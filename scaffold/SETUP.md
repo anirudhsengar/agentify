@@ -30,16 +30,16 @@ The setup creates the following labels (every workflow triggers off these):
 To create only the labels manually, run the `gh label create` invocations in
 `.github/scripts/setup-agentify.sh` directly. Each is idempotent and re-runnable.
 
-See [ADR-0005](docs/adr/0005-agent-star-label-taxonomy.md) for why `/to-issues`
-creates executable implementation slices with `agent:queued`, while `/to-prd`
-creates planning artifacts with `artifact:prd`. `agent:drill-me` is the intake
-side of the same taxonomy (see [ADR-0012](docs/adr/0012-evolution-loop.md)).
+See the stamped `.github/agent-state-machine.json` for the label/state contract
+that drives these workflows. Background design notes live in the agentify
+source repo: [ADR-0005](https://github.com/agentify/agentify/blob/main/docs/adr/0005-agent-star-label-taxonomy.md)
+and [ADR-0012](https://github.com/agentify/agentify/blob/main/docs/adr/0012-evolution-loop.md).
 
 ## 2. Configure the agent runtime's secrets and variables
 
 The `.github/workflows/agent-*.yml` workflows watch the `agent:*` labels
 above and run [Pi](https://github.com/earendil-works/pi) to do the actual
-work (see [ADR-0007](docs/adr/0007-pi-as-the-ci-coding-harness.md)).
+work (see [ADR-0007](https://github.com/agentify/agentify/blob/main/docs/adr/0007-pi-as-the-ci-coding-harness.md)).
 Set these once, in **Settings → Secrets and variables → Actions**:
 
 **Secrets:**
@@ -64,7 +64,23 @@ AGENT_BOT_LOGIN Required. The GitHub login AGENT_PAT belongs to. The drill workf
                 uses it to recognize its own replies and prevent a loop.
 ```
 
-## 3. Validate the template
+## 3. Drive the async loop
+
+Creating an issue is safe triage by default. Automation starts when a trusted
+actor adds a runnable label or comments with one of these commands:
+
+```
+/agent implement
+/agent review
+/agent update-branch
+/agent retry
+/agent stop
+```
+
+Every command routes through `.github/workflows/agent-command.yml`, checks the
+actor role, mutates labels idempotently, and comments with the next action.
+
+## 4. Validate the template
 
 Run:
 

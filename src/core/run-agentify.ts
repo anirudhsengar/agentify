@@ -1,20 +1,28 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { VERSION as PI_SDK_VERSION } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { ensureAgentifyConfig } from "./agentify-config.ts";
-import {
-  AGENTIFY_MANAGED_MARKERS,
-  addMarkdownManagedMarker,
-  exportAgenticSurface,
-} from "./artifact-exporters.ts";
+import { exportAgenticSurface } from "./artifact-exporters.ts";
 import { packageRoot } from "./pi-sdk-runtime.ts";
 import { ProjectClassifier } from "./project-classifier.ts";
 import { installScaffoldRuntime } from "./scaffold-installer.ts";
 import { formatGitHubReadiness, inspectGitHubReadiness } from "./github-readiness.ts";
 import { inspectAgentifyRepoState } from "./repo-status.ts";
 import { writeProjectState } from "./project-state.ts";
+import { renderBrownfieldArtifacts, type RenderedArtifact } from "./artifacts/renderers.ts";
+import {
+  CODEBASE_MAP_RELATIVE_PATH,
+  MANIFEST_RELATIVE_PATH,
+  kindForPath,
+  manifestFileFromContent,
+  markerForPath,
+  writeManifest,
+  type ManagedManifest,
+  type ManagedManifestFile,
+} from "./manifest.ts";
 import type {
   AgentifyConfig,
   AgentifyTarget,
@@ -92,7 +100,13 @@ type FinalAuditState = {
   gapReasons: string[];
 };
 
-type AuditArtifactSnapshot = Map<string, "managed" | "unmanaged">;
+type AuditSnapshotEntry = {
+  ownership: "managed" | "unmanaged";
+  content: Buffer;
+  mode: number;
+};
+
+type AuditArtifactSnapshot = Map<string, AuditSnapshotEntry>;
 
 const ALWAYS_ON_ARTIFACTS = [
   "specs/README.md",
@@ -107,6 +121,36 @@ const RESERVED_AGENT_NAMES = new Set([
   "fix.md",
   "document.md",
 ]);
+
+const GENERATED_SURFACE_PATHS = [
+  AGENTS_MD_PATH,
+  "CLAUDE.md",
+  "CONTEXT.md",
+  "specs/README.md",
+  "ai_docs/README.md",
+  "conditional_docs.md",
+  "SETUP.md",
+  ".pi/agents",
+  ".pi/prompts",
+  ".pi/extensions",
+  ".pi/skills",
+  ".agents",
+  ".claude",
+  ".codex",
+  ".github/actions",
+  ".github/agent-prompts",
+  ".github/scripts",
+  ".github/workflows",
+  "app_docs",
+  "app_review",
+] as const;
+
+const INTERNAL_STATE_PATHS = [
+  CODEBASE_MAP_RELATIVE_PATH,
+  MANIFEST_RELATIVE_PATH,
+] as const;
+
+const GREENFIELD_STATE_RELATIVE_PATH = ".pi/agentify/greenfield-state.json";
 
 function cleanupInternalScaffolding(cwd: string): void {
   try {
@@ -152,65 +196,283 @@ function toRel(cwd: string, filePath: string): string {
   return path.relative(cwd, filePath).split(path.sep).join("/");
 }
 
-function listExistingAgentMarkdown(cwd: string): string[] {
-  const agentsDir = path.join(cwd, ".pi", "agents");
-  if (!fs.existsSync(agentsDir)) return [];
-  return fs.readdirSync(agentsDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-    .map((entry) => path.join(agentsDir, entry.name));
+function listFilesRecursively(root: string): string[] {
+  if (!fs.existsSync(root)) return [];
+  const stat = fs.statSync(root);
+  if (stat.isFile()) return [root];
+  if (!stat.isDirectory()) return [];
+  const files: string[] = [];
+  const visit = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        visit(full);
+      } else if (entry.isFile()) {
+        files.push(full);
+      }
+    }
+  };
+  visit(root);
+  return files;
+}
+
+function listGeneratedSurfaceFiles(cwd: string): string[] {
+  const files = new Set<string>();
+  for (const rel of GENERATED_SURFACE_PATHS) {
+    for (const filePath of listFilesRecursively(path.join(cwd, rel))) {
+      files.add(filePath);
+    }
+  }
+  return [...files];
+}
+
+function fileHasManagedMarker(relativePath: string, content: Buffer): boolean {
+  const marker = markerForPath(relativePath);
+  if (marker === "sha256") return true;
+  return content.toString("utf-8").includes(marker);
 }
 
 function collectAuditArtifactSnapshot(cwd: string): AuditArtifactSnapshot {
   const snapshot: AuditArtifactSnapshot = new Map();
-  const candidates = [
-    path.join(cwd, AGENTS_MD_PATH),
-    ...ALWAYS_ON_ARTIFACTS.map((rel) => path.join(cwd, rel)),
-    ...listExistingAgentMarkdown(cwd),
-  ];
-  for (const filePath of candidates) {
+  for (const filePath of listGeneratedSurfaceFiles(cwd)) {
     if (!fs.existsSync(filePath)) continue;
-    const content = fs.readFileSync(filePath, "utf-8");
-    snapshot.set(
-      toRel(cwd, filePath),
-      content.includes(AGENTIFY_MANAGED_MARKERS.markdown) ? "managed" : "unmanaged",
-    );
+    const rel = toRel(cwd, filePath);
+    const content = fs.readFileSync(filePath);
+    snapshot.set(rel, {
+      ownership: fileHasManagedMarker(rel, content) ? "managed" : "unmanaged",
+      content,
+      mode: fs.statSync(filePath).mode & 0o777,
+    });
   }
   return snapshot;
 }
 
-function listAuditArtifacts(cwd: string): string[] {
-  return [
-    path.join(cwd, AGENTS_MD_PATH),
-    ...ALWAYS_ON_ARTIFACTS.map((rel) => path.join(cwd, rel)),
-    ...listExistingAgentMarkdown(cwd),
-  ];
+function restoreSnapshotFile(cwd: string, relativePath: string, entry: AuditSnapshotEntry): void {
+  const filePath = path.join(cwd, relativePath);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, entry.content, { mode: entry.mode });
+  try {
+    fs.chmodSync(filePath, entry.mode);
+  } catch {
+    // Best effort on filesystems without chmod support.
+  }
 }
 
-function markAuditArtifacts(
+function cleanupEmptyGeneratedDirs(cwd: string): void {
+  const dirs = GENERATED_SURFACE_PATHS
+    .map((rel) => path.join(cwd, rel))
+    .filter((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isDirectory())
+    .sort((a, b) => b.length - a.length);
+  for (const dir of dirs) {
+    try {
+      fs.rmdirSync(dir);
+    } catch {
+      // Directory was not empty or disappeared; both are fine.
+    }
+  }
+}
+
+function rollbackGeneratedSurface(
   cwd: string,
   snapshot: AuditArtifactSnapshot,
-): ArtifactWrite[] {
-  const writes: ArtifactWrite[] = [];
-  for (const filePath of listAuditArtifacts(cwd)) {
-    if (!fs.existsSync(filePath)) continue;
+): { removed: number; restored: number } {
+  let removed = 0;
+  let restored = 0;
+  for (const filePath of listGeneratedSurfaceFiles(cwd)) {
     const rel = toRel(cwd, filePath);
-    if (snapshot.get(rel) === "unmanaged") {
-      writes.push({
-        path: filePath,
-        action: "conflict",
-        reason: "existing file is not agentify-managed",
-      });
+    const entry = snapshot.get(rel);
+    if (entry) {
+      restoreSnapshotFile(cwd, rel, entry);
+      restored += 1;
       continue;
     }
-    const content = fs.readFileSync(filePath, "utf-8");
-    if (content.includes(AGENTIFY_MANAGED_MARKERS.markdown)) {
-      writes.push({ path: filePath, action: "skipped" });
-      continue;
-    }
-    fs.writeFileSync(filePath, addMarkdownManagedMarker(content), { mode: 0o644 });
-    writes.push({ path: filePath, action: "written" });
+    fs.rmSync(filePath, { force: true });
+    removed += 1;
   }
-  return writes;
+  for (const [rel, entry] of snapshot) {
+    const filePath = path.join(cwd, rel);
+    if (!fs.existsSync(filePath)) {
+      restoreSnapshotFile(cwd, rel, entry);
+      restored += 1;
+    }
+  }
+  cleanupEmptyGeneratedDirs(cwd);
+  return { removed, restored };
+}
+
+function collectInternalStateSnapshot(cwd: string): AuditArtifactSnapshot {
+  const snapshot: AuditArtifactSnapshot = new Map();
+  for (const rel of INTERNAL_STATE_PATHS) {
+    const filePath = path.join(cwd, rel);
+    if (!fs.existsSync(filePath)) continue;
+    const content = fs.readFileSync(filePath);
+    snapshot.set(rel, {
+      ownership: "managed",
+      content,
+      mode: fs.statSync(filePath).mode & 0o777,
+    });
+  }
+  return snapshot;
+}
+
+function restoreInternalStateSnapshot(cwd: string, snapshot: AuditArtifactSnapshot): void {
+  for (const rel of INTERNAL_STATE_PATHS) {
+    const filePath = path.join(cwd, rel);
+    const entry = snapshot.get(rel);
+    if (entry) {
+      restoreSnapshotFile(cwd, rel, entry);
+    } else {
+      fs.rmSync(filePath, { force: true });
+    }
+  }
+}
+
+function writeFileUnderRoot(root: string, relativePath: string, content: string | Buffer): void {
+  const filePath = path.join(root, relativePath);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, content, { mode: 0o644 });
+}
+
+function makeStagingRoot(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "agentify-staging-"));
+}
+
+function writeRenderedArtifactsToStaging(
+  stagingRoot: string,
+  artifacts: readonly RenderedArtifact[],
+  metadata: Map<string, ManagedManifestFile>,
+): void {
+  for (const artifact of artifacts) {
+    writeFileUnderRoot(stagingRoot, artifact.relativePath, artifact.content);
+    metadata.set(artifact.relativePath, manifestFileFromContent({
+      relativePath: artifact.relativePath,
+      content: artifact.content,
+      kind: artifact.kind,
+      required: artifact.required,
+      marker: artifact.marker,
+      source: artifact.source,
+    }));
+  }
+}
+
+function copyCanonicalMapToStaging(
+  cwd: string,
+  stagingRoot: string,
+  metadata: Map<string, ManagedManifestFile>,
+): void {
+  const source = path.join(cwd, CODEBASE_MAP_RELATIVE_PATH);
+  if (!fs.existsSync(source)) return;
+  const content = fs.readFileSync(source);
+  writeFileUnderRoot(stagingRoot, CODEBASE_MAP_RELATIVE_PATH, content);
+  metadata.set(CODEBASE_MAP_RELATIVE_PATH, manifestFileFromContent({
+    relativePath: CODEBASE_MAP_RELATIVE_PATH,
+    content,
+    kind: "state",
+    required: true,
+    marker: markerForPath(CODEBASE_MAP_RELATIVE_PATH),
+    source: "write_map",
+  }));
+}
+
+function collectStagedFiles(stagingRoot: string): Array<{ relativePath: string; content: Buffer }> {
+  return listFilesRecursively(stagingRoot)
+    .map((filePath) => ({
+      relativePath: toRel(stagingRoot, filePath),
+      content: fs.readFileSync(filePath),
+    }))
+    .filter((file) => file.relativePath !== MANIFEST_RELATIVE_PATH);
+}
+
+function addWriteMetadata(
+  stagingRoot: string,
+  writes: readonly ArtifactWrite[],
+  source: string,
+  metadata: Map<string, ManagedManifestFile>,
+): void {
+  for (const write of writes) {
+    if (write.action === "conflict") continue;
+    const relativePath = toRel(stagingRoot, write.path);
+    const filePath = path.join(stagingRoot, relativePath);
+    if (!fs.existsSync(filePath)) continue;
+    const content = fs.readFileSync(filePath);
+    metadata.set(relativePath, manifestFileFromContent({
+      relativePath,
+      content,
+      kind: kindForPath(relativePath),
+      required: undefined,
+      marker: markerForPath(relativePath),
+      source,
+    }));
+  }
+}
+
+function isConflictingDestination(
+  cwd: string,
+  relativePath: string,
+  snapshot: AuditArtifactSnapshot,
+): boolean {
+  const destination = path.join(cwd, relativePath);
+  if (!fs.existsSync(destination)) return false;
+  const snapshotEntry = snapshot.get(relativePath);
+  if (snapshotEntry) return snapshotEntry.ownership === "unmanaged";
+  const content = fs.readFileSync(destination);
+  return !fileHasManagedMarker(relativePath, content);
+}
+
+function applyStagedBundle(params: {
+  cwd: string;
+  stagingRoot: string;
+  snapshot: AuditArtifactSnapshot;
+  metadata: Map<string, ManagedManifestFile>;
+  agentifyVersion: string;
+}): { writes: ArtifactWrite[]; requiredConflictCount: number; manifest: ManagedManifest | null } {
+  const stagedFiles = collectStagedFiles(params.stagingRoot);
+  const writes: ArtifactWrite[] = [];
+  const conflicted = new Set<string>();
+  let requiredConflictCount = 0;
+
+  for (const file of stagedFiles) {
+    if (!isConflictingDestination(params.cwd, file.relativePath, params.snapshot)) continue;
+    const entry = params.metadata.get(file.relativePath)
+      ?? manifestFileFromContent({ relativePath: file.relativePath, content: file.content });
+    conflicted.add(file.relativePath);
+    if (entry.required) requiredConflictCount += 1;
+    writes.push({
+      path: path.join(params.cwd, file.relativePath),
+      action: "conflict",
+      reason: "existing file is not agentify-managed",
+    });
+  }
+
+  if (requiredConflictCount > 0) {
+    return { writes, requiredConflictCount, manifest: null };
+  }
+
+  const manifestFiles: ManagedManifestFile[] = [];
+  for (const file of stagedFiles) {
+    if (conflicted.has(file.relativePath)) continue;
+    const destination = path.join(params.cwd, file.relativePath);
+    const existing = fs.existsSync(destination) ? fs.readFileSync(destination) : null;
+    const action = existing && Buffer.compare(existing, file.content) === 0 ? "skipped" : "written";
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.writeFileSync(destination, file.content, { mode: 0o644 });
+    writes.push({ path: destination, action });
+    manifestFiles.push(
+      params.metadata.get(file.relativePath)
+        ?? manifestFileFromContent({ relativePath: file.relativePath, content: file.content }),
+    );
+  }
+
+  const manifest: ManagedManifest = {
+    schema_version: "1",
+    agentify_version: params.agentifyVersion,
+    generated_at: new Date().toISOString(),
+    mode: "brownfield",
+    files: manifestFiles.sort((a, b) => a.path.localeCompare(b.path)),
+  };
+  writeManifest(params.cwd, manifest);
+  writes.push({ path: path.join(params.cwd, MANIFEST_RELATIVE_PATH), action: "written" });
+  return { writes, requiredConflictCount, manifest };
 }
 
 function loadAgentifyVersion(): string {
@@ -221,6 +483,53 @@ function loadAgentifyVersion(): string {
   } catch {
     return "unknown";
   }
+}
+
+function inferGreenfieldCheckpoint(cwd: string): string {
+  if (fs.existsSync(path.join(cwd, "specs")) && listFilesRecursively(path.join(cwd, "specs")).length > 0) {
+    return "spec";
+  }
+  if (fs.existsSync(path.join(cwd, "docs", "issues")) && listFilesRecursively(path.join(cwd, "docs", "issues")).length > 0) {
+    return "issue_slices";
+  }
+  if (fs.existsSync(path.join(cwd, "docs", "plans")) && listFilesRecursively(path.join(cwd, "docs", "plans")).length > 0) {
+    return "plan";
+  }
+  if (fs.existsSync(path.join(cwd, "docs", "prds")) && listFilesRecursively(path.join(cwd, "docs", "prds")).length > 0) {
+    return "prd";
+  }
+  if (fs.existsSync(path.join(cwd, "GOALS.md"))) return "goals";
+  if (fs.existsSync(path.join(cwd, "CONTEXT.md"))) return "wide_idea";
+  return "wide_idea";
+}
+
+function writeGreenfieldState(cwd: string, params: {
+  turns: number;
+  aborted: boolean;
+  costUsd: number | null;
+}): void {
+  const filePath = path.join(cwd, GREENFIELD_STATE_RELATIVE_PATH);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(
+    filePath,
+    `${JSON.stringify({
+      schema_version: "1",
+      updated_at: new Date().toISOString(),
+      checkpoint: inferGreenfieldCheckpoint(cwd),
+      turns: params.turns,
+      cost_usd: params.costUsd,
+      aborted: params.aborted,
+      checkpoints: {
+        wide_idea: fs.existsSync(path.join(cwd, "CONTEXT.md")),
+        goals: fs.existsSync(path.join(cwd, "GOALS.md")),
+        prd: fs.existsSync(path.join(cwd, "docs", "prds")),
+        plan: fs.existsSync(path.join(cwd, "docs", "plans")),
+        issue_slices: fs.existsSync(path.join(cwd, "docs", "issues")),
+        spec: fs.existsSync(path.join(cwd, "specs")),
+      },
+    }, null, 2)}\n`,
+    { mode: 0o644 },
+  );
 }
 
 function extractUsage(event: AgentSessionEvent): AssistantUsage | undefined {
@@ -250,13 +559,9 @@ function extractWriteMapResult(result: WriteMapResult | undefined): {
   };
 }
 
-// Decide success from the VALIDATED codebase map on disk, not merely
-// from the existence of output files (ADR 0014). Success requires:
-//   1. the canonical map loads and validates,
-//   2. every coverage dimension is closed (status covered + substance),
-//   3. AGENTS.md exists and is within the line cap,
-//   4. the always-on artifacts exist.
-// Anything short of that is `partial`, and no export/scaffold runs.
+// Decide audit success from the validated structured state, not from
+// user-facing files. Renderers own AGENTS.md and always-on docs after
+// the map closes, so the builder can complete without writing them.
 function readFinalAuditState(cwd: string): FinalAuditState {
   const agentsMdPath = path.join(cwd, AGENTS_MD_PATH);
   const agentsMdExists = fs.existsSync(agentsMdPath);
@@ -294,22 +599,13 @@ function readFinalAuditState(cwd: string): FinalAuditState {
     }
   }
 
-  if (!agentsMdExists) {
-    gapReasons.push("AGENTS.md was not written");
-  } else {
+  if (agentsMdExists) {
     const lines = countFileLines(agentsMdPath);
     if (lines > AGENTS_MD_MAX_LINES) {
       gapReasons.push(
-        `AGENTS.md is ${lines} lines, exceeds the ${AGENTS_MD_MAX_LINES}-line cap`,
+        `legacy AGENTS.md write is ${lines} lines, exceeds the ${AGENTS_MD_MAX_LINES}-line cap`,
       );
     }
-  }
-
-  if (alwaysOnWritten !== ALWAYS_ON_ARTIFACTS.length) {
-    const missing = ALWAYS_ON_ARTIFACTS.filter(
-      (rel) => !fs.existsSync(path.join(cwd, rel)),
-    );
-    gapReasons.push(`missing always-on artifact(s): ${missing.join(", ")}`);
   }
 
   const success = gapReasons.length === 0;
@@ -329,9 +625,10 @@ function readFinalAuditState(cwd: string): FinalAuditState {
 function buildBrownfieldUserPrompt(targets: ReadonlyArray<AgentifyTarget>): string {
   return [
     "Audit this existing codebase and bootstrap its agentic surface.",
-    "Explore the codebase, fill the structured codebase map via write_map, and close every coverage area before writing user-facing files.",
-    "The map is internal scaffolding and must not be treated as a deliverable.",
-    "Emit codebase-emergent intelligence only: AGENTS.md, specs/README.md, ai_docs/README.md, feature-specialized .pi/agents/<feature>.md files, conditional docs, feedback-loop state, expert prompts, and proposed domain model artifacts when warranted.",
+    "Explore the codebase, fill the structured codebase map via write_map, and close every coverage area before emitting artifact_intents.",
+    "The map and artifact_intents are internal structured state; TypeScript renderers write user-facing files after validation.",
+    "Do not write AGENTS.md, specs/README.md, ai_docs/README.md, .pi/agents, .pi/prompts, .pi/extensions, scaffold, or harness exports directly.",
+    "Describe codebase-emergent intelligence in artifact_intents: agent guide sections, always-on docs, feature specialists, prompt templates, expert prompts, and extension candidates when warranted.",
     "Do not emit generic build-chain primitives; those ship as agentify skills and will be exported separately.",
     `The standalone CLI will export the audited intelligence for these harness targets after the audit: ${targets.join(", ")}.`,
     "Skip user-owned files. Honest sparseness beats padding.",
@@ -392,12 +689,13 @@ async function runBrownfieldAudit(
   options: RunAgentifyOptions,
   config: AgentifyConfig,
 ): Promise<void> {
+  const internalStateSnapshot = collectInternalStateSnapshot(options.cwd);
   cleanupInternalScaffolding(options.cwd);
   const artifactSnapshot = collectAuditArtifactSnapshot(options.cwd);
   // Absolute paths of pre-existing user-owned artifacts the builder
   // must not overwrite mid-session (B4 / defense repo protection).
   const protectedPaths = [...artifactSnapshot.entries()]
-    .filter(([, ownership]) => ownership === "unmanaged")
+    .filter(([, entry]) => entry.ownership === "unmanaged")
     .map(([rel]) => path.resolve(options.cwd, rel));
   const promptContent = loadBuilderPrompt();
   const promptSha = crypto.createHash("sha256").update(promptContent).digest("hex");
@@ -488,43 +786,124 @@ async function runBrownfieldAudit(
     // Preserve the canonical codebase map (ADR 0014); remove only the
     // transient draft/history/logs transport.
     cleanupTransientScaffolding(options.cwd);
+    let reportedStatus = finalState.status;
     if (finalState.status === "success") {
-      const ownershipWrites = markAuditArtifacts(options.cwd, artifactSnapshot);
-      const exportResults = exportAgenticSurface({
-        cwd: options.cwd,
-        packageRoot: packageRoot(),
-        targets: options.targets,
-      });
-      const scaffoldWrites = installScaffoldRuntime({
-        cwd: options.cwd,
-        packageRoot: packageRoot(),
-      });
-      const conflicts = [
-        ...ownershipWrites,
-        ...exportResults.flatMap((result) => result.writes),
-        ...scaffoldWrites,
-      ]
-        .filter((write) => write.action === "conflict");
-      const scaffoldInstalled = scaffoldWrites.filter((write) => write.action === "written").length;
-      options.ui.info(
-        `agentify: audit complete. ${finalState.featureAgentsWritten} feature agent(s), ` +
-          `${exportResults.length} harness export(s), ${scaffoldInstalled} scaffold file(s) installed, ` +
-          `${conflicts.length} conflict(s).`,
-      );
-      reportGitHubReadiness(options);
-      persistProjectState(options, {
-        projectKind: "brownfield",
-        runStatus: "success",
-        repoMode: "brownfield",
-        repoStatus: "ready",
-        featureAgentCount: finalState.featureAgentsWritten,
-        latestLogPath: log.logPath,
-      });
+      const rollback = rollbackGeneratedSurface(options.cwd, artifactSnapshot);
+      if (rollback.removed > 0 || rollback.restored > 0) {
+        options.ui.info(
+          `agentify: cleaned legacy generated writes (${rollback.removed} removed, ${rollback.restored} restored).`,
+        );
+      }
+
+      const map = loadCanonicalMap(options.cwd);
+      const renderResult = map
+        ? renderBrownfieldArtifacts(map)
+        : { artifacts: [], errors: ["validated codebase map disappeared before rendering"] };
+
+      if (renderResult.errors.length > 0) {
+        reportedStatus = "partial";
+        restoreInternalStateSnapshot(options.cwd, internalStateSnapshot);
+        options.ui.error("agentify: audit artifacts failed deterministic rendering; no bundle was applied.");
+        for (const reason of renderResult.errors.slice(0, 8)) {
+          options.ui.error(`agentify:   - ${reason}`);
+        }
+        persistProjectState(options, {
+          projectKind: "brownfield",
+          runStatus: "partial",
+          repoMode: "brownfield",
+          repoStatus: "partial",
+          featureAgentCount: 0,
+          latestLogPath: log.logPath,
+        });
+      } else {
+        const stagingRoot = makeStagingRoot();
+        options.ui.info(`agentify: staging generated bundle at ${stagingRoot}`);
+        try {
+          const metadata = new Map<string, ManagedManifestFile>();
+          writeRenderedArtifactsToStaging(stagingRoot, renderResult.artifacts, metadata);
+          copyCanonicalMapToStaging(options.cwd, stagingRoot, metadata);
+          const exportResults = exportAgenticSurface({
+            cwd: stagingRoot,
+            packageRoot: packageRoot(),
+            targets: options.targets,
+          });
+          for (const result of exportResults) {
+            addWriteMetadata(stagingRoot, result.writes, `harness-export:${result.target}`, metadata);
+          }
+          const scaffoldWrites = installScaffoldRuntime({
+            cwd: stagingRoot,
+            packageRoot: packageRoot(),
+          });
+          addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata);
+
+          const applyResult = applyStagedBundle({
+            cwd: options.cwd,
+            stagingRoot,
+            snapshot: artifactSnapshot,
+            metadata,
+            agentifyVersion: loadAgentifyVersion(),
+          });
+          const conflicts = applyResult.writes.filter((write) => write.action === "conflict");
+          const scaffoldInstalled = applyResult.writes
+            .filter((write) => write.action === "written")
+            .filter((write) => {
+              const rel = toRel(options.cwd, write.path);
+              return rel === "SETUP.md" || rel.startsWith(".github/");
+            })
+            .length;
+
+          if (applyResult.requiredConflictCount > 0) {
+            reportedStatus = "partial";
+            restoreInternalStateSnapshot(options.cwd, internalStateSnapshot);
+            options.ui.error(
+              `agentify: required generated file conflict(s) blocked apply; no bundle files were written.`,
+            );
+            for (const conflict of conflicts.slice(0, 8)) {
+              options.ui.error(`agentify:   - ${toRel(options.cwd, conflict.path)}: ${conflict.reason ?? "conflict"}`);
+            }
+            persistProjectState(options, {
+              projectKind: "brownfield",
+              runStatus: "partial",
+              repoMode: "brownfield",
+              repoStatus: "partial",
+              featureAgentCount: 0,
+              latestLogPath: log.logPath,
+            });
+          } else {
+            const repoState = inspectAgentifyRepoState(options.cwd, options.configDir);
+            reportedStatus = repoState.status === "ready" ? "success" : "partial";
+            options.ui.info(
+              `agentify: audit complete. ${repoState.featureAgentCount} feature agent(s), ` +
+                `${exportResults.length} harness export(s), ${scaffoldInstalled} scaffold file(s) installed, ` +
+                `${conflicts.length} optional conflict(s).`,
+            );
+            reportGitHubReadiness(options);
+            persistProjectState(options, {
+              projectKind: "brownfield",
+              runStatus: reportedStatus,
+              repoMode: "brownfield",
+              repoStatus: repoState.status,
+              featureAgentCount: repoState.featureAgentCount,
+              latestLogPath: log.logPath,
+            });
+          }
+        } finally {
+          fs.rmSync(stagingRoot, { recursive: true, force: true });
+          options.ui.info(`agentify: cleaned staging bundle at ${stagingRoot}`);
+        }
+      }
     } else {
+      const rollback = rollbackGeneratedSurface(options.cwd, artifactSnapshot);
+      restoreInternalStateSnapshot(options.cwd, internalStateSnapshot);
       options.ui.error(
         `agentify: audit did not complete (${finalState.covered}/${finalState.total} dimensions closed); ` +
           "no harness export was run.",
       );
+      if (rollback.removed > 0 || rollback.restored > 0) {
+        options.ui.error(
+          `agentify: cleaned partial generated writes (${rollback.removed} removed, ${rollback.restored} restored).`,
+        );
+      }
       for (const reason of finalState.gapReasons.slice(0, 8)) {
         options.ui.error(`agentify:   - ${reason}`);
       }
@@ -541,23 +920,25 @@ async function runBrownfieldAudit(
     log.sessionEnd({
       duration_ms: Date.now() - start,
       was_aborted: runtimeResult.aborted,
-      status: finalState.status,
+      status: reportedStatus,
     });
     log.runEnd({
       exit_code: runtimeResult.aborted ? -1 : 0,
-      status: finalState.status,
+      status: reportedStatus,
       coverage: {
         covered: finalState.covered,
         gap: finalState.gap,
         total: finalState.total,
       },
-      agents_md_path: finalState.agentsMdExists
+      agents_md_path: fs.existsSync(path.join(options.cwd, AGENTS_MD_PATH))
         ? path.join(options.cwd, AGENTS_MD_PATH)
         : null,
     });
     options.ui.info(`agentify: log written to ${log.logPath}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    rollbackGeneratedSurface(options.cwd, artifactSnapshot);
+    restoreInternalStateSnapshot(options.cwd, internalStateSnapshot);
     log.runEnd({ exit_code: -1, status: "error", error_message: message });
     options.ui.error(`agentify: ${message}`);
     throw err;
@@ -589,6 +970,11 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
   let scaffoldInstalled = 0;
   let scaffoldConflicts = 0;
   if (!result.aborted) {
+    writeGreenfieldState(options.cwd, {
+      turns: result.turns,
+      costUsd: result.costUsd,
+      aborted: result.aborted,
+    });
     const scaffoldWrites = installScaffoldRuntime({
       cwd: options.cwd,
       packageRoot: packageRoot(),

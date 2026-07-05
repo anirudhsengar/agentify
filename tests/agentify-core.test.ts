@@ -181,7 +181,10 @@ async function testArtifactExporter(): Promise<void> {
     "---\nname: demo\ndescription: Demo skill\n---\n\nUse demo skill.\n",
   );
   fs.mkdirSync(path.join(cwd, ".pi", "agents"), { recursive: true });
-  fs.writeFileSync(path.join(cwd, "AGENTS.md"), "# Target AGENTS\n");
+  fs.writeFileSync(
+    path.join(cwd, "AGENTS.md"),
+    `${AGENTIFY_MANAGED_MARKERS.markdown}\n# Target AGENTS\n`,
+  );
   fs.writeFileSync(
     path.join(cwd, ".pi", "agents", "payments.md"),
     "---\nname: payments\ndescription: Payments specialist\n---\n\nUse payments.\n",
@@ -205,6 +208,14 @@ async function testArtifactExporter(): Promise<void> {
     .flatMap((result) => result.writes)
     .find((write) => write.path.endsWith(path.join(".codex", "agents", "payments.toml")));
   assert.equal(conflict?.action, "conflict");
+
+  fs.writeFileSync(path.join(cwd, "AGENTS.md"), "# User-owned AGENTS\n");
+  fs.rmSync(path.join(cwd, "CLAUDE.md"), { force: true });
+  const claudeConflict = exportAgenticSurface({ cwd, packageRoot, targets: ["claude"] })
+    .flatMap((result) => result.writes)
+    .find((write) => write.path.endsWith("CLAUDE.md"));
+  assert.equal(claudeConflict?.action, "conflict");
+  assert.ok(!fs.existsSync(path.join(cwd, "CLAUDE.md")));
 }
 
 async function testBrownfieldRunWithFakeRuntime(): Promise<void> {
@@ -263,6 +274,11 @@ async function testGreenfieldRunWithFakeRuntime(): Promise<void> {
   assert.ok(fs.existsSync(path.join(cwd, "GOALS.md")));
   assert.ok(fs.existsSync(path.join(cwd, "docs", "issues", "001-first.md")));
   assert.ok(fs.existsSync(path.join(cwd, "specs", "feature-first.md")));
+  assert.ok(fs.existsSync(path.join(cwd, ".pi", "agentify", "greenfield-state.json")));
+  assert.match(
+    fs.readFileSync(path.join(cwd, ".pi", "agentify", "greenfield-state.json"), "utf-8"),
+    /"checkpoint": "spec"/,
+  );
   assert.ok(fs.existsSync(path.join(cwd, ".github", "workflows", "agent-implement.yml")));
   assert.ok(fs.existsSync(path.join(cwd, "SETUP.md")));
   assert.ok(ui.infos.some((message) => message.includes("greenfield session complete")));

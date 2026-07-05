@@ -59,6 +59,7 @@ export function makeValidCodebaseMap(
         postmortems_dir: null,
         changelog_present: false,
       },
+      suggested_subagent_domains: ["payments"],
     },
     skeleton: {
       top_level_tree: ["src/", "tests/"],

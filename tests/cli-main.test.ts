@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -6,6 +7,8 @@ import * as path from "node:path";
 import { authPath, saveAgentifyConfig } from "../src/core/agentify-config.ts";
 import { writeProjectState } from "../src/core/project-state.ts";
 import { runAgentifyApp } from "../src/core/agentify-app.ts";
+import { AGENTIFY_MANAGED_MARKERS } from "../src/core/artifact-exporters.ts";
+import { manifestFileFromContent, writeManifest } from "../src/core/manifest.ts";
 import { makeValidCodebaseMap } from "./fixtures/codebase-map.ts";
 import type {
   AgentRuntime,
@@ -78,18 +81,35 @@ function hashCwd(cwd: string): string {
 }
 
 function seedReadyRepo(cwd: string, configDir: string): void {
-  for (const relativePath of [
+  const files = [
     "AGENTS.md",
     "specs/README.md",
     "ai_docs/README.md",
+    ".pi/agentify/codebase_map.json",
     "SETUP.md",
     ".github/workflows/agent-implement.yml",
+    ".github/actions/run-pi/action.yml",
+    ".github/scripts/setup-agentify.sh",
     ".pi/agents/payments.md",
-  ]) {
+  ].map((relativePath) => {
     const filePath = path.join(cwd, relativePath);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, "x\n");
-  }
+    const marker = relativePath.endsWith(".json")
+      ? ""
+      : relativePath.endsWith(".md")
+        ? `${AGENTIFY_MANAGED_MARKERS.markdown}\n`
+        : `${AGENTIFY_MANAGED_MARKERS.toml}\n`;
+    const content = `${marker}x\n`;
+    fs.writeFileSync(filePath, content);
+    return manifestFileFromContent({ relativePath, content, source: "test" });
+  });
+  writeManifest(cwd, {
+    schema_version: "1",
+    agentify_version: "test",
+    generated_at: "2026-07-05T00:00:00.000Z",
+    mode: "brownfield",
+    files,
+  });
   const logDir = path.join(configDir, "logs", "agentify");
   fs.mkdirSync(logDir, { recursive: true });
   const logPath = path.join(logDir, `2026-07-05T00-00-00-000Z-${hashCwd(cwd)}-00.jsonl`);
@@ -204,7 +224,10 @@ async function testRecoversPartialRepo(): Promise<void> {
   const cwd = tempDir("agentify-cli-main-recover-");
   const configDir = tempDir("agentify-cli-main-recover-config-");
   try {
-    fs.writeFileSync(path.join(cwd, "AGENTS.md"), "# partial\n");
+    fs.writeFileSync(
+      path.join(cwd, "AGENTS.md"),
+      `${AGENTIFY_MANAGED_MARKERS.markdown}\n# partial\n`,
+    );
     writeProjectState(configDir, {
       cwd,
       lastRunAt: "2026-07-04T12:00:00Z",
@@ -248,11 +271,22 @@ async function testRecoversPartialRepo(): Promise<void> {
   }
 }
 
+async function testBinPrintsConciseErrors(): Promise<void> {
+  const result = spawnSync(process.execPath, ["bin/agentify.js", "foo"], {
+    cwd: path.resolve("."),
+    encoding: "utf-8",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /^agentify: /);
+  assert.doesNotMatch(result.stderr, /Error:|at .*\.ts|at .*\.js/);
+}
+
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "rejectsLegacySubcommands", fn: testRejectsLegacySubcommands },
   { name: "runsThroughSingleEntrypoint", fn: testRunsThroughSingleEntrypoint },
   { name: "attachesToInitializedRepoWithoutRerun", fn: testAttachesToInitializedRepoWithoutRerun },
   { name: "recoversPartialRepo", fn: testRecoversPartialRepo },
+  { name: "binPrintsConciseErrors", fn: testBinPrintsConciseErrors },
 ];
 
 let passed = 0;

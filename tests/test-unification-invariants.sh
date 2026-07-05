@@ -72,11 +72,15 @@ dupes=$(find docs/adr -maxdepth 1 -name '[0-9][0-9][0-9][0-9]-*.md' -printf '%f\
 for f in \
   scaffold/.github/workflows/agent-implement.yml \
   scaffold/.github/workflows/agent-review.yml \
+  scaffold/.github/workflows/agent-command.yml \
   scaffold/.github/workflows/agent-drill-me-issue.yml \
+  scaffold/.github/agent-state-machine.json \
   scaffold/.github/agent-prompts/drill-me-issue.md \
   scaffold/.github/workflows/agent-refresh-surface.yml \
   scaffold/.github/actions/run-pi/action.yml \
   scaffold/.github/actions/setup-pi/action.yml \
+  scaffold/.github/scripts/run-pi-safe.sh \
+  scaffold/.github/scripts/route-agent-command.sh \
   scaffold/.github/scripts/setup-agentify.sh \
   scaffold/.github/scripts/validate-repository.sh \
   scaffold/SETUP.md scaffold/.gitignore scaffold/tests/run.sh; do

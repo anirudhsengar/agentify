@@ -45,18 +45,10 @@ runs:
         : "${PI_MODEL:?PI_MODEL repository variable is required — see SETUP.md}"
 
         out="${RUNNER_TEMP}/pi-output-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}.txt"
+        runner="${GITHUB_ACTION_PATH}/../../scripts/run-pi-safe.sh"
 
-        # --approve trusts project-local resources (.agents/skills, .pi/settings.json)
-        # for this run only — non-interactive modes never show the trust prompt
-        # anyway, but this also covers the defaultProjectTrust=ask fallback.
-        # --no-session: CI runs are one-shot, nothing to resume across jobs.
         set +e
-        pi --print --no-session --approve \
-          --provider "$PI_PROVIDER" \
-          --model "$PI_MODEL" \
-          --api-key "$PI_API_KEY" \
-          --thinking "$PI_THINKING" \
-          "$(cat "$PROMPT_FILE")" | tee "$out"
+        bash "$runner" | tee "$out"
         status=${PIPESTATUS[0]}
         set -e
 

@@ -3,6 +3,12 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { inspectAgentifyRepoState } from "../src/core/repo-status.ts";
+import {
+  manifestFileFromContent,
+  writeManifest,
+  type ManagedManifestFile,
+} from "../src/core/manifest.ts";
+import { AGENTIFY_MANAGED_MARKERS } from "../src/core/artifact-exporters.ts";
 
 function tempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -14,24 +20,75 @@ function write(relativePath: string, cwd: string): void {
   fs.writeFileSync(filePath, "x\n");
 }
 
+function writeManaged(relativePath: string, cwd: string): ManagedManifestFile {
+  const filePath = path.join(cwd, relativePath);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const marker = relativePath.endsWith(".json")
+    ? ""
+    : relativePath.endsWith(".md")
+      ? `${AGENTIFY_MANAGED_MARKERS.markdown}\n`
+      : `${AGENTIFY_MANAGED_MARKERS.toml}\n`;
+  const content = `${marker}x\n`;
+  fs.writeFileSync(filePath, content);
+  return manifestFileFromContent({
+    relativePath,
+    content,
+    source: "test",
+  });
+}
+
 async function testReadyBrownfield(): Promise<void> {
   const cwd = tempDir("agentify-repo-status-brownfield-");
+  const configDir = tempDir("agentify-repo-status-config-");
+  try {
+    const files = [
+      "AGENTS.md",
+      "specs/README.md",
+      "ai_docs/README.md",
+      ".pi/agentify/codebase_map.json",
+      "SETUP.md",
+      ".github/workflows/agent-implement.yml",
+      ".github/actions/run-pi/action.yml",
+      ".github/scripts/setup-agentify.sh",
+      ".pi/agents/payments.md",
+    ].map((relativePath) => writeManaged(relativePath, cwd));
+    writeManifest(cwd, {
+      schema_version: "1",
+      agentify_version: "test",
+      generated_at: "2026-07-05T00:00:00.000Z",
+      mode: "brownfield",
+      files,
+    });
+    const state = inspectAgentifyRepoState(cwd, configDir);
+    assert.equal(state.mode, "brownfield");
+    assert.equal(state.status, "ready");
+    assert.equal(state.featureAgentCount, 1);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(configDir, { recursive: true, force: true });
+  }
+}
+
+async function testUnmanagedBrownfieldIsPartial(): Promise<void> {
+  const cwd = tempDir("agentify-repo-status-unmanaged-");
   const configDir = tempDir("agentify-repo-status-config-");
   try {
     for (const relativePath of [
       "AGENTS.md",
       "specs/README.md",
       "ai_docs/README.md",
+      ".pi/agentify/codebase_map.json",
       "SETUP.md",
       ".github/workflows/agent-implement.yml",
-      ".pi/agents/payments.md",
+      ".github/actions/run-pi/action.yml",
+      ".github/scripts/setup-agentify.sh",
     ]) {
       write(relativePath, cwd);
     }
     const state = inspectAgentifyRepoState(cwd, configDir);
     assert.equal(state.mode, "brownfield");
-    assert.equal(state.status, "ready");
-    assert.equal(state.featureAgentCount, 1);
+    assert.equal(state.status, "partial");
+    assert.ok(state.missing.some((entry) => entry.includes("(unmanaged)")));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
     fs.rmSync(configDir, { recursive: true, force: true });
@@ -47,10 +104,12 @@ async function testPartialGreenfield(): Promise<void> {
     const state = inspectAgentifyRepoState(cwd, configDir);
     assert.equal(state.mode, "greenfield");
     assert.equal(state.status, "partial");
-    assert.deepEqual(state.missing.sort(), [
-      ".github/workflows/agent-implement.yml",
-      "SETUP.md",
-    ]);
+    assert.ok(state.missing.includes(".github/workflows/agent-implement.yml"));
+    assert.ok(state.missing.includes(".github/actions/run-pi/action.yml"));
+    assert.ok(state.missing.includes(".github/scripts/setup-agentify.sh"));
+    assert.ok(state.missing.includes("SETUP.md"));
+    assert.ok(state.missing.includes("GOALS.md (unmanaged)"));
+    assert.ok(state.missing.includes("CONTEXT.md (unmanaged)"));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
     fs.rmSync(configDir, { recursive: true, force: true });
@@ -72,6 +131,7 @@ async function testUninitializedRepo(): Promise<void> {
 
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "readyBrownfield", fn: testReadyBrownfield },
+  { name: "unmanagedBrownfieldIsPartial", fn: testUnmanagedBrownfieldIsPartial },
   { name: "partialGreenfield", fn: testPartialGreenfield },
   { name: "uninitializedRepo", fn: testUninitializedRepo },
 ];

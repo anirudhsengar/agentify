@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$repo_root"
+shopt -s nullglob
 
 failures=0
 
@@ -20,7 +21,8 @@ require_text() {
   fi
 }
 
-for skill_file in .agents/skills/*/SKILL.md; do
+skill_files=(.agents/skills/*/SKILL.md)
+for skill_file in "${skill_files[@]}"; do
   directory_name=$(basename "$(dirname "$skill_file")")
   declared_name=$(sed -n 's/^name:[[:space:]]*//p' "$skill_file" | head -n1)
   if [ "$directory_name" != "$declared_name" ]; then
@@ -28,19 +30,25 @@ for skill_file in .agents/skills/*/SKILL.md; do
   fi
 done
 
-while IFS= read -r skill_name; do
-  if [ ! -f ".agents/skills/$skill_name/SKILL.md" ]; then
-    fail "skills-lock.json references missing skill '$skill_name'"
-  fi
-done < <(jq -r '.skills | keys[]' skills-lock.json)
+if [ -f skills-lock.json ]; then
+  while IFS= read -r skill_name; do
+    if [ ! -f ".agents/skills/$skill_name/SKILL.md" ]; then
+      fail "skills-lock.json references missing skill '$skill_name'"
+    fi
+  done < <(jq -r '.skills | keys[]' skills-lock.json)
+fi
 
-runtime_docs=(
+runtime_docs_candidates=(
   CONTEXT.md
   .agents/skills/to-goals/SKILL.md
   .agents/skills/to-goals/GOALS-FORMAT.md
   .github/agent-prompts/drill-me-issue.md
 )
-if grep -En '(/drill-with-docs|/drill-goal|/drill-subgoal|skills/drill-goal|skills/drill-subgoal)' "${runtime_docs[@]}"; then
+runtime_docs=()
+for candidate in "${runtime_docs_candidates[@]}"; do
+  [ -f "$candidate" ] && runtime_docs+=("$candidate")
+done
+if [ "${#runtime_docs[@]}" -gt 0 ] && grep -En '(/drill-with-docs|/drill-goal|/drill-subgoal|skills/drill-goal|skills/drill-subgoal)' "${runtime_docs[@]}"; then
   fail "runtime documentation references retired drill skills"
 fi
 
@@ -48,24 +56,32 @@ if [ -e .agents/skills/grill ] || [ -e .agents/skills/grilling ] || \
    [ -e .claude/skills/grill ] || [ -e .claude/skills/grilling ]; then
   fail "old grill/grilling skills must not exist; use the unified /drill-me skill"
 fi
-if grep -En '/grill|/grilling|skills/grill|skills/grilling' docs/adr/*.md skills-lock.json; then
+legacy_reference_files=(docs/adr/*.md)
+[ -f skills-lock.json ] && legacy_reference_files+=(skills-lock.json)
+if [ "${#legacy_reference_files[@]}" -gt 0 ] && grep -En '/grill|/grilling|skills/grill|skills/grilling' "${legacy_reference_files[@]}"; then
   fail "repository still references deleted grill/grilling skills"
 fi
 
 if [ -e .agents/skills/setup-matt-pocock-skills ] || [ -e .claude/skills/setup-matt-pocock-skills ]; then
   fail "setup-matt-pocock-skills must not exist; agentify setup lives in SETUP.md and .github/scripts/setup-agentify.sh"
 fi
-if grep -En 'setup-matt-pocock-skills|Matt Pocock|matt-pocock|matt pocock' SETUP.md docs/adr/*.md .agents/skills/*/SKILL.md skills-lock.json; then
+setup_reference_files=(SETUP.md docs/adr/*.md .agents/skills/*/SKILL.md)
+[ -f skills-lock.json ] && setup_reference_files+=(skills-lock.json)
+if [ "${#setup_reference_files[@]}" -gt 0 ] && grep -En 'setup-matt-pocock-skills|Matt Pocock|matt-pocock|matt pocock' "${setup_reference_files[@]}"; then
   fail "repository still references deleted setup-matt-pocock-skills surface"
 fi
-require_text \
-  .agents/skills/to-issues/SKILL.md \
-  'agent:queued' \
-  "implementation slices must be created with agent:queued"
-require_text \
-  .agents/skills/to-prd/SKILL.md \
-  'artifact:prd' \
-  "PRDs must use the artifact:prd label"
+if [ -f .agents/skills/to-issues/SKILL.md ]; then
+  require_text \
+    .agents/skills/to-issues/SKILL.md \
+    'agent:queued' \
+    "implementation slices must be created with agent:queued"
+fi
+if [ -f .agents/skills/to-prd/SKILL.md ]; then
+  require_text \
+    .agents/skills/to-prd/SKILL.md \
+    'artifact:prd' \
+    "PRDs must use the artifact:prd label"
+fi
 
 for workflow in \
   .github/workflows/agent-implement-pr.yml \
@@ -126,19 +142,45 @@ require_text .github/workflows/agent-drill-me-issue.yml "contains\\(github\\.eve
 require_text .github/workflows/agent-drill-me-issue.yml 'agent/drill-me-' \
   "drill workflow must use the agent/drill-me- branch prefix"
 
+require_text .github/agent-state-machine.json '"agent:queued"' \
+  "agent state machine contract must document agent labels"
+jq -e . .github/agent-state-machine.json >/dev/null \
+  || fail ".github/agent-state-machine.json is not valid JSON"
+require_text .github/workflows/agent-command.yml 'issue_comment:' \
+  "agent command router must listen to issue comments"
+require_text .github/workflows/agent-command.yml 'AUTHOR_ASSOCIATION' \
+  "agent command router must authorize actors"
+require_text .github/workflows/agent-command.yml 'route-agent-command\.sh' \
+  "agent command workflow must delegate to the router script"
+require_text .github/scripts/route-agent-command.sh '/agent retry|retry\)' \
+  "agent command router must support retry"
+require_text .github/scripts/route-agent-command.sh 'update-branch' \
+  "agent command router must support update-branch"
+
 require_text .github/actions/setup-pi/action.yml 'version:' \
   "Pi setup must accept an exact version"
+require_text .github/actions/run-pi/action.yml 'run-pi-safe\.sh' \
+  "Pi runs must go through the agentify safety wrapper"
+if grep -Eq '^[[:space:]]+pi --print' .github/actions/run-pi/action.yml; then
+  fail "run-pi action must not invoke pi directly; use run-pi-safe.sh"
+fi
+require_text .github/scripts/run-pi-safe.sh 'unset AGENT_PAT' \
+  "Pi safety wrapper must remove AGENT_PAT from the model process"
+require_text .github/scripts/run-pi-safe.sh 'AGENTIFY_CI_DEFENSE=1' \
+  "Pi safety wrapper must enable the CI defense floor"
 require_text SETUP.md 'PI_VERSION' \
   "Setup must require a pinned Pi version"
 
-duplicate_adr_ids=$(
-  find docs/adr -maxdepth 1 -type f -name '[0-9][0-9][0-9][0-9]-*.md' -printf '%f\n' |
-    cut -d- -f1 |
-    sort |
-    uniq -d
-)
-if [ -n "$duplicate_adr_ids" ]; then
-  fail "duplicate ADR identifiers: $duplicate_adr_ids"
+if [ -d docs/adr ]; then
+  duplicate_adr_ids=$(
+    find docs/adr -maxdepth 1 -type f -name '[0-9][0-9][0-9][0-9]-*.md' -printf '%f\n' |
+      cut -d- -f1 |
+      sort |
+      uniq -d
+  )
+  if [ -n "$duplicate_adr_ids" ]; then
+    fail "duplicate ADR identifiers: $duplicate_adr_ids"
+  fi
 fi
 
 for script in .github/scripts/*.sh tests/*.sh; do

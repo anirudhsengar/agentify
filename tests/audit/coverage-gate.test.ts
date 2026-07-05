@@ -14,6 +14,7 @@ import {
 import { loadCanonicalMap } from "../../src/core/audit/write-map-tool.ts";
 import { runAgentify } from "../../src/core/run-agentify.ts";
 import { saveAgentifyConfig, authPath } from "../../src/core/agentify-config.ts";
+import { readProjectState } from "../../src/core/project-state.ts";
 import type {
   AgentRuntime,
   AgentRuntimeResult,
@@ -81,10 +82,11 @@ class ScriptedRuntime implements AgentRuntime {
 }
 
 async function run(cwd: string, write: (cwd: string) => void): Promise<SilentUi> {
+  const configDir = makeConfiguredConfigDir();
   const ui = new SilentUi();
   await runAgentify({
     cwd,
-    configDir: makeConfiguredConfigDir(),
+    configDir,
     ui,
     runtime: new ScriptedRuntime(write),
     targets: ["codex"],
@@ -92,6 +94,21 @@ async function run(cwd: string, write: (cwd: string) => void): Promise<SilentUi>
     githubReadinessOverride: READY_GITHUB,
   });
   return ui;
+}
+
+async function runWithState(cwd: string, write: (cwd: string) => void): Promise<{ ui: SilentUi; configDir: string }> {
+  const configDir = makeConfiguredConfigDir();
+  const ui = new SilentUi();
+  await runAgentify({
+    cwd,
+    configDir,
+    ui,
+    runtime: new ScriptedRuntime(write),
+    targets: ["codex", "claude", "pi"],
+    assumeProjectKind: "brownfield",
+    githubReadinessOverride: READY_GITHUB,
+  });
+  return { ui, configDir };
 }
 
 // --- assessCoverageClosure -------------------------------------------------
@@ -146,6 +163,9 @@ async function testNoMapMeansPartialNoExport(): Promise<void> {
   const cwd = tempDir("gate-nomap");
   const ui = await run(cwd, (c) => writeArtifacts(c, { /* no map */ }));
   assert.ok(!fs.existsSync(path.join(cwd, ".codex")), "must not export without a map");
+  assert.ok(!fs.existsSync(path.join(cwd, "AGENTS.md")), "partial audit must roll back AGENTS.md");
+  assert.ok(!fs.existsSync(path.join(cwd, "specs", "README.md")), "partial audit must roll back specs README");
+  assert.ok(!fs.existsSync(path.join(cwd, "ai_docs", "README.md")), "partial audit must roll back ai_docs README");
   assert.ok(ui.errors.some((m) => m.includes("did not complete")));
 }
 
@@ -184,6 +204,31 @@ async function testFullyCoveredMeansSuccessAndPersistsMap(): Promise<void> {
   assert.ok(ui.infos.some((m) => m.includes("audit complete")));
 }
 
+async function testUserOwnedAgentsMdBlocksClaudeExport(): Promise<void> {
+  const cwd = tempDir("gate-user-agents");
+  fs.writeFileSync(path.join(cwd, "AGENTS.md"), "# User owned\n");
+  const { ui, configDir } = await runWithState(cwd, (c) => {
+    writeArtifacts(c, { map: makeValidCodebaseMap() });
+  });
+  assert.equal(fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf-8"), "# User owned\n");
+  assert.ok(!fs.existsSync(path.join(cwd, "CLAUDE.md")), "must not copy user-owned AGENTS.md to CLAUDE.md");
+  assert.ok(ui.errors.some((m) => m.includes("required generated file conflict")));
+  assert.equal(readProjectState(configDir, cwd)?.repoStatus, "partial");
+}
+
+async function testUserOwnedWorkflowConflictPersistsPartial(): Promise<void> {
+  const cwd = tempDir("gate-workflow-conflict");
+  const workflow = path.join(cwd, ".github", "workflows", "agent-implement.yml");
+  fs.mkdirSync(path.dirname(workflow), { recursive: true });
+  fs.writeFileSync(workflow, "name: user-owned\n");
+  const { configDir } = await runWithState(cwd, (c) => {
+    writeArtifacts(c, { map: makeValidCodebaseMap() });
+  });
+  assert.equal(readProjectState(configDir, cwd)?.repoStatus, "partial");
+  assert.equal(readProjectState(configDir, cwd)?.runStatus, "partial");
+  assert.equal(fs.readFileSync(workflow, "utf-8"), "name: user-owned\n");
+}
+
 const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "closureAllCovered", fn: testClosureAllCovered },
   { name: "closureRejectsEmptyEvidence", fn: testClosureRejectsEmptyEvidence },
@@ -194,6 +239,8 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "gapMapMeansPartialNoExport", fn: testGapMapMeansPartialNoExport },
   { name: "oversizedAgentsMdMeansPartial", fn: testOversizedAgentsMdMeansPartial },
   { name: "fullyCoveredMeansSuccessAndPersistsMap", fn: testFullyCoveredMeansSuccessAndPersistsMap },
+  { name: "userOwnedAgentsMdBlocksClaudeExport", fn: testUserOwnedAgentsMdBlocksClaudeExport },
+  { name: "userOwnedWorkflowConflictPersistsPartial", fn: testUserOwnedWorkflowConflictPersistsPartial },
 ];
 
 let passed = 0;

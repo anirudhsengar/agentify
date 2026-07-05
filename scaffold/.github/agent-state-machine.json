@@ -1,0 +1,21 @@
+{
+  "schema_version": "1",
+  "states": [
+    { "name": "intake", "label": "agent:drill-me", "description": "Issue is being drilled or clarified." },
+    { "name": "queued", "label": "agent:queued", "description": "Implementation slice exists but is not running." },
+    { "name": "implementing", "label": "agent:in-progress", "description": "An agent workflow is currently mutating code." },
+    { "name": "review", "label": "agent:review", "description": "A PR is awaiting automated review." },
+    { "name": "blocked", "label": "agent:blocked", "description": "Automation stopped and needs human action or retry." },
+    { "name": "approved", "label": "agent:approved", "description": "Automated review found no blockers; human merge is still required." },
+    { "name": "human-merge", "label": null, "description": "A human reviews and merges the PR." }
+  ],
+  "commands": [
+    { "command": "/agent retry", "trusted_actor_required": true, "description": "Retry the last blocked or queued agent action." },
+    { "command": "/agent stop", "trusted_actor_required": true, "description": "Remove runnable labels and mark the item blocked." },
+    { "command": "/agent implement", "trusted_actor_required": true, "description": "Add agent:implement to an issue or agent PR." },
+    { "command": "/agent review", "trusted_actor_required": true, "description": "Add agent:review to an agent PR." },
+    { "command": "/agent update-branch", "trusted_actor_required": true, "description": "Add agent:update-branch to an agent PR." }
+  ],
+  "issue_created_default": "safe-triage",
+  "issue_created_go_signal": "Only agent:drill-me starts intake automatically; implementation requires agent:implement."
+}

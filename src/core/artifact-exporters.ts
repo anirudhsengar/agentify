@@ -174,11 +174,19 @@ function exportClaude(cwd: string, packageRoot: string): ArtifactExportResult {
   const agentsMd = path.join(cwd, "AGENTS.md");
   if (fs.existsSync(agentsMd)) {
     const content = fs.readFileSync(agentsMd, "utf-8");
-    writes.push(writeManagedFile(
-      path.join(cwd, "CLAUDE.md"),
-      content.includes(MD_MARKER) ? content : `${MD_MARKER}\n${content}`,
-      MD_MARKER,
-    ));
+    if (!content.includes(MD_MARKER)) {
+      writes.push({
+        path: path.join(cwd, "CLAUDE.md"),
+        action: "conflict",
+        reason: "source AGENTS.md is not agentify-managed",
+      });
+    } else {
+      writes.push(writeManagedFile(
+        path.join(cwd, "CLAUDE.md"),
+        content,
+        MD_MARKER,
+      ));
+    }
   }
   exportSkills(packageRoot, path.join(cwd, ".claude", "skills"), writes);
   for (const agent of listFeatureAgents(cwd)) {

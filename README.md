@@ -93,15 +93,17 @@ On a successful **brownfield** audit, agentify writes into your repo:
 | `AGENTS.md` | Codebase-specific agent guide (capped at 200 lines) |
 | `specs/README.md`, `ai_docs/README.md` | Always-on context artifacts |
 | `.pi/agents/<feature>.md` | Generated feature specialists |
-| `.pi/agentify/codebase_map.json` | The validated audit map (managed) |
+| `.pi/prompts/`, `.pi/extensions/` | Deterministically rendered prompt templates, experts, and extension candidates when warranted |
+| `.pi/agentify/codebase_map.json`, `.pi/agentify/manifest.json` | The validated audit map and managed-file manifest |
 | `.agents/skills/`, `.claude/`, `.codex/`, `CLAUDE.md` | Harness exports |
 | `SETUP.md`, `.github/workflows/*`, `.github/scripts/*` | GitHub runtime scaffold |
 
 Generated files carry an `agentify:managed` marker. agentify never
-overwrites a pre-existing user-owned file: it reports it as a conflict
-and leaves it intact. Nothing is written unless the audit closes every
-coverage dimension; a partial audit reports its gaps and writes no
-harness export.
+overwrites a pre-existing user-owned file: it reports it as a conflict,
+leaves it intact, and keeps readiness `partial` when the conflict is
+required. User-facing files are applied from a staged bundle only after
+the audit closes every coverage dimension; a partial audit reports its
+gaps and rolls back generated surface writes.
 
 ## After Bootstrap
 
@@ -179,6 +181,8 @@ Useful docs:
 
 - [docs/lifecycle/README.md](docs/lifecycle/README.md) — the public
   lifecycle: bootstrap, GitHub inbox, PR, refresh.
+- [docs/roadmap/10-10/README.md](docs/roadmap/10-10/README.md) —
+  agent-sized roadmap from the repository audit to a 10/10 product.
 - [docs/01-orientation.md](docs/01-orientation.md)
 - [docs/13-repository-layout.md](docs/13-repository-layout.md)
 - [docs/14-development-guide.md](docs/14-development-guide.md)
