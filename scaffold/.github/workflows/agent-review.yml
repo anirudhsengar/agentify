@@ -1,0 +1,210 @@
+name: Agent Review
+
+# Picks up agent:review on a PR and has Pi review it. Simplified vs. plain
+# label-driven review tooling elsewhere: a single approve/request-changes
+# verdict with a summary comment, not per-line inline review threads — no
+# structured-output retry layer here, so keeping the schema small keeps the
+# failure mode "blocked, re-add the label" instead of a partially-posted
+# review.
+
+on:
+  # pull_request_target rather than pull_request: the standard pull_request
+  # trigger depends on a generated merge commit, which GitHub fails to
+  # produce when the PR is out-of-date or conflicting. pull_request_target
+  # runs in the base context and doesn't need that merge commit, so the
+  # labeled event fires reliably.
+  pull_request_target:
+    types: [labeled]
+
+jobs:
+  review:
+    if: >-
+      github.event.label.name == 'agent:review' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'agent/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency:
+      group: agent-mutate-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      BRANCH: ${{ github.event.pull_request.head.ref }}
+      BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Transition labels — remove trigger + blocked, add in-progress
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr edit "$PR_NUMBER" --remove-label "agent:review" || true
+          gh pr edit "$PR_NUMBER" --remove-label "agent:approved" || true
+          gh pr edit "$PR_NUMBER" --remove-label "agent:blocked" || true
+          gh pr edit "$PR_NUMBER" --add-label "agent:in-progress"
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Checkout trusted runtime from the PR base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .agentify-runtime
+          persist-credentials: false
+
+      - name: Exclude trusted runtime checkout from PR commits
+        run: echo "/.agentify-runtime/" >> .git/info/exclude
+
+      - name: Ensure base ref is available for diffing
+        run: |
+          git fetch origin "$BASE_REF":"$BASE_REF" || git fetch origin "$BASE_REF"
+          git checkout "$BRANCH" 2>/dev/null || git checkout -B "$BRANCH"
+          git config user.name "pi-agent[bot]"
+          git config user.email "pi-agent[bot]@users.noreply.github.com"
+
+      - name: Capture pre-run HEAD
+        id: pre
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Capture PR context for a credential-free agent run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash .agentify-runtime/.github/scripts/capture-pr-context.sh \
+            "$PR_NUMBER" "$GH_REPO" "${RUNNER_TEMP}/pr-context"
+
+      - name: Setup Pi
+        uses: ./.agentify-runtime/.github/actions/setup-pi
+        with:
+          version: ${{ vars.PI_VERSION }}
+
+      - name: Render review prompt
+        env:
+          PR_CONTEXT_DIR: ${{ runner.temp }}/pr-context
+        run: envsubst < .agentify-runtime/.github/agent-prompts/review.md > "${RUNNER_TEMP}/review-prompt.md"
+
+      - name: Run Pi — review
+        id: pi_review
+        uses: ./.agentify-runtime/.github/actions/run-pi
+        with:
+          prompt-file: ${{ runner.temp }}/review-prompt.md
+          api-key: ${{ secrets.PI_API_KEY }}
+          provider: ${{ vars.PI_PROVIDER || 'anthropic' }}
+          model: ${{ vars.PI_MODEL }}
+          thinking: ${{ vars.PI_THINKING || 'high' }}
+
+      - name: Extract verdict
+        id: verdict
+        env:
+          TRANSCRIPT: ${{ steps.pi_review.outputs.output-file }}
+        run: |
+          set -euo pipefail
+          bash .agentify-runtime/.github/scripts/extract-output.sh "$TRANSCRIPT" > "${RUNNER_TEMP}/review.json"
+          jq -e '
+            type == "object" and
+            ((.verdict == "approve") or (.verdict == "request_changes")) and
+            (.summary | type == "string" and length > 0)
+          ' "${RUNNER_TEMP}/review.json" >/dev/null
+          jq -r '.verdict' "${RUNNER_TEMP}/review.json" > "${RUNNER_TEMP}/verdict.txt"
+          jq -r '.summary' "${RUNNER_TEMP}/review.json" > "${RUNNER_TEMP}/summary.md"
+          echo "value=$(cat "${RUNNER_TEMP}/verdict.txt")" >> "$GITHUB_OUTPUT"
+
+      - name: Push any fixup commits (abort cleanly if non-fast-forward)
+        if: success()
+        env:
+          AGENT_PAT: ${{ secrets.AGENT_PAT }}
+        run: |
+          if [ "$(git rev-parse HEAD)" = "${{ steps.pre.outputs.sha }}" ]; then
+            echo "No fixup commits."
+            exit 0
+          fi
+          : "${AGENT_PAT:?AGENT_PAT is required — see SETUP.md}"
+          GH_TOKEN="$AGENT_PAT" gh auth setup-git
+          set +e
+          git push --force-with-lease="refs/heads/$BRANCH:$BRANCH_HEAD_SHA" origin "$BRANCH" 2> push_err.txt
+          status=$?
+          set -e
+          if [ $status -ne 0 ]; then
+            if grep -qiE "non-fast-forward|rejected|fetch first|stale info" push_err.txt; then
+              echo "Branch advanced during review run." > "${RUNNER_TEMP}/failure_reason.txt"
+              cat push_err.txt
+              exit 1
+            fi
+            cat push_err.txt
+            exit $status
+          fi
+
+      - name: Post review
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          verdict="${{ steps.verdict.outputs.value }}"
+          if [ "$verdict" = "approve" ]; then
+            {
+              echo "## Agent review — approved"
+              echo
+              cat "${RUNNER_TEMP}/summary.md"
+            } > "${RUNNER_TEMP}/review-comment.md"
+            gh pr comment "$PR_NUMBER" --body-file "${RUNNER_TEMP}/review-comment.md"
+            gh pr edit "$PR_NUMBER" --add-label "agent:approved"
+            gh pr ready "$PR_NUMBER" || true
+          elif [ "$verdict" = "request_changes" ]; then
+            {
+              echo "## Agent review — changes requested"
+              echo
+              cat "${RUNNER_TEMP}/summary.md"
+            } > "${RUNNER_TEMP}/review-comment.md"
+            gh pr comment "$PR_NUMBER" --body-file "${RUNNER_TEMP}/review-comment.md"
+          else
+            echo "Unexpected verdict: $verdict" > "${RUNNER_TEMP}/failure_reason.txt"
+            exit 1
+          fi
+
+      - name: Re-queue for implementation on request_changes
+        if: success() && steps.verdict.outputs.value == 'request_changes'
+        env:
+          AGENT_PAT: ${{ secrets.AGENT_PAT }}
+        run: |
+          set -euo pipefail
+          : "${AGENT_PAT:?AGENT_PAT is required — see SETUP.md}"
+          GH_TOKEN="$AGENT_PAT" gh pr edit "$PR_NUMBER" --add-label "agent:implement"
+
+      - name: Mark blocked on failure
+        if: failure()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          reason="(no reason file written — check workflow logs)"
+          if [ -f "${RUNNER_TEMP}/failure_reason.txt" ]; then
+            reason=$(cat "${RUNNER_TEMP}/failure_reason.txt")
+          fi
+          gh pr edit "$PR_NUMBER" --add-label "agent:blocked" || true
+          gh pr comment "$PR_NUMBER" --body "$(cat <<EOF
+          \`agent:review\` run failed.
+
+          **Reason:** $reason
+
+          **Workflow run:** $RUN_URL
+
+          Re-add \`agent:review\` to retry.
+          EOF
+          )"
+
+      - name: Always remove in-progress label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr edit "$PR_NUMBER" --remove-label "agent:in-progress" || true

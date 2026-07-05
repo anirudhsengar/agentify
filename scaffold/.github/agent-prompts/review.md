@@ -1,0 +1,47 @@
+# TASK
+
+Review PR #${PR_NUMBER} (branch `${BRANCH}`) against `${BASE_REF}`.
+
+# CONTEXT
+
+Read every JSON file under `${PR_CONTEXT_DIR}` for the PR, top-level
+comments, review summaries, inline comments, and closing issues. Then run:
+
+```
+git diff ${BASE_REF}...${BRANCH}
+```
+
+Read `CONTEXT.md` and any relevant ADRs under `docs/adr/`. Read the issue
+the PR closes from `${PR_CONTEXT_DIR}/issues/` for the original intent.
+GitHub credentials are intentionally unavailable during the agent run; the
+workflow posts the result and pushes any fixup commits afterward.
+
+# HOW TO REVIEW
+
+Follow the `/review` skill with `${BASE_REF}...${BRANCH}` as the fixed point
+and the issue under `${PR_CONTEXT_DIR}/issues/` as the spec source. It runs the
+two axes — **Standards** (the audited `AGENTS.md` conventions/pitfalls, ADRs,
+the `/<feature>` specialist for the area) and **Spec** (does the diff implement
+what the issue asked?) — as isolated sub-agents, plus visual proof when the app
+runs. This is the same skill a developer runs locally.
+
+You may make small, obviously-correct fixup commits (typos, an obviously
+missing test, a lint fix) directly on `${BRANCH}` if you're confident. Do
+NOT make substantial design changes — flag those in your summary instead
+of unilaterally rewriting the approach.
+
+# OUTPUT
+
+Once you're done, emit a single `<output>` block as the **last thing** in
+your response:
+
+<output>
+{
+  "verdict": "approve",
+  "summary": "Markdown review body. What you checked, what you found, anything you fixed directly, and anything left for the human to decide."
+}
+</output>
+
+`verdict` must be exactly `"approve"` or `"request_changes"`. Use
+`request_changes` for anything beyond trivial fixes — the implement loop
+will pick the PR back up.

@@ -1,0 +1,650 @@
+// spawn-explorer-tool.ts
+//
+// Custom tool that spawns a fresh, stateless in-process sub-agent
+// to perform a single dimension-shaped exploration of the codebase.
+// The sub-agent runs in the same Node.js process as the parent, so
+// the parent's Pi auth is reused (no subprocess, no auth forwarding).
+// The sub-agent has a fresh message history, a different system
+// prompt (one of the explorers/*.md files), and a narrow tool list.
+//
+// The sub-agent is created via createAgentSession() from the SDK
+// with a custom DefaultResourceLoader that:
+//   - replaces the system prompt with the dimension-specific prompt,
+//   - skips project context files (AGENTS.md, CLAUDE.md, etc.),
+//   - skips project extensions, skills, prompt templates, themes,
+// so the sub-agent starts from a clean slate.
+//
+// After the sub-agent finishes, we extract the last assistant
+// message's text and return it to the parent builder as the
+// structured report. The parent merges the report's fields into the
+// codebase_map.
+//
+// MODES (dimension-shaped, all stateless, all read-only):
+//   - topography    — whole-codebase orientation
+//   - module_graph  — import graph, client/server split, shared state
+//   - type_tracer   — trace a specific type end-to-end
+//   - conventions   — read sibling files, induce naming/logging/etc.
+//   - operational   — build/run/deploy, env vars, ports, shutdown
+//   - security      — path/command/env classifications, damage-control
+//   - pitfalls      — git-log-driven risk discovery
+//   - validation    — test/lint/typecheck commands + per-change-type
+//   - gap_filler    — close an uncovered D1-D10 dimension (fallback mode)
+//   - custom        — system prompt composed by the parent (Phase 2.10);
+//                     unlimited sub-agents; one per topic/specialization.
+//
+// "files" mode was deprecated in Task 3.8 — removed from the enum.
+// The "custom" mode (Phase 2.10) replaces the implicit parallel-cap
+// pattern: there is no longer a hard cap on parallel sub-agents.
+// The action budget in the parent (none — the LLM decides) is the
+// sole governor.
+
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+    createAgentSession,
+    DefaultResourceLoader,
+    defineTool,
+    type ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
+import { StringEnum } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
+import { getThinkingLevel } from "./state.ts";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const EXPLORERS_DIR = path.join(HERE, "prompts", "explorers");
+
+// Hard cap on sub-agent report size (Phase 1.3). 32 KB is enough
+// for a structured ## Report; anything larger is truncated to
+// prevent context overflow.
+const MAX_REPORT_BYTES = 32_000;
+
+// The 9 dimension-shaped modes plus a 10th "custom" mode (Phase 2.10)
+// that takes an inline or file-based system prompt composed by the
+// builder. The legacy "files" mode is deprecated (Task 3.8) and
+// removed from the enum. If a future caller uses it, TypeBox
+// validation will reject the call.
+const ExplorerMode = StringEnum(
+    [
+        "topography",
+        "module_graph",
+        "type_tracer",
+        "conventions",
+        "operational",
+        "security",
+        "pitfalls",
+        "validation",
+        "gap_filler",
+        "custom",
+    ] as const,
+    { default: "topography" },
+);
+
+const MODE_TO_FILE: Record<string, string> = {
+    topography: "topography.md",
+    module_graph: "module_graph.md",
+    type_tracer: "type_tracer.md",
+    conventions: "conventions.md",
+    operational: "operational.md",
+    security: "security.md",
+    pitfalls: "pitfalls.md",
+    validation: "validation.md",
+    gap_filler: "gap_filler.md",
+};
+
+// The 11-section template used by the builder to compose custom
+// sub-agent prompts (Phase 2.10). The builder reads this template,
+// substitutes the `{{...}}` placeholders, and dispatches the
+// sub-agent with the composed system prompt (inline or as a file).
+const CUSTOM_TEMPLATE_PATH = path.join(EXPLORERS_DIR, "_template.md");
+
+// Per-mode model selection (Phase 2.7). The `custom` mode inherits
+// from the parent (the builder picks the model per-topic).
+const MODE_MODEL_DEFAULT: Record<string, string> = {
+    topography: "haiku",
+    module_graph: "sonnet",
+    type_tracer: "sonnet",
+    conventions: "sonnet",
+    operational: "sonnet",
+    security: "sonnet",
+    pitfalls: "sonnet",
+    validation: "haiku",
+    gap_filler: "opus",
+    custom: "sonnet",
+};
+
+/** Per-mode step caps (Phase 4.6). */
+const MODE_STEP_DEFAULTS: Record<string, { reads: number; bash: number; steps: number }> = {
+    topography: { reads: 8, bash: 0, steps: 12 },
+    module_graph: { reads: 10, bash: 0, steps: 15 },
+    type_tracer: { reads: 8, bash: 0, steps: 12 },
+    conventions: { reads: 7, bash: 0, steps: 10 },
+    operational: { reads: 10, bash: 0, steps: 15 },
+    security: { reads: 10, bash: 0, steps: 15 },
+    pitfalls: { reads: 5, bash: 2, steps: 10 },
+    validation: { reads: 10, bash: 2, steps: 15 },
+    gap_filler: { reads: 8, bash: 2, steps: 12 },
+    // Phase 2.10 — custom sub-agents: builder specifies per-call.
+    custom: { reads: 8, bash: 0, steps: 12 },
+};
+
+const ModelChoice = StringEnum(
+    ["inherit", "haiku", "sonnet", "opus"] as const,
+    { default: "inherit" },
+);
+
+const SpawnExplorerParams = Type.Object({
+    mode: Type.Optional(ExplorerMode),
+    target_path: Type.String({
+        description:
+            "Directory to explore. Absolute path or cwd-relative path. " +
+            "The sub-agent will only read files within this directory. " +
+            "If the resolved path is outside ctx.cwd, the call is rejected " +
+            "unless `allow_external_paths: true` is also passed (logged as a " +
+            "security event).",
+    }),
+    focus: Type.Optional(
+        Type.String({
+            description:
+                "Optional focus. Semantics depend on mode: for type_tracer, the type name to trace; for gap_filler, the dimension (e.g., 'D5_pitfalls'); for others, a one-sentence hint.",
+        }),
+    ),
+    model: Type.Optional(
+        ModelChoice,
+    ),
+    summary: Type.Optional(
+        Type.String({
+            description:
+                "One-line focus summary passed to the sub-agent as context. " +
+                "Useful for steering the sub-agent's exploration toward a specific aspect.",
+        }),
+    ),
+    allow_external_paths: Type.Optional(
+        Type.Boolean({
+            description:
+                "If true, allow target_path to resolve outside ctx.cwd. " +
+                "Default false (domain-locked). When set, the external access is logged.",
+        }),
+    ),
+    max_reads: Type.Optional(
+        Type.Number({
+            description: "Override the per-mode default read cap.",
+        }),
+    ),
+    max_bash_invocations: Type.Optional(
+        Type.Number({
+            description: "Override the per-mode default bash invocation cap.",
+        }),
+    ),
+    max_total_steps: Type.Optional(
+        Type.Number({
+            description: "Override the per-mode default total step cap.",
+        }),
+    ),
+    // Phase 2.10 — custom mode parameters. The builder composes a
+    // system prompt for the sub-agent (one per topic/specialization)
+    // and dispatches it. Inline is fine for short prompts; file-based
+    // is for longer ones. Exactly one of `system_prompt` or
+    // `system_prompt_file` MUST be provided when mode == "custom".
+    // For other modes these are ignored.
+    system_prompt: Type.Optional(
+        Type.String({
+            description:
+                "Inline system prompt for the sub-agent. The builder " +
+                "composes this from the `_template.md` 11-section template " +
+                "with the placeholders substituted. Required for `custom` " +
+                "mode unless `system_prompt_file` is provided. Inline is " +
+                "recommended for prompts under ~16 KB.",
+        }),
+    ),
+    system_prompt_file: Type.Optional(
+        Type.String({
+            description:
+                "Path (absolute or cwd-relative) to a `.md` file containing " +
+                "the sub-agent's full system prompt. Use this for long " +
+                "prompts (>16 KB) or when the builder wants to write the " +
+                "prompt to disk first (e.g., for inspection). Required for " +
+                "`custom` mode unless `system_prompt` is provided. The " +
+                "file is read once at spawn time and passed to the " +
+                "sub-agent's resource loader.",
+        }),
+    ),
+    tools: Type.Optional(
+        Type.Array(Type.String(), {
+            description:
+                "Override the tool list for the sub-agent. Defaults are " +
+                "mode-specific (most fixed modes are read-only; pitfalls, " +
+                "validation, and gap_filler get `bash`). For `custom` " +
+                "mode, the default is `[\"read\", \"grep\", \"find\", \"ls\"]`. " +
+                "If you need `bash` for a custom sub-agent, include it here.",
+        }),
+    ),
+});
+
+let activeSpawnCount = 0;
+
+function resolveExplorerPromptPath(mode: string): string {
+    const file = MODE_TO_FILE[mode];
+    if (!file) {
+        throw new Error(
+            `Unknown explorer mode: "${mode}". Valid modes: ${Object.keys(MODE_TO_FILE).join(", ")}`,
+        );
+    }
+    return path.join(EXPLORERS_DIR, file);
+}
+
+function readSubagentPrompt(mode: string): string {
+    const promptPath = resolveExplorerPromptPath(mode);
+    return fs.readFileSync(promptPath, "utf-8");
+}
+
+/**
+ * Resolve the system prompt for a sub-agent.
+ *
+ * For fixed modes (topography, module_graph, etc.), the prompt is
+ * loaded from the explorer files in `prompts/explorers/`.
+ *
+ * For `custom` mode (Phase 2.10), the prompt is composed by the
+ * parent (the builder) and passed either inline (`system_prompt`)
+ * or as a file (`system_prompt_file`). Exactly one of the two is
+ * required when `mode == "custom"`.
+ */
+function resolveSubagentPrompt(
+    mode: string,
+    inlinePrompt: string | undefined,
+    promptFile: string | undefined,
+): { prompt: string; source: "inline" | "file" | "fixed" } {
+    if (mode === "custom") {
+        if (inlinePrompt) {
+            return { prompt: inlinePrompt, source: "inline" };
+        }
+        if (promptFile) {
+            const resolved = path.isAbsolute(promptFile)
+                ? promptFile
+                : path.resolve(promptFile);
+            return { prompt: fs.readFileSync(resolved, "utf-8"), source: "file" };
+        }
+        throw new Error(
+            `custom mode requires either system_prompt or system_prompt_file. ` +
+            `Compose the prompt from the 11-section template at ` +
+            `${CUSTOM_TEMPLATE_PATH} and pass it via one of the two parameters.`,
+        );
+    }
+    // Fixed mode: load from disk.
+    return { prompt: readSubagentPrompt(mode), source: "fixed" };
+}
+
+function extractFinalAssistantText(
+    messages: ReadonlyArray<{ role?: string; content?: unknown }>,
+): string {
+    // Walk backwards to find the last assistant message with text content.
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (!m || m.role !== "assistant") continue;
+        const content = m.content;
+        if (typeof content === "string") return content;
+        if (Array.isArray(content)) {
+            const textParts: string[] = [];
+            for (const block of content) {
+                if (
+                    block &&
+                    typeof block === "object" &&
+                    "type" in block &&
+                    (block as { type?: string }).type === "text" &&
+                    "text" in block &&
+                    typeof (block as { text?: unknown }).text === "string"
+                ) {
+                    textParts.push((block as { text: string }).text);
+                }
+            }
+            if (textParts.length > 0) return textParts.join("");
+        }
+    }
+    return "(no report — sub-agent did not produce text)";
+}
+
+function truncateReport(report: string): { report: string; truncated: boolean; report_length: number } {
+    if (report.length <= MAX_REPORT_BYTES) {
+        return { report, truncated: false, report_length: report.length };
+    }
+    const omitted = report.length - MAX_REPORT_BYTES;
+    return {
+        report:
+            report.slice(0, MAX_REPORT_BYTES) +
+            `\n\n[TRUNCATED: ${omitted} bytes omitted; see log for full report]`,
+        truncated: true,
+        report_length: report.length,
+    };
+}
+
+function persistTruncatedReport(
+    cwd: string,
+    mode: string,
+    runId: string,
+    fullReport: string,
+): string {
+    try {
+        const logDir = path.join(cwd, ".pi", "agentify", "logs");
+        fs.mkdirSync(logDir, { recursive: true });
+        const safeRunId = runId.replace(/[^a-zA-Z0-9-]/g, "-");
+        const filePath = path.join(logDir, `${safeRunId}-spawn-${mode}-report.txt`);
+        fs.writeFileSync(filePath, fullReport, { mode: 0o644 });
+        return filePath;
+    } catch {
+        return "";
+    }
+}
+
+function resolveTargetPath(target: string, cwd: string): string {
+    if (path.isAbsolute(target)) return path.normalize(target);
+    return path.normalize(path.join(cwd, target));
+}
+
+function isPathInside(child: string, parent: string): boolean {
+    const rel = path.relative(parent, child);
+    return !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+function sha256(s: string): string {
+    // Use a tiny inline hash — we don't need crypto-grade, just stable.
+    // Avoiding import of node:crypto keeps the file light.
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = (h * 0x01000193) >>> 0;
+    }
+    return h.toString(16).padStart(8, "0");
+}
+
+function buildRunId(): string {
+    return `spawn-${Date.now()}-${sha256(os.tmpdir() + process.pid + Math.random().toString())}`;
+}
+
+export interface SpawnExplorerToolOptions {
+    agentDir: string;
+}
+
+export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): ToolDefinition {
+    return defineTool({
+    name: "spawn_explorer",
+    label: "Spawn Explorer",
+    description:
+        "Spawn a fresh, stateless in-process sub-agent to perform a single bounded exploration. " +
+        "The sub-agent does not inherit your context. Returns a structured ## Report tailored to the mode. " +
+        "There are 10 modes. The first 9 are dimension-shaped fixed modes: " +
+        "topography (whole-codebase orientation), module_graph (imports/split/shared state), " +
+        "type_tracer (trace a type end-to-end; pass type name in focus), conventions (induce naming/logging/etc.), " +
+        "operational (build/run/deploy/env/ports), security (path/command/env classifications), " +
+        "pitfalls (git-log + grep for tribal knowledge), validation (test/lint/typecheck commands), " +
+        "gap_filler (close an uncovered D1-D10 dimension; pass dimension in focus). " +
+        "The 10th mode is `custom` (Phase 2.10): the parent composes the sub-agent's system " +
+        "prompt from the 11-section `_template.md`, and the sub-agent becomes a topic/specialization " +
+        "specialist. Pass the prompt via `system_prompt` (inline) or `system_prompt_file` (path). " +
+        "There is NO hard cap on parallel sub-agents and NO hard action limit; the LLM decides when " +
+        "sole governor. Dispatch as many as the topic decomposition needs. " +
+        "Default mode: topography. Reports exceeding 32 KB are truncated; the full report is " +
+        "persisted to the log dir. target_path is domain-locked to ctx.cwd unless " +
+        "allow_external_paths is true (logged). Use the `model` parameter to override the per-mode " +
+        "model default (haiku/sonnet/opus). Use `summary` for a one-line focus hint passed as " +
+        "additional context.",
+    parameters: SpawnExplorerParams,
+
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+        const mode = params.mode ?? "topography";
+
+        // Phase 2.10 — no parallel cap, no hard action limit. The
+        // LLM is the brain; the system is the loop. We still track
+        // activeSpawnCount for observability but no longer reject
+        // calls based on it.
+
+        // Validate target_path domain-lock (Phase 2.6).
+        const resolvedTarget = resolveTargetPath(params.target_path, ctx.cwd);
+        const insideCwd = isPathInside(resolvedTarget, ctx.cwd);
+        if (!insideCwd && !params.allow_external_paths) {
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text:
+                            `Error: defense domain-lock: target_path '${params.target_path}' resolves to ` +
+                            `'${resolvedTarget}', which is outside ctx.cwd '${ctx.cwd}'. ` +
+                            `If you really need to read outside ctx.cwd, set allow_external_paths: true ` +
+                            `(this is logged as a security event).`,
+                    },
+                ],
+                isError: true,
+                details: undefined as unknown as Record<string, unknown>,
+            };
+        }
+
+        // Log external path access (Phase 2.6).
+        if (params.allow_external_paths) {
+            try {
+                // Best-effort: log to the agentify log if available.
+                // The actual write happens via ctx.log if exposed; we
+                // emit a no-op here that the defense hook handler can pick
+                // up. The audit trail is in the JSONL log via the
+                // subagent_spawned event's details.
+            } catch {
+                // ignore
+            }
+        }
+
+        // Resolve model (Phase 2.7).
+        const modelChoice = params.model ?? "inherit";
+        const resolvedModel = modelChoice === "inherit"
+            ? MODE_MODEL_DEFAULT[mode] ?? "sonnet"
+            : modelChoice;
+
+        // Resolve step caps (Phase 4.6).
+        const stepDefaults = MODE_STEP_DEFAULTS[mode] ?? { reads: 10, bash: 2, steps: 15 };
+        const maxReads = params.max_reads ?? stepDefaults.reads;
+        const maxBash = params.max_bash_invocations ?? stepDefaults.bash;
+        const maxSteps = params.max_total_steps ?? stepDefaults.steps;
+
+        activeSpawnCount += 1;
+        const start = Date.now();
+        const runId = buildRunId();
+
+        // Resolve the sub-agent's system prompt. For fixed modes,
+        // it's loaded from prompts/explorers/. For custom mode, the
+        // builder composes it and passes via system_prompt or
+        // system_prompt_file.
+        let subagentSystemPrompt: string;
+        let promptSource: "inline" | "file" | "fixed";
+        try {
+            const resolved = resolveSubagentPrompt(
+                mode,
+                params.system_prompt,
+                params.system_prompt_file,
+            );
+            subagentSystemPrompt = resolved.prompt;
+            promptSource = resolved.source;
+        } catch (err) {
+            activeSpawnCount -= 1;
+            const msg = err instanceof Error ? err.message : String(err);
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `Error: ${msg}`,
+                    },
+                ],
+                isError: true,
+                details: undefined as unknown as Record<string, unknown>,
+            };
+        }
+
+        // Compose the user task for the sub-agent. Each fixed-mode
+        // prompt uses positional $1 = TARGET_PATH and $2 = FOCUS; we
+        // pass them space-separated. The prompt's variable section
+        // explains what $2 means for its mode. We also pass a
+        // model+step constraints block as a tail paragraph (the
+        // sub-agent's prompt is unchanged; the parent injects this).
+        const summarySuffix = params.summary ? `\n\n# Focus\n\n${params.summary}` : "";
+        const constraintsBlock =
+            `\n\n# Constraints (from parent)\n` +
+            `- Model: ${resolvedModel}\n` +
+            `- Step cap: ${maxSteps} total (${maxReads} reads, ${maxBash} bash invocations max)\n` +
+            `- Return ## Report within ~${maxSteps * 1000} tokens.`;
+        const task = mode === "custom"
+            ? `${params.target_path}${summarySuffix}${constraintsBlock}`
+            : `${params.target_path} ${params.focus ?? ""}${summarySuffix}${constraintsBlock}`;
+
+        type SubSession = { dispose: () => void; prompt: (text: string) => Promise<void>; messages: unknown[] };
+        let session: SubSession | undefined;
+
+        try {
+            // Build a clean resource loader for the sub-agent:
+            // - no project context files (AGENTS.md, CLAUDE.md)
+            // - no project extensions (the defense hook, etc. would
+            //   interfere with the sub-agent's read-only purpose)
+            // - no skills, prompt templates, themes
+            // - the system prompt is fully replaced with the
+            //   dimension-specific prompt (or the parent's custom
+            //   prompt for custom mode).
+            const resourceLoader = new DefaultResourceLoader({
+                cwd: ctx.cwd,
+                agentDir: toolOptions.agentDir,
+                noContextFiles: true,
+                noExtensions: true,
+                noSkills: true,
+                noPromptTemplates: true,
+                noThemes: true,
+                systemPrompt: subagentSystemPrompt,
+            });
+
+            // Tool selection. The pitfalls, validation, and gap_filler
+            // fixed modes need bash (for git log, test runs, etc.).
+            // For custom mode, the builder specifies the tool list
+            // explicitly via the `tools` parameter; if not provided,
+            // default to read-only.
+            const defaultToolsForMode: ReadonlyArray<string> = (() => {
+                if (mode === "pitfalls" || mode === "validation" || mode === "gap_filler") {
+                    return ["read", "grep", "find", "ls", "bash"];
+                }
+                if (mode === "custom") {
+                    return ["read", "grep", "find", "ls"];
+                }
+                return ["read", "grep", "find", "ls"];
+            })();
+            const toolsForMode: ReadonlyArray<string> = params.tools ?? defaultToolsForMode;
+
+            // Mirror the parent's thinking level so sub-agents do their
+            // structured analysis with the same reasoning budget as the
+            // builder. A sub-agent running at the SDK default would
+            // silently do less reasoning and produce weaker reports.
+            const parentThinkingLevel = getThinkingLevel();
+            const { session: createdSession } = await createAgentSession({
+                cwd: ctx.cwd,
+                agentDir: toolOptions.agentDir,
+                model: ctx.model,
+                modelRegistry: ctx.modelRegistry,
+                thinkingLevel: parentThinkingLevel === "unknown" ? undefined : parentThinkingLevel,
+                tools: [...toolsForMode],
+                resourceLoader,
+            });
+            session = createdSession as unknown as SubSession;
+
+            // Send the task and wait for the sub-agent to finish.
+            if (!session) throw new Error("session not initialized");
+            await session.prompt(task);
+
+            // Extract the final assistant text from the sub-agent's
+            // message history and return it as the tool result.
+            const rawReport = extractFinalAssistantText(
+                session.messages as ReadonlyArray<{ role?: string; content?: unknown }>,
+            );
+
+            // Truncate the report if it exceeds the cap.
+            const { report, truncated, report_length } = truncateReport(rawReport);
+            let truncatedPath = "";
+            if (truncated) {
+                truncatedPath = persistTruncatedReport(ctx.cwd, mode, runId, rawReport);
+            }
+
+            // Count actual tool calls from the sub-agent for the step-cap diagnostic.
+            const subagentMessages =
+                session.messages as ReadonlyArray<{ role?: string; content?: unknown }>;
+            let readCount = 0;
+            let bashCount = 0;
+            for (const m of subagentMessages) {
+                if (m.role !== "assistant") continue;
+                if (!Array.isArray(m.content)) continue;
+                for (const block of m.content) {
+                    if (!block || typeof block !== "object") continue;
+                    const b = block as { type?: string; name?: string };
+                    if (b.type === "tool_use") {
+                        if (b.name === "read") readCount += 1;
+                        else if (b.name === "bash") bashCount += 1;
+                    }
+                }
+            }
+
+            const durationMs = Date.now() - start;
+            const stepWarning =
+                readCount > maxReads || bashCount > maxBash
+                    ? ` [WARNING: sub-agent exceeded step cap: reads=${readCount}/${maxReads}, bash=${bashCount}/${maxBash}]`
+                    : readCount >= maxReads * 0.8
+                    ? ` [WARNING: 80% of reads used: ${readCount}/${maxReads}]`
+                    : "";
+
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text:
+                            `Sub-agent (mode=${mode}, model=${resolvedModel}) explored ${params.target_path} in ${durationMs}ms. ` +
+                            `reads=${readCount}/${maxReads}, bash=${bashCount}/${maxBash}${stepWarning}.\n\n` +
+                            report,
+                    },
+                ],
+                details: {
+                    mode,
+                    prompt_source: promptSource,
+                    target_path: params.target_path,
+                    resolved_target_path: resolvedTarget,
+                    focus: params.focus ?? null,
+                    summary: params.summary ?? null,
+                    model: resolvedModel,
+                    tools: toolsForMode,
+                    duration_ms: durationMs,
+                    report_length,
+                    report_truncated: truncated,
+                    report_truncated_path: truncatedPath || null,
+                    reads: readCount,
+                    bash: bashCount,
+                    max_reads: maxReads,
+                    max_bash: maxBash,
+                    max_steps: maxSteps,
+                    domain_locked: insideCwd,
+                    allow_external_paths: params.allow_external_paths ?? false,
+                    run_id: runId,
+                },
+            };
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `Error: sub-agent (mode=${mode}) for ${params.target_path} failed: ${msg}`,
+                    },
+                ],
+                isError: true,
+                details: undefined as unknown as Record<string, unknown>,
+            };
+        } finally {
+            try {
+                session?.dispose();
+            } catch {
+                // ignore disposal errors
+            }
+            activeSpawnCount -= 1;
+        }
+    },
+    }) as unknown as ToolDefinition;
+}
+
+export type SpawnExplorerTool = ReturnType<typeof createSpawnExplorerTool>;

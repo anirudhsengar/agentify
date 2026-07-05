@@ -1,0 +1,30 @@
+{
+  "name": "chain_sub_agents",
+  "description": "Run a sequence of sub-agents, each passing its result to the next via ${agents[<prev>].result_text}.",
+  "tags": ["pipeline", "sequential", "subagent"],
+  "inputs": {
+    "chain": {
+      "type": "string-list",
+      "description": "Step ids (and their subagent_template names) in execution order. Format: 'id:template'."
+    }
+  },
+  "parallelism": "sequential",
+  "max_runtime_minutes": 30,
+  "steps": [
+    {
+      "id": "first",
+      "description": "First link; spawned with chain[0]'s template.",
+      "handler": "subagent",
+      "subagent_template": "scout-report-suggest",
+      "user_prompt": "Begin the chain. Process the user's overall request and produce a result the next link can build on."
+    },
+    {
+      "id": "second",
+      "description": "Placeholder — replaced via compose_workflow when the chain length is known at runtime.",
+      "handler": "subagent",
+      "subagent_template": "scout-report-suggest",
+      "user_prompt": "Continue from: ${agents[first].result_text}",
+      "depends_on": ["first"]
+    }
+  ]
+}
