@@ -51,6 +51,7 @@ import {
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { getThinkingLevel } from "./state.ts";
+import { makeDefenseHook } from "./defense-hook.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXPLORERS_DIR = path.join(HERE, "prompts", "explorers");
@@ -254,15 +255,23 @@ function resolveSubagentPrompt(
     mode: string,
     inlinePrompt: string | undefined,
     promptFile: string | undefined,
+    cwd: string,
 ): { prompt: string; source: "inline" | "file" | "fixed" } {
     if (mode === "custom") {
         if (inlinePrompt) {
             return { prompt: inlinePrompt, source: "inline" };
         }
         if (promptFile) {
+            // Resolve relative paths against the repo cwd, not the
+            // process cwd (B6), and confine the read to the repo.
             const resolved = path.isAbsolute(promptFile)
-                ? promptFile
-                : path.resolve(promptFile);
+                ? path.normalize(promptFile)
+                : path.normalize(path.resolve(cwd, promptFile));
+            if (!isPathInside(resolved, cwd) && !path.isAbsolute(promptFile)) {
+                throw new Error(
+                    `system_prompt_file '${promptFile}' resolves outside the repository.`,
+                );
+            }
             return { prompt: fs.readFileSync(resolved, "utf-8"), source: "file" };
         }
         throw new Error(
@@ -458,6 +467,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 mode,
                 params.system_prompt,
                 params.system_prompt_file,
+                ctx.cwd,
             );
             subagentSystemPrompt = resolved.prompt;
             promptSource = resolved.source;
@@ -513,7 +523,19 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 noPromptTemplates: true,
                 noThemes: true,
                 systemPrompt: subagentSystemPrompt,
+                // Explorer sub-agents read (and, for some modes, run
+                // bash against) untrusted repository content. Attach the
+                // same defense hook the parent session uses: bash
+                // blacklist, zero-access paths, credential-store block,
+                // and a repository jail on writes. Without this the
+                // sub-agent would run bash with no blacklist at all.
+                extensionFactories: [
+                    (pi) => {
+                        pi.on("tool_call", makeDefenseHook({ repoJail: true }));
+                    },
+                ],
             });
+            await resourceLoader.reload();
 
             // Tool selection. The pitfalls, validation, and gap_filler
             // fixed modes need bash (for git log, test runs, etc.).

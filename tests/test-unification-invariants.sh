@@ -167,6 +167,44 @@ for f in src/cli-webhook.ts src/cli-aiw.ts src/cli-orchestrator.ts src/cli-exper
   fi
 done
 
+# 15. Release hygiene: the license, changelog, and publish curation the
+#     package claims must actually exist.
+[ -f LICENSE ] || fail "LICENSE file is missing (package.json declares MIT)"
+[ -f CHANGELOG.md ] || fail "CHANGELOG.md is missing"
+[ "$(jq -r '.license // empty' package.json)" = "MIT" ] \
+  || fail "package.json license must be MIT (matching LICENSE)"
+jq -e '.files | index("bin")' package.json >/dev/null \
+  || fail "package.json must declare a files allowlist including bin/"
+[ "$(jq -r '.scripts.prepublishOnly // empty' package.json)" != "" ] \
+  || fail "package.json must define a prepublishOnly gate"
+jq -e '.repository.url // empty' package.json >/dev/null \
+  || fail "package.json must declare a repository url"
+grep -q 'typecheck' <<<"$(jq -r '.scripts.test // empty' package.json)" \
+  || fail "npm test must run the typecheck gate"
+
+# 16. Root CI exists for the agentify package itself (not just the
+#     scaffold stamped into target repos).
+[ -f .github/workflows/ci.yml ] || fail "root CI workflow .github/workflows/ci.yml is missing"
+
+# 17. Every doc the README links to resolves, and the ADR set is present.
+for d in \
+  docs/lifecycle/README.md \
+  docs/01-orientation.md \
+  docs/13-repository-layout.md \
+  docs/14-development-guide.md \
+  docs/15-the-webhook-server.md \
+  docs/18-the-orchestrator.md \
+  docs/adr/README.md; do
+  [ -f "$d" ] || fail "documentation file referenced by the repo is missing: $d"
+done
+
+# 18. Every ADR referenced from shipped skills / scaffold resolves.
+while IFS= read -r adr; do
+  [ -f "docs/adr/$adr" ] || fail "referenced ADR is missing: docs/adr/$adr"
+done < <(grep -rhoE 'docs/adr/[0-9]{4}-[a-z0-9-]+\.md' \
+           .agents/skills scaffold docs README.md 2>/dev/null \
+           | sed 's#.*docs/adr/##' | sort -u)
+
 if [ "$failures" -gt 0 ]; then
   echo "$failures unification invariant error(s)." >&2
   exit 1

@@ -73,6 +73,20 @@ export const BLACKLIST: ReadonlyArray<BlacklistEntry> = [
   { pattern: /\bwget\b[^|;&]*\|\s*(bash|sh|zsh|python|node)\b/, label: "wget pipe to shell (RCE)" },
   { pattern: /\bcurl\b[^|;&]*\|\s*(sudo\s+)?(bash|sh)\b/, label: "curl pipe to bash with sudo" },
 
+  // ===== Interpreter inline code (single-command RCE bypass) =====
+  // A bare `python3 -c '...'` / `node -e '...'` has no shell operators,
+  // so it passes the SHELL_OPERATORS pre-check. It is nonetheless
+  // arbitrary code execution that can read secrets, open sockets, or
+  // write outside the repo. The builder never needs interpreter
+  // one-liners; scripts should be written to a file and run (where the
+  // script-content scanner applies). Block the eval forms outright.
+  { pattern: /\b(python|python3|pypy|pypy3)\s+(-c|-)\b/, label: "python inline code (-c)" },
+  { pattern: /\bnode\s+(-e|--eval|-p|--print)\b/, label: "node inline eval (-e/-p)" },
+  { pattern: /\b(deno)\s+eval\b/, label: "deno eval" },
+  { pattern: /\b(bun)\s+(-e|--eval)\b/, label: "bun inline eval" },
+  { pattern: /\b(ruby|perl|php)\s+-e\b/, label: "ruby/perl/php inline code (-e)" },
+  { pattern: /\b(bash|sh|zsh|dash|ksh)\s+-c\b/, label: "shell inline code (-c)" },
+
   // ===== Install from URL (Phase 1.4 — added) =====
   { pattern: /\b(pip|pip3|python\s+-m\s+pip)\s+install\s+https?:\/\//, label: "pip install from URL" },
   { pattern: /\bnpm\s+install\s+https?:\/\//, label: "npm install from URL" },
@@ -159,5 +173,11 @@ export const BLACKLIST: ReadonlyArray<BlacklistEntry> = [
  * `.env.template` (the canonical "this is a template" suffixes) via
  * a negative lookahead. This closes the false-positive on the
  * `read .env.sample` case.
+ *
+ * The agentify credential store (`~/.agentify/auth.json`,
+ * `~/.agentify/config.json`) is protected separately by an absolute
+ * homedir check in the defense hook, because a repo-relative
+ * `.agentify/` (e.g. this project's own `.agentify/webhooks.example.json`)
+ * is legitimate and must remain readable.
  */
-export const ZERO_ACCESS_PATH_REGEX = /(\.env(?!\.sample(?:\..*)?$|\.example(?:\..*)?$|\.template(?:\..*)?$)|secrets\.(?!sample(?:\..*)?$|example(?:\..*)?$|template(?:\..*)?$)|~?\/?\.ssh\/|\/etc\/)/;
+export const ZERO_ACCESS_PATH_REGEX = /(\.env(?!\.sample(?:\..*)?$|\.example(?:\..*)?$|\.template(?:\..*)?$)|secrets\.(?!sample(?:\..*)?$|example(?:\..*)?$|template(?:\..*)?$)|~?\/?\.ssh\/|\/etc\/|\.aws\/credentials|\.npmrc$|id_(rsa|ed25519|ecdsa|dsa)(\.pub)?$)/;

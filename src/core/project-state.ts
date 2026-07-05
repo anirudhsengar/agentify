@@ -25,7 +25,7 @@ export function projectStatePath(configDir: string, cwd: string): string {
 }
 
 function writeJson0600(filePath: string, value: unknown): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 });
   try {
     fs.chmodSync(filePath, 0o600);

@@ -8,6 +8,8 @@ import { runAgentifyApp } from "./core/agentify-app.ts";
 import type { AgentifyUi } from "./core/types.ts";
 
 class ConsoleUi implements AgentifyUi {
+  constructor(private readonly nonInteractive = false) {}
+
   status(message: string): void {
     output.write(`${message}\n`);
   }
@@ -20,13 +22,28 @@ class ConsoleUi implements AgentifyUi {
     process.stderr.write(`${message}\n`);
   }
 
+  private ensureInteractive(message: string): void {
+    if (this.nonInteractive) {
+      throw new Error(
+        `${message} Running non-interactively (--non-interactive). ` +
+          "Pre-configure auth via a provider env var (e.g. OPENAI_API_KEY / ANTHROPIC_API_KEY) " +
+          "or ~/.agentify/auth.json, and pass --assume brownfield|greenfield for ambiguous repos.",
+      );
+    }
+    if (!input.isTTY) {
+      throw new Error(
+        `${message} Cannot prompt because stdin is not interactive. ` +
+          "Pre-configure auth via a provider env var or ~/.agentify/auth.json, " +
+          "or run with --non-interactive and --assume for scripted use.",
+      );
+    }
+  }
+
   async promptSelect(
     message: string,
     choices: ReadonlyArray<{ label: string; value: string }>,
   ): Promise<string> {
-    if (!input.isTTY) {
-      throw new Error(`${message} Cannot prompt because stdin is not interactive.`);
-    }
+    this.ensureInteractive(message);
     const rl = readline.createInterface({ input, output });
     try {
       output.write(`${message}\n`);
@@ -47,9 +64,7 @@ class ConsoleUi implements AgentifyUi {
   }
 
   async promptSecret(message: string): Promise<string> {
-    if (!input.isTTY) {
-      throw new Error(`${message} Cannot prompt because stdin is not interactive.`);
-    }
+    this.ensureInteractive(message);
     return new Promise((resolve, reject) => {
       const stdin = process.stdin;
       const stdout = process.stdout;
@@ -101,16 +116,46 @@ function printHelp(): void {
   output.write(`agentify ${readPackageVersion()}
 
 Usage:
-  agentify
-  agentify --help
-  agentify --version
+  agentify [options]
+
+Options:
+  -h, --help                 Show this help and exit.
+  -v, --version              Print the version and exit.
+  --config-dir <dir>         Use a different agentify state dir (default ~/.agentify).
+  --non-interactive, --yes   Never prompt. Requires pre-configured auth
+                             (provider env var or ~/.agentify/auth.json).
+  --assume <kind>            Skip classification for ambiguous repos.
+                             <kind> is 'brownfield' or 'greenfield'.
 
 Run agentify in the current repository. Existing repos are audited and exported for
 Codex, Claude Code, and Pi. Empty/new repos start a local-first greenfield chat.
 
 agentify exposes one public CLI entrypoint. Bootstrap, attach, and recovery all
-start from \`agentify\` itself.
+start from \`agentify\` itself. After bootstrap, work through GitHub issues, comments,
+and PRs (see docs/lifecycle/README.md).
 `);
+}
+
+function takeFlagValue(argv: string[], names: string[]): string | undefined {
+  for (let i = 0; i < argv.length; i++) {
+    if (names.includes(argv[i])) {
+      const value = argv[i + 1];
+      argv.splice(i, value ? 2 : 1);
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function takeBooleanFlag(argv: string[], names: string[]): boolean {
+  let found = false;
+  for (let i = argv.length - 1; i >= 0; i--) {
+    if (names.includes(argv[i])) {
+      argv.splice(i, 1);
+      found = true;
+    }
+  }
+  return found;
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
@@ -122,25 +167,29 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     output.write(`${readPackageVersion()}\n`);
     return;
   }
-  // Parse --config-dir (or --configDir) from argv so the single public
-  // entrypoint can target a different agentify runtime state directory.
-  let configDir = defaultConfigDir();
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--config-dir" || argv[i] === "--configDir") {
-      const v = argv[i + 1];
-      if (v) {
-        configDir = v;
-        argv.splice(i, 2);
-        i -= 1;
-      }
+  // Parse flags from argv so the single public entrypoint stays one
+  // command while supporting non-interactive/scripted use.
+  const configDir = takeFlagValue(argv, ["--config-dir", "--configDir"])
+    ?? defaultConfigDir();
+  const nonInteractive = takeBooleanFlag(argv, ["--non-interactive", "--yes", "-y"]);
+  const assumeRaw = takeFlagValue(argv, ["--assume", "--assume-kind"]);
+  let assumeProjectKind: "brownfield" | "greenfield" | undefined;
+  if (assumeRaw !== undefined) {
+    if (assumeRaw !== "brownfield" && assumeRaw !== "greenfield") {
+      throw new Error(
+        `--assume must be 'brownfield' or 'greenfield' (got '${assumeRaw}').`,
+      );
     }
+    assumeProjectKind = assumeRaw;
   }
+
   await runAgentifyApp({
     args: argv,
     cwd: process.cwd(),
     configDir,
-    ui: new ConsoleUi(),
+    ui: new ConsoleUi(nonInteractive),
     runtime: new PiSdkRuntime(),
+    assumeProjectKind,
   });
 }
 

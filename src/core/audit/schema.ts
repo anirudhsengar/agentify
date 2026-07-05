@@ -1268,6 +1268,78 @@ export function extractCoverageSummary(map: CodebaseMap): {
 }
 
 // ============================================================================
+// Coverage closure (the code-enforced gate — ADR 0014)
+// ============================================================================
+//
+// The TypeBox schema validates shape, not substance: a dimension can
+// be marked `covered` with an empty evidence summary or a pitfalls
+// list that is empty. `assessCoverageClosure` applies the minimum
+// substance rules the builder prompt describes, so "covered" means the
+// same thing in code as it does in the prompt.
+
+/** Hard cap on generated AGENTS.md length (ADR 0009 / builder prompt). */
+export const AGENTS_MD_MAX_LINES = 200;
+
+/** Minimum pitfalls the map must carry when D5 is claimed covered. */
+export const MIN_PITFALLS_FOR_COVERED = 1;
+
+export interface CoverageClosureResult {
+    /** Dimensions that are `covered` AND satisfy the substance rules. */
+    closed: CoverageDimension[];
+    /** Dimensions that are `gap`, or `covered` but failing substance. */
+    unresolved: CoverageDimension[];
+    /** Human-readable reasons keyed by dimension for the unresolved set. */
+    reasons: Record<string, string>;
+}
+
+function isNonEmptyString(v: unknown): boolean {
+    return typeof v === "string" && v.trim().length > 0;
+}
+
+/**
+ * Decide, per dimension, whether the map has closed it for real.
+ * A dimension is closed only when its coverage entry is `covered`,
+ * its `evidence_summary` is non-empty, and any dimension-specific
+ * substance rule is satisfied (currently: D5 requires at least one
+ * pitfall with a line reference).
+ */
+export function assessCoverageClosure(map: CodebaseMap): CoverageClosureResult {
+    const closed: CoverageDimension[] = [];
+    const unresolved: CoverageDimension[] = [];
+    const reasons: Record<string, string> = {};
+
+    for (const dim of COVERAGE_DIMENSIONS) {
+        const entry = map.coverage?.[dim];
+        if (!entry || entry.status !== "covered") {
+            unresolved.push(dim);
+            reasons[dim] = "coverage status is not 'covered'";
+            continue;
+        }
+        if (!isNonEmptyString(entry.evidence_summary)) {
+            unresolved.push(dim);
+            reasons[dim] = "covered but evidence_summary is empty";
+            continue;
+        }
+        if (dim === "D5_pitfalls") {
+            const pitfalls = Array.isArray(map.pitfalls) ? map.pitfalls : [];
+            const withRefs = pitfalls.filter(
+                (p) => p && typeof p.line_ref === "number" && isNonEmptyString(p.what),
+            );
+            if (withRefs.length < MIN_PITFALLS_FOR_COVERED) {
+                unresolved.push(dim);
+                reasons[dim] =
+                    `covered but only ${withRefs.length} substantive pitfall(s); ` +
+                    `need >= ${MIN_PITFALLS_FOR_COVERED} with a line_ref`;
+                continue;
+            }
+        }
+        closed.push(dim);
+    }
+
+    return { closed, unresolved, reasons };
+}
+
+// ============================================================================
 // Apply defaults (schema_version, generated_at)
 // ============================================================================
 

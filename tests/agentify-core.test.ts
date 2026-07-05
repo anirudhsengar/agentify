@@ -17,6 +17,7 @@ import {
 import { ProjectClassifier } from "../src/core/project-classifier.ts";
 import { AGENTIFY_PROVIDERS, PROVIDER_ENV_KEYS } from "../src/core/provider-auth.ts";
 import { runAgentify } from "../src/core/run-agentify.ts";
+import { makeValidCodebaseMap } from "./fixtures/codebase-map.ts";
 import type {
   AgentRuntime,
   AgentRuntimeResult,
@@ -65,6 +66,11 @@ class BrownfieldFakeRuntime implements AgentRuntime {
     fs.mkdirSync(path.join(options.cwd, "specs"), { recursive: true });
     fs.mkdirSync(path.join(options.cwd, "ai_docs"), { recursive: true });
     fs.mkdirSync(path.join(options.cwd, ".pi", "agents"), { recursive: true });
+    fs.mkdirSync(path.join(options.cwd, ".pi", "agentify"), { recursive: true });
+    fs.writeFileSync(
+      path.join(options.cwd, ".pi", "agentify", "codebase_map.json"),
+      JSON.stringify(makeValidCodebaseMap(), null, 2),
+    );
     fs.writeFileSync(path.join(options.cwd, "AGENTS.md"), "# Agentified\n");
     fs.writeFileSync(path.join(options.cwd, "specs", "README.md"), "# Specs\n");
     fs.writeFileSync(path.join(options.cwd, "ai_docs", "README.md"), "# AI Docs\n");

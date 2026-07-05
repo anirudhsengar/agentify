@@ -1,7 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-issue_number=${1:?usage: check-issue-ready.sh ISSUE_NUMBER}
+issue_number=${1:?usage: check-issue-ready.sh ISSUE_NUMBER [ACTOR]}
+# Optional second arg: the actor who applied agent:implement. When
+# provided (with GH_REPO in the environment), the run is refused unless
+# that actor has write access to the repository. This stops an outside
+# user from triggering a write-capable, secret-bearing agent run just by
+# adding a label.
+actor=${2:-}
+if [ -n "$actor" ] && [ -n "${GH_REPO:-}" ]; then
+  permission=$(gh api "repos/${GH_REPO}/collaborators/${actor}/permission" \
+    --jq '.permission' 2>/dev/null || echo "none")
+  case "$permission" in
+    admin|write|maintain) ;;
+    *)
+      echo "Actor ${actor} has '${permission}' permission — refusing a write-capable agent run."
+      exit 4
+      ;;
+  esac
+fi
+
 issue_json=$(gh issue view "$issue_number" --json body,labels)
 
 if ! jq -e 'any(.labels[]?; .name == "agent:queued")' <<<"$issue_json" >/dev/null; then

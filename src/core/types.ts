@@ -65,6 +65,22 @@ export interface AgentRuntimeSessionOptions {
    * target path is outside the globs.
    */
   agentDomain?: string[] | null;
+  /**
+   * When true, the defense hook confines `write`/`edit` to the working
+   * directory (repository jail). Set for the builder and greenfield
+   * sessions.
+   */
+  repoJail?: boolean;
+  /**
+   * Absolute paths of pre-existing user-owned files the session must
+   * not overwrite (from the pre-run ownership snapshot).
+   */
+  protectedPaths?: readonly string[];
+  /**
+   * Wall-clock timeout in milliseconds. When exceeded, the session is
+   * aborted. Undefined = no timeout.
+   */
+  timeoutMs?: number;
 }
 
 export interface AgentRuntimeResult {

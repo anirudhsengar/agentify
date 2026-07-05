@@ -67,7 +67,11 @@ export class PiSdkRuntime implements AgentRuntime {
       appendSystemPrompt: [],
       extensionFactories: [
         (pi) => {
-          pi.on("tool_call", makeDefenseHook({ agentDomain: options.agentDomain ?? null }));
+          pi.on("tool_call", makeDefenseHook({
+            agentDomain: options.agentDomain ?? null,
+            repoJail: options.repoJail ?? false,
+            protectedPaths: options.protectedPaths,
+          }));
         },
       ],
     });
@@ -112,6 +116,7 @@ export class PiSdkRuntime implements AgentRuntime {
       });
     });
 
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       if (options.signal) {
         if (options.signal.aborted) {
@@ -128,10 +133,17 @@ export class PiSdkRuntime implements AgentRuntime {
           );
         }
       }
+      if (options.timeoutMs && options.timeoutMs > 0) {
+        timer = setTimeout(() => {
+          aborted = true;
+          void session.abort();
+        }, options.timeoutMs);
+      }
       await session.prompt(options.userPrompt);
       await done;
       return { turns, costUsd: sawCost ? costUsd : null, aborted };
     } finally {
+      if (timer) clearTimeout(timer);
       session.dispose();
     }
   }
@@ -165,6 +177,7 @@ export class PiSdkRuntime implements AgentRuntime {
       onEvent: options.onEvent,
       customTools: [],
       additionalSkillPaths: [SHIPPED_SKILLS_DIR],
+      repoJail: true,
     });
   }
 }

@@ -71,7 +71,23 @@ export function inspectGitHubReadiness(
   }
   if (guidance.length === 0) {
     guidance.push(
-      "GitHub bootstrap looks ready. Review SETUP.md, run `bash .github/scripts/setup-agentify.sh`, then use GitHub issues/comments as the async inbox.",
+      "GitHub bootstrap looks ready. Next steps to close the loop:",
+    );
+    guidance.push(
+      "1. Review the generated diff, then commit and push the generated files and scaffold to your default branch.",
+    );
+    guidance.push(
+      "2. Run `bash .github/scripts/setup-agentify.sh` to create the agent:* labels.",
+    );
+    guidance.push(
+      "3. Set Actions secrets PI_API_KEY and AGENT_PAT, and variables PI_VERSION and PI_MODEL (see SETUP.md).",
+    );
+    guidance.push(
+      "4. Then drive work through GitHub issues, comments, and PRs (see docs/lifecycle/README.md).",
+    );
+  } else {
+    guidance.push(
+      "Once the above is resolved, commit and push the generated files, run `bash .github/scripts/setup-agentify.sh`, and set the PI_API_KEY / AGENT_PAT secrets before using the GitHub inbox.",
     );
   }
 

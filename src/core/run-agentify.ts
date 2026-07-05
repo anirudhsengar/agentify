@@ -13,6 +13,7 @@ import { packageRoot } from "./pi-sdk-runtime.ts";
 import { ProjectClassifier } from "./project-classifier.ts";
 import { installScaffoldRuntime } from "./scaffold-installer.ts";
 import { formatGitHubReadiness, inspectGitHubReadiness } from "./github-readiness.ts";
+import { inspectAgentifyRepoState } from "./repo-status.ts";
 import { writeProjectState } from "./project-state.ts";
 import type {
   AgentifyConfig,
@@ -24,7 +25,9 @@ import type {
 import { AgentifyLog } from "./audit/log.ts";
 import { loadBuilderPrompt } from "./audit/prompt.ts";
 import {
+  AGENTS_MD_MAX_LINES,
   COVERAGE_DIMENSIONS,
+  assessCoverageClosure,
 } from "./audit/schema.ts";
 import {
   getOrCreateSessionId,
@@ -32,7 +35,12 @@ import {
   setThinkingLevel,
 } from "./audit/state.ts";
 import { createSpawnExplorerTool } from "./audit/spawn-explorer-tool.ts";
-import { writeMapDeltaTool, writeMapTool } from "./audit/write-map-tool.ts";
+import {
+  DRAFT_TRANSPORT_DIR,
+  loadCanonicalMap,
+  writeMapDeltaTool,
+  writeMapTool,
+} from "./audit/write-map-tool.ts";
 
 const AGENTS_MD_PATH = "AGENTS.md";
 const INTERNAL_MAP_DIR = path.join(".pi", "agentify");
@@ -80,6 +88,8 @@ type FinalAuditState = {
   alwaysOnWritten: number;
   alwaysOnTotal: number;
   featureAgentsWritten: number;
+  /** Why the audit did not reach `success`, when applicable. */
+  gapReasons: string[];
 };
 
 type AuditArtifactSnapshot = Map<string, "managed" | "unmanaged">;
@@ -103,6 +113,38 @@ function cleanupInternalScaffolding(cwd: string): void {
     fs.rmSync(path.join(cwd, INTERNAL_MAP_DIR), { recursive: true, force: true });
   } catch {
     // Best effort cleanup.
+  }
+}
+
+// Remove only the transient draft/history transport, preserving the
+// canonical codebase_map.json. Run at the END of a run so the map
+// survives as a managed audit artifact (ADR 0014): AGENTS.md points to
+// it, and partial/aborted runs keep their progress for inspection.
+function cleanupTransientScaffolding(cwd: string): void {
+  const transient = [
+    path.join(cwd, DRAFT_TRANSPORT_DIR),
+    path.join(cwd, INTERNAL_MAP_DIR, "history"),
+    path.join(cwd, INTERNAL_MAP_DIR, "logs"),
+  ];
+  for (const target of transient) {
+    try {
+      fs.rmSync(target, { recursive: true, force: true });
+    } catch {
+      // Best effort cleanup.
+    }
+  }
+}
+
+function countFileLines(filePath: string): number {
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    if (content.length === 0) return 0;
+    const withoutTrailingNewline = content.endsWith("\n")
+      ? content.slice(0, -1)
+      : content;
+    return withoutTrailingNewline.split("\n").length;
+  } catch {
+    return 0;
   }
 }
 
@@ -208,8 +250,16 @@ function extractWriteMapResult(result: WriteMapResult | undefined): {
   };
 }
 
+// Decide success from the VALIDATED codebase map on disk, not merely
+// from the existence of output files (ADR 0014). Success requires:
+//   1. the canonical map loads and validates,
+//   2. every coverage dimension is closed (status covered + substance),
+//   3. AGENTS.md exists and is within the line cap,
+//   4. the always-on artifacts exist.
+// Anything short of that is `partial`, and no export/scaffold runs.
 function readFinalAuditState(cwd: string): FinalAuditState {
-  const agentsMdExists = fs.existsSync(path.join(cwd, AGENTS_MD_PATH));
+  const agentsMdPath = path.join(cwd, AGENTS_MD_PATH);
+  const agentsMdExists = fs.existsSync(agentsMdPath);
   let alwaysOnWritten = 0;
   for (const rel of ALWAYS_ON_ARTIFACTS) {
     if (fs.existsSync(path.join(cwd, rel))) alwaysOnWritten += 1;
@@ -225,16 +275,54 @@ function readFinalAuditState(cwd: string): FinalAuditState {
     }
   }
 
-  const success = agentsMdExists && alwaysOnWritten === ALWAYS_ON_ARTIFACTS.length;
+  const total = COVERAGE_DIMENSIONS.length;
+  const gapReasons: string[] = [];
+  const map = loadCanonicalMap(cwd);
+
+  if (!map) {
+    gapReasons.push(
+      "no valid codebase map at .pi/agentify/codebase_map.json (write_map was never completed or failed schema validation)",
+    );
+  }
+
+  const closure = map
+    ? assessCoverageClosure(map)
+    : { closed: [], unresolved: [...COVERAGE_DIMENSIONS], reasons: {} as Record<string, string> };
+  if (map) {
+    for (const dim of closure.unresolved) {
+      gapReasons.push(`${dim}: ${closure.reasons[dim] ?? "not closed"}`);
+    }
+  }
+
+  if (!agentsMdExists) {
+    gapReasons.push("AGENTS.md was not written");
+  } else {
+    const lines = countFileLines(agentsMdPath);
+    if (lines > AGENTS_MD_MAX_LINES) {
+      gapReasons.push(
+        `AGENTS.md is ${lines} lines, exceeds the ${AGENTS_MD_MAX_LINES}-line cap`,
+      );
+    }
+  }
+
+  if (alwaysOnWritten !== ALWAYS_ON_ARTIFACTS.length) {
+    const missing = ALWAYS_ON_ARTIFACTS.filter(
+      (rel) => !fs.existsSync(path.join(cwd, rel)),
+    );
+    gapReasons.push(`missing always-on artifact(s): ${missing.join(", ")}`);
+  }
+
+  const success = gapReasons.length === 0;
   return {
     status: success ? "success" : "partial",
-    covered: agentsMdExists ? COVERAGE_DIMENSIONS.length : 0,
-    gap: agentsMdExists ? 0 : COVERAGE_DIMENSIONS.length,
-    total: COVERAGE_DIMENSIONS.length,
+    covered: closure.closed.length,
+    gap: closure.unresolved.length,
+    total,
     agentsMdExists,
     alwaysOnWritten,
     alwaysOnTotal: ALWAYS_ON_ARTIFACTS.length,
     featureAgentsWritten,
+    gapReasons,
   };
 }
 
@@ -306,6 +394,11 @@ async function runBrownfieldAudit(
 ): Promise<void> {
   cleanupInternalScaffolding(options.cwd);
   const artifactSnapshot = collectAuditArtifactSnapshot(options.cwd);
+  // Absolute paths of pre-existing user-owned artifacts the builder
+  // must not overwrite mid-session (B4 / defense repo protection).
+  const protectedPaths = [...artifactSnapshot.entries()]
+    .filter(([, ownership]) => ownership === "unmanaged")
+    .map(([rel]) => path.resolve(options.cwd, rel));
   const promptContent = loadBuilderPrompt();
   const promptSha = crypto.createHash("sha256").update(promptContent).digest("hex");
   const log = new AgentifyLog({ cwd: options.cwd, configDir: options.configDir });
@@ -335,6 +428,8 @@ async function runBrownfieldAudit(
       systemPrompt: promptContent,
       userPrompt: buildBrownfieldUserPrompt(options.targets),
       tools: BUILDER_TOOL_ALLOWLIST,
+      repoJail: true,
+      protectedPaths,
       customTools: [
         writeMapTool,
         writeMapDeltaTool,
@@ -376,9 +471,9 @@ async function runBrownfieldAudit(
       },
     });
 
-    const finalState = runtimeResult.aborted
+    const finalState: FinalAuditState = runtimeResult.aborted
       ? {
-          status: "aborted" as const,
+          status: "aborted",
           covered: 0,
           gap: COVERAGE_DIMENSIONS.length,
           total: COVERAGE_DIMENSIONS.length,
@@ -386,10 +481,13 @@ async function runBrownfieldAudit(
           alwaysOnWritten: 0,
           alwaysOnTotal: ALWAYS_ON_ARTIFACTS.length,
           featureAgentsWritten: 0,
+          gapReasons: ["run was aborted"],
         }
       : readFinalAuditState(options.cwd);
 
-    cleanupInternalScaffolding(options.cwd);
+    // Preserve the canonical codebase map (ADR 0014); remove only the
+    // transient draft/history/logs transport.
+    cleanupTransientScaffolding(options.cwd);
     if (finalState.status === "success") {
       const ownershipWrites = markAuditArtifacts(options.cwd, artifactSnapshot);
       const exportResults = exportAgenticSurface({
@@ -423,7 +521,13 @@ async function runBrownfieldAudit(
         latestLogPath: log.logPath,
       });
     } else {
-      options.ui.error("agentify: audit did not complete; no harness export was run.");
+      options.ui.error(
+        `agentify: audit did not complete (${finalState.covered}/${finalState.total} dimensions closed); ` +
+          "no harness export was run.",
+      );
+      for (const reason of finalState.gapReasons.slice(0, 8)) {
+        options.ui.error(`agentify:   - ${reason}`);
+      }
       persistProjectState(options, {
         projectKind: "brownfield",
         runStatus: finalState.status,
@@ -465,12 +569,23 @@ async function runBrownfieldAudit(
 
 async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig): Promise<void> {
   options.ui.status("agentify: starting greenfield chat");
-  const result = await options.runtime.runGreenfield({
-    cwd: options.cwd,
-    configDir: options.configDir,
-    config,
-    signal: options.signal,
-  });
+  setThinkingLevel(config.thinkingLevel ?? "high");
+  // Activate the defense hook for the greenfield session too. Without
+  // this, the hook is inert (state.ts) and the greenfield session runs
+  // bash/write unguarded, unlike the hardened brownfield session.
+  const sessionId = getOrCreateSessionId();
+  setAgentifySessionActive(sessionId, true);
+  let result: Awaited<ReturnType<typeof options.runtime.runGreenfield>>;
+  try {
+    result = await options.runtime.runGreenfield({
+      cwd: options.cwd,
+      configDir: options.configDir,
+      config,
+      signal: options.signal,
+    });
+  } finally {
+    setAgentifySessionActive(sessionId, false);
+  }
   let scaffoldInstalled = 0;
   let scaffoldConflicts = 0;
   if (!result.aborted) {
@@ -488,12 +603,17 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
   );
   if (!result.aborted) {
     reportGitHubReadiness(options);
+    // Derive repoStatus from the actual filesystem signals so the
+    // persisted state agrees with what the next run's detection sees
+    // (a greenfield session that only installed scaffold, with no
+    // GOALS.md / docs planning artifacts, is not "ready").
+    const repoState = inspectAgentifyRepoState(options.cwd, options.configDir);
     persistProjectState(options, {
       projectKind: "greenfield",
       runStatus: "success",
       repoMode: "greenfield",
-      repoStatus: "ready",
-      featureAgentCount: 0,
+      repoStatus: repoState.status,
+      featureAgentCount: repoState.featureAgentCount,
       latestLogPath: null,
     });
   } else {

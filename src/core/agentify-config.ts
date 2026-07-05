@@ -45,7 +45,17 @@ export function loadAgentifyConfig(configDir: string): AgentifyConfig {
 }
 
 function writeJson0600(filePath: string, value: unknown): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const dir = path.dirname(filePath);
+  // The agentify config dir holds credentials; create it private (0700)
+  // so auth.json/config.json are never exposed via a world-readable
+  // parent, then best-effort tighten in case it pre-existed with a
+  // looser umask.
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    fs.chmodSync(dir, 0o700);
+  } catch {
+    // Best effort on filesystems without chmod semantics.
+  }
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 });
   try {
     fs.chmodSync(filePath, 0o600);

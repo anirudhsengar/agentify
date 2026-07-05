@@ -45,6 +45,7 @@
 // small for one-shot use.
 
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import type { ToolCallEvent, ToolCallEventResult } from "@earendil-works/pi-coding-agent";
 import {
@@ -58,6 +59,44 @@ import { isAgentifySessionActive } from "./state.ts";
 const PATH_SENSITIVE_TOOLS = new Set(["read", "write", "edit"]);
 const WRITE_TOOLS = new Set(["write", "edit", "write_file", "multi_edit"]);
 const ESCALATION_TOOL = "escalate_to_orchestrator";
+
+/** The agentify credential store — never readable/writable by the agent. */
+const AGENTIFY_HOME = path.resolve(os.homedir(), ".agentify");
+
+/** Resolve a (possibly relative) path to an absolute, normalized path. */
+function toAbsolute(target: string, cwd: string): string {
+  return path.isAbsolute(target)
+    ? path.normalize(target)
+    : path.normalize(path.resolve(cwd, target));
+}
+
+/**
+ * Resolve `abs` following symlinks on the nearest existing ancestor so
+ * a symlink cannot be used to escape a boundary (e.g. a repo file that
+ * symlinks to ~/.agentify/auth.json). Non-existent leaves resolve
+ * against the realpath of their closest existing parent.
+ */
+function realResolve(abs: string): string {
+  let cur = abs;
+  const tail: string[] = [];
+  while (cur !== path.dirname(cur)) {
+    if (fs.existsSync(cur)) {
+      try {
+        return path.join(fs.realpathSync(cur), ...tail.reverse());
+      } catch {
+        return abs;
+      }
+    }
+    tail.push(path.basename(cur));
+    cur = path.dirname(cur);
+  }
+  return abs;
+}
+
+function isInside(child: string, parent: string): boolean {
+  const rel = path.relative(parent, child);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
 
 const SCRIPT_CONTENT_SCAN_BYTES = 64 * 1024;
 const SCRIPT_RUNNERS = /\b(python|python3|node|bash|sh|zsh|perl|ruby)\b/;
@@ -159,10 +198,34 @@ function pathRelativeToCwd(targetPath: string, cwd: string): string {
   return abs;
 }
 
-export function makeDefenseHook(opts: { agentDomain?: string[] | null } = {}): (event: ToolCallEvent) => Promise<ToolCallEventResult | undefined> {
+export interface DefenseHookOptions {
+  /** Orchestrator sub-agent domain globs (Layer E). null = no lock. */
+  agentDomain?: string[] | null;
+  /**
+   * When true, `write`/`edit` targets must resolve inside the session's
+   * working directory (repository jail). Used for the builder,
+   * greenfield, and explorer sessions so the agent cannot write outside
+   * the repo it is auditing.
+   */
+  repoJail?: boolean;
+  /**
+   * Absolute paths of pre-existing, user-owned (unmanaged) files that
+   * the agent must not overwrite mid-session. Populated from the
+   * pre-run ownership snapshot.
+   */
+  protectedPaths?: readonly string[];
+}
+
+export function makeDefenseHook(opts: DefenseHookOptions = {}): (event: ToolCallEvent) => Promise<ToolCallEventResult | undefined> {
   const agentDomain = opts.agentDomain ?? null;
+  const repoJail = opts.repoJail ?? false;
+  const protectedSet = new Set(
+    (opts.protectedPaths ?? []).map((p) => path.normalize(p)),
+  );
   return async (event) => {
-    if (!isAgentifySessionActive() && agentDomain === null) return undefined;
+    if (!isAgentifySessionActive() && agentDomain === null && !repoJail) {
+      return undefined;
+    }
 
     const cwd = (event as { cwd?: string }).cwd ?? process.cwd();
 
@@ -193,14 +256,48 @@ export function makeDefenseHook(opts: { agentDomain?: string[] | null } = {}): (
       return undefined;
     }
 
-    // Layer B — read/write/edit: zero-access path guard.
+    // Layer B — read/write/edit: zero-access path guard, credential-store
+    // protection, repository jail, and user-owned file protection.
     if (PATH_SENSITIVE_TOOLS.has(event.toolName)) {
       const pathValue = extractPathFromInputForTool(event.toolName, event.input);
-      if (pathValue.length > 0 && ZERO_ACCESS_PATH_REGEX.test(pathValue)) {
-        return {
-          block: true,
-          reason: `defense zero-access: ${event.toolName} on '${pathValue}' blocked`,
-        };
+      if (pathValue.length > 0) {
+        // 1. Pattern-based zero-access (secrets, ssh keys, /etc, ...).
+        if (ZERO_ACCESS_PATH_REGEX.test(pathValue)) {
+          return {
+            block: true,
+            reason: `defense zero-access: ${event.toolName} on '${pathValue}' blocked`,
+          };
+        }
+        const abs = toAbsolute(pathValue, cwd);
+        const real = realResolve(abs);
+        // 2. The agentify credential store is off-limits (read too),
+        //    resolved through symlinks so a repo symlink can't escape.
+        if (isInside(real, AGENTIFY_HOME) || isInside(abs, AGENTIFY_HOME)) {
+          return {
+            block: true,
+            reason: `defense zero-access: ${event.toolName} on the agentify credential store is blocked`,
+          };
+        }
+        if (WRITE_TOOLS.has(event.toolName)) {
+          // 3. User-owned file protection: never clobber a pre-existing
+          //    unmanaged file captured in the ownership snapshot.
+          if (protectedSet.has(abs) || protectedSet.has(real)) {
+            return {
+              block: true,
+              reason: `defense: '${pathValue}' is a user-owned file; agentify will not overwrite it`,
+            };
+          }
+          // 4. Repository jail: writes must stay inside the repo.
+          if (repoJail) {
+            const realCwd = realResolve(toAbsolute(cwd, cwd));
+            if (!isInside(real, realCwd)) {
+              return {
+                block: true,
+                reason: `defense repo-jail: ${event.toolName} on '${pathValue}' resolves outside the repository`,
+              };
+            }
+          }
+        }
       }
     }
 

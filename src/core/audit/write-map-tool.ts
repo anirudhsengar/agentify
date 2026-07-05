@@ -46,6 +46,40 @@ const DRAFT_DIR = path.join(AGENTIFY_OUTPUT_DIR, ".agentify");
 const DRAFT_PATH = path.join(DRAFT_DIR, "draft.json");
 const HISTORY_DIR = path.join(AGENTIFY_OUTPUT_DIR, "history");
 
+/** Absolute path to the canonical codebase map for a given repo root. */
+export function canonicalMapPath(cwd: string): string {
+    return path.join(cwd, AGENTIFY_OUTPUT_DIR, MAP_FILENAME);
+}
+
+/** Relative path (posix-style) of the transient draft transport dir. */
+export const DRAFT_TRANSPORT_DIR = DRAFT_DIR;
+
+/**
+ * Load and schema-validate the canonical codebase map. Returns the
+ * validated map, or `null` when the map is absent, unreadable, not
+ * JSON, or does not satisfy the schema. Used by the post-run success
+ * gate (see ADR 0014) so success reflects the real map, not merely
+ * the existence of output files.
+ */
+export function loadCanonicalMap(cwd: string): CodebaseMap | null {
+    const filePath = canonicalMapPath(cwd);
+    if (!fs.existsSync(filePath)) return null;
+    let raw: string;
+    try {
+        raw = fs.readFileSync(filePath, "utf-8");
+    } catch {
+        return null;
+    }
+    if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        return null;
+    }
+    return Value.Check(CodebaseMapSchema, parsed) ? (parsed as CodebaseMap) : null;
+}
+
 // Cap map_file size at 1 MB. A 1 MB JSON map is suspicious —
 // either the LLM duplicated something or the JSON is malformed.
 const MAX_MAP_FILE_BYTES = 1_000_000;
@@ -641,24 +675,11 @@ export const writeMapDeltaTool = defineTool({
             };
         }
 
-        // 3. Reserve check (if dimension was provided).
+        // 3. Reserve tracking (observability only — the soft ceiling
+        //    never blocks; it surfaces a warning for runaway retries).
+        let reserveWarning: string | undefined;
         if (params.dimension) {
-            const reserve = consumeReserve(params.dimension);
-            if (!reserve.allowed) {
-                return {
-                    content: [
-                        {
-                            type: "text",
-                            text:
-                                `Error: ${reserve.reason}. ` +
-                                `The reserve is consumed by gap_filler attempts. ` +
-                                `If this dimension cannot be closed, the run will fail with no files written.`,
-                        },
-                    ],
-                    isError: true,
-                details: undefined as unknown as Record<string, unknown>,
-                };
-            }
+            reserveWarning = consumeReserve(params.dimension).reason;
         }
 
         // 4. Merge the delta into the existing map.
@@ -742,7 +763,8 @@ export const writeMapDeltaTool = defineTool({
             `Merged delta into codebase map at ${writeResult.path} (${writeResult.size_bytes} bytes). ` +
             `Strategy: ${strategy}. Dimension: ${params.dimension ?? "(none)"}. ` +
             `Gap-filler count for ${params.dimension ?? "n/a"}: ${params.dimension ? getReserveCount(params.dimension) : 0} (soft ceiling: ${GAP_FILLER_SOFT_CEILING}). ` +
-            `${coverageLine}`;
+            `${coverageLine}` +
+            (reserveWarning ? ` Note: ${reserveWarning}` : "");
 
         return {
             content: [{ type: "text", text: resultText }],

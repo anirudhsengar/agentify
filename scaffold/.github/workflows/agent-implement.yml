@@ -46,13 +46,15 @@ jobs:
       - name: Exclude trusted runtime checkout from implementation commits
         run: echo "/.agentify-runtime/" >> .git/info/exclude
 
-      - name: Pre-flight — require queued state and closed blockers
+      - name: Pre-flight — require queued state, closed blockers, authorized actor
         id: readiness
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          IMPLEMENT_ACTOR: ${{ github.actor }}
         run: |
           set +e
-          reason=$(bash .agentify-runtime/.github/scripts/check-issue-ready.sh "$ISSUE_NUMBER" 2>&1)
+          reason=$(bash .agentify-runtime/.github/scripts/check-issue-ready.sh "$ISSUE_NUMBER" "$IMPLEMENT_ACTOR" 2>&1)
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
@@ -247,6 +249,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh issue edit "$ISSUE_NUMBER" --remove-label "agent:queued" || true
+
+      - name: Comment PR link on the issue
+        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
+        env:
+          PR_NUMBER: ${{ steps.open_pr.outputs.pr_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Make the handoff visible on the source issue instead of leaving
+        # the user to discover the PR in the GitHub UI.
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body "$(cat <<EOF
+          Opened draft PR #${PR_NUMBER} and queued it for automated review (\`agent:review\`).
+
+          **Workflow run:** $RUN_URL
+          EOF
+          )" || true
 
       - name: Mark blocked on failure
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && failure()
