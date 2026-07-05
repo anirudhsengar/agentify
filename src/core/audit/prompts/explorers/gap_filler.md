@@ -149,6 +149,60 @@ The closure criteria and minimal exploration per dimension:
 - **Common gaps**: no `AGENTS.md`, no `ai_docs/`. Record
  `agents_md: null`; the dimension is still `covered`.
 
+## Examples
+
+A concrete example of a successful `D5_pitfalls` gap-closing report.
+Use this as the reference for what a complete, well-formed delta looks
+like.
+
+```
+## Report
+target_path: .
+gap_dimension: D5_pitfalls
+gap_closed_for: D5_pitfalls
+blocker_reason: null
+delta:
+  pitfalls:
+    - module: src/core/run-agentify.ts
+      what: Session options assembled without validating that the API key is present
+      consequence: Silent auth failure; the builder starts and immediately errors on first tool call
+      line_ref: src/core/run-agentify.ts:42
+    - module: src/core/audit/schema.ts
+      what: TypeBox schema constants defined as `Type.Object` at module level with no lazy evaluation
+      consequence: Any import of schema.ts pays the full construction cost at startup — slows cold start by ~200 ms on large maps
+      line_ref: src/core/audit/schema.ts:1
+    - module: src/core/artifact-exporters.ts
+      what: AGENTS.md line-count enforced by character counting, not newline counting
+      consequence: A line with a long URL can silently push the file over 200 lines without triggering the cap guard
+      line_ref: src/core/artifact-exporters.ts:88
+evidence_files_read:
+  - src/core/run-agentify.ts
+  - src/core/audit/schema.ts
+  - src/core/artifact-exporters.ts
+exploration_calls_used: 5
+```
+
+If you cannot close the gap, the `gap_closed_for: null` example:
+
+```
+## Report
+target_path: .
+gap_dimension: D8_security
+gap_closed_for: null
+blocker_reason: No .gitignore, no declared path rules, no env sample, and grep for os.environ/process.env returns 0 matches. Security surface is genuinely unobservable for this codebase.
+delta:
+  security_surface:
+    path_classifications: null
+    blocked_patterns: null
+    banned_interpreters: null
+    env_allowlist: null
+    security_checklist: null
+evidence_files_read:
+  - package.json
+  - .gitignore
+exploration_calls_used: 3
+```
+
 ## Workflow
 
 1. Identify the gap dimension from `FOCUS`. If it's not in

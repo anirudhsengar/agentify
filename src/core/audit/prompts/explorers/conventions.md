@@ -40,6 +40,59 @@ FOCUS: $2 # dynamic: optional focus hint (e.g., "core modules" or "tests")
  - For config dirs: pick the most-referenced config files.
 - `STOP` after emitting the structured `## Report`.
 
+## Examples
+
+A concrete example of a filled conventions report for a TypeScript/ESM
+codebase. Use this as the reference for structure, field coverage, and
+the level of specificity expected.
+
+```
+## Report
+target_path: src/core/
+files_read:
+  - src/core/run-agentify.ts
+  - src/core/audit/schema.ts
+  - src/core/artifact-exporters.ts
+  - src/core/cli.ts
+naming:
+  files: kebab-case (run-agentify.ts, artifact-exporters.ts)
+  classes: PascalCase (CodebaseMap, AuditResult)
+  functions: camelCase with verb_noun (runAgentify, exportArtifacts)
+  branches: not observed
+  commits: not observed
+error_handling:
+  raise_vs_return: return
+  custom_exceptions: false
+  log_then_throw: false
+  examples:
+    - file: src/core/run-agentify.ts:58
+      pattern: "return { success: false, error: e instanceof Error ? e.message : String(e) }"
+logging:
+  pattern: "[SUCCESS] <phase> — <msg> / [ERROR] <phase> — <msg>"
+  observed: true
+  examples:
+    - file: src/core/artifact-exporters.ts:34
+      line: 'console.log("[SUCCESS] AGENTS.md written — 142 lines")'
+state_passing: constructor_injection
+file_size:
+  observed_avg: 280
+  observed_max: 620
+  outliers: [src/core/audit/schema.ts]
+patterns:
+  - name: TypeBox-schema-at-top-level
+    where: src/core/audit/schema.ts:1
+    description: All TypeBox schemas defined as module-level constants so they are constructed once and shared across importers
+  - name: write_map-as-only-persist-path
+    where: src/core/audit/write-map.ts:1
+    description: The codebase map is only ever mutated through write_map — never by direct JSON manipulation
+conventions_summary:
+  - Files are kebab-case; functions are camelCase verb_noun; types/interfaces are PascalCase.
+  - Errors are returned as typed objects, never thrown across module boundaries.
+  - stdout uses [SUCCESS] / [ERROR] prefixes — agent-friendly convention.
+  - TypeBox schemas live at top-level module scope; import type for type-only imports; no any.
+  - State is injected via constructor parameters, not globals or module-level singletons.
+```
+
 ## Workflow
 
 1. Run `ls $TARGET_PATH` to enumerate files. Skip non-source files

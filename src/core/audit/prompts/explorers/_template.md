@@ -1,3 +1,8 @@
+---
+description: Template for composing custom feature-explorer sub-agent prompts. The builder fills all {{placeholders}} for each feature before dispatching via spawn_explorer(mode="custom"). Do not invoke this file directly — it is a builder-internal template.
+type: builder-internal-template
+---
+
 # {{role}} (custom feature-explorer sub-agent)
 
 ## Purpose
@@ -159,6 +164,83 @@ above is the only contract.)
 (Domain knowledge for this feature. Filled in by the parent based
 on the codebase's nature. 2-5 bullets of what to look for, common
 patterns, common pitfalls, codebase-specific signals.)
+
+## Output Format
+
+A fully-filled example of what this template produces for a concrete
+feature ("payment"). The builder substitutes real values; the agent
+returns the `## Report` block below.
+
+```
+# payment-feature-explorer (custom feature-explorer sub-agent)
+
+## Purpose
+You are a feature-intelligence gatherer for the `app/payments/`
+area of the codebase. Your single job is to gather everything a
+feature-specialized agent would need to own this feature end-to-end.
+
+## Variables
+TOPIC: payment
+TARGET: app/payments/
+FOCUS: focus on webhook idempotency
+TASK: explore the payment feature and return a structured report
+
+## Workflow
+1. ls app/payments/ to enumerate files.
+2. Read app/payments/stripe.py (entry point).
+3. Read app/payments/webhook.py (idempotency logic).
+4. grep -r "idempotency_key" app/payments/ for the pattern.
+5. Read tests/payments/test_webhook.py for test coverage.
+
+## Report
+feature_name: payment
+feature_purpose: Handles Stripe charges, refunds, and webhook events
+scope:
+  primary_paths:
+  - app/payments/**
+  - migrations/versions/*_payments_*.py
+  entry_points:
+  - app/payments/stripe.py
+  - app/payments/webhook.py
+  test_paths:
+  - tests/payments/**
+stability: high
+recurrence: high
+line_ranges:
+  - path: app/payments/stripe.py
+    range: [1, 120]
+    purpose: Stripe client init + charge/refund helpers
+  - path: app/payments/webhook.py
+    range: [1, 85]
+    purpose: Webhook signature verification + idempotency gate
+key_types:
+  - name: ChargeRequest
+    path: app/payments/models.py:14
+    purpose: Input model for creating a charge
+  - name: WebhookEvent
+    path: app/payments/models.py:42
+    purpose: Parsed Stripe webhook payload
+conventions:
+  - pattern: idempotency-key-first
+    description: Every webhook handler checks idempotency_key before acting
+    example_ref: app/payments/webhook.py:31
+  - pattern: stripe-client-singleton
+    description: One stripe.Client instance shared via module-level init
+    example_ref: app/payments/stripe.py:12
+pitfalls:
+  - risk: Double-processing webhooks
+    consequence: Duplicate charges if idempotency_key is not checked
+    reference: app/payments/webhook.py:31
+  - risk: Raw Stripe error re-raised
+    consequence: 500s leak Stripe error messages to the client
+    reference: app/payments/stripe.py:67
+use_when:
+  - working on payments, charges, or refunds
+  - fixing a webhook or Stripe integration bug
+not_use_when:
+  - frontend UI changes — use the frontend agent
+  - database schema unrelated to payments — use the database agent
+```
 
 ## Stop
 
