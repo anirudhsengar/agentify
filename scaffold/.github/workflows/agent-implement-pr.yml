@@ -125,11 +125,33 @@ jobs:
         with:
           version: ${{ vars.PI_VERSION }}
 
+      - name: Render project workflow context
+        if: steps.state.outputs.proceed == 'true' && steps.inputs.outputs.proceed == 'true'
+        run: |
+          bash .agentify-runtime/.github/scripts/render-workflow-context.sh "." > "${RUNNER_TEMP}/workflow-context.md"
+
+      - name: Render specialist routing context
+        if: steps.state.outputs.proceed == 'true' && steps.inputs.outputs.proceed == 'true'
+        run: |
+          bash .agentify-runtime/.github/scripts/render-specialist-context.sh "." > "${RUNNER_TEMP}/specialist-context.md"
+
+      - name: Render expert routing context
+        if: steps.state.outputs.proceed == 'true' && steps.inputs.outputs.proceed == 'true'
+        run: |
+          bash .agentify-runtime/.github/scripts/render-expert-context.sh "." > "${RUNNER_TEMP}/expert-context.md"
+
       - name: Render implement-pr prompt
         if: steps.state.outputs.proceed == 'true' && steps.inputs.outputs.proceed == 'true'
         env:
           PR_CONTEXT_DIR: ${{ runner.temp }}/pr-context
-        run: envsubst < .agentify-runtime/.github/agent-prompts/implement-pr.md > "${RUNNER_TEMP}/implement-pr-prompt.md"
+        run: |
+          WORKFLOW_CONTEXT=$(cat "${RUNNER_TEMP}/workflow-context.md")
+          SPECIALIST_CONTEXT=$(cat "${RUNNER_TEMP}/specialist-context.md")
+          EXPERT_CONTEXT=$(cat "${RUNNER_TEMP}/expert-context.md")
+          export WORKFLOW_CONTEXT
+          export SPECIALIST_CONTEXT
+          export EXPERT_CONTEXT
+          envsubst < .agentify-runtime/.github/agent-prompts/implement-pr.md > "${RUNNER_TEMP}/implement-pr-prompt.md"
 
       - name: Run Pi — implement PR feedback
         if: steps.state.outputs.proceed == 'true' && steps.inputs.outputs.proceed == 'true'

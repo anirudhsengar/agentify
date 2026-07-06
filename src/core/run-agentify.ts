@@ -10,6 +10,11 @@ import { packageRoot } from "./pi-sdk-runtime.ts";
 import { ProjectClassifier } from "./project-classifier.ts";
 import { installScaffoldRuntime } from "./scaffold-installer.ts";
 import { formatGitHubReadiness, inspectGitHubReadiness } from "./github-readiness.ts";
+import { validateGreenfieldArtifacts, writeGreenfieldState } from "./greenfield-state.ts";
+import {
+  readGreenfieldFormation,
+  renderGreenfieldArtifacts,
+} from "./greenfield-artifacts.ts";
 import { inspectAgentifyRepoState } from "./repo-status.ts";
 import { writeProjectState } from "./project-state.ts";
 import { renderBrownfieldArtifacts, type RenderedArtifact } from "./artifacts/renderers.ts";
@@ -129,9 +134,11 @@ const GENERATED_SURFACE_PATHS = [
   "specs/README.md",
   "ai_docs/README.md",
   "conditional_docs.md",
+  ".pi/conditional_docs.md",
   "SETUP.md",
   ".pi/agents",
   ".pi/prompts",
+  ".pi/workflows",
   ".pi/extensions",
   ".pi/skills",
   ".agents",
@@ -143,14 +150,13 @@ const GENERATED_SURFACE_PATHS = [
   ".github/workflows",
   "app_docs",
   "app_review",
+  "app_fix_reports",
 ] as const;
 
 const INTERNAL_STATE_PATHS = [
   CODEBASE_MAP_RELATIVE_PATH,
   MANIFEST_RELATIVE_PATH,
 ] as const;
-
-const GREENFIELD_STATE_RELATIVE_PATH = ".pi/agentify/greenfield-state.json";
 
 function cleanupInternalScaffolding(cwd: string): void {
   try {
@@ -425,6 +431,7 @@ function applyStagedBundle(params: {
   snapshot: AuditArtifactSnapshot;
   metadata: Map<string, ManagedManifestFile>;
   agentifyVersion: string;
+  mode: Exclude<ProjectKind, "ambiguous">;
 }): { writes: ArtifactWrite[]; requiredConflictCount: number; manifest: ManagedManifest | null } {
   const stagedFiles = collectStagedFiles(params.stagingRoot);
   const writes: ArtifactWrite[] = [];
@@ -467,7 +474,7 @@ function applyStagedBundle(params: {
     schema_version: "1",
     agentify_version: params.agentifyVersion,
     generated_at: new Date().toISOString(),
-    mode: "brownfield",
+    mode: params.mode,
     files: manifestFiles.sort((a, b) => a.path.localeCompare(b.path)),
   };
   writeManifest(params.cwd, manifest);
@@ -483,53 +490,6 @@ function loadAgentifyVersion(): string {
   } catch {
     return "unknown";
   }
-}
-
-function inferGreenfieldCheckpoint(cwd: string): string {
-  if (fs.existsSync(path.join(cwd, "specs")) && listFilesRecursively(path.join(cwd, "specs")).length > 0) {
-    return "spec";
-  }
-  if (fs.existsSync(path.join(cwd, "docs", "issues")) && listFilesRecursively(path.join(cwd, "docs", "issues")).length > 0) {
-    return "issue_slices";
-  }
-  if (fs.existsSync(path.join(cwd, "docs", "plans")) && listFilesRecursively(path.join(cwd, "docs", "plans")).length > 0) {
-    return "plan";
-  }
-  if (fs.existsSync(path.join(cwd, "docs", "prds")) && listFilesRecursively(path.join(cwd, "docs", "prds")).length > 0) {
-    return "prd";
-  }
-  if (fs.existsSync(path.join(cwd, "GOALS.md"))) return "goals";
-  if (fs.existsSync(path.join(cwd, "CONTEXT.md"))) return "wide_idea";
-  return "wide_idea";
-}
-
-function writeGreenfieldState(cwd: string, params: {
-  turns: number;
-  aborted: boolean;
-  costUsd: number | null;
-}): void {
-  const filePath = path.join(cwd, GREENFIELD_STATE_RELATIVE_PATH);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(
-    filePath,
-    `${JSON.stringify({
-      schema_version: "1",
-      updated_at: new Date().toISOString(),
-      checkpoint: inferGreenfieldCheckpoint(cwd),
-      turns: params.turns,
-      cost_usd: params.costUsd,
-      aborted: params.aborted,
-      checkpoints: {
-        wide_idea: fs.existsSync(path.join(cwd, "CONTEXT.md")),
-        goals: fs.existsSync(path.join(cwd, "GOALS.md")),
-        prd: fs.existsSync(path.join(cwd, "docs", "prds")),
-        plan: fs.existsSync(path.join(cwd, "docs", "plans")),
-        issue_slices: fs.existsSync(path.join(cwd, "docs", "issues")),
-        spec: fs.existsSync(path.join(cwd, "specs")),
-      },
-    }, null, 2)}\n`,
-    { mode: 0o644 },
-  );
 }
 
 function extractUsage(event: AgentSessionEvent): AssistantUsage | undefined {
@@ -842,6 +802,7 @@ async function runBrownfieldAudit(
             snapshot: artifactSnapshot,
             metadata,
             agentifyVersion: loadAgentifyVersion(),
+            mode: "brownfield",
           });
           const conflicts = applyResult.writes.filter((write) => write.action === "conflict");
           const scaffoldInstalled = applyResult.writes
@@ -950,6 +911,7 @@ async function runBrownfieldAudit(
 
 async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig): Promise<void> {
   options.ui.status("agentify: starting greenfield chat");
+  const artifactSnapshot = collectAuditArtifactSnapshot(options.cwd);
   setThinkingLevel(config.thinkingLevel ?? "high");
   // Activate the defense hook for the greenfield session too. Without
   // this, the hook is inert (state.ts) and the greenfield session runs
@@ -969,25 +931,115 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
   }
   let scaffoldInstalled = 0;
   let scaffoldConflicts = 0;
+  let artifactsValid = false;
+  let validationReported = false;
   if (!result.aborted) {
-    writeGreenfieldState(options.cwd, {
-      turns: result.turns,
-      costUsd: result.costUsd,
-      aborted: result.aborted,
-    });
-    const scaffoldWrites = installScaffoldRuntime({
-      cwd: options.cwd,
-      packageRoot: packageRoot(),
-    });
-    scaffoldInstalled = scaffoldWrites.filter((write) => write.action === "written").length;
-    scaffoldConflicts = scaffoldWrites.filter((write) => write.action === "conflict").length;
+    const formation = readGreenfieldFormation(options.cwd);
+    if (!formation) {
+      options.ui.error(
+        "agentify: greenfield session did not submit structured artifacts with write_greenfield_artifacts; scaffold was not installed.",
+      );
+    } else {
+      const renderResult = renderGreenfieldArtifacts(formation);
+      if (renderResult.errors.length > 0) {
+        options.ui.error("agentify: greenfield structured artifacts failed deterministic rendering; scaffold was not installed.");
+        for (const reason of renderResult.errors.slice(0, 8)) {
+          options.ui.error(`agentify:   - ${reason}`);
+        }
+      } else {
+        const stagingRoot = makeStagingRoot();
+        options.ui.info(`agentify: staging greenfield bundle at ${stagingRoot}`);
+        try {
+          const metadata = new Map<string, ManagedManifestFile>();
+          writeRenderedArtifactsToStaging(stagingRoot, renderResult.artifacts, metadata);
+          const stagedValidation = validateGreenfieldArtifacts(stagingRoot);
+          if (!stagedValidation.ok) {
+            options.ui.error(
+              "agentify: greenfield artifacts did not pass the substance gate; scaffold was not installed.",
+            );
+            for (const reason of stagedValidation.reasons.slice(0, 8)) {
+              options.ui.error(`agentify:   - ${reason}`);
+            }
+            validationReported = true;
+          } else {
+            const scaffoldWrites = installScaffoldRuntime({
+              cwd: stagingRoot,
+              packageRoot: packageRoot(),
+            });
+            addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata);
+            const applyResult = applyStagedBundle({
+              cwd: options.cwd,
+              stagingRoot,
+              snapshot: artifactSnapshot,
+              metadata,
+              agentifyVersion: loadAgentifyVersion(),
+              mode: "greenfield",
+            });
+            const conflicts = applyResult.writes.filter((write) => write.action === "conflict");
+            scaffoldInstalled = applyResult.writes
+              .filter((write) => write.action === "written")
+              .filter((write) => {
+                const rel = toRel(options.cwd, write.path);
+                return rel === "SETUP.md" || rel.startsWith(".github/");
+              })
+              .length;
+            scaffoldConflicts = conflicts.length;
+            if (applyResult.requiredConflictCount > 0) {
+              options.ui.error(
+                "agentify: required greenfield generated file conflict(s) blocked apply; no bundle files were written.",
+              );
+              for (const conflict of conflicts.slice(0, 8)) {
+                options.ui.error(`agentify:   - ${toRel(options.cwd, conflict.path)}: ${conflict.reason ?? "conflict"}`);
+              }
+            } else {
+              const greenfieldState = writeGreenfieldState(options.cwd, {
+                turns: result.turns,
+                costUsd: result.costUsd,
+                aborted: result.aborted,
+              });
+              artifactsValid = greenfieldState.artifact_validation.ok;
+              if (!artifactsValid) {
+                options.ui.error(
+                  "agentify: greenfield artifacts did not pass the substance gate after apply; scaffold readiness was blocked.",
+                );
+                for (const reason of greenfieldState.artifact_validation.reasons.slice(0, 8)) {
+                  options.ui.error(`agentify:   - ${reason}`);
+                }
+                validationReported = true;
+              }
+            }
+          }
+        } finally {
+          fs.rmSync(stagingRoot, { recursive: true, force: true });
+          options.ui.info(`agentify: cleaned greenfield staging bundle at ${stagingRoot}`);
+        }
+      }
+    }
+    if (!artifactsValid) {
+      const greenfieldState = writeGreenfieldState(options.cwd, {
+        turns: result.turns,
+        costUsd: result.costUsd,
+        aborted: result.aborted,
+      });
+      if (!validationReported && !greenfieldState.artifact_validation.ok) {
+        options.ui.error("agentify: greenfield artifacts did not pass the substance gate; scaffold was not installed.");
+        for (const reason of greenfieldState.artifact_validation.reasons.slice(0, 8)) {
+          options.ui.error(`agentify:   - ${reason}`);
+        }
+      }
+    }
   }
+  const scaffoldSummary = result.aborted
+    ? ")"
+    : artifactsValid
+      ? `, ${scaffoldInstalled} scaffold file(s) installed, ${scaffoldConflicts} conflict(s))`
+      : ", scaffold not installed: artifact substance gate failed)";
   options.ui.info(
     `agentify: greenfield session complete (${result.turns} turn(s)` +
       `${result.costUsd === null ? "" : `, $${result.costUsd.toFixed(4)}`}` +
-      `${result.aborted ? ")" : `, ${scaffoldInstalled} scaffold file(s) installed, ${scaffoldConflicts} conflict(s))`}.`,
+      `${scaffoldSummary}.`,
   );
-  if (!result.aborted) {
+  if (!result.aborted && artifactsValid) {
     reportGitHubReadiness(options);
     // Derive repoStatus from the actual filesystem signals so the
     // persisted state agrees with what the next run's detection sees
@@ -1000,6 +1052,15 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
       repoMode: "greenfield",
       repoStatus: repoState.status,
       featureAgentCount: repoState.featureAgentCount,
+      latestLogPath: null,
+    });
+  } else if (!result.aborted) {
+    persistProjectState(options, {
+      projectKind: "greenfield",
+      runStatus: "partial",
+      repoMode: "greenfield",
+      repoStatus: "partial",
+      featureAgentCount: 0,
       latestLogPath: null,
     });
   } else {

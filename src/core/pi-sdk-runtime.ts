@@ -18,6 +18,7 @@ import type {
 import { authPath } from "./agentify-config.ts";
 import { getProviderEnvValue } from "./provider-auth.ts";
 import { makeDefenseHook } from "./audit/defense-hook.ts";
+import { createWriteGreenfieldArtifactsTool } from "./greenfield-artifacts.ts";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SHIPPED_SKILLS_DIR = path.join(PACKAGE_ROOT, ".agents", "skills");
@@ -164,7 +165,11 @@ export class PiSdkRuntime implements AgentRuntime {
       "After GOALS.md, after each split, and after each PRD/plan/issues/spec/implementation milestone, present the next valid actions and let the user choose whether to continue, switch units, or stop.",
       "GitHub issues labeled `agent:drill-me` are the post-launch async intake only; do not require them for first-stage greenfield formation.",
       "Use the shipped agentify skills as your workflow source of truth.",
-      "Write local artifacts instead of requiring GitHub. Commit only after successful validation and review; never push.",
+      "For planning artifacts, do not write CONTEXT.md, GOALS.md, docs/prds, docs/plans, docs/issues, or specs directly.",
+      "Instead call the `write_greenfield_artifacts` tool with the structured formation payload; agentify renders those files deterministically after the session.",
+      "The `stop_at` field is a hard gate: use `stop_at: \"goals\"` for first formation unless the user explicitly approves continuing to PRD, plan, issue_slices, or spec in this same session.",
+      "Never include PRDs, plans, issues, or specs beyond the declared `stop_at`; agentify will reject the payload and the repo will remain partial.",
+      "Write local implementation code only after the user explicitly approves implementation. Commit only after successful validation and review; never push.",
     ].join("\n");
     return this.runSession({
       cwd: options.cwd,
@@ -175,7 +180,7 @@ export class PiSdkRuntime implements AgentRuntime {
       tools: ["read", "grep", "find", "ls", "bash", "write", "edit"],
       signal: options.signal,
       onEvent: options.onEvent,
-      customTools: [],
+      customTools: [createWriteGreenfieldArtifactsTool()],
       additionalSkillPaths: [SHIPPED_SKILLS_DIR],
       repoJail: true,
     });

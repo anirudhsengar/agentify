@@ -8,8 +8,9 @@ New to the codebase? Read this first, then
 agentify is a standalone CLI. You run `agentify` once inside a
 repository and it turns that repository into an "agentic codebase": it
 audits the code, generates codebase-specific agent intelligence
-(`AGENTS.md`, feature agents, experts, specs, ai_docs), ships a generic
-skill pack, and stamps a GitHub Actions runtime so that, after
+(`AGENTS.md`, feature agents, project workflow specs, expert directories,
+specs, ai_docs, feedback-loop storage, and repo-specific skill candidates),
+ships a generic skill pack, and stamps a GitHub Actions runtime so that, after
 bootstrap, issues/comments/PRs drive agentic work. Pi
 (`@earendil-works/pi-coding-agent`) is the agent harness.
 
@@ -40,6 +41,7 @@ bin/agentify.js            jiti-loads src/cli.ts (ADR 0011)
            ├─ audit/write-map-tool.ts + audit/schema.ts   the map
            ├─ audit/spawn-explorer-tool.ts   sub-agents
            ├─ artifact-exporters.ts   harness exports
+           ├─ greenfield-artifacts.ts   typed formation renderer/tool
            ├─ scaffold-installer.ts   stamp scaffold/
            └─ github-readiness.ts   next-step guidance
 ```

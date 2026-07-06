@@ -19,7 +19,10 @@
 //   schema-validated; the merge is configurable.
 //
 // Both tools report gap counts in their result so the agent can
-// decide whether to dispatch a gap_filler sub-agent.
+// decide whether to dispatch a gap_filler sub-agent. The reported
+// gaps use the same closure assessment as the final post-run gate,
+// so "covered" status without substantive evidence is surfaced
+// immediately to the agent.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -35,7 +38,8 @@ import {
     WriteMapDeltaParamsSchema,
     WriteMapParamsSchema,
     applyMapDefaults,
-    extractCoverageSummary,
+    assessCoverageClosure,
+    COVERAGE_DIMENSIONS,
     type CodebaseMap,
     type CoverageDimension,
 } from "./schema.ts";
@@ -78,6 +82,32 @@ export function loadCanonicalMap(cwd: string): CodebaseMap | null {
         return null;
     }
     return Value.Check(CodebaseMapSchema, parsed) ? (parsed as CodebaseMap) : null;
+}
+
+function formatCoverageClosure(map: CodebaseMap): {
+    closed: CoverageDimension[];
+    unresolved: CoverageDimension[];
+    reasons: Record<string, string>;
+    line: string;
+    warnings: string[] | null;
+} {
+    const closure = assessCoverageClosure(map);
+    const warnings =
+        closure.unresolved.length > 0
+            ? closure.unresolved.map((dim) => `${dim}: ${closure.reasons[dim] ?? "not closed"}`)
+            : null;
+    const line =
+        warnings === null
+            ? `All ${COVERAGE_DIMENSIONS.length} coverage dimensions closed.`
+            : `${closure.closed.length}/${COVERAGE_DIMENSIONS.length} coverage dimensions closed. ` +
+                `Unresolved: ${warnings.join("; ")}.`;
+    return {
+        closed: closure.closed,
+        unresolved: closure.unresolved,
+        reasons: closure.reasons,
+        line,
+        warnings,
+    };
 }
 
 // Cap map_file size at 1 MB. A 1 MB JSON map is suspicious —
@@ -435,8 +465,8 @@ export const writeMapTool = defineTool({
         "Schema-enforced via TypeBox. Two modes: (1) inline `map` for small maps (≤ 3KB); " +
         "(2) `map_file` pointing to a JSON file for large maps. The tool reads, " +
         "validates, and writes the canonical map. Gap entries in the coverage block are " +
-        "allowed in the data and reported in the result; the report emit is gated on " +
-        "all 10 dimensions being `covered` (enforced by the prompt, not the tool). " +
+        "allowed in the data and reported in the result; weak `covered` entries are " +
+        "also reported with the same closure rules as the final post-run gate. " +
         "In `auto` mode (default), inline maps that exceed 100KB are transparently " +
         "fall-backed to the file-based transport. " +
         "Call multiple times during exploration to persist progress; call once with the " +
@@ -579,7 +609,7 @@ export const writeMapTool = defineTool({
         }
 
         const validMap = validation.value;
-        const summary = extractCoverageSummary(validMap);
+        const closure = formatCoverageClosure(validMap);
 
         // Persist the canonical map.
         let writeResult: { path: string; size_bytes: number };
@@ -594,12 +624,6 @@ export const writeMapTool = defineTool({
             };
         }
 
-        // Compose the human-readable result.
-        const coverageLine =
-            summary.gap.length === 0
-                ? "All 10 dimensions covered."
-                : `${summary.covered.length}/10 dimensions covered. Gap: ${summary.gap.join(", ")}.`;
-
         const injectedLine =
             injectedDefaults.length > 0
                 ? ` Injected defaults: ${injectedDefaults.join(", ")}.`
@@ -607,7 +631,7 @@ export const writeMapTool = defineTool({
 
         const resultText =
             `Wrote codebase map to ${writeResult.path} (${writeResult.size_bytes} bytes). ` +
-            `Source: ${sourcePath}.${injectedLine} ${coverageLine}`;
+            `Source: ${sourcePath}.${injectedLine} ${closure.line}`;
 
         return {
             content: [{ type: "text", text: resultText }],
@@ -619,11 +643,16 @@ export const writeMapTool = defineTool({
                 schema_version: validMap.schema_version ?? "1",
                 generated_at: validMap.generated_at ?? null,
                 coverage_summary: {
-                    covered: summary.covered,
-                    gap: summary.gap,
-                    total: summary.total,
+                    covered: closure.closed,
+                    gap: closure.unresolved,
+                    total: COVERAGE_DIMENSIONS.length,
                 },
-                gap_warning: summary.gap.length > 0 ? summary.gap : null,
+                coverage_closure: {
+                    closed: closure.closed,
+                    unresolved: closure.unresolved,
+                    reasons: closure.reasons,
+                },
+                gap_warning: closure.warnings,
             },
         };
     },
@@ -738,7 +767,7 @@ export const writeMapDeltaTool = defineTool({
         }
 
         const validMap = mergedValidation.value;
-        const summary = extractCoverageSummary(validMap);
+        const closure = formatCoverageClosure(validMap);
 
         // 9. Persist the canonical map.
         let writeResult: { path: string; size_bytes: number };
@@ -753,17 +782,11 @@ export const writeMapDeltaTool = defineTool({
             };
         }
 
-        // 10. Compose the result.
-        const coverageLine =
-            summary.gap.length === 0
-                ? "All 10 dimensions covered."
-                : `${summary.covered.length}/10 dimensions covered. Gap: ${summary.gap.join(", ")}.`;
-
         const resultText =
             `Merged delta into codebase map at ${writeResult.path} (${writeResult.size_bytes} bytes). ` +
             `Strategy: ${strategy}. Dimension: ${params.dimension ?? "(none)"}. ` +
             `Gap-filler count for ${params.dimension ?? "n/a"}: ${params.dimension ? getReserveCount(params.dimension) : 0} (soft ceiling: ${GAP_FILLER_SOFT_CEILING}). ` +
-            `${coverageLine}` +
+            `${closure.line}` +
             (reserveWarning ? ` Note: ${reserveWarning}` : "");
 
         return {
@@ -776,11 +799,16 @@ export const writeMapDeltaTool = defineTool({
                 gap_filler_count: params.dimension ? getReserveCount(params.dimension) : 0,
                 gap_filler_soft_ceiling: GAP_FILLER_SOFT_CEILING,
                 coverage_summary: {
-                    covered: summary.covered,
-                    gap: summary.gap,
-                    total: summary.total,
+                    covered: closure.closed,
+                    gap: closure.unresolved,
+                    total: COVERAGE_DIMENSIONS.length,
                 },
-                gap_warning: summary.gap.length > 0 ? summary.gap : null,
+                coverage_closure: {
+                    closed: closure.closed,
+                    unresolved: closure.unresolved,
+                    reasons: closure.reasons,
+                },
+                gap_warning: closure.warnings,
             },
         };
     },

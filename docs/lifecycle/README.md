@@ -27,11 +27,25 @@ agentify classifies the repository:
   fills a structured codebase map, and — only when every coverage
   dimension is closed — emits the agentic surface: `AGENTS.md`,
   `specs/README.md`, `ai_docs/README.md`, feature agents under
-  `.pi/agents/`, experts, and the harness exports you selected. It then
-  stamps the GitHub Actions scaffold and reports GitHub readiness.
+  `.pi/agents/`, specialist workflow specs under `.pi/workflows/`,
+  expert directories, feedback-loop storage, repo-specific `.pi/skills/`
+  candidates, and the harness exports you selected. The GitHub implement
+  and review scaffold summarizes `.pi/agents` into specialist routing
+  guidance, summarizes `.pi/prompts/experts` into expert routing guidance,
+  and implement also summarizes `.pi/workflows` into workflow routing
+  guidance. It then stamps the GitHub Actions scaffold and reports GitHub
+  readiness.
 - **Empty/starter (greenfield):** it starts a local-first formation
   chat that moves one goal at a time through PRDs, plans, issues, and
-  specs, then stamps the same scaffold.
+  specs. The model submits typed formation data through
+  `write_greenfield_artifacts`; agentify renders the planning markdown
+  deterministically. The payload's `stop_at` field is a hard checkpoint
+  gate: first formation normally stops at `goals`, and artifacts beyond
+  the user-approved milestone are rejected. agentify records
+  `.pi/agentify/greenfield-state.json` with the current checkpoint, next
+  actions, exact artifact paths, local/GitHub resume instructions, and
+  artifact validation result, then stamps the same scaffold only after the
+  planning artifacts pass the substance gate.
 
 If a previous run left the repo half-initialized, agentify detects that
 and recovers. If the repo is already fully initialized, agentify
@@ -66,9 +80,14 @@ The `agent:*` label taxonomy ([ADR 0005](../adr/0005-agent-star-label-taxonomy.m
 drives the loop:
 
 1. Open an issue (or let the drill workflow triage a new one).
-2. Once the issue is a ready slice it carries `agent:queued`.
+2. Once the issue is a ready slice it carries `agent:queued` and a
+   `## Blocked by` section. Use `None - can start immediately.` when it is
+   unblocked, or concrete `#123` issue references when earlier work must close
+   first.
 3. Adding `agent:implement` triggers the implement workflow: it
-   branches, runs Pi, commits, and opens a draft PR labeled
+   refuses open blockers, branches, renders generated workflow/specialist/expert
+   routing context, runs a credential-free orchestration planner to select the
+   starting route, runs Pi to implement, commits, and opens a draft PR labeled
    `agent:review`.
 4. The review workflow reviews the PR and either approves
    (`agent:approved`) or requests changes (re-queues implement).
@@ -77,6 +96,15 @@ drives the loop:
 > Creating an issue is not by itself a go signal. A label — applied by
 > a human or by the drill pipeline after approval — starts implementation.
 > This keeps write-capable automation gated.
+
+For greenfield repositories, the drill workflow also renders
+`.pi/agentify/greenfield-state.json` into the prompt as resume context. The
+agent sees the local checkpoint, current focus, artifact paths, and local/GitHub
+continuation instructions before making its one transition. The model run reads
+captured issue JSON from the workflow, not live GitHub credentials. When a
+transition needs child, PRD, or implementation issues, the model returns
+structured issue requests and the trusted workflow creates or reuses those
+issues with `agent:drill-me`, `artifact:prd`, or `agent:queued` labels.
 
 ## 5. Self-refresh
 
@@ -91,6 +119,7 @@ agentic surface current without another terminal invocation.
 |-------|---------|-------------------|
 | Auth | No key / no TTY | CLI error naming the env vars |
 | Audit | Coverage gaps remain | `partial` status, no export, log path printed |
+| Greenfield | Missing structured formation output, `stop_at` overrun, or placeholder/thin artifacts | `partial` status, checkpoint state with validation/resume context, no scaffold |
 | Commit | Files not pushed | GitHub loop inert until pushed |
 | Setup | Missing secrets/labels | `setup-agentify.sh` / workflow preflight |
 | Implement | Preconditions unmet | Issue comment + `agent:blocked` |

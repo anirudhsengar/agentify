@@ -336,6 +336,20 @@ export interface QuestionResult {
   confidence: "high" | "medium" | "low";
 }
 
+export interface StaleExpert {
+  domain: string;
+  expert: ExpertDomain;
+  lastUpdated: string | null;
+  latestChangedPath: string | null;
+  latestChangedAt: string | null;
+  checkedPathCount: number;
+  reason: string;
+}
+
+export interface StaleExpertOptions {
+  maxFilesPerExpert?: number;
+}
+
 // ---------------------------------------------------------------------------
 // Self-improve driver
 // ---------------------------------------------------------------------------
@@ -522,6 +536,85 @@ function extractCitations(text: string): string[] {
 // Auto-trigger: schedule a self-improve after AIW completion
 // ---------------------------------------------------------------------------
 
+const DEFAULT_STALE_SCAN_FILE_LIMIT = 500;
+
+function stripLineRef(value: string): string {
+  return value.replace(/:\d+(?::\d+)?$/, "");
+}
+
+function uniqueNonEmpty(values: string[]): string[] {
+  return [...new Set(values.map((v) => stripLineRef(v.trim())).filter(Boolean))];
+}
+
+function expertOwnedPaths(yaml: ExpertiseYaml): string[] {
+  const primaryPaths = Array.isArray(yaml.primary_paths) ? yaml.primary_paths : [];
+  const overviewKeyFiles = Array.isArray(yaml.overview?.key_files) ? yaml.overview!.key_files! : [];
+  const keyTypes = Array.isArray(yaml.key_types) ? yaml.key_types : [];
+  const patternRefs = Array.isArray(yaml.patterns) ? yaml.patterns : [];
+  const pitfallRefs = Array.isArray(yaml.pitfalls) ? yaml.pitfalls : [];
+  const testPaths = Array.isArray(yaml.testing?.test_paths) ? yaml.testing!.test_paths! : [];
+  return uniqueNonEmpty([
+    ...primaryPaths,
+    ...overviewKeyFiles.map((kf) => kf.path),
+    ...keyTypes.map((kt) => kt.path),
+    ...patternRefs.map((p) => p.example_ref ?? ""),
+    ...pitfallRefs.map((p) => p.reference ?? ""),
+    ...testPaths,
+  ]);
+}
+
+function resolveInsideCwd(cwd: string, relPath: string): string | null {
+  const absolute = path.resolve(cwd, relPath);
+  const relative = path.relative(cwd, absolute);
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) return null;
+  return absolute;
+}
+
+function toPosixRel(cwd: string, absolute: string): string {
+  return path.relative(cwd, absolute).split(path.sep).join("/");
+}
+
+function repoRootForExpert(expert: ExpertDomain): string | null {
+  const suffix = path.join(".pi", "prompts", "experts", expert.domain);
+  if (!expert.dir.endsWith(suffix)) return null;
+  return expert.dir.slice(0, -suffix.length).replace(/[\\/]+$/, "");
+}
+
+function normalizeRepoPath(value: string, cwd: string | null): string {
+  const stripped = stripLineRef(value.trim());
+  if (cwd !== null && path.isAbsolute(stripped)) {
+    const relative = path.relative(cwd, stripped);
+    if (relative === "") return "";
+    if (!relative.startsWith("..") && !path.isAbsolute(relative)) {
+      return relative.split(path.sep).join("/").replace(/\/+$/, "");
+    }
+  }
+  return stripped.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
+}
+
+function repoPathsOverlap(left: string, right: string): boolean {
+  if (left === "" || right === "") return true;
+  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+}
+
+function collectExistingFiles(cwd: string, relPath: string, maxFiles: number, out: string[]): void {
+  if (out.length >= maxFiles) return;
+  const absolute = resolveInsideCwd(cwd, relPath);
+  if (absolute === null || !fs.existsSync(absolute)) return;
+  const stat = fs.lstatSync(absolute);
+  if (stat.isSymbolicLink()) return;
+  if (stat.isFile()) {
+    out.push(absolute);
+    return;
+  }
+  if (!stat.isDirectory()) return;
+  for (const entry of fs.readdirSync(absolute, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    if (out.length >= maxFiles) return;
+    if (entry.name === ".git" || entry.name === "node_modules") continue;
+    collectExistingFiles(cwd, path.join(relPath, entry.name), maxFiles, out);
+  }
+}
+
 /**
  * Return the experts whose `primary_paths` overlap the AIW's
  * `touched_paths`. Used by the auto-trigger to schedule LEARN
@@ -539,16 +632,92 @@ export function expertsTouchedBy(
     } catch {
       continue;
     }
-    const primaryPaths = Array.isArray(yaml.primary_paths) ? yaml.primary_paths : [];
-    const overviewKeyFiles = Array.isArray(yaml.overview?.key_files) ? yaml.overview!.key_files! : [];
-    const owned = primaryPaths.concat(
-      overviewKeyFiles.map((kf) => kf.path),
-    );
+    const owned = expertOwnedPaths(yaml);
     if (owned.length === 0) continue;
-    const overlaps = touchedPaths.some((tp) =>
-      owned.some((op) => tp.startsWith(op) || op.startsWith(tp)),
-    );
+    const cwd = repoRootForExpert(expert);
+    const normalizedTouched = touchedPaths.map((tp) => normalizeRepoPath(tp, cwd));
+    const normalizedOwned = owned.map((op) => normalizeRepoPath(op, cwd));
+    const overlaps = normalizedTouched.some((tp) => normalizedOwned.some((op) => repoPathsOverlap(tp, op)));
     if (overlaps) out.push(expert);
   }
   return out;
+}
+
+/**
+ * Return experts whose referenced repository files are newer than
+ * `expertise.yaml`'s `last_updated`. This is deterministic staleness
+ * detection for refresh loops; the self-improve prompt still owns the
+ * actual content update.
+ */
+export function findStaleExperts(
+  registry: ExpertRegistry,
+  cwd: string,
+  options: StaleExpertOptions = {},
+): StaleExpert[] {
+  const maxFiles = options.maxFilesPerExpert ?? DEFAULT_STALE_SCAN_FILE_LIMIT;
+  const stale: StaleExpert[] = [];
+
+  for (const expert of registry.list()) {
+    let yaml: ExpertiseYaml;
+    try {
+      yaml = parseExpertiseYaml(expert.expertisePath);
+    } catch {
+      stale.push({
+        domain: expert.domain,
+        expert,
+        lastUpdated: null,
+        latestChangedPath: null,
+        latestChangedAt: null,
+        checkedPathCount: 0,
+        reason: "expertise.yaml is not parseable",
+      });
+      continue;
+    }
+
+    const owned = expertOwnedPaths(yaml);
+    const files: string[] = [];
+    for (const ownedPath of owned) {
+      collectExistingFiles(cwd, ownedPath, maxFiles, files);
+      if (files.length >= maxFiles) break;
+    }
+
+    const lastUpdated = yaml.last_updated ?? expert.lastUpdated;
+    const lastUpdatedMs = lastUpdated ? Date.parse(lastUpdated) : Number.NaN;
+    if (!Number.isFinite(lastUpdatedMs)) {
+      stale.push({
+        domain: expert.domain,
+        expert,
+        lastUpdated: lastUpdated ?? null,
+        latestChangedPath: files[0] ? toPosixRel(cwd, files[0]) : null,
+        latestChangedAt: files[0] ? fs.statSync(files[0]).mtime.toISOString() : null,
+        checkedPathCount: files.length,
+        reason: "expertise.yaml last_updated is missing or invalid",
+      });
+      continue;
+    }
+
+    let latestPath: string | null = null;
+    let latestMtime = 0;
+    for (const file of files) {
+      const mtime = fs.statSync(file).mtimeMs;
+      if (mtime > latestMtime) {
+        latestMtime = mtime;
+        latestPath = file;
+      }
+    }
+
+    if (latestPath !== null && latestMtime > lastUpdatedMs) {
+      stale.push({
+        domain: expert.domain,
+        expert,
+        lastUpdated,
+        latestChangedPath: toPosixRel(cwd, latestPath),
+        latestChangedAt: new Date(latestMtime).toISOString(),
+        checkedPathCount: files.length,
+        reason: "referenced repository file is newer than expertise.yaml last_updated",
+      });
+    }
+  }
+
+  return stale.sort((a, b) => a.domain.localeCompare(b.domain));
 }

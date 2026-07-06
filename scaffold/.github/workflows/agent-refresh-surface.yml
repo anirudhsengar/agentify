@@ -7,7 +7,6 @@ name: Agent Refresh Surface
 
 on:
   push:
-    branches: [main, master]
   workflow_dispatch:
 
 concurrency:
@@ -17,7 +16,14 @@ concurrency:
 jobs:
   refresh:
     # Skip pushes made by the refresh branch itself to avoid a loop.
-    if: "${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore(agentify): refresh agentic surface') }}"
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.ref_name == github.event.repository.default_branch &&
+          !startsWith(github.event.head_commit.message, 'chore(agentify): refresh agentic surface')
+        )
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -63,7 +69,12 @@ jobs:
         with:
           version: ${{ vars.PI_VERSION }}
 
+      - name: Detect stale experts
+        run: node .agentify-runtime/.github/scripts/detect-stale-experts.mjs . > "${RUNNER_TEMP}/stale-experts.json"
+
       - name: Render refresh prompt
+        env:
+          STALE_EXPERTS_FILE: ${{ runner.temp }}/stale-experts.json
         run: envsubst < .agentify-runtime/.github/agent-prompts/refresh-surface.md > "${RUNNER_TEMP}/refresh-prompt.md"
 
       - name: Run Pi — refresh surface
@@ -81,13 +92,16 @@ jobs:
           AGENT_PAT: ${{ secrets.AGENT_PAT }}
         run: |
           set -euo pipefail
-          if git diff --quiet && git diff --cached --quiet; then
+          commits_ahead=$(git rev-list --count "origin/${BASE_REF}..HEAD")
+          if git diff --quiet && git diff --cached --quiet && [ "$commits_ahead" -eq 0 ]; then
             echo "Surface already current — nothing to refresh."
             exit 0
           fi
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            git add -A
+            git commit -m "chore(agentify): refresh agentic surface for ${GITHUB_SHA::8}"
+          fi
           : "${AGENT_PAT:?AGENT_PAT is required — see SETUP.md}"
-          git add -A
-          git commit -m "chore(agentify): refresh agentic surface for ${GITHUB_SHA::8}"
           GH_TOKEN="$AGENT_PAT" gh auth setup-git
           git push --force origin "$BRANCH"
           GH_TOKEN="$AGENT_PAT" gh pr create \

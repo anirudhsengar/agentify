@@ -11,7 +11,7 @@ import {
   assessCoverageClosure,
   COVERAGE_DIMENSIONS,
 } from "../../src/core/audit/schema.ts";
-import { loadCanonicalMap } from "../../src/core/audit/write-map-tool.ts";
+import { loadCanonicalMap, writeMapTool } from "../../src/core/audit/write-map-tool.ts";
 import { runAgentify } from "../../src/core/run-agentify.ts";
 import { saveAgentifyConfig, authPath } from "../../src/core/agentify-config.ts";
 import { readProjectState } from "../../src/core/project-state.ts";
@@ -141,6 +141,130 @@ function testClosureRejectsGapStatus(): void {
   assert.ok(result.unresolved.includes("D8_security"));
 }
 
+function testClosureRejectsWeakDimensionEvidence(): void {
+  const cases: Array<{
+    dim: (typeof COVERAGE_DIMENSIONS)[number];
+    mutate: (map: ReturnType<typeof makeValidCodebaseMap>) => void;
+    reason: RegExp;
+  }> = [
+    {
+      dim: "D1_topography",
+      mutate: (map) => { map.skeleton.entry_points = []; },
+      reason: /entry point/i,
+    },
+    {
+      dim: "D2_module_boundaries",
+      mutate: (map) => {
+        map.module_graph.edges = [];
+        map.module_graph.parallelizable_subtrees = [];
+        map.module_graph.shared_abstractions = [];
+      },
+      reason: /module/i,
+    },
+    {
+      dim: "D3_type_contract",
+      mutate: (map) => {
+        map.type_contract_surface.idks = [];
+        map.type_contract_surface.typescript_interfaces = [];
+        map.type_contract_surface.pydantic_models = [];
+        map.type_contract_surface.db_models = [];
+        map.type_contract_surface.stable_types = [];
+        map.type_contract_surface.one_type_trace = null;
+      },
+      reason: /type|contract/i,
+    },
+    {
+      dim: "D4_conventions",
+      mutate: (map) => { map.conventions.naming.files = ""; },
+      reason: /convention|naming/i,
+    },
+    {
+      dim: "D5_pitfalls",
+      mutate: (map) => { map.pitfalls = []; },
+      reason: /pitfall/i,
+    },
+    {
+      dim: "D6_validation",
+      mutate: (map) => {
+        map.validation_surface.test_command = "";
+        map.validation_surface.per_change_type.chore.mandatory = [];
+        map.validation_surface.per_change_type.bug.mandatory = [];
+        map.validation_surface.per_change_type.feature.mandatory = [];
+      },
+      reason: /validation|test/i,
+    },
+    {
+      dim: "D7_operational",
+      mutate: (map) => { map.operational_surface.run.command = ""; },
+      reason: /run|operational/i,
+    },
+    {
+      dim: "D8_security",
+      mutate: (map) => {
+        map.security_surface.paths.zero_access = [];
+        map.security_surface.bash_blocked_patterns = [];
+        map.security_surface.damage_control_rules = [];
+      },
+      reason: /security|zero-access/i,
+    },
+    {
+      dim: "D9_process",
+      mutate: (map) => { map.meta.lifecycle.issue_types = []; },
+      reason: /process|issue/i,
+    },
+    {
+      dim: "D10_documentation",
+      mutate: (map) => {
+        map.meta.documentation.agents_md = null;
+        map.meta.documentation.has_ai_docs = false;
+        map.meta.documentation.has_app_docs = false;
+        map.meta.documentation.has_specs = false;
+        map.meta.documentation.readme_metrics = { present: false, line_count: 0, section_count: 0 };
+      },
+      reason: /doc/i,
+    },
+  ];
+
+  for (const testCase of cases) {
+    const map = makeValidCodebaseMap();
+    testCase.mutate(map);
+    const result = assessCoverageClosure(map);
+    assert.ok(result.unresolved.includes(testCase.dim), `${testCase.dim} should be unresolved`);
+    assert.match(result.reasons[testCase.dim] ?? "", testCase.reason);
+  }
+}
+
+async function testWriteMapReturnsClosureReasons(): Promise<void> {
+  const cwd = tempDir("write-map-feedback");
+  const map = makeValidCodebaseMap();
+  map.validation_surface.test_command = "";
+
+  const result = await writeMapTool.execute(
+    "test-write-map",
+    { map } as never,
+    undefined,
+    undefined,
+    { cwd } as never,
+  );
+
+  const text =
+    result.content?.[0]?.type === "text"
+      ? (result.content[0] as { type: "text"; text: string }).text
+      : "";
+  const details = result.details as
+    | {
+        coverage_closure?: {
+          unresolved?: string[];
+          reasons?: Record<string, string>;
+        };
+      }
+    | undefined;
+
+  assert.match(text, /coverage dimensions closed/i);
+  assert.ok(details?.coverage_closure?.unresolved?.includes("D6_validation"));
+  assert.match(details?.coverage_closure?.reasons?.D6_validation ?? "", /validation command/i);
+}
+
 // --- loadCanonicalMap ------------------------------------------------------
 
 function testLoadCanonicalMapRejectsGarbage(): void {
@@ -234,6 +358,8 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "closureRejectsEmptyEvidence", fn: testClosureRejectsEmptyEvidence },
   { name: "closureRejectsPitfallsWithoutSubstance", fn: testClosureRejectsPitfallsWithoutSubstance },
   { name: "closureRejectsGapStatus", fn: testClosureRejectsGapStatus },
+  { name: "closureRejectsWeakDimensionEvidence", fn: testClosureRejectsWeakDimensionEvidence },
+  { name: "writeMapReturnsClosureReasons", fn: testWriteMapReturnsClosureReasons },
   { name: "loadCanonicalMapRejectsGarbage", fn: testLoadCanonicalMapRejectsGarbage },
   { name: "noMapMeansPartialNoExport", fn: testNoMapMeansPartialNoExport },
   { name: "gapMapMeansPartialNoExport", fn: testGapMapMeansPartialNoExport },

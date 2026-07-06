@@ -15,9 +15,14 @@ import {
   exportAgenticSurface,
 } from "../src/core/artifact-exporters.ts";
 import { ProjectClassifier } from "../src/core/project-classifier.ts";
+import { writeGreenfieldFormation } from "../src/core/greenfield-artifacts.ts";
+import { readGreenfieldState } from "../src/core/greenfield-state.ts";
+import { readManifest } from "../src/core/manifest.ts";
+import { readProjectState } from "../src/core/project-state.ts";
 import { AGENTIFY_PROVIDERS, PROVIDER_ENV_KEYS } from "../src/core/provider-auth.ts";
 import { runAgentify } from "../src/core/run-agentify.ts";
 import { makeValidCodebaseMap } from "./fixtures/codebase-map.ts";
+import { makeGreenfieldFormation } from "./fixtures/greenfield-formation.ts";
 import type {
   AgentRuntime,
   AgentRuntimeResult,
@@ -95,17 +100,20 @@ class GreenfieldFakeRuntime implements AgentRuntime {
   async runGreenfield(options: {
     cwd: string;
   }): Promise<AgentRuntimeResult> {
-    fs.mkdirSync(path.join(options.cwd, "docs", "prds"), { recursive: true });
-    fs.mkdirSync(path.join(options.cwd, "docs", "plans"), { recursive: true });
-    fs.mkdirSync(path.join(options.cwd, "docs", "issues"), { recursive: true });
-    fs.mkdirSync(path.join(options.cwd, "specs"), { recursive: true });
+    writeGreenfieldFormation(options.cwd, makeGreenfieldFormation());
+    return { turns: 2, costUsd: null, aborted: false };
+  }
+}
+
+class PlaceholderGreenfieldFakeRuntime implements AgentRuntime {
+  async runSession(): Promise<AgentRuntimeResult> {
+    throw new Error("Brownfield mode should not run in this test.");
+  }
+
+  async runGreenfield(options: { cwd: string }): Promise<AgentRuntimeResult> {
     fs.writeFileSync(path.join(options.cwd, "CONTEXT.md"), "# Context\n");
     fs.writeFileSync(path.join(options.cwd, "GOALS.md"), "# Goals\n");
-    fs.writeFileSync(path.join(options.cwd, "docs", "prds", "first.md"), "# PRD\n");
-    fs.writeFileSync(path.join(options.cwd, "docs", "plans", "first.md"), "# Plan\n");
-    fs.writeFileSync(path.join(options.cwd, "docs", "issues", "001-first.md"), "# Issue\n");
-    fs.writeFileSync(path.join(options.cwd, "specs", "feature-first.md"), "# Spec\n");
-    return { turns: 2, costUsd: null, aborted: false };
+    return { turns: 1, costUsd: null, aborted: false };
   }
 }
 
@@ -272,18 +280,56 @@ async function testGreenfieldRunWithFakeRuntime(): Promise<void> {
 
   assert.ok(fs.existsSync(path.join(cwd, "CONTEXT.md")));
   assert.ok(fs.existsSync(path.join(cwd, "GOALS.md")));
-  assert.ok(fs.existsSync(path.join(cwd, "docs", "issues", "001-first.md")));
+  assert.ok(fs.existsSync(path.join(cwd, "docs", "issues", "001-import-invoices.md")));
   assert.ok(fs.existsSync(path.join(cwd, "specs", "feature-first.md")));
-  assert.ok(fs.existsSync(path.join(cwd, ".pi", "agentify", "greenfield-state.json")));
-  assert.match(
-    fs.readFileSync(path.join(cwd, ".pi", "agentify", "greenfield-state.json"), "utf-8"),
-    /"checkpoint": "spec"/,
+  assert.ok(
+    fs.readFileSync(path.join(cwd, "GOALS.md"), "utf-8")
+      .includes(AGENTIFY_MANAGED_MARKERS.markdown),
   );
+  assert.ok(fs.existsSync(path.join(cwd, ".pi", "agentify", "greenfield-state.json")));
+  const greenfieldState = readGreenfieldState(cwd);
+  assert.equal(greenfieldState?.checkpoint, "spec");
+  assert.equal(greenfieldState?.artifact_validation.ok, true);
+  assert.equal(greenfieldState?.resume.source, "formation");
+  assert.equal(greenfieldState?.resume.stop_at, "spec");
+  assert.ok(greenfieldState?.resume.artifact_paths.includes("specs/feature-first.md"));
+  assert.ok(greenfieldState?.resume.github_resume.includes("agent:queued"));
+  assert.ok(greenfieldState?.next_actions.some((action) => action.includes("/implement")));
+  const manifest = readManifest(cwd);
+  assert.equal(manifest?.mode, "greenfield");
+  assert.ok(manifest?.files.some((file) => file.path === "GOALS.md" && file.required));
   assert.ok(fs.existsSync(path.join(cwd, ".github", "workflows", "agent-implement.yml")));
   assert.ok(fs.existsSync(path.join(cwd, "SETUP.md")));
   assert.ok(ui.infos.some((message) => message.includes("greenfield session complete")));
   assert.ok(ui.infos.some((message) => message.includes("scaffold file(s) installed")));
   assert.ok(ui.infos.some((message) => message.includes("GitHub bootstrap is ready")));
+}
+
+async function testInvalidGreenfieldArtifactsRemainPartial(): Promise<void> {
+  const cwd = tempDir("greenfield-invalid");
+  const configDir = tempDir("greenfield-invalid-config");
+  saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
+  fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
+
+  const ui = new TestUi();
+  await runAgentify({
+    cwd,
+    configDir,
+    ui,
+    runtime: new PlaceholderGreenfieldFakeRuntime(),
+    targets: ["codex", "claude", "pi"],
+    assumeProjectKind: "greenfield",
+    githubReadinessOverride: READY_GITHUB,
+  });
+
+  const state = readGreenfieldState(cwd);
+  assert.equal(state?.artifact_validation.ok, false);
+  assert.ok(state?.artifact_validation.reasons.some((reason) => reason.includes("GOALS.md")));
+  assert.ok(!fs.existsSync(path.join(cwd, "SETUP.md")), "invalid greenfield artifacts must not install scaffold");
+  assert.equal(readProjectState(configDir, cwd)?.runStatus, "partial");
+  assert.ok(ui.errors.some((message) => message.includes("substance gate")));
+  assert.ok(ui.infos.some((message) => message.includes("scaffold not installed")));
+  assert.ok(!ui.infos.some((message) => message.includes("GitHub bootstrap is ready")));
 }
 
 await testProjectClassifier();
@@ -292,5 +338,6 @@ await testAuthPromptAnd0600Write();
 await testArtifactExporter();
 await testBrownfieldRunWithFakeRuntime();
 await testGreenfieldRunWithFakeRuntime();
+await testInvalidGreenfieldArtifactsRemainPartial();
 
 console.log("agentify core tests passed.");

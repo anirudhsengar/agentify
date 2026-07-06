@@ -92,6 +92,22 @@ async function testRepoJailBlocksOutsideWrite(): Promise<void> {
   }
 }
 
+async function testRepoJailBlocksAllWriteLikeTools(): Promise<void> {
+  const cwd = tempDir("agentify-jail-write-like-");
+  try {
+    activate();
+    const hook = makeDefenseHook({ repoJail: true });
+    for (const toolName of ["write_file", "multi_edit"]) {
+      const outside = await hook(evt(toolName, { path: "/tmp/evil.ts", content: "x" }, cwd));
+      assert.ok(outside?.block, `${toolName} outside the repo must be blocked`);
+      assert.match(outside?.reason ?? "", /repo-jail/);
+    }
+    deactivate();
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function testProtectedPathsBlockOverwrite(): Promise<void> {
   const cwd = tempDir("agentify-protected-");
   try {
@@ -105,6 +121,24 @@ async function testProtectedPathsBlockOverwrite(): Promise<void> {
     // A different file in the repo is fine.
     const other = await hook(evt("write", { path: path.join(cwd, "NEW.md"), content: "x" }, cwd));
     assert.equal(other, undefined);
+    deactivate();
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testProtectedPathsBlockAllWriteLikeTools(): Promise<void> {
+  const cwd = tempDir("agentify-protected-write-like-");
+  try {
+    activate();
+    const userFile = path.join(cwd, "AGENTS.md");
+    fs.writeFileSync(userFile, "# user owned\n");
+    const hook = makeDefenseHook({ repoJail: true, protectedPaths: [userFile] });
+    for (const toolName of ["write_file", "multi_edit"]) {
+      const result = await hook(evt(toolName, { path: userFile, content: "clobber" }, cwd));
+      assert.ok(result?.block, `${toolName} must not overwrite user-owned files`);
+      assert.match(result?.reason ?? "", /user-owned/);
+    }
     deactivate();
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
@@ -131,7 +165,9 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "interpreterOneLinerBlockedViaHook", fn: testInterpreterOneLinerBlockedViaHook },
   { name: "credentialStoreBlocked", fn: testCredentialStoreBlocked },
   { name: "repoJailBlocksOutsideWrite", fn: testRepoJailBlocksOutsideWrite },
+  { name: "repoJailBlocksAllWriteLikeTools", fn: testRepoJailBlocksAllWriteLikeTools },
   { name: "protectedPathsBlockOverwrite", fn: testProtectedPathsBlockOverwrite },
+  { name: "protectedPathsBlockAllWriteLikeTools", fn: testProtectedPathsBlockAllWriteLikeTools },
   { name: "readsOutsideRepoStillAllowed", fn: testReadsOutsideRepoStillAllowed },
 ];
 

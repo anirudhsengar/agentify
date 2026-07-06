@@ -26,6 +26,27 @@ export const PATH_PARAM_NAMES: Record<string, ReadonlyArray<string>> = {
     "filename",
     "file",
   ],
+  write_file: [
+    "path",
+    "filePath",
+    "file_path",
+    "target",
+    "filepath",
+    "filename",
+    "file",
+    "outputPath",
+    "output_path",
+    "destination",
+  ],
+  multi_edit: [
+    "path",
+    "filePath",
+    "file_path",
+    "target",
+    "filepath",
+    "filename",
+    "file",
+  ],
 };
 
 /** Return the first path-bearing string from `input`, or empty. */

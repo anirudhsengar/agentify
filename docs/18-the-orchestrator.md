@@ -38,16 +38,24 @@ shipped loop today:
 
 1. **Scaffold workflows** (`scaffold/.github/workflows/*.yml`) —
    label-driven GitHub Actions running Pi. **This is the shipped async
-   loop.**
+   loop.** The implement workflows render generated `.pi/workflows/*.json`
+   specs into prompt context, and implement/review workflows render generated
+   `.pi/agents/*.md` specialist routing plus `.pi/prompts/experts/*`
+   expert routing context. Issue implementation also runs a credential-free
+   orchestration-planner prompt that emits a bounded structured route for the
+   implementation agent. These workflows do not execute orchestrator DAGs.
 2. **AIW workflows** (`src/core/aiw/`) — fixed phase pipelines
    (plan → build → review → fix → ship), each phase a fresh Pi session,
    isolated in a git worktree.
 3. **Orchestrator workflows** (`src/core/orchestrator/workflows/*.json`) —
    JSON DAGs composing sub-agents and AIWs.
 
-AIW and orchestrator are internal alternatives / foundation code. See
-[ADR 0013](adr/0013-webhook-server.md) for the same "parked internal
-runtime" framing applied to the webhook server.
+AIW and orchestrator are internal alternatives / foundation code. Generated
+project workflow specs are already discoverable by the orchestrator registry,
+and the scaffold can read workflows, specialist routes, expert routes, and a
+structured orchestration route as prompt guidance, but public execution still
+belongs to GitHub Actions. See [ADR 0013](adr/0013-webhook-server.md) for the
+same "parked internal runtime" framing applied to the webhook server.
 
 ## Persistence
 

@@ -89,10 +89,23 @@ jobs:
         with:
           version: ${{ vars.PI_VERSION }}
 
+      - name: Render specialist routing context
+        run: |
+          bash .agentify-runtime/.github/scripts/render-specialist-context.sh "." > "${RUNNER_TEMP}/specialist-context.md"
+
+      - name: Render expert routing context
+        run: |
+          bash .agentify-runtime/.github/scripts/render-expert-context.sh "." > "${RUNNER_TEMP}/expert-context.md"
+
       - name: Render review prompt
         env:
           PR_CONTEXT_DIR: ${{ runner.temp }}/pr-context
-        run: envsubst < .agentify-runtime/.github/agent-prompts/review.md > "${RUNNER_TEMP}/review-prompt.md"
+        run: |
+          SPECIALIST_CONTEXT=$(cat "${RUNNER_TEMP}/specialist-context.md")
+          EXPERT_CONTEXT=$(cat "${RUNNER_TEMP}/expert-context.md")
+          export SPECIALIST_CONTEXT
+          export EXPERT_CONTEXT
+          envsubst < .agentify-runtime/.github/agent-prompts/review.md > "${RUNNER_TEMP}/review-prompt.md"
 
       - name: Run Pi — review
         id: pi_review
@@ -109,16 +122,8 @@ jobs:
         env:
           TRANSCRIPT: ${{ steps.pi_review.outputs.output-file }}
         run: |
-          set -euo pipefail
-          bash .agentify-runtime/.github/scripts/extract-output.sh "$TRANSCRIPT" > "${RUNNER_TEMP}/review.json"
-          jq -e '
-            type == "object" and
-            ((.verdict == "approve") or (.verdict == "request_changes")) and
-            (.summary | type == "string" and length > 0)
-          ' "${RUNNER_TEMP}/review.json" >/dev/null
-          jq -r '.verdict' "${RUNNER_TEMP}/review.json" > "${RUNNER_TEMP}/verdict.txt"
-          jq -r '.summary' "${RUNNER_TEMP}/review.json" > "${RUNNER_TEMP}/summary.md"
-          echo "value=$(cat "${RUNNER_TEMP}/verdict.txt")" >> "$GITHUB_OUTPUT"
+          bash .agentify-runtime/.github/scripts/extract-review-verdict.sh \
+            "$TRANSCRIPT" "$RUNNER_TEMP" "$GITHUB_OUTPUT"
 
       - name: Push any fixup commits (abort cleanly if non-fast-forward)
         if: success()

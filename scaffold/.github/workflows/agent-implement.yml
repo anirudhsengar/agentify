@@ -53,17 +53,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
           IMPLEMENT_ACTOR: ${{ github.actor }}
         run: |
-          set +e
-          reason=$(bash .agentify-runtime/.github/scripts/check-issue-ready.sh "$ISSUE_NUMBER" "$IMPLEMENT_ACTOR" 2>&1)
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then
-            gh issue edit "$ISSUE_NUMBER" --remove-label "agent:implement" || true
-            gh issue comment "$ISSUE_NUMBER" --body "Refused to run \`agent:implement\`: $reason"
-            echo "proceed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "proceed=true" >> "$GITHUB_OUTPUT"
-          fi
+          bash .agentify-runtime/.github/scripts/run-issue-readiness.sh \
+            "$ISSUE_NUMBER" "$IMPLEMENT_ACTOR" "$GITHUB_OUTPUT"
 
       - name: Pre-flight — refuse if an open PR already exists for this issue
         if: steps.readiness.outputs.proceed == 'true'
@@ -117,12 +108,8 @@ jobs:
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
         id: branch
         run: |
-          slug=$(echo "$ISSUE_TITLE" \
-            | tr '[:upper:]' '[:lower:]' \
-            | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' \
-            | cut -c1-50)
-          branch="agent/issue-${ISSUE_NUMBER}-${slug}"
-          echo "name=$branch" >> "$GITHUB_OUTPUT"
+          bash .agentify-runtime/.github/scripts/compute-implementation-branch.sh \
+            "$ISSUE_NUMBER" "$ISSUE_TITLE" "$GITHUB_OUTPUT"
 
       - name: Create branch
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
@@ -139,12 +126,67 @@ jobs:
         with:
           version: ${{ vars.PI_VERSION }}
 
+      - name: Render project workflow context
+        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
+        run: |
+          bash .agentify-runtime/.github/scripts/render-workflow-context.sh "." > "${RUNNER_TEMP}/workflow-context.md"
+
+      - name: Render specialist routing context
+        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
+        run: |
+          bash .agentify-runtime/.github/scripts/render-specialist-context.sh "." > "${RUNNER_TEMP}/specialist-context.md"
+
+      - name: Render expert routing context
+        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
+        run: |
+          bash .agentify-runtime/.github/scripts/render-expert-context.sh "." > "${RUNNER_TEMP}/expert-context.md"
+
+      - name: Render orchestration prompt
+        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
+        env:
+          ISSUE_CONTEXT_DIR: ${{ runner.temp }}/issue-context
+        run: |
+          WORKFLOW_CONTEXT=$(cat "${RUNNER_TEMP}/workflow-context.md")
+          SPECIALIST_CONTEXT=$(cat "${RUNNER_TEMP}/specialist-context.md")
+          EXPERT_CONTEXT=$(cat "${RUNNER_TEMP}/expert-context.md")
+          export WORKFLOW_CONTEXT
+          export SPECIALIST_CONTEXT
+          export EXPERT_CONTEXT
+          envsubst < .agentify-runtime/.github/agent-prompts/orchestrate-issue.md > "${RUNNER_TEMP}/orchestrate-issue-prompt.md"
+
+      - name: Run Pi — orchestrate issue route
+        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
+        id: pi_orchestrate
+        uses: ./.agentify-runtime/.github/actions/run-pi
+        with:
+          prompt-file: ${{ runner.temp }}/orchestrate-issue-prompt.md
+          api-key: ${{ secrets.PI_API_KEY }}
+          provider: ${{ vars.PI_PROVIDER || 'anthropic' }}
+          model: ${{ vars.PI_MODEL }}
+          thinking: ${{ vars.PI_THINKING || 'high' }}
+
+      - name: Extract orchestration plan
+        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
+        env:
+          TRANSCRIPT: ${{ steps.pi_orchestrate.outputs.output-file }}
+        run: |
+          bash .agentify-runtime/.github/scripts/extract-orchestration-plan.sh \
+            "$TRANSCRIPT" "${RUNNER_TEMP}/orchestration-plan.md"
+
       - name: Render implement prompt
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
         env:
           BRANCH: ${{ steps.branch.outputs.name }}
           ISSUE_CONTEXT_DIR: ${{ runner.temp }}/issue-context
         run: |
+          WORKFLOW_CONTEXT=$(cat "${RUNNER_TEMP}/workflow-context.md")
+          SPECIALIST_CONTEXT=$(cat "${RUNNER_TEMP}/specialist-context.md")
+          EXPERT_CONTEXT=$(cat "${RUNNER_TEMP}/expert-context.md")
+          ORCHESTRATION_PLAN=$(cat "${RUNNER_TEMP}/orchestration-plan.md")
+          export WORKFLOW_CONTEXT
+          export SPECIALIST_CONTEXT
+          export EXPERT_CONTEXT
+          export ORCHESTRATION_PLAN
           envsubst < .agentify-runtime/.github/agent-prompts/implement.md > "${RUNNER_TEMP}/implement-prompt.md"
 
       - name: Run Pi — implement
@@ -161,13 +203,8 @@ jobs:
       - name: Verify commits were made
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
         run: |
-          set -euo pipefail
-          commits_ahead=$(git rev-list --count "${BASE_REF}..HEAD")
-          if [ "$commits_ahead" -eq 0 ]; then
-            echo "Agent finished but no commits were made on the branch." > "${RUNNER_TEMP}/failure_reason.txt"
-            exit 1
-          fi
-          echo "Implementation produced $commits_ahead commit(s)."
+          bash .agentify-runtime/.github/scripts/verify-implementation-commits.sh \
+            "$BASE_REF" "${RUNNER_TEMP}/failure_reason.txt"
 
       - name: Render write-pr prompt
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
@@ -193,19 +230,12 @@ jobs:
         env:
           TRANSCRIPT: ${{ steps.pi_write_pr.outputs.output-file }}
         run: |
-          set -euo pipefail
-          bash .agentify-runtime/.github/scripts/extract-output.sh "$TRANSCRIPT" > "${RUNNER_TEMP}/pr_meta.json"
-          jq -e '
-            type == "object" and
-            (.prTitle | type == "string" and length > 0 and length <= 70 and (contains("\n") | not)) and
-            (.prDescription | type == "string" and length > 0) and
-            (.prDescription | test("(?i)(closes|fixes|resolves)[[:space:]]+#'"${ISSUE_NUMBER}"'\\b"))
-          ' "${RUNNER_TEMP}/pr_meta.json" >/dev/null
-          jq -r '.prTitle' "${RUNNER_TEMP}/pr_meta.json" > "${RUNNER_TEMP}/pr_title.txt"
-          jq -r '.prDescription' "${RUNNER_TEMP}/pr_meta.json" > "${RUNNER_TEMP}/pr_description.txt"
+          bash .agentify-runtime/.github/scripts/extract-pr-meta.sh \
+            "$TRANSCRIPT" "$ISSUE_NUMBER" "$RUNNER_TEMP"
 
-      - name: Push branch
+      - name: Publish implementation branch and draft PR
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
+        id: open_pr
         env:
           BRANCH: ${{ steps.branch.outputs.name }}
           AGENT_PAT: ${{ secrets.AGENT_PAT }}
@@ -214,95 +244,34 @@ jobs:
         # already exists for this issue, and the branch name is
         # deterministic from the issue number.
         run: |
-          set -euo pipefail
-          : "${AGENT_PAT:?AGENT_PAT is required — see SETUP.md}"
-          GH_TOKEN="$AGENT_PAT" gh auth setup-git
-          git push --force origin "$BRANCH"
+          bash .agentify-runtime/.github/scripts/publish-implementation-pr.sh \
+            "$BRANCH" "$BASE_REF" \
+            "${RUNNER_TEMP}/pr_title.txt" \
+            "${RUNNER_TEMP}/pr_description.txt" \
+            "$GITHUB_OUTPUT"
 
-      - name: Open PR
-        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
-        id: open_pr
-        env:
-          BRANCH: ${{ steps.branch.outputs.name }}
-          AGENT_PAT: ${{ secrets.AGENT_PAT }}
-        run: |
-          set -euo pipefail
-          : "${AGENT_PAT:?AGENT_PAT is required — see SETUP.md}"
-          PR_TITLE=$(cat "${RUNNER_TEMP}/pr_title.txt")
-          pr_url=$(GH_TOKEN="$AGENT_PAT" gh pr create \
-            --draft --base "$BASE_REF" --head "$BRANCH" \
-            --title "$PR_TITLE" --body-file "${RUNNER_TEMP}/pr_description.txt" | tail -n1)
-          echo "pr_number=$(basename "$pr_url")" >> "$GITHUB_OUTPUT"
-
-      - name: Request automated review (add agent:review label)
-        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
-        env:
-          PR_NUMBER: ${{ steps.open_pr.outputs.pr_number }}
-          AGENT_PAT: ${{ secrets.AGENT_PAT }}
-        run: |
-          set -euo pipefail
-          : "${AGENT_PAT:?AGENT_PAT is required — see SETUP.md}"
-          GH_TOKEN="$AGENT_PAT" gh pr edit "$PR_NUMBER" --add-label "agent:review"
-
-      - name: Mark issue as handed off to its PR
-        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh issue edit "$ISSUE_NUMBER" --remove-label "agent:queued" || true
-
-      - name: Comment PR link on the issue
+      - name: Complete implementation handoff
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
         env:
           PR_NUMBER: ${{ steps.open_pr.outputs.pr_number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Make the handoff visible on the source issue instead of leaving
-        # the user to discover the PR in the GitHub UI.
+          AGENT_PAT: ${{ secrets.AGENT_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh issue comment "$ISSUE_NUMBER" --body "$(cat <<EOF
-          Opened draft PR #${PR_NUMBER} and queued it for automated review (\`agent:review\`).
-
-          **Workflow run:** $RUN_URL
-          EOF
-          )" || true
+          bash .agentify-runtime/.github/scripts/complete-implementation-handoff.sh \
+            "$ISSUE_NUMBER" "$PR_NUMBER" "$RUN_URL"
 
       - name: Mark blocked on failure
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && failure()
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CREATED_PR_NUMBER: ${{ steps.open_pr.outputs.pr_number }}
         run: |
-          reason="(no reason file written — check workflow logs)"
-          if [ -f "${RUNNER_TEMP}/failure_reason.txt" ]; then
-            reason=$(cat "${RUNNER_TEMP}/failure_reason.txt")
-          fi
-          if [ -n "$CREATED_PR_NUMBER" ]; then
-            gh issue edit "$ISSUE_NUMBER" --remove-label "agent:queued" || true
-            gh pr edit "$CREATED_PR_NUMBER" --add-label "agent:blocked" || true
-            gh issue comment "$ISSUE_NUMBER" --body "$(cat <<EOF
-            Implementation PR #${CREATED_PR_NUMBER} was created, but the handoff failed.
-
-            **Reason:** $reason
-
-            **Workflow run:** $RUN_URL
-
-            Inspect the PR, then add \`agent:review\` there to continue.
-            EOF
-            )"
-            exit 0
-          fi
-          gh issue edit "$ISSUE_NUMBER" --add-label "agent:blocked" || true
-          gh issue comment "$ISSUE_NUMBER" --body "$(cat <<EOF
-          \`agent:implement\` run failed.
-
-          **Reason:** $reason
-
-          **Workflow run:** $RUN_URL
-
-          Re-add \`agent:implement\` to retry.
-          EOF
-          )"
+          bash .agentify-runtime/.github/scripts/mark-implementation-failure.sh \
+            "$ISSUE_NUMBER" "${CREATED_PR_NUMBER:-}" \
+            "${RUNNER_TEMP}/failure_reason.txt" \
+            "$RUN_URL"
 
       - name: Always remove in-progress
         if: always() && steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'

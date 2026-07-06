@@ -116,6 +116,37 @@ async function testPartialGreenfield(): Promise<void> {
   }
 }
 
+async function testReadyGreenfieldManifest(): Promise<void> {
+  const cwd = tempDir("agentify-repo-status-greenfield-ready-");
+  const configDir = tempDir("agentify-repo-status-config-");
+  try {
+    const files = [
+      "GOALS.md",
+      "CONTEXT.md",
+      "SETUP.md",
+      ".github/workflows/agent-implement.yml",
+      ".github/actions/run-pi/action.yml",
+      ".github/scripts/setup-agentify.sh",
+    ].map((relativePath) => writeManaged(relativePath, cwd));
+    writeManifest(cwd, {
+      schema_version: "1",
+      agentify_version: "test",
+      generated_at: "2026-07-06T00:00:00.000Z",
+      mode: "greenfield",
+      files,
+    });
+
+    const state = inspectAgentifyRepoState(cwd, configDir);
+
+    assert.equal(state.mode, "greenfield");
+    assert.equal(state.status, "ready");
+    assert.deepEqual(state.missing, []);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(configDir, { recursive: true, force: true });
+  }
+}
+
 async function testUninitializedRepo(): Promise<void> {
   const cwd = tempDir("agentify-repo-status-empty-");
   const configDir = tempDir("agentify-repo-status-config-");
@@ -133,6 +164,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "readyBrownfield", fn: testReadyBrownfield },
   { name: "unmanagedBrownfieldIsPartial", fn: testUnmanagedBrownfieldIsPartial },
   { name: "partialGreenfield", fn: testPartialGreenfield },
+  { name: "readyGreenfieldManifest", fn: testReadyGreenfieldManifest },
   { name: "uninitializedRepo", fn: testUninitializedRepo },
 ];
 

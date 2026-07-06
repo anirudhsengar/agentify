@@ -17,7 +17,7 @@
 //        "Marquee Break" attack pattern
 //        (`write cleanup.py && python cleanup.py`).
 //
-//   Layer B — `read`, `write`, `edit` tools:
+//   Layer B — path-sensitive read/write tools:
 //     Zero-access path guard. The LLM can reach .env / secrets /
 //     ~/.ssh / /etc directly via the `read` tool, which never goes
 //     through the bash layer. The hook blocks these regardless of
@@ -56,8 +56,8 @@ import {
 import { extractPathFromInputForTool } from "./defense/paths.ts";
 import { isAgentifySessionActive } from "./state.ts";
 
-const PATH_SENSITIVE_TOOLS = new Set(["read", "write", "edit"]);
 const WRITE_TOOLS = new Set(["write", "edit", "write_file", "multi_edit"]);
+const PATH_SENSITIVE_TOOLS = new Set(["read", ...WRITE_TOOLS]);
 const ESCALATION_TOOL = "escalate_to_orchestrator";
 
 /** The agentify credential store — never readable/writable by the agent. */

@@ -30,13 +30,13 @@
 //   - validation    — test/lint/typecheck commands + per-change-type
 //   - gap_filler    — close an uncovered D1-D10 dimension (fallback mode)
 //   - custom        — system prompt composed by the parent (Phase 2.10);
-//                     unlimited sub-agents; one per topic/specialization.
+//                     one per topic/specialization, bounded by the audit
+//                     dispatch budget.
 //
 // "files" mode was deprecated in Task 3.8 — removed from the enum.
-// The "custom" mode (Phase 2.10) replaces the implicit parallel-cap
-// pattern: there is no longer a hard cap on parallel sub-agents.
-// The action budget in the parent (none — the LLM decides) is the
-// sole governor.
+// The "custom" mode (Phase 2.10) replaces the old fixed feature cap,
+// but sub-agent dispatch is still bounded by total/concurrent/time
+// budgets so a bad audit cannot spawn unbounded work.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -60,6 +60,9 @@ const EXPLORERS_DIR = path.join(HERE, "prompts", "explorers");
 // for a structured ## Report; anything larger is truncated to
 // prevent context overflow.
 const MAX_REPORT_BYTES = 32_000;
+const DEFAULT_MAX_TOTAL_SPAWNS = 64;
+const DEFAULT_MAX_CONCURRENT_SPAWNS = 4;
+const DEFAULT_SUBAGENT_TIMEOUT_MS = 10 * 60 * 1000;
 
 // The 9 dimension-shaped modes plus a 10th "custom" mode (Phase 2.10)
 // that takes an inline or file-based system prompt composed by the
@@ -225,6 +228,18 @@ const SpawnExplorerParams = Type.Object({
 
 let activeSpawnCount = 0;
 
+function makeBudgetError(text: string, budget: Record<string, number>): {
+    content: Array<{ type: "text"; text: string }>;
+    isError: true;
+    details: { budget: Record<string, number> };
+} {
+    return {
+        content: [{ type: "text", text }],
+        isError: true,
+        details: { budget },
+    };
+}
+
 function resolveExplorerPromptPath(mode: string): string {
     const file = MODE_TO_FILE[mode];
     if (!file) {
@@ -372,9 +387,20 @@ function buildRunId(): string {
 
 export interface SpawnExplorerToolOptions {
     agentDir: string;
+    /** Hard cap for total sub-agents spawned by this tool instance. */
+    maxTotalSpawns?: number;
+    /** Hard cap for concurrently running sub-agents across tool instances. */
+    maxConcurrentSpawns?: number;
+    /** Wall-clock timeout for a single sub-agent prompt. */
+    maxSubagentDurationMs?: number;
 }
 
 export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): ToolDefinition {
+    const maxTotalSpawns = toolOptions.maxTotalSpawns ?? DEFAULT_MAX_TOTAL_SPAWNS;
+    const maxConcurrentSpawns = toolOptions.maxConcurrentSpawns ?? DEFAULT_MAX_CONCURRENT_SPAWNS;
+    const maxSubagentDurationMs = toolOptions.maxSubagentDurationMs ?? DEFAULT_SUBAGENT_TIMEOUT_MS;
+    let totalSpawnCount = 0;
+
     return defineTool({
     name: "spawn_explorer",
     label: "Spawn Explorer",
@@ -390,8 +416,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         "The 10th mode is `custom` (Phase 2.10): the parent composes the sub-agent's system " +
         "prompt from the 11-section `_template.md`, and the sub-agent becomes a topic/specialization " +
         "specialist. Pass the prompt via `system_prompt` (inline) or `system_prompt_file` (path). " +
-        "There is NO hard cap on parallel sub-agents and NO hard action limit; the LLM decides when " +
-        "sole governor. Dispatch as many as the topic decomposition needs. " +
+        `Hard dispatch budgets: max ${maxTotalSpawns} total sub-agents per audit, ` +
+        `max ${maxConcurrentSpawns} concurrent sub-agents, and max ${maxSubagentDurationMs}ms ` +
+        "wall-clock time per sub-agent. Dispatch as many as the topic decomposition needs within those bounds. " +
         "Default mode: topography. Reports exceeding 32 KB are truncated; the full report is " +
         "persisted to the log dir. target_path is domain-locked to ctx.cwd unless " +
         "allow_external_paths is true (logged). Use the `model` parameter to override the per-mode " +
@@ -401,11 +428,6 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
 
     async execute(_id, params, _signal, _onUpdate, ctx) {
         const mode = params.mode ?? "topography";
-
-        // Phase 2.10 — no parallel cap, no hard action limit. The
-        // LLM is the brain; the system is the loop. We still track
-        // activeSpawnCount for observability but no longer reject
-        // calls based on it.
 
         // Validate target_path domain-lock (Phase 2.6).
         const resolvedTarget = resolveTargetPath(params.target_path, ctx.cwd);
@@ -452,10 +474,6 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         const maxBash = params.max_bash_invocations ?? stepDefaults.bash;
         const maxSteps = params.max_total_steps ?? stepDefaults.steps;
 
-        activeSpawnCount += 1;
-        const start = Date.now();
-        const runId = buildRunId();
-
         // Resolve the sub-agent's system prompt. For fixed modes,
         // it's loaded from prompts/explorers/. For custom mode, the
         // builder composes it and passes via system_prompt or
@@ -485,6 +503,26 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 details: undefined as unknown as Record<string, unknown>,
             };
         }
+
+        if (totalSpawnCount >= maxTotalSpawns) {
+            return makeBudgetError(
+                `Error: spawn_explorer budget exhausted: ${totalSpawnCount}/${maxTotalSpawns} total sub-agents already dispatched. ` +
+                "Use the existing reports, write_map/write_map_delta, or mark the remaining gap honestly.",
+                { max_total_spawns: maxTotalSpawns },
+            );
+        }
+        if (activeSpawnCount >= maxConcurrentSpawns) {
+            return makeBudgetError(
+                `Error: spawn_explorer concurrency budget exhausted: ${activeSpawnCount}/${maxConcurrentSpawns} sub-agents already running. ` +
+                "Wait for current sub-agents to finish before dispatching more.",
+                { max_concurrent_spawns: maxConcurrentSpawns },
+            );
+        }
+
+        activeSpawnCount += 1;
+        totalSpawnCount += 1;
+        const start = Date.now();
+        const runId = buildRunId();
 
         // Compose the user task for the sub-agent. Each fixed-mode
         // prompt uses positional $1 = TARGET_PATH and $2 = FOCUS; we
@@ -569,9 +607,28 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             });
             session = createdSession as unknown as SubSession;
 
-            // Send the task and wait for the sub-agent to finish.
+            // Send the task and wait for the sub-agent to finish, with
+            // a hard wall-clock timeout. The session is disposed in the
+            // finally block, including after timeout.
             if (!session) throw new Error("session not initialized");
-            await session.prompt(task);
+            let timeout: ReturnType<typeof setTimeout> | undefined;
+            try {
+                await Promise.race([
+                    session.prompt(task),
+                    new Promise<never>((_resolve, reject) => {
+                        timeout = setTimeout(() => {
+                            reject(
+                                new Error(
+                                    `sub-agent exceeded timeout of ${maxSubagentDurationMs}ms; ` +
+                                    "split the exploration into a narrower target or mark the gap honestly",
+                                ),
+                            );
+                        }, maxSubagentDurationMs);
+                    }),
+                ]);
+            } finally {
+                if (timeout) clearTimeout(timeout);
+            }
 
             // Extract the final assistant text from the sub-agent's
             // message history and return it as the tool result.
@@ -640,6 +697,11 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     max_reads: maxReads,
                     max_bash: maxBash,
                     max_steps: maxSteps,
+                    max_total_spawns: maxTotalSpawns,
+                    total_spawns_used: totalSpawnCount,
+                    max_concurrent_spawns: maxConcurrentSpawns,
+                    active_spawns: activeSpawnCount,
+                    max_subagent_duration_ms: maxSubagentDurationMs,
                     domain_locked: insideCwd,
                     allow_external_paths: params.allow_external_paths ?? false,
                     run_id: runId,

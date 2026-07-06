@@ -1215,7 +1215,11 @@ export const ArtifactIntentsSchema = Type.Object({
     experts: Type.Array(ExpertIntentSchema, {
         minItems: 0,
         maxItems: 24,
-        description: "Expert prompt domains rendered to .pi/prompts/experts/<name>.md.",
+        description:
+            "Legacy expert prompt material. Prefer grade7_evidence.expert_domains; " +
+            "renderers convert either source into .pi/prompts/experts/<domain>/ " +
+            "with expertise.yaml, question.md, self-improve.md, plan.md, and " +
+            "plan_build_improve.md.",
     }),
     extension_candidates: Type.Array(ExtensionCandidateIntentSchema, {
         minItems: 0,
@@ -1432,12 +1436,130 @@ function isNonEmptyString(v: unknown): boolean {
     return typeof v === "string" && v.trim().length > 0;
 }
 
+function hasItems<T>(value: T[] | undefined): value is [T, ...T[]] {
+    return Array.isArray(value) && value.length > 0;
+}
+
+function hasMandatoryCommand(value: { mandatory: string[]; optional: string[] } | undefined): boolean {
+    return Array.isArray(value?.mandatory) && value.mandatory.some(isNonEmptyString);
+}
+
+function assessDimensionSubstance(map: CodebaseMap, dim: CoverageDimension): string | null {
+    switch (dim) {
+        case "D1_topography":
+            if (!hasItems(map.skeleton.top_level_tree)) return "covered but top_level_tree is empty";
+            if (!hasItems(map.skeleton.entry_points)) return "covered but no entry point was recorded";
+            if (!hasItems(map.skeleton.first_5_files_for_fresh_agent)) {
+                return "covered but no first files were recorded for a fresh agent";
+            }
+            return null;
+        case "D2_module_boundaries":
+            if (
+                !hasItems(map.module_graph.edges)
+                && !hasItems(map.module_graph.parallelizable_subtrees)
+                && !hasItems(map.module_graph.shared_abstractions)
+                && !hasItems(map.module_graph.shared_state)
+                && map.module_graph.client_server_split === null
+            ) {
+                return "covered but no module boundary evidence was recorded";
+            }
+            return null;
+        case "D3_type_contract":
+            if (
+                !hasItems(map.type_contract_surface.typescript_interfaces)
+                && !hasItems(map.type_contract_surface.pydantic_models)
+                && !hasItems(map.type_contract_surface.db_models)
+                && !hasItems(map.type_contract_surface.idks)
+                && !hasItems(map.type_contract_surface.stable_types)
+                && map.type_contract_surface.one_type_trace === null
+            ) {
+                return "covered but no type or contract evidence was recorded";
+            }
+            return null;
+        case "D4_conventions":
+            if (!isNonEmptyString(map.conventions.naming.files) || !isNonEmptyString(map.conventions.naming.functions)) {
+                return "covered but naming convention evidence is incomplete";
+            }
+            if (!isNonEmptyString(map.conventions.logging.pattern)) {
+                return "covered but logging convention evidence is incomplete";
+            }
+            return null;
+        case "D5_pitfalls": {
+            const withRefs = map.pitfalls.filter(
+                (p) =>
+                    p
+                    && typeof p.line_ref === "number"
+                    && isNonEmptyString(p.module)
+                    && isNonEmptyString(p.what)
+                    && isNonEmptyString(p.consequence),
+            );
+            if (withRefs.length < MIN_PITFALLS_FOR_COVERED) {
+                return (
+                    `covered but only ${withRefs.length} substantive pitfall(s); ` +
+                    `need >= ${MIN_PITFALLS_FOR_COVERED} with module, what, consequence, and line_ref`
+                );
+            }
+            return null;
+        }
+        case "D6_validation":
+            if (!isNonEmptyString(map.validation_surface.test_command)) {
+                return "covered but test/validation command evidence is empty";
+            }
+            if (
+                !hasMandatoryCommand(map.validation_surface.per_change_type.chore)
+                || !hasMandatoryCommand(map.validation_surface.per_change_type.bug)
+                || !hasMandatoryCommand(map.validation_surface.per_change_type.feature)
+            ) {
+                return "covered but mandatory per-change validation commands are incomplete";
+            }
+            return null;
+        case "D7_operational":
+            if (!isNonEmptyString(map.operational_surface.build.command)) {
+                return "covered but build command evidence is empty";
+            }
+            if (!isNonEmptyString(map.operational_surface.run.command)) {
+                return "covered but run command evidence is empty";
+            }
+            if (!isNonEmptyString(map.operational_surface.git_workflow.main_branch)) {
+                return "covered but git workflow evidence is incomplete";
+            }
+            return null;
+        case "D8_security":
+            if (!hasItems(map.security_surface.paths.zero_access)) {
+                return "covered but zero-access security paths are empty";
+            }
+            if (!hasItems(map.security_surface.bash_blocked_patterns) && !hasItems(map.security_surface.damage_control_rules)) {
+                return "covered but security damage-control evidence is empty";
+            }
+            return null;
+        case "D9_process":
+            if (!isNonEmptyString(map.meta.lifecycle.sdlc_model)) {
+                return "covered but process lifecycle model is empty";
+            }
+            if (!hasItems(map.meta.lifecycle.issue_types)) {
+                return "covered but issue process types are empty";
+            }
+            return null;
+        case "D10_documentation": {
+            const docsPresent = isNonEmptyString(map.meta.documentation.agents_md)
+                || map.meta.documentation.has_ai_docs
+                || map.meta.documentation.has_app_docs
+                || map.meta.documentation.has_specs
+                || map.meta.documentation.readme_metrics.present;
+            if (!docsPresent) return "covered but no documentation surface was recorded";
+            if (map.meta.documentation.readme_metrics.present && map.meta.documentation.readme_metrics.section_count <= 0) {
+                return "covered but README documentation metrics are incomplete";
+            }
+            return null;
+        }
+    }
+}
+
 /**
  * Decide, per dimension, whether the map has closed it for real.
  * A dimension is closed only when its coverage entry is `covered`,
  * its `evidence_summary` is non-empty, and any dimension-specific
- * substance rule is satisfied (currently: D5 requires at least one
- * pitfall with a line reference).
+ * substance rule is satisfied.
  */
 export function assessCoverageClosure(map: CodebaseMap): CoverageClosureResult {
     const closed: CoverageDimension[] = [];
@@ -1456,18 +1578,11 @@ export function assessCoverageClosure(map: CodebaseMap): CoverageClosureResult {
             reasons[dim] = "covered but evidence_summary is empty";
             continue;
         }
-        if (dim === "D5_pitfalls") {
-            const pitfalls = Array.isArray(map.pitfalls) ? map.pitfalls : [];
-            const withRefs = pitfalls.filter(
-                (p) => p && typeof p.line_ref === "number" && isNonEmptyString(p.what),
-            );
-            if (withRefs.length < MIN_PITFALLS_FOR_COVERED) {
-                unresolved.push(dim);
-                reasons[dim] =
-                    `covered but only ${withRefs.length} substantive pitfall(s); ` +
-                    `need >= ${MIN_PITFALLS_FOR_COVERED} with a line_ref`;
-                continue;
-            }
+        const substanceFailure = assessDimensionSubstance(map, dim);
+        if (substanceFailure !== null) {
+            unresolved.push(dim);
+            reasons[dim] = substanceFailure;
+            continue;
         }
         closed.push(dim);
     }

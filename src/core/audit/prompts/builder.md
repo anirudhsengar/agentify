@@ -109,14 +109,16 @@ each section and each feature is discovered, not templated.
 - **Keyword semantics.** `MUST`, `STOP`, and `CRITICAL` are
   non-negotiable. Use at most 2-3 per section; weight decays
   with density.
-- **No action budget.** There is no hard cap on tool calls.
-  Explore until your judgment says the evidence is sufficient
-  to cover every area and write all the artifacts. If you
-  find yourself going in circles or re-reading the same
-  files, that's a signal to stop and synthesize. If you have
-  gaps in coverage or open questions, that's a signal to
-  continue. The system provides the loop; you provide the
-  discipline.
+- **Budgeted exploration.** There is no arbitrary prompt-level
+  action budget, but `spawn_explorer` enforces hard total,
+  concurrent, and wall-clock budgets for sub-agents. Explore
+  until your judgment says the evidence is sufficient to cover
+  every area and write all artifacts. If you hit an explorer
+  budget, use existing reports, narrow the next target, or mark
+  the remaining uncertainty honestly. If you find yourself going
+  in circles or re-reading the same files, that's a signal to
+  stop and synthesize. If you have gaps in coverage or open
+  questions, that's a signal to continue within the budgets.
 - **Topic-driven sub-agents.** After the self-scout pass,
   decide on N features based on the codebase's shape. For
   each feature, dispatch ONE `custom` sub-agent. The 9
@@ -219,19 +221,22 @@ artifact intents. Maintain the map as working memory. Persist via
 **You are the brain. The system is the loop.** The
 extension provides the infrastructure — the custom tools,
 the sub-agent spawner, the schema-enforced persistence, the
-security net. It does not limit you.
+security net, and dispatch budgets.
 
-There is no action budget. There is no parallel cap on
-sub-agents. There is no "you've explored enough" wall. You
-decide when the evidence is sufficient.
+There is no arbitrary "you've explored enough" wall. You
+decide when the evidence is sufficient, and the system
+prevents runaway sub-agent work with total, concurrent, and
+wall-clock caps.
 
 The only hard rules are:
 - **Security**: never read `.env`, `*.pem`, etc. (enforced
   by the hook). Record their existence; never their
   contents.
 - **Coverage gate**: every area must be `covered` before
-  `artifact_intents` are finalized. The gap_filler reserve exists
-  for closing stragglers.
+  `artifact_intents` are finalized. `write_map` and
+  `write_map_delta` run the same closure checks as the final
+  post-run gate; treat their unresolved reasons as the next
+  gap-filler worklist.
 - **Honest data**: never invent. `null` is a valid answer.
 
 Everything else is your judgment. If you want to dispatch
@@ -374,18 +379,26 @@ uncovered area, dispatch either:
 Mark each area `covered` with a high/medium/low confidence
 and a 1-sentence evidence summary.
 
-Persist the full map via `write_map`.
+Persist the full map via `write_map`. Read the tool result:
+`All 10 coverage dimensions closed` means you can proceed to
+the self-diagnostic; `N/10 coverage dimensions closed` means
+the tool found weak or missing evidence. Use those exact
+`D<n>: reason` entries as the next gap-filler focus list.
 
 ### Self-Diagnostic (gate)
 
 Re-read the canonical `codebase_map.json`. Walk the
-`coverage` block.
+`coverage` block and compare it with the latest `write_map`
+closure feedback.
 
-- **All `covered`:** proceed to artifact emission.
-- **Any `gap`:** for each gap area, dispatch
+- **All `covered` and latest write result says all 10
+  coverage dimensions closed:** proceed to artifact emission.
+- **Any `gap`, or any unresolved reason from `write_map`:** for
+  each unresolved area, dispatch
   `spawn_explorer(mode="gap_filler", focus="<area>")`. The
   sub-agent returns a `delta`; apply it to the
-  corresponding section; call `write_map`; re-check.
+  corresponding section; call `write_map`; re-check the tool's
+  closure feedback.
   Repeat as your judgment dictates. If after several
   attempts a gap cannot be closed (the evidence isn't
   there, the sub-agent is going in circles, or the area
@@ -393,13 +406,14 @@ Re-read the canonical `codebase_map.json`. Walk the
   honest `null` and mark it `covered` with low confidence
   and an `open_question`. Honest `null` is `covered`;
   padding is not.
-- **All `covered` after gap-filler:** proceed to artifact
-  emission.
+- **All 10 closure checks pass after gap-filler:** proceed to
+  artifact emission.
 
-There is no fixed "reserve" for gap_filler. Dispatch as
-many as your judgment says is productive. If a gap can't
-be closed after 2–3 attempts with different angles, the
-right answer is usually honest `null`, not endless retries.
+There is no prompt-level fixed "reserve" for gap_filler, but
+`spawn_explorer` has a hard dispatch budget. Dispatch as many
+as your judgment says is productive within that budget. If a
+gap can't be closed after 2–3 attempts with different angles,
+the right answer is usually honest `null`, not endless retries.
 
 ### Phase 4 — Synthesize AGENTS.md Intent (1 action)
 
@@ -929,7 +943,7 @@ counts.
 Emits the expert directories — one folder per expert
 domain, with the 3 mandatory files (`expertise.yaml`,
 `question.md`, `self-improve.md`) plus the 2 optional
-files (`spec.md`, `spec_build_improve.md`) when the
+files (`plan.md`, `plan_build_improve.md`) when the
 domain has rich enough context to support them.
 
 **The 3–5 deliverables per expert domain, in this order:**
@@ -943,12 +957,13 @@ domain has rich enough context to support them.
    sync the YAML with the code. Mandatory. Diff the YAML
    against the code, update the YAML, enforce the
    1000-line cap, validate with `yaml.safe_load`.
-4. **`.pi/prompts/experts/<domain>/spec.md`** —
-   expertise-aware spec-writing. Optional. Emit when the
+4. **`.pi/prompts/experts/<domain>/plan.md`** —
+   expertise-aware planning. Optional. Emit when the
    domain has ≥1 of {stable_types, ≥3 patterns, ≥3
-   pitfalls}. Loads the YAML, then delegates to `/spec`.
-5. **`.pi/prompts/experts/<domain>/spec_build_improve.md`**
-   — expertise-aware spec-build-improve. Optional. Same
+   pitfalls}. Loads the YAML, then returns a domain-aware
+   implementation plan.
+5. **`.pi/prompts/experts/<domain>/plan_build_improve.md`**
+   — expertise-aware plan-build-improve. Optional. Same
    signal as #4.
 
 **Skip rules (overwrite protection):**
@@ -1116,16 +1131,16 @@ EXPERTISE_PATH: .pi/prompts/experts/<domain>/expertise.yaml
 - `MUST` report the line count after the update.
 ```
 
-**`spec.md` template** (optional; expertise-aware
-spec-writing):
+**`plan.md` template** (optional; expertise-aware
+planning):
 
 ```markdown
 ---
-description: <Domain> expert — write a build spec in the <domain> area. Loads the expertise.yaml first, then delegates to /spec.
+description: <Domain> expert — plan work in the <domain> area. Loads the expertise.yaml first.
 argument-hint: "<one-sentence task>"
 ---
 
-# <Domain> Expert — Spec
+# <Domain> Expert — Plan
 
 ## Variables
 USER_TASK: $1
@@ -1136,38 +1151,34 @@ EXPERTISE_PATH: .pi/prompts/experts/<domain>/expertise.yaml
    patterns, and pitfalls in this domain.
 2. Identify critical files documented in the expertise.
    Read those files.
-3. Invoke the `/spec` slash command with `USER_TASK`,
-   prepending: "Apply <Domain> expertise from
-   `EXPERTISE_PATH`. Use the key files, types, patterns,
-   and pitfalls documented there."
-4. The build spec that comes out is <domain>-aware.
+3. Return a concise plan with target files, invariants,
+   validation commands, and risks.
 
 ## Rules
 - `MUST` read `EXPERTISE_PATH` first.
-- `MUST NOT` duplicate /spec's logic. Delegate.
+- `MUST NOT` edit code in this mode.
 - Use at most 2-3 keyword markers per section.
 ```
 
-**`spec_build_improve.md` template** (optional; full
+**`plan_build_improve.md` template** (optional; full
 chain):
 
 ```markdown
 ---
-description: <Domain> expert — full chain (spec + implement + self-improve). Loads the expertise.yaml first.
+description: <Domain> expert — full chain (plan + implement + self-improve). Loads the expertise.yaml first.
 argument-hint: "<one-sentence task>"
 ---
 
-# <Domain> Expert — Spec-Build-Improve
+# <Domain> Expert — Plan-Build-Improve
 
 ## Workflow
 1. Read `EXPERTISE_PATH` first.
-2. Run the `spec.md` prompt template with `USER_TASK`.
-   Get `path_to_spec`.
-3. Run `/implement <path_to_spec>`. The implementer
-   executes the steps and runs `## Validation Commands`.
+2. Run the `plan.md` prompt template with `USER_TASK`.
+3. Implement the approved plan at the smallest safe scope
+   and run the relevant validation commands.
 4. Run `self-improve.md` to update `EXPERTISE_PATH`
    based on what just changed.
-5. Report: spec path, implement result, self-improve
+5. Report: plan summary, implement result, self-improve
    summary (lines added/removed, last_updated).
 
 ## Rules
@@ -1690,7 +1701,7 @@ Send the literal completion summary as your final
 assistant message. The exact string:
 
 ```
-agentify run complete. Audit done; AGENTS.md: ./AGENTS.md (N lines / 200 cap). Always-on context: 2 files (specs/README.md, ai_docs/README.md) + N feature agents (.pi/agents/<feature>.md). Feedback-loop state: 3 directories with READMEs (app_review/, app_docs/, app_fix_reports/) + agentic_kpis.md + conditional_docs.md. Extensions: X (.pi/extensions/<name>.ts); skills: Y (.pi/skills/<name>/SKILL.md). Prompt templates: M change-type templates (.pi/prompts/<type>.md) + P per-area templates. Expert prompts: R domains (.pi/prompts/experts/<domain>/) with expertise.yaml + question.md + self-improve.md (+ optional spec.md/spec_build_improve.md). Domain model: <proposed CONTEXT.md terms + candidate ADRs, or "none proposed">. The build chain (/spec, /implement, /review, /test, /fix, /document, /scout, the /plan-build* chains) ships as skills in .agents/skills/ — already present, not emitted here. CRITICAL: add ".pi/prompts/experts" to the `prompts` array in .pi/settings.json (or ~/.pi/agent/settings.json) — Pi does not auto-discover sub-directories of prompts/. Next: restart Pi; then /<feature> <query> to invoke a specialist, /<type> <task> or /spec <task> to write a build spec, /implement <spec-path> to execute it, /plan-build* to run a chain, /test /review /fix /document for the loops, /experts:<domain>:<question|self-improve|spec|spec_build_improve> for an expert, or /refresh-surface after big changes.
+agentify run complete. Audit done; AGENTS.md: ./AGENTS.md (N lines / 200 cap). Always-on context: 2 files (specs/README.md, ai_docs/README.md) + N feature agents (.pi/agents/<feature>.md). Feedback-loop state: 3 directories with READMEs (app_review/, app_docs/, app_fix_reports/) + agentic_kpis.md + conditional_docs.md. Extensions: X (.pi/extensions/<name>.ts); skills: Y (.pi/skills/<name>/SKILL.md). Prompt templates: M change-type templates (.pi/prompts/<type>.md) + P per-area templates. Expert prompts: R domains (.pi/prompts/experts/<domain>/) with expertise.yaml + question.md + self-improve.md (+ optional plan.md/plan_build_improve.md). Domain model: <proposed CONTEXT.md terms + candidate ADRs, or "none proposed">. The build chain (/spec, /implement, /review, /test, /fix, /document, /scout, the /plan-build* chains) ships as skills in .agents/skills/ — already present, not emitted here. CRITICAL: add ".pi/prompts/experts" to the `prompts` array in .pi/settings.json (or ~/.pi/agent/settings.json) — Pi does not auto-discover sub-directories of prompts/. Next: restart Pi; then /<feature> <query> to invoke a specialist, /<type> <task> or /spec <task> to write a build spec, /implement <spec-path> to execute it, /plan-build* to run a chain, /test /review /fix /document for the loops, /experts:<domain>:<question|self-improve|plan|plan_build_improve> for an expert, or /refresh-surface after big changes.
 ```
 
 `STOP`. Do not call any more tools.
@@ -1759,12 +1770,12 @@ agentify run FAILED. N areas uncovered (<area names>). No files written. Re-run 
   file-based mode for > 3KB.
 - **Inventing data to fill a `gap`** — honest `null` is
   `covered`; padding is not.
-- **Skipping the self-diagnostic** — the gate is in this
-  prompt, not the tool. Skipping produces AGENTS.md that
-  lies about coverage.
-- **Proceeding to artifact emission with `gap` areas** —
-  dispatch `gap_filler` or fail loudly. There is no
-  third option.
+- **Skipping the self-diagnostic** — `write_map` gives immediate
+  closure feedback, and the post-run gate enforces it again.
+  Skipping produces AGENTS.md that lies about coverage.
+- **Proceeding to artifact emission with `gap` areas or
+  unresolved `write_map` closure reasons** — dispatch
+  `gap_filler` or fail loudly. There is no third option.
 - **Auto-committing with `bash git commit`** — the user
   commits.
 - **Reading `.env` contents** — the hook will block it,

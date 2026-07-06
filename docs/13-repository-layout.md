@@ -13,6 +13,7 @@ agentify/
 │       ├── pi-sdk-runtime.ts    In-process Pi session (createAgentSession)
 │       ├── project-classifier.ts  brownfield / greenfield / ambiguous
 │       ├── artifact-exporters.ts  Codex / Claude / Pi harness exports
+│       ├── greenfield-artifacts.ts  Typed greenfield formation renderer + tool
 │       ├── scaffold-installer.ts  Stamp scaffold/ into the target repo
 │       ├── repo-status.ts       Detect initialized / partial / uninitialized
 │       ├── project-state.ts     Per-repo run metadata (~/.agentify/projects)
@@ -57,5 +58,12 @@ agentify/
 
 Shipped machinery (same for every repo): `.agents/skills/`, `scaffold/`.
 Generated intelligence (per repo, from the audit): `AGENTS.md`,
-`specs/README.md`, `ai_docs/README.md`, `.pi/agents/*.md`, experts.
+`specs/README.md`, `ai_docs/README.md`, `.pi/agents/*.md`,
+`.pi/workflows/*.json`, expert directories, feedback-loop storage, and
+repo-specific `.pi/skills/`. The stamped GitHub implement/review workflows
+render `.pi/agents/*.md` specialist routing and `.pi/prompts/experts/*`
+expert routing into prompt context, and implement also renders
+`.pi/workflows/*.json`, so the public issue/PR loop can use the generated
+specialist, expert, and workflow guidance even before the internal orchestrator
+is the hosted runtime.
 See [ADR 0009](adr/0009-machinery-shipped-intelligence-generated.md).

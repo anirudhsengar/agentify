@@ -90,6 +90,8 @@ export function kindForPath(relativePath: string): ManagedArtifactKind {
   if (normalized.startsWith(".github/") || normalized === "SETUP.md") return "scaffold";
   if (normalized.startsWith(".pi/prompts/experts/")) return "expert";
   if (normalized.startsWith(".pi/prompts/")) return "prompt";
+  if (normalized.startsWith(".pi/workflows/")) return "workflow";
+  if (normalized.startsWith(".pi/extensions/")) return "extension";
   if (normalized.startsWith(".pi/agentify/")) return "state";
   return "audit";
 }

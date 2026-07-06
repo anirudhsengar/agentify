@@ -7,6 +7,7 @@ import * as path from "node:path";
 import {
   ExpertRegistry,
   expertsTouchedBy,
+  findStaleExperts,
   parseExpertiseYaml,
   parseExpertiseYamlText,
   runQuestion,
@@ -294,6 +295,53 @@ async function testExpertsTouchedBy(): Promise<void> {
   }
 }
 
+async function testExpertsTouchedByAbsolutePaths(): Promise<void> {
+  const cwd = tempDir("agentify-expert-touched-abs-");
+  try {
+    setupExpertDir(cwd, "billing", { primaryPaths: ["app/billing/"] });
+    setupExpertDir(cwd, "auth", { primaryPaths: ["app/auth/"] });
+    const reg = ExpertRegistry.fromCwd(cwd);
+    const matched = expertsTouchedBy(reg, [
+      path.join(cwd, "app", "billing", "stripe.py"),
+    ]);
+    assert.deepEqual(matched.map((m) => m.domain), ["billing"]);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testFindStaleExperts(): Promise<void> {
+  const cwd = tempDir("agentify-expert-stale-");
+  try {
+    setupExpertDir(cwd, "billing", {
+      lastUpdated: "2026-07-01T00:00:00Z",
+      primaryPaths: ["app/billing/"],
+    });
+    setupExpertDir(cwd, "auth", {
+      lastUpdated: "2026-07-05T00:00:00Z",
+      primaryPaths: ["app/auth/"],
+    });
+
+    const billingFile = path.join(cwd, "app", "billing", "stripe.py");
+    const authFile = path.join(cwd, "app", "auth", "login.py");
+    fs.mkdirSync(path.dirname(billingFile), { recursive: true });
+    fs.mkdirSync(path.dirname(authFile), { recursive: true });
+    fs.writeFileSync(billingFile, "def stripe(): pass\n");
+    fs.writeFileSync(authFile, "def login(): pass\n");
+    fs.utimesSync(billingFile, new Date("2026-07-03T00:00:00Z"), new Date("2026-07-03T00:00:00Z"));
+    fs.utimesSync(authFile, new Date("2026-07-03T00:00:00Z"), new Date("2026-07-03T00:00:00Z"));
+
+    const reg = ExpertRegistry.fromCwd(cwd);
+    const stale = findStaleExperts(reg, cwd);
+
+    assert.deepEqual(stale.map((s) => s.domain), ["billing"]);
+    assert.equal(stale[0]?.latestChangedPath, "app/billing/stripe.py");
+    assert.equal(stale[0]?.lastUpdated, "2026-07-01T00:00:00Z");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 await testParseExpertiseYaml();
 await testRegistryEmpty();
 await testRegistryDiscoversExperts();
@@ -303,5 +351,7 @@ await testSelfImproveDetectsNoChange();
 await testQuestionExtractsCitations();
 await testQuestionDetectsLowConfidence();
 await testExpertsTouchedBy();
+await testExpertsTouchedByAbsolutePaths();
+await testFindStaleExperts();
 
 console.log("agent-expert tests passed.");

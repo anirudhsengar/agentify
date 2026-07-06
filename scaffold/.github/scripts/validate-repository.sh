@@ -102,12 +102,75 @@ require_text .github/workflows/agent-implement.yml 'path: \.agentify-runtime' \
   "issue implementation must use a trusted default-branch runtime checkout"
 require_text .github/workflows/agent-implement.yml 'uses: \./\.agentify-runtime/\.github/actions/run-pi' \
   "both issue implementation agent runs must use trusted runtime actions"
+require_text .github/workflows/agent-implement.yml 'run-issue-readiness\.sh' \
+  "issue implementation readiness preflight must delegate to a tested trusted script"
+require_text .github/workflows/agent-implement.yml 'compute-implementation-branch\.sh' \
+  "issue implementation branch naming must delegate to a tested trusted script"
+require_text .github/workflows/agent-implement.yml 'extract-pr-meta\.sh' \
+  "issue implementation PR metadata validation must delegate to a tested trusted script"
+require_text .github/workflows/agent-implement.yml 'publish-implementation-pr\.sh' \
+  "issue implementation branch push and draft PR creation must delegate to a tested trusted script"
+require_text .github/workflows/agent-implement.yml 'verify-implementation-commits\.sh' \
+  "issue implementation no-change detection must delegate to a tested trusted script"
+require_text .github/workflows/agent-implement.yml 'complete-implementation-handoff\.sh' \
+  "issue implementation post-PR handoff side effects must delegate to a tested trusted script"
+require_text .github/workflows/agent-implement.yml 'mark-implementation-failure\.sh' \
+  "issue implementation failure handoff side effects must delegate to a tested trusted script"
+require_text .github/workflows/agent-implement.yml 'orchestrate-issue\.md' \
+  "issue implementation must run the public orchestration planner before implementation"
+require_text .github/workflows/agent-implement.yml 'extract-orchestration-plan\.sh' \
+  "issue implementation must extract the structured orchestration plan through a tested trusted script"
+require_text .github/workflows/agent-update-branch.yml 'push-updated-branch\.sh' \
+  "update-branch stale push protection must delegate to a tested trusted script"
+require_text .github/workflows/agent-update-branch.yml 'extract-update-branch-comment\.sh' \
+  "update-branch merge-resolution output validation must delegate to a tested trusted script"
+require_text .github/workflows/agent-review.yml 'extract-review-verdict\.sh' \
+  "PR review verdict validation must delegate to a tested trusted script"
 require_text .github/workflows/agent-drill-me-issue.yml 'uses: \./\.agentify-runtime/\.github/actions/run-pi' \
   "drill runs must use trusted default-branch runtime actions"
 require_text .github/workflows/agent-refresh-surface.yml 'path: \.agentify-runtime' \
   "surface refresh must use a trusted default-branch runtime checkout"
 require_text .github/workflows/agent-refresh-surface.yml 'uses: \./\.agentify-runtime/\.github/actions/run-pi' \
   "surface refresh must use trusted runtime actions"
+require_text .github/workflows/agent-refresh-surface.yml 'git rev-list --count "origin/\$\{BASE_REF\}\.\.HEAD"' \
+  "surface refresh workflow must push/open a PR even if Pi already committed changes"
+require_text .github/agent-prompts/refresh-surface.md 'Do NOT commit' \
+  "surface refresh prompt must leave commits to the trusted workflow"
+
+require_text .github/workflows/agent-implement.yml 'render-workflow-context\.sh' \
+  "issue implementation must inject generated project workflow context"
+require_text .github/workflows/agent-implement-pr.yml 'render-workflow-context\.sh' \
+  "PR implementation must inject generated project workflow context"
+require_text .github/workflows/agent-implement.yml 'render-specialist-context\.sh' \
+  "issue implementation must inject generated specialist routing context"
+require_text .github/workflows/agent-implement-pr.yml 'render-specialist-context\.sh' \
+  "PR implementation must inject generated specialist routing context"
+require_text .github/workflows/agent-review.yml 'render-specialist-context\.sh' \
+  "PR review must inject generated specialist routing context"
+require_text .github/workflows/agent-implement.yml 'render-expert-context\.sh' \
+  "issue implementation must inject generated expert routing context"
+require_text .github/workflows/agent-implement-pr.yml 'render-expert-context\.sh' \
+  "PR implementation must inject generated expert routing context"
+require_text .github/workflows/agent-review.yml 'render-expert-context\.sh' \
+  "PR review must inject generated expert routing context"
+require_text .github/agent-prompts/implement.md 'WORKFLOW_CONTEXT' \
+  "issue implementation prompt must include generated project workflow context"
+require_text .github/agent-prompts/implement-pr.md 'WORKFLOW_CONTEXT' \
+  "PR implementation prompt must include generated project workflow context"
+require_text .github/agent-prompts/implement.md 'SPECIALIST_CONTEXT' \
+  "issue implementation prompt must include generated specialist routing context"
+require_text .github/agent-prompts/implement-pr.md 'SPECIALIST_CONTEXT' \
+  "PR implementation prompt must include generated specialist routing context"
+require_text .github/agent-prompts/review.md 'SPECIALIST_CONTEXT' \
+  "review prompt must include generated specialist routing context"
+require_text .github/agent-prompts/implement.md 'EXPERT_CONTEXT' \
+  "issue implementation prompt must include generated expert routing context"
+require_text .github/agent-prompts/implement.md 'ORCHESTRATION_PLAN' \
+  "issue implementation prompt must include the generated orchestration plan"
+require_text .github/agent-prompts/implement-pr.md 'EXPERT_CONTEXT' \
+  "PR implementation prompt must include generated expert routing context"
+require_text .github/agent-prompts/review.md 'EXPERT_CONTEXT' \
+  "review prompt must include generated expert routing context"
 
 for workflow in \
   .github/workflows/agent-implement.yml \
@@ -141,6 +204,25 @@ require_text .github/workflows/agent-drill-me-issue.yml "contains\\(github\\.eve
   "drill workflow must gate on the agent:drill-me label"
 require_text .github/workflows/agent-drill-me-issue.yml 'agent/drill-me-' \
   "drill workflow must use the agent/drill-me- branch prefix"
+require_text .github/workflows/agent-drill-me-issue.yml 'render-formation-resume-context\.sh' \
+  "drill workflow must inject formation resume context"
+require_text .github/agent-prompts/drill-me-issue.md 'FORMATION_RESUME_CONTEXT' \
+  "drill prompt must include rendered formation resume context"
+require_text .github/workflows/agent-drill-me-issue.yml 'capture-issue-context\.sh' \
+  "drill workflow must capture issue context before credential-free Pi runs"
+require_text .github/agent-prompts/drill-me-issue.md 'ISSUE_CONTEXT_DIR' \
+  "drill prompt must read captured issue context"
+require_text .github/workflows/agent-drill-me-issue.yml 'apply-drill-issues\.sh' \
+  "drill workflow must apply structured issue requests through trusted shell"
+require_text .github/agent-prompts/drill-me-issue.md 'implementationIssues' \
+  "drill prompt must expose structured implementation issue requests"
+require_text .github/agent-prompts/drill-me-issue.md '## Blocked by' \
+  "drill prompt must require blocker sections on implementation issue bodies"
+require_text .github/scripts/apply-drill-issues.sh 'Blocked by' \
+  "trusted drill issue applier must validate blocker sections before creating queued issues"
+if grep -Eq 'gh issue create|gh issue comment' .github/agent-prompts/drill-me-issue.md; then
+  fail "drill prompt must not ask the credential-free model process to mutate GitHub directly"
+fi
 
 require_text .github/agent-state-machine.json '"agent:queued"' \
   "agent state machine contract must document agent labels"

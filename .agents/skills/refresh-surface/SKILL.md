@@ -24,6 +24,9 @@ evolution loop ([ADR-0012](../../../docs/adr/0012-evolution-loop.md)).
      doesn't name, so run a full `/agentify` instead.
 3. **Re-sync experts.** For each expert domain (`.pi/prompts/experts/<domain>/`) whose
    `primary_paths` the diff touched, run that domain's `self-improve` (`USE_DIFF=true`).
+   In CI, also read the workflow-provided stale-experts JSON file and treat every domain
+   listed in `stale[]` as affected; it is produced before the model runs by comparing
+   expert `last_updated` timestamps to the files referenced by `expertise.yaml`.
    The code is the source of truth; the YAML is a cache.
 4. **Honesty gate carries over.** If a refreshed area can't be covered, mark it honestly
    (`null` / low confidence) rather than padding — same rule as the audit.
@@ -35,5 +38,5 @@ evolution loop ([ADR-0012](../../../docs/adr/0012-evolution-loop.md)).
 - **MUST NOT** invent surface for code that isn't there; refresh reflects the code as it
   now is, including deletions (remove a feature agent whose area was deleted).
 - **MUST** keep `AGENTS.md` under its 200-line cap when updating it.
-- In CI, repo-file changes go through a PR like any other agent change — do not push
-  directly; the workflow handles the git plumbing.
+- In CI, repo-file changes go through a PR like any other agent change — do not commit
+  or push directly; the trusted workflow handles the git plumbing.

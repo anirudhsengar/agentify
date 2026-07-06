@@ -78,11 +78,20 @@ needed. User-owned files are reported as conflicts and left intact.
 ## New Repo
 
 Run `agentify` in an empty or starter repo. The CLI starts a local-first
-greenfield session, writes checkpointed planning artifacts, installs the
-GitHub runtime scaffold, reports readiness, and proceeds one selected
-goal/sub-goal at a time through the same build chain. Subsequent runs
-attach to that initialized state instead of acting like a separate tool
-family.
+greenfield session. The model submits a typed formation payload through
+`write_greenfield_artifacts`; its `stop_at` field is a hard checkpoint
+gate, so agentify rejects PRDs, plans, issues, or specs beyond the
+user-approved milestone. agentify deterministically renders `CONTEXT.md`,
+`GOALS.md`, PRDs, plans, issues, and specs from that payload, records
+artifact validation and resume context in
+`.pi/agentify/greenfield-state.json`, and installs the GitHub runtime
+scaffold only after the artifacts pass the substance gate. It then
+proceeds one selected goal/sub-goal at a time through the same build
+chain. Post-launch drill issues receive that formation resume context, and
+the credential-free model run can request child, PRD, or implementation issues
+through structured output that the trusted workflow applies with the right
+labels. Subsequent runs attach to that initialized state instead of acting like
+a separate tool family.
 
 ## What Gets Written
 
@@ -92,11 +101,18 @@ On a successful **brownfield** audit, agentify writes into your repo:
 |------|------|
 | `AGENTS.md` | Codebase-specific agent guide (capped at 200 lines) |
 | `specs/README.md`, `ai_docs/README.md` | Always-on context artifacts |
-| `.pi/agents/<feature>.md` | Generated feature specialists |
-| `.pi/prompts/`, `.pi/extensions/` | Deterministically rendered prompt templates, experts, and extension candidates when warranted |
+| `.pi/agents/<feature>.md` | Generated feature specialists, summarized into GitHub implement/review prompts as routing context |
+| `.pi/prompts/`, `.pi/workflows/`, `.pi/extensions/`, `.pi/skills/` | Deterministically rendered prompt templates, orchestrator workflow specs that are summarized into GitHub implement prompts, expert directories summarized into implement/review prompts, extension candidates, and repo-specific skill candidates when warranted |
+| `app_review/`, `app_docs/`, `app_fix_reports/`, `.pi/conditional_docs.md` | Feedback-loop storage used by the shipped review, document, fix, and implementation skills |
 | `.pi/agentify/codebase_map.json`, `.pi/agentify/manifest.json` | The validated audit map and managed-file manifest |
 | `.agents/skills/`, `.claude/`, `.codex/`, `CLAUDE.md` | Harness exports |
 | `SETUP.md`, `.github/workflows/*`, `.github/scripts/*` | GitHub runtime scaffold |
+
+On a successful **greenfield** formation, agentify writes
+`CONTEXT.md`, `GOALS.md`, `docs/prds/*`, `docs/plans/*`,
+`docs/issues/*`, `specs/*`, `.pi/agentify/greenfield-formation.json`,
+`.pi/agentify/greenfield-state.json`, `.pi/agentify/manifest.json`, and
+the same GitHub runtime scaffold.
 
 Generated files carry an `agentify:managed` marker. agentify never
 overwrites a pre-existing user-owned file: it reports it as a conflict,
@@ -142,10 +158,15 @@ kind, alternate state dir); there are no subcommands.
 - **GitHub loop does nothing after bootstrap** — confirm you committed
   and pushed the generated files, ran `setup-agentify.sh`, set the
   `PI_API_KEY`/`AGENT_PAT` secrets, and that the issue carries both
-  `agent:queued` and `agent:implement`.
+  `agent:queued` and `agent:implement`. The implement workflow first runs
+  a credential-free orchestration planner over the generated workflow,
+  specialist, and expert context, then passes that route to the implementation
+  agent.
 
 Webhook, AIW, orchestrator, and expert modules may still exist
-internally, but they are not part of the public product surface.
+internally. The public GitHub loop uses generated workflow/specialist/expert
+context plus the orchestration-planner prompt; it does not expose the internal
+OrchestratorHost as a public command or hosted control plane.
 
 The shipped skill pack lives in `.agents/skills/` and is mirrored to
 `.claude/skills/` for harnesses that support skills. Those skills are

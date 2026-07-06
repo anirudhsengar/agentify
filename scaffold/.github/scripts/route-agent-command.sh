@@ -23,9 +23,17 @@ remove_runnable_labels() {
 
 case "$command" in
   retry)
-    gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --remove-label "agent:blocked" || true
-    gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --add-label "agent:implement"
-    comment "Queued retry with \`agent:implement\`. Watch the workflow run for status."
+    if [ "$is_pr" = "true" ]; then
+      gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --remove-label "agent:blocked" || true
+      gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --remove-label "agent:in-progress" || true
+      gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --add-label "agent:review"
+      comment "Queued retry with \`agent:review\`."
+    else
+      gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --remove-label "agent:blocked" || true
+      gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --remove-label "agent:in-progress" || true
+      gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --add-label "agent:implement"
+      comment "Queued retry with \`agent:implement\`."
+    fi
     ;;
   stop|block)
     remove_runnable_labels

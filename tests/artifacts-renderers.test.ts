@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { Value } from "typebox/value";
 import { CodebaseMapSchema } from "../src/core/audit/schema.ts";
 import { renderBrownfieldArtifacts } from "../src/core/artifacts/renderers.ts";
 import { AGENTIFY_MANAGED_MARKERS } from "../src/core/artifact-exporters.ts";
+import { ExpertRegistry } from "../src/core/agent-expert.ts";
+import { WorkflowRegistry } from "../src/core/orchestrator/workflow-registry.ts";
 import { makeValidCodebaseMap } from "./fixtures/codebase-map.ts";
 
 function makeIntentMap() {
-  return makeValidCodebaseMap({
+  const map = makeValidCodebaseMap({
     artifact_intents: {
       agent_guide: {
         title: "Agent Guide",
@@ -52,7 +57,90 @@ function makeIntentMap() {
         state_machine_notes: ["Use the default state contract."],
       },
     },
+    grade7_evidence: {
+      expert_domains: [
+        {
+          domain: "billing",
+          rationale: "Billing carries recurring payment invariants.",
+          primary_paths: ["src/billing"],
+          entry_points: ["src/billing/index.ts"],
+          test_paths: ["tests/billing.test.ts"],
+          key_files: [
+            {
+              path: "src/billing/index.ts",
+              purpose: "Billing entry point.",
+              line_range: [1, 120],
+            },
+          ],
+          key_types: [
+            {
+              name: "Invoice",
+              path: "src/billing/types.ts:1",
+              purpose: "Stable billing contract.",
+            },
+          ],
+          patterns: [
+            {
+              name: "idempotency",
+              description: "Billing writes must be idempotent.",
+              example_ref: "src/billing/index.ts:42",
+            },
+          ],
+          pitfalls: [
+            {
+              risk: "Double charging on retry.",
+              consequence: "Customers can be charged twice.",
+              reference: "src/billing/index.ts:55",
+            },
+          ],
+          conventions: ["Amounts are stored in cents."],
+          stability: "high",
+          recurrence: "high",
+          test_command: "npm test -- tests/billing.test.ts",
+          last_updated: "2026-07-05T00:00:00.000Z",
+        },
+      ],
+    },
+    grade3_evidence: {
+      custom_tool_candidates: [
+        {
+          name: "run-tests",
+          existing_command: "npm test",
+          purpose: "Run the repository test suite.",
+          source_path: "package.json#scripts.test",
+        },
+      ],
+      skill_candidates: [
+        {
+          name: "prime-db",
+          purpose: "Prime the local database before integration tests.",
+          steps_or_script_path: "scripts/prime-db.sh",
+        },
+      ],
+    },
   });
+  map.meta.lifecycle.per_area_template_candidates = [
+    {
+      area_name: "api-endpoint",
+      issue_type: "feature",
+      trigger_phrases: ["new API route", "endpoint change"],
+      rationale: "API endpoint work is recurring and benefits from local routing conventions.",
+      source_feature_agent: ".pi/agents/payments.md",
+    },
+  ];
+  return map;
+}
+
+function tempDir(prefix: string): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+function writeArtifacts(cwd: string, result: ReturnType<typeof renderBrownfieldArtifacts>): void {
+  for (const artifact of result.artifacts) {
+    const filePath = path.join(cwd, artifact.relativePath);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, artifact.content);
+  }
 }
 
 function testRendersIntentBundleDeterministically(): void {
@@ -67,9 +155,116 @@ function testRendersIntentBundleDeterministically(): void {
   assert.ok(paths.includes("ai_docs/README.md"));
   assert.ok(paths.includes(".pi/agents/payments.md"));
   assert.ok(paths.includes(".pi/prompts/db-migration.md"));
-  assert.ok(paths.includes(".pi/prompts/experts/billing.md"));
+  assert.ok(paths.includes(".pi/prompts/experts/billing/expertise.yaml"));
+  assert.ok(paths.includes(".pi/prompts/experts/billing/question.md"));
+  assert.ok(paths.includes(".pi/prompts/experts/billing/self-improve.md"));
   assert.ok(paths.includes(".pi/extensions/migration-check.ts"));
-  assert.ok(first.artifacts.every((artifact) => artifact.content.includes(artifact.marker)));
+  assert.ok(paths.includes(".pi/workflows/payments-plan-build-review-fix.json"));
+  assert.ok(first.artifacts.every((artifact) =>
+    artifact.marker === "sha256" || artifact.content.includes(artifact.marker)
+  ));
+}
+
+function testRenderedExpertsAreDiscoverableByRuntime(): void {
+  const cwd = tempDir("agentify-rendered-experts-");
+  try {
+    const result = renderBrownfieldArtifacts(makeIntentMap());
+    assert.deepEqual(result.errors, []);
+    writeArtifacts(cwd, result);
+
+    const registry = ExpertRegistry.fromCwd(cwd);
+    const expert = registry.get("billing");
+    assert.ok(expert);
+    assert.equal(expert.domain, "billing");
+    assert.ok(expert.expertisePath.endsWith(".pi/prompts/experts/billing/expertise.yaml"));
+    assert.ok(expert.questionPath.endsWith(".pi/prompts/experts/billing/question.md"));
+    assert.ok(expert.selfImprovePath.endsWith(".pi/prompts/experts/billing/self-improve.md"));
+    assert.equal(expert.lastUpdated, "2026-07-05T00:00:00.000Z");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+function testRenderedProjectWorkflowsAreDiscoverableByRuntime(): void {
+  const cwd = tempDir("agentify-rendered-workflows-");
+  const configDir = tempDir("agentify-rendered-workflows-config-");
+  try {
+    const result = renderBrownfieldArtifacts(makeIntentMap());
+    assert.deepEqual(result.errors, []);
+    writeArtifacts(cwd, result);
+
+    const workflowArtifact = result.artifacts.find((artifact) =>
+      artifact.relativePath === ".pi/workflows/payments-plan-build-review-fix.json"
+    );
+    assert.ok(workflowArtifact, "expected payments project workflow to be rendered");
+    assert.equal(workflowArtifact.kind, "workflow");
+
+    const registry = WorkflowRegistry.fromCwd(cwd, configDir);
+    const workflow = registry.get("payments_plan_build_review_fix");
+    assert.ok(workflow, "expected generated workflow to be discoverable");
+    assert.equal(workflow?.steps.length, 2);
+    assert.equal(workflow?.steps[0]?.handler, "subagent");
+    assert.equal(workflow?.steps[0]?.subagent_template, "payments");
+    assert.equal(workflow?.steps[1]?.handler, "aiw");
+    assert.equal(workflow?.steps[1]?.workflow_type, "plan_build_review_fix");
+    assert.match(workflow?.steps[1]?.prompt ?? "", /\$\{agents\[scout\]\.result_text\}/);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(configDir, { recursive: true, force: true });
+  }
+}
+
+function testRendersFeedbackLoopStorageAndSkillCandidates(): void {
+  const result = renderBrownfieldArtifacts(makeIntentMap());
+  assert.deepEqual(result.errors, []);
+  const byPath = new Map(result.artifacts.map((artifact) => [artifact.relativePath, artifact]));
+
+  for (const requiredPath of [
+    "app_review/README.md",
+    "app_docs/README.md",
+    "app_fix_reports/README.md",
+    "app_docs/agentic_kpis.md",
+    ".pi/conditional_docs.md",
+    ".pi/skills/prime-db/SKILL.md",
+  ]) {
+    assert.ok(byPath.has(requiredPath), `expected ${requiredPath} to be rendered`);
+    assert.ok(byPath.get(requiredPath)?.content.includes(byPath.get(requiredPath)!.marker));
+  }
+
+  const skill = byPath.get(".pi/skills/prime-db/SKILL.md")!;
+  assert.equal(skill.kind, "skill");
+  assert.match(skill.content, /^---\nname: prime-db\n/m);
+  assert.match(skill.content, /Prime the local database before integration tests\./);
+  assert.match(skill.content, /scripts\/prime-db\.sh <args>/);
+}
+
+function testRendersCustomToolCandidatesAsExtensions(): void {
+  const result = renderBrownfieldArtifacts(makeIntentMap());
+  assert.deepEqual(result.errors, []);
+  const extension = result.artifacts.find((artifact) => artifact.relativePath === ".pi/extensions/run-tests.ts");
+  assert.ok(extension, "expected custom tool candidate to render as an extension");
+  assert.equal(extension.kind, "extension");
+  assert.match(extension.content, /const TOOL_NAME = "run-tests";/);
+  assert.match(extension.content, /const COMMAND = "npm";/);
+  assert.match(extension.content, /const ARGS = \["test"\];/);
+  assert.match(extension.content, /execFileAsync/);
+}
+
+function testRendersLifecyclePromptTemplates(): void {
+  const result = renderBrownfieldArtifacts(makeIntentMap());
+  assert.deepEqual(result.errors, []);
+  const byPath = new Map(result.artifacts.map((artifact) => [artifact.relativePath, artifact]));
+  for (const promptPath of [
+    ".pi/prompts/feature.md",
+    ".pi/prompts/bug.md",
+    ".pi/prompts/api-endpoint.md",
+  ]) {
+    assert.ok(byPath.has(promptPath), `expected ${promptPath} to be rendered`);
+    assert.equal(byPath.get(promptPath)?.kind, "prompt");
+  }
+  assert.match(byPath.get(".pi/prompts/feature.md")!.content, /specs\/feature-<slug>\.md/);
+  assert.match(byPath.get(".pi/prompts/api-endpoint.md")!.content, /api-endpoint-specific feature template/);
+  assert.match(byPath.get(".pi/prompts/api-endpoint.md")!.content, /\.pi\/agents\/payments\.md/);
 }
 
 function testSchemaRejectsUnsafeIntentNamesAndPaths(): void {
@@ -95,10 +290,16 @@ function testFallbackRendererProducesManagedCoreFiles(): void {
   assert.ok(agents);
   assert.ok(agents.content.includes(AGENTIFY_MANAGED_MARKERS.markdown));
   assert.ok(result.artifacts.some((artifact) => artifact.relativePath === ".pi/agents/payments.md"));
+  assert.ok(result.artifacts.some((artifact) => artifact.relativePath === ".pi/workflows/payments-plan-build-review-fix.json"));
 }
 
 const tests: Array<{ name: string; fn: () => void }> = [
   { name: "rendersIntentBundleDeterministically", fn: testRendersIntentBundleDeterministically },
+  { name: "renderedExpertsAreDiscoverableByRuntime", fn: testRenderedExpertsAreDiscoverableByRuntime },
+  { name: "renderedProjectWorkflowsAreDiscoverableByRuntime", fn: testRenderedProjectWorkflowsAreDiscoverableByRuntime },
+  { name: "rendersFeedbackLoopStorageAndSkillCandidates", fn: testRendersFeedbackLoopStorageAndSkillCandidates },
+  { name: "rendersCustomToolCandidatesAsExtensions", fn: testRendersCustomToolCandidatesAsExtensions },
+  { name: "rendersLifecyclePromptTemplates", fn: testRendersLifecyclePromptTemplates },
   { name: "schemaRejectsUnsafeIntentNamesAndPaths", fn: testSchemaRejectsUnsafeIntentNamesAndPaths },
   { name: "rendererRejectsOversizedAgentsMd", fn: testRendererRejectsOversizedAgentsMd },
   { name: "fallbackRendererProducesManagedCoreFiles", fn: testFallbackRendererProducesManagedCoreFiles },
