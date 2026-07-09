@@ -8,6 +8,26 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Slot consumers wired across every LLM call site (Phase 3 of ADR 0017):
+  - AIW phases (plan, build, review, fix) consume the `scoring`
+    slot by default; `state.model_role` overrides per AIW.
+  - Orchestrator sub-agents (`AgentManager.runAgent`) thread
+    `state.model`, `state.thinking_level`, and `state.model_role`
+    into the runtime session. Closes the Phase 2 gap.
+  - Orchestrator host session itself sets `modelRole: "primary"`.
+  - `agent-expert.ts` LEARN/REUSE flows accept a `modelSlot` and
+    pass it to `pi -p` via `AGENTIFY_LEARN_MODEL` env var.
+  - AIW `scheduleExpertSelfImprove` and orchestrator
+    `AutoImproveScheduler` resolve the scoring slot at call time.
+  - Webhook triggers carry a `model_role` slot hint in
+    `PromptInvocationSchema`; the worker threads it through to
+    the runtime.
+- First-run picker offers three tier presets — `Max quality`,
+  `Balanced`, `Cost optimized` — plus the existing `Customize`
+  advanced path. `pickTierPreset` exports a pure helper that
+  ranks models by `reasoning` and `contextWindow` and buckets them
+  into three tiers.
+- `--provider` and `--key` flags on `agentify login` (Phase 1).
 - Named model slots (ADR 0017): `primary`, `explorer`, `scoring`.
   - `AgentifyConfig.modelsByRole?: Partial<Record<ModelRole, ModelSlot>>`
     plus `AgentRuntimeSessionOptions.modelRole?: ModelRole`.

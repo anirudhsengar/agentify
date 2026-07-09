@@ -180,18 +180,87 @@ want to opt into a different slot:
 
 ## Out of scope (Phase 3+)
 
-- Wiring AIW runtime / webhook worker / orchestrator agent-manager
-  to non-`primary` slots.
-- `agent-expert.ts` LEARN/REUSE slot consumer.
-- Tier *presets* in the first-run picker UI (e.g., "Max quality",
-  "Balanced", "Cost optimized").
-- `--alias haiku` shortcuts on `models set`.
-- `coms` envelope model field (cross-process routing).
+- ~~Wiring AIW runtime / webhook worker / orchestrator agent-manager
+  to non-`primary` slots.~~ **Done in Phase 3.** All AIW phases
+  (plan, build, review, fix) consume the `scoring` slot by default.
+  Webhook triggers carry a `model_role` slot hint. Orchestrator
+  sub-agents propagate `state.model_role` into the runtime session.
+- ~~`agent-expert.ts` LEARN/REUSE slot consumer.~~ **Done in Phase 3.**
+  `runSelfImprove` and `runQuestion` accept a `modelSlot` and pass it
+  to the `pi -p` subprocess via the `AGENTIFY_LEARN_MODEL` env var.
+  AIW's `scheduleExpertSelfImprove` and the orchestrator's
+  `AutoImproveScheduler` resolve the scoring slot at call time.
+- ~~Tier *presets* in the first-run picker UI (e.g., "Max quality",
+  "Balanced", "Cost optimized").~~ **Done in Phase 3.** `pickTierPreset`
+  ranks models by `reasoning` and `contextWindow` and buckets into
+  three tiers.
+- `--alias haiku` shortcuts on `models set` — still Phase 4+.
+- `coms` envelope model field (cross-process routing) — still Phase 4+.
 - File locking for `config.json` writes (currently last-writer-wins;
-  `auth.json` is already locked via `AuthStorage`).
+  `auth.json` is already locked via `AuthStorage`) — still Phase 4+.
 - New roles beyond `primary`/`explorer`/`scoring`. The schema uses
   `Partial<Record<ModelRole, ModelSlot>>` so adding a role would be a
   compile-time nudge to update all consumers.
+
+## Phase 3 outcomes
+
+Phase 3 shipped all five slot consumers:
+
+### AIW per-phase slots
+
+- `src/core/aiw/state.ts`: `AiwStateSchema` adds `model_role`. Every
+  AIW phase (plan, build, review, fix) consumes the configured
+  `modelRole` (defaults to `"scoring"`).
+- `src/core/aiw/runtime.ts` `runPhase` reads `state.model_role` and
+  threads it to `AgentRuntimeSessionOptions.modelRole`.
+
+### Orchestrator sub-agent slot propagation
+
+- `src/core/orchestrator/state.ts`: `AgentStateSchema` adds
+  `model_role`.
+- `src/core/orchestrator/agent-manager.ts` `runAgent` overlays
+  `state.model`, `state.thinking_level`, and `state.model_role` onto
+  the parent config and threads `modelRole` to the runtime.
+- `src/core/orchestrator/host.ts`: orchestrator host session itself
+  sets `modelRole: "primary"` explicitly.
+- `src/core/orchestrator/subagent-registry.ts`: `AgentFrontmatter`
+  adds `model_role`.
+
+### LEARN slot consumer
+
+- `src/core/agent-expert.ts`: `runSelfImprove` and `runQuestion`
+  accept `configDir` and `modelSlot`. The default syncer/answerer
+  sets `AGENTIFY_LEARN_MODEL=<provider>/<model>` env var before
+  spawning `pi -p`.
+- `src/core/orchestrator/auto-improve.ts`: `AutoImproveScheduler`
+  accepts a pre-resolved `scoringModel` and passes it to
+  `runSelfImprove`.
+- `src/core/aiw/runtime.ts` `scheduleExpertSelfImprove` resolves the
+  scoring slot at call time and threads it through.
+
+### Picker tier presets
+
+- `src/core/agentify-config.ts`: `pickTierPreset` exports a pure
+  function that ranks models by `reasoning` then `contextWindow`
+  descending, then buckets by index. Three presets:
+  - `max-quality`: same strongest model in all three slots.
+  - `balanced`: strongest primary, medium explorer/scoring.
+  - `cost-optimized`: medium primary, fast explorer/scoring.
+- `promptModelStrategy` prompts the user with the three presets plus
+  a `Customize` advanced path.
+
+### Webhook slot hints
+
+- `src/core/webhook/state.ts`: `PromptInvocationSchema` adds
+  `model_role` (optional). `WebhookTaskRecordSchema` carries it on
+  the queue record.
+- `src/core/webhook/trigger-registry.ts`: `ResolvedPromptInvocation`
+  carries the slot hint.
+- `src/core/webhook/server.ts`: `makeQueuedRecord` forwards
+  `prompt.model_role`.
+- `src/core/webhook/worker.ts` `buildSessionOptions` reads
+  `record.prompt.model_role` and passes `modelRole` to the runtime;
+  falls back to literal `model` when unset.
 
 ## Risks
 

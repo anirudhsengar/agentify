@@ -251,7 +251,10 @@ export async function runPhase(args: RunPhaseArgs): Promise<RunPhaseResult> {
     };
   }
 
-  // Build session options.
+  // Build session options. AIW phases consume the configured slot —
+  // defaults to "scoring" (ADR 0017 / Phase 3) so the brownfield/
+  // greenfield builder (which uses primary) stays on the strongest
+  // model the user has configured, while AIW runs on a cheaper model.
   const runtimeInstance = runtime ?? new PiSdkRuntime();
   const sessionOptions: AgentRuntimeSessionOptions = {
     cwd: phaseCwd,
@@ -260,6 +263,7 @@ export async function runPhase(args: RunPhaseArgs): Promise<RunPhaseResult> {
       model: state.model ?? undefined,
       thinkingLevel: normalizeThinkingLevel(state.thinking_level),
     },
+    modelRole: normalizeModelRole(state.model_role) ?? "scoring",
     systemPrompt: PHASE_SYSTEM_PROMPT[phase],
     userPrompt,
     tools: [...phaseTools],
@@ -509,6 +513,14 @@ function normalizeThinkingLevel(value: string | null): "off" | "minimal" | "low"
   return undefined;
 }
 
+function normalizeModelRole(value: string | null): "primary" | "explorer" | "scoring" | undefined {
+  if (!value) return undefined;
+  if (value === "primary" || value === "explorer" || value === "scoring") {
+    return value;
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Hook wrappers (centralized here so the worker can also call them)
 // ---------------------------------------------------------------------------
@@ -721,9 +733,33 @@ function scheduleExpertSelfImprove(workingDir: string, logger: AiwLogger): void 
         const matched = mod.expertsTouchedBy(registry, [workingDir]);
         if (matched.length === 0) return;
         const todayIso = new Date().toISOString();
+        // Phase 3 (ADR 0017): resolve the scoring slot for the LEARN
+        // run. Best-effort — falls back to the syncer's default if
+        // the slot can't be resolved (no auth, empty registry).
+        let modelSlot: { provider: string; model: string } | undefined;
+        let cfgDir = "";
+        try {
+          const { AuthStorage, ModelRegistry } = await import("@earendil-works/pi-coding-agent");
+          const { authPath, loadAgentifyConfig, defaultConfigDir } = await import("../agentify-config.ts");
+          const { selectModelForRole } = await import("../models/resolver.ts");
+          cfgDir = defaultConfigDir();
+          const authStorage = AuthStorage.create(authPath(cfgDir));
+          const registry2 = ModelRegistry.create(authStorage);
+          const config = loadAgentifyConfig(cfgDir);
+          const resolved = selectModelForRole(registry2, config, "scoring");
+          if (resolved) {
+            modelSlot = { provider: resolved.model.provider, model: resolved.model.id };
+          }
+        } catch {
+          // Best effort — leave modelSlot undefined.
+        }
         for (const expert of matched) {
           try {
-            const r = await mod.runSelfImprove(expert, workingDir, { todayIso });
+            const r = await mod.runSelfImprove(expert, workingDir, {
+              todayIso,
+              configDir: cfgDir,
+              modelSlot,
+            });
             logger.info(`expert self-improve scheduled`, {
               expert: r.expert,
               changed: r.changed,

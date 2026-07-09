@@ -40,6 +40,7 @@ import { shippedSkillsDir } from "../pi-sdk-runtime.ts";
 import type {
   AgentRuntime,
   AgentRuntimeSessionOptions,
+  AgentifyConfig,
 } from "../types.ts";
 
 export interface WorkerOptions {
@@ -323,18 +324,33 @@ function buildSessionOptions(
   userPrompt: string,
   configDir: string,
 ): AgentRuntimeSessionOptions {
+  // Phase 3 (ADR 0017): model_role takes precedence over model. When
+  // model_role is set, the runtime consumes the configured slot via
+  // the resolver; when unset, fall back to the literal model id (or
+  // primary if neither is set).
+  const modelRole = normalizeModelRole(record.prompt.model_role);
+  const config: AgentifyConfig = {
+    model: record.prompt.model ?? undefined,
+    thinkingLevel: normalizeThinkingLevel(record.prompt.thinking_level),
+  };
   return {
     cwd: record.prompt.cwd,
     configDir,
-    config: {
-      model: record.prompt.model ?? undefined,
-      thinkingLevel: normalizeThinkingLevel(record.prompt.thinking_level),
-    },
+    config,
+    ...(modelRole ? { modelRole } : {}),
     systemPrompt: composeSystemPrompt(record),
     userPrompt,
     tools: record.prompt.tools,
     additionalSkillPaths: [shippedSkillsDir()],
   };
+}
+
+function normalizeModelRole(value: string | null): "primary" | "explorer" | "scoring" | undefined {
+  if (!value) return undefined;
+  if (value === "primary" || value === "explorer" || value === "scoring") {
+    return value;
+  }
+  return undefined;
 }
 
 function composeUserPrompt(record: WebhookTaskRecord): string {

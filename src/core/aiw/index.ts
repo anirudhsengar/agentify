@@ -74,6 +74,7 @@ export interface AiwRunner {
     workingDir?: string;
     model?: string | null;
     thinkingLevel?: string | null;
+    modelRole?: "primary" | "explorer" | "scoring" | null;
     source?: string;
     signal?: AbortSignal;
     aiwId?: string;
@@ -109,6 +110,7 @@ export function startAiwRunner(options: AiwRunnerOptions): AiwRunner {
         frontendPort: isolation.frontendPort,
         model: args.model ?? null,
         thinkingLevel: args.thinkingLevel ?? null,
+        modelRole: args.modelRole ?? null,
         worktreeCreated: isolation.created,
         source: args.source ?? "cli:manual",
         changeType: args.changeType ?? "unknown",

@@ -1,13 +1,9 @@
-// triggers/manual-trigger.ts — CLI entry point for `agentify aiw run`.
-//
-// Usage:
-//   agentify aiw run <workflow> --prompt "<text>" [--cwd <path>]
-//                          [--model <id>] [--thinking <level>]
-//                          [--aiw-id <id>] [--no-worktree]
-//                          [--dry-run]
+// triggers/manual-trigger.ts — synchronous wrapper around the AIW runner.
 //
 // The trigger runs synchronously: it spawns the AIW runner, blocks
-// until the workflow completes, and prints a summary.
+// until the workflow completes, and prints a summary. It is library
+// code, not a CLI command — the public `agentify` entrypoint rejects
+// subcommands.
 
 import { startAiwRunner, totals, durationMs } from "../index.ts";
 import type { ChangeType, WorkflowName } from "../state.ts";
@@ -15,12 +11,12 @@ import { defaultConfigDir } from "../../agentify-config.ts";
 import { PiSdkRuntime } from "../../pi-sdk-runtime.ts";
 
 export interface ManualTriggerOptions {
-  configDir?: string;
   cwd: string;
   workflow: WorkflowName;
   prompt: string;
   model?: string | null;
   thinkingLevel?: string | null;
+  modelRole?: "primary" | "explorer" | "scoring" | null;
   aiwId?: string;
   noWorktree?: boolean;
   dryRun?: boolean;
@@ -31,7 +27,7 @@ export interface ManualTriggerOptions {
 }
 
 export async function runManualTrigger(options: ManualTriggerOptions): Promise<void> {
-  const configDir = options.configDir ?? defaultConfigDir();
+  const configDir = defaultConfigDir();
   const log = options.logger ?? ((m: string) => process.stdout.write(`${m}\n`));
 
   const runner = startAiwRunner({
@@ -55,6 +51,7 @@ export async function runManualTrigger(options: ManualTriggerOptions): Promise<v
     workingDir: options.cwd,
     model: options.model ?? null,
     thinkingLevel: options.thinkingLevel ?? null,
+    modelRole: options.modelRole ?? null,
     source: "cli:manual",
     changeType: options.changeType,
     force: options.force,

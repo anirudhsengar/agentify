@@ -103,6 +103,13 @@ export const AgentStateSchema = Type.Object({
   thinking_level: Type.Union([Type.String(), Type.Null()], {
     description: "Pi's thinking_level enum or null = inherit.",
   }),
+  /**
+   * Named slot role for this sub-agent session. Defaults to
+   * "primary" when unset. See `ModelRole` and ADR 0017.
+   */
+  model_role: Type.Union([Type.String(), Type.Null()], {
+    description: "Slot role: 'primary' | 'explorer' | 'scoring'. Null = inherit parent's role.",
+  }),
   started_at: Type.String({ description: "ISO 8601." }),
   ended_at: Type.Union([Type.String(), Type.Null()]),
   turns: Type.Number({ description: "Number of completed turns." }),
@@ -185,6 +192,7 @@ export interface MakeQueuedAgentParams {
   tools: string[];
   model?: string | null;
   thinkingLevel?: string | null;
+  modelRole?: "primary" | "explorer" | "scoring" | null;
   parentSessionId: string;
   subagentTemplate?: string | null;
   expertisePath?: string | null;
@@ -205,6 +213,7 @@ export function makeQueuedAgentState(params: MakeQueuedAgentParams): AgentState 
     tools: [...params.tools],
     model: params.model ?? null,
     thinking_level: params.thinkingLevel ?? null,
+    model_role: params.modelRole ?? null,
     started_at: params.startedAt ?? new Date().toISOString(),
     ended_at: null,
     turns: 0,

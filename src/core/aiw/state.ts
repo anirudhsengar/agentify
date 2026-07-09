@@ -158,6 +158,14 @@ export const AiwStateSchema = Type.Object({
   // Optional model overrides; runtime defaults apply if absent.
   model: Type.Union([Type.String(), Type.Null()]),
   thinking_level: Type.Union([Type.String(), Type.Null()]),
+  /**
+   * Named slot role for AIW phase sessions. Defaults to "scoring"
+   * (see ADR 0017 / Phase 3) — every AIW phase (plan, build,
+   * review, fix) consumes the scoring slot so the brownfield/
+   * greenfield builder (which uses primary) stays on the strongest
+   * model the user has configured.
+   */
+  model_role: Type.Union([Type.String(), Type.Null()]),
   // The ordered log of phase records. One entry per workflow phase.
   phases: Type.Array(PhaseRecordSchema),
   current_step: Type.Union([Type.String(), Type.Null()]),
@@ -247,6 +255,7 @@ export function makeQueuedAiwState(params: {
   frontendPort: number;
   model?: string | null;
   thinkingLevel?: string | null;
+  modelRole?: string | null;
   worktreeCreated: boolean;
   source: string;
   changeType?: ChangeType;
@@ -273,6 +282,7 @@ export function makeQueuedAiwState(params: {
     frontend_port: params.frontendPort,
     model: params.model ?? null,
     thinking_level: params.thinkingLevel ?? null,
+    model_role: params.modelRole ?? null,
     phases,
     current_step: null,
     status: AiwStatus.Queued,

@@ -30,6 +30,9 @@ import {
   renderOrchestratorPrompt,
   DEFAULT_AIW_TYPES,
 } from "./orchestrator-prompt.ts";
+import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
+import { authPath, loadAgentifyConfig } from "../agentify-config.ts";
+import { selectModelForRole } from "../models/resolver.ts";
 import {
   appendOrchestratorEvent,
   appendOrchestratorExecutionLog,
@@ -154,10 +157,22 @@ export class OrchestratorHost {
     });
 
     // auto-improve: auto-LEARN scheduler. Fires on every
-    // agent_end with an expertise_path.
+    // agent_end with an expertise_path. Phase 3 (ADR 0017): resolve
+    // the scoring slot model so the LEARN flow honors it.
+    let scoringModel: import("@earendil-works/pi-ai").Model<import("@earendil-works/pi-ai").Api> | undefined;
+    try {
+      const authStorage = AuthStorage.create(authPath(opts.configDir));
+      const modelRegistry = ModelRegistry.create(authStorage);
+      const config = loadAgentifyConfig(opts.configDir);
+      const resolved = selectModelForRole(modelRegistry, config, "scoring");
+      if (resolved) scoringModel = resolved.model;
+    } catch {
+      // Best effort.
+    }
     this.autoImprove = new AutoImproveScheduler({
       configDir: opts.configDir,
       cwd: opts.cwd,
+      scoringModel,
     });
   }
 
@@ -236,6 +251,7 @@ export class OrchestratorHost {
       cwd: this.cwd,
       configDir: this.configDir,
       config: this.config,
+      modelRole: "primary", // orchestrator host IS the primary session
       systemPrompt,
       userPrompt,
       tools: [], // cardinal rule: no Pi built-ins.

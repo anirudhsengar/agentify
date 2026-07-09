@@ -174,6 +174,12 @@ export interface ResolvedPromptInvocation {
   tools: string[];
   model?: string;
   thinking_level?: string;
+  /**
+   * Slot role hint (Phase 3 / ADR 0017). When set, the dispatched
+   * session consumes the configured slot. Takes precedence over
+   * `model` when both are set.
+   */
+  model_role?: "primary" | "explorer" | "scoring";
 }
 
 export function resolvePromptInvocation(
@@ -202,7 +208,15 @@ export function resolvePromptInvocation(
     tools: trigger.prompt.tools ?? defaultToolsForTrigger(trigger),
     model: trigger.prompt.model,
     thinking_level: trigger.prompt.thinking_level,
+    model_role: normalizeModelRole(trigger.prompt.model_role),
   };
+}
+
+function normalizeModelRole(
+  value: string | undefined,
+): "primary" | "explorer" | "scoring" | undefined {
+  if (value === "primary" || value === "explorer" || value === "scoring") return value;
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

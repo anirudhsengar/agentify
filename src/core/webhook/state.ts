@@ -72,8 +72,18 @@ export const PromptInvocationSchema = Type.Object({
       "Tool allowlist override. Default is read-only (no bash). Set " +
       "explicitly when the prompt needs write/edit or bash.",
   })),
-  model: Type.Optional(Type.String()),
+  model: Type.Optional(Type.String({
+    description: "Literal model id (e.g. 'anthropic/claude-opus-4-8'). If both `model` and `model_role` are set, `model` wins.",
+  })),
   thinking_level: Type.Optional(Type.String()),
+  /**
+   * Named slot role hint (Phase 3 / ADR 0017). When set, the
+   * dispatched session consumes the configured slot rather than a
+   * literal model id. Falls back to "primary" when unset.
+   */
+  model_role: Type.Optional(Type.String({
+    description: "Slot role: 'primary' | 'explorer' | 'scoring'. Takes precedence over `model` when set.",
+  })),
   // If set, the trigger fires a multi-phase AI Developer Workflow
   // instead of a single prompt. Mutually exclusive with `template`
   // for execution purposes — when `aiw_workflow` is set, the
@@ -201,6 +211,8 @@ export const WebhookTaskRecordSchema = Type.Object({
     tools: Type.Array(Type.String()),
     model: Type.Union([Type.String(), Type.Null()]),
     thinking_level: Type.Union([Type.String(), Type.Null()]),
+    /** Phase 3 (ADR 0017): slot role hint. */
+    model_role: Type.Union([Type.String(), Type.Null()]),
   }),
   // Worker-side results (populated by the worker on completion).
   result: Type.Optional(Type.Object({

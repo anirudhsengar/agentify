@@ -340,6 +340,7 @@ async function handle(
       tools: prompt.tools ?? [],
       model: prompt.model ?? null,
       thinking_level: prompt.thinking_level ?? null,
+      model_role: prompt.model_role ?? null,
     },
   });
   appendRecord(ctx.paths, record);

@@ -406,6 +406,7 @@ export function enqueueAiwTask(args: {
       tools: args.tools ?? [],
       model: null,
       thinking_level: null,
+      model_role: null,
     },
     taskId: args.aiwId,
   });

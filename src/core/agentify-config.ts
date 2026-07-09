@@ -163,21 +163,35 @@ async function promptModelStrategy(
       ? modelChoices
       : [{ label: "(no models available — proceed anyway)", value: "" }];
 
+  // Phase 3 (ADR 0017): three tier presets + "Customize" advanced path.
   const strategy = await ui.promptSelect(
     "How would you like to assign models in agentify?",
     [
-      { label: "Use one model for everything (recommended)", value: "single" },
-      { label: "Assign different models per role", value: "split" },
+      { label: "Max quality — strongest model for every slot", value: "max-quality" },
+      { label: "Balanced — strongest for primary, medium for explorer/scoring", value: "balanced" },
+      { label: "Cost optimized — medium primary, fast explorer/scoring", value: "cost-optimized" },
+      { label: "Customize each slot (advanced)", value: "split" },
     ],
   );
 
+  if (strategy === "max-quality" || strategy === "balanced" || strategy === "cost-optimized") {
+    const tierModels = providerModels.map((m) => ({
+      provider: m.provider as AgentifyProvider,
+      id: m.id,
+      reasoning: m.reasoning,
+      contextWindow: m.contextWindow,
+    }));
+    return pickTierPreset(tierModels, strategy);
+  }
+
   if (strategy === "single") {
+    // Legacy "single" — kept for callers that pass modelStrategy.
     const primaryChoice = await ui.promptSelect("Choose your primary model:", choices);
     const primary = parseSlotChoice(primaryChoice);
     return primary ? { primary } : undefined;
   }
 
-  // Split path: prompt primary (required), then optionally explorer + scoring.
+  // Split / Customize path: prompt primary (required), then optionally explorer + scoring.
   const primaryChoice = await ui.promptSelect("Primary model (required):", choices);
   const primary = parseSlotChoice(primaryChoice);
   if (!primary) return undefined;
@@ -206,6 +220,61 @@ async function promptModelStrategy(
     primary,
     explorer,
     scoring,
+  };
+}
+
+/**
+ * Resolve a tier preset into a `modelsByRole` block.
+ *
+ * Models are ranked by `reasoning ? 1 : 0` then `contextWindow`
+ * descending, then bucketed by index:
+ *   tier 0 (strongest) — primary slot in max-quality/balanced;
+ *                       explorer+scoring in cost-optimized
+ *   tier 1 (medium)    — primary in cost-optimized;
+ *                       explorer+scoring in balanced
+ *   tier 2 (fast)      — explorer+scoring in cost-optimized
+ *
+ * Edge cases:
+ *   - One model only → all slots get that model.
+ *   - No reasoning models → fall back to contextWindow sort.
+ *   - Empty list → returns undefined; the caller falls through to
+ *     the legacy `modelsByRole = undefined` path.
+ */
+export function pickTierPreset(
+  providerModels: ReadonlyArray<{ provider: AgentifyProvider; id: string; reasoning?: boolean; contextWindow: number }>,
+  preset: "max-quality" | "balanced" | "cost-optimized",
+): AgentifyConfig["modelsByRole"] {
+  if (providerModels.length === 0) return undefined;
+  const sorted = [...providerModels].sort((a, b) => {
+    const ar = a.reasoning ? 1 : 0;
+    const br = b.reasoning ? 1 : 0;
+    if (ar !== br) return br - ar;
+    return b.contextWindow - a.contextWindow;
+  });
+  const strongest = sorted[0];
+  const medium = sorted[Math.min(1, sorted.length - 1)];
+  const fast = sorted[Math.min(2, sorted.length - 1)];
+  // Max quality: same model in all slots.
+  if (preset === "max-quality") {
+    return {
+      primary: { provider: strongest.provider, model: strongest.id },
+      explorer: { provider: strongest.provider, model: strongest.id },
+      scoring: { provider: strongest.provider, model: strongest.id },
+    };
+  }
+  // Balanced: strongest primary, medium explorer/scoring.
+  if (preset === "balanced") {
+    return {
+      primary: { provider: strongest.provider, model: strongest.id },
+      explorer: { provider: medium.provider, model: medium.id },
+      scoring: { provider: medium.provider, model: medium.id },
+    };
+  }
+  // Cost optimized: medium primary, fast explorer/scoring.
+  return {
+    primary: { provider: medium.provider, model: medium.id },
+    explorer: { provider: fast.provider, model: fast.id },
+    scoring: { provider: fast.provider, model: fast.id },
   };
 }
 

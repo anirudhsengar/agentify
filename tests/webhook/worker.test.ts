@@ -81,6 +81,7 @@ function tempPrompt(): WebhookTaskRecord["prompt"] {
     tools: ["read", "write"],
     model: null,
     thinking_level: null,
+    model_role: null,
   };
 }
 

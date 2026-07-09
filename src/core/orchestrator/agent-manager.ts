@@ -74,6 +74,11 @@ export interface CreateAgentArgs {
   model?: string | null;
   /** Thinking level. Default: inherit. */
   thinking_level?: string | null;
+  /**
+   * Named slot role for this sub-agent. Default: inherit parent's
+   * role (typically "primary"). See `ModelRole` and ADR 0017.
+   */
+  modelRole?: "primary" | "explorer" | "scoring" | null;
   /** Initial user prompt. */
   user_prompt: string;
   /** Tool allowlist. Default: from template; if neither, ['read']. */
@@ -96,6 +101,21 @@ export interface CreateAgentResult {
 
 export interface ListAgentsFilter {
   status?: AgentStatus[];
+}
+
+function normalizeThinking(value: string): import("../types.ts").ThinkingLevel | undefined {
+  if (value === "off" || value === "minimal" || value === "low"
+      || value === "medium" || value === "high" || value === "xhigh") {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeModelRole(value: string | null): import("../types.ts").ModelRole | undefined {
+  if (value === "primary" || value === "explorer" || value === "scoring") {
+    return value;
+  }
+  return undefined;
 }
 
 export interface AgentStatusPayload {
@@ -227,6 +247,8 @@ export class AgentManager {
     // Model: explicit > template > inherit.
     const model = args.model ?? template?.model ?? "inherit";
     const thinkingLevel = args.thinking_level ?? null;
+    // Slot role: explicit > template > inherit (null).
+    const modelRole = args.modelRole ?? template?.modelRole ?? null;
 
     // Domain: explicit > template.
     const domain = args.domain ?? template?.domain ?? null;
@@ -241,6 +263,7 @@ export class AgentManager {
       tools: filteredTools,
       model,
       thinkingLevel,
+      modelRole,
       parentSessionId: this.opts.orchestratorSessionId,
       subagentTemplate: args.subagent_template ?? template?.name ?? null,
       expertisePath: template?.expertise ?? null,
@@ -648,14 +671,25 @@ export class AgentManager {
 
     // Resolve the model alias for the runtime (the runtime expects
     // a provider/model pair; tests pass a fake that ignores it).
+    // Phase 3 (ADR 0017): overlay `state.model` (literal override),
+    // `state.thinking_level`, and `state.model_role` (slot hint) on
+    // top of the parent's config so sub-agents honor the per-agent
+    // model the orchestrator captured at create_agent time.
+    const parentConfig = (this.opts.config ?? {}) as import("../types.ts").AgentifyConfig;
+    const agentOverride: Partial<import("../types.ts").AgentifyConfig> = {};
+    if (state.model) agentOverride.model = state.model;
+    if (state.thinking_level) agentOverride.thinkingLevel = normalizeThinking(state.thinking_level);
     const config: import("../types.ts").AgentifyConfig = {
-      ...(this.opts.config ?? {}),
+      ...parentConfig,
+      ...agentOverride,
     };
+    const modelRole = normalizeModelRole(state.model_role);
 
     const result = await this.opts.runtime.runSession({
       cwd: sessionCwd,
       configDir: this.opts.configDir,
       config,
+      ...(modelRole ? { modelRole } : {}),
       systemPrompt: state.system_prompt,
       userPrompt,
       tools: state.tools,

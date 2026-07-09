@@ -370,6 +370,19 @@ export interface SelfImproveOptions {
   todayIso?: string;
   /** Logger callback. */
   log?: (msg: string) => void;
+  /**
+   * Config dir for resolving the scoring slot. Required to use the
+   * scoring-slot model override; if absent, the syncer falls back to
+   * `pi -p`'s default model.
+   */
+  configDir?: string;
+  /**
+   * Slot hint to pass through to the syncer. Defaults to "scoring".
+   * Provider is `string` (not the strict AgentifyProvider union)
+   * because the subprocess pass-through doesn't enforce the union.
+   * See ADR 0017.
+   */
+  modelSlot?: { provider: string; model: string };
 }
 
 export type SelfImproveSyncer = (args: {
@@ -377,6 +390,8 @@ export type SelfImproveSyncer = (args: {
   expert: ExpertDomain;
   yaml: ExpertiseYaml;
   todayIso: string;
+  configDir?: string;
+  modelSlot?: { provider: string; model: string };
 }) => Promise<{ stdout: string; changed: boolean; summary: string }>;
 
 export async function runSelfImprove(
@@ -399,7 +414,14 @@ export async function runSelfImprove(
   options.log?.(`self-improve: ${expert.domain} (${linesBefore} lines)`);
 
   const syncer = options.syncer ?? defaultSelfImproveSyncer;
-  const result = await syncer({ cwd, expert, yaml: prevYaml ?? { domain: expert.domain }, todayIso });
+  const result = await syncer({
+    cwd,
+    expert,
+    yaml: prevYaml ?? { domain: expert.domain },
+    todayIso,
+    configDir: options.configDir,
+    modelSlot: options.modelSlot,
+  });
 
   // After the syncer runs, re-read the YAML to compute the diff.
   const after = fs.existsSync(expert.expertisePath)
@@ -434,16 +456,28 @@ async function defaultSelfImproveSyncer(args: {
   expert: ExpertDomain;
   yaml: ExpertiseYaml;
   todayIso: string;
+  configDir?: string;
+  modelSlot?: { provider: string; model: string };
 }): Promise<{ stdout: string; changed: boolean; summary: string }> {
   // The default syncer spawns `pi -p <self-improve.md>`. This keeps
   // the LEARN loop deterministic on real Pi installations while
   // remaining testable via the `syncer` override.
+  //
+  // Phase 3 (ADR 0017): if `modelSlot` is provided, set the env var
+  // `AGENTIFY_LEARN_MODEL=<provider>/<id>` so downstream `pi -p`
+  // implementations can pick the right model. (Some `pi` builds honor
+  // this; others ignore it — the fallback is `pi -p`'s default.)
   return new Promise((resolve, reject) => {
     let stdout = "";
     try {
       const bin = process.env["PI_BIN"] ?? "pi";
+      const env: NodeJS.ProcessEnv = { ...process.env };
+      if (args.modelSlot) {
+        env["AGENTIFY_LEARN_MODEL"] = `${args.modelSlot.provider}/${args.modelSlot.model}`;
+      }
       const proc = spawn(bin, ["-p", args.expert.selfImprovePath, "--cwd", args.cwd], {
         stdio: ["ignore", "pipe", "pipe"],
+        env,
       });
       proc.stdout.on("data", (d: Buffer) => { stdout += d.toString("utf-8"); });
       proc.stderr.on("data", () => { /* swallow */ });
@@ -469,12 +503,21 @@ async function defaultSelfImproveSyncer(args: {
 export interface QuestionOptions {
   /** Optional override for the answerer (e.g. for tests). */
   answerer?: QuestionAnswerer;
+  /**
+   * Config dir for resolving the scoring slot. Required to use the
+   * scoring-slot model override.
+   */
+  configDir?: string;
+  /** Slot hint to pass through to the answerer. Defaults to "scoring". */
+  modelSlot?: { provider: string; model: string };
 }
 
 export type QuestionAnswerer = (args: {
   cwd: string;
   expert: ExpertDomain;
   question: string;
+  configDir?: string;
+  modelSlot?: { provider: string; model: string };
 }) => Promise<{ answer: string; citations: string[]; confidence: "high" | "medium" | "low" }>;
 
 export async function runQuestion(
@@ -484,7 +527,13 @@ export async function runQuestion(
   options: QuestionOptions = {},
 ): Promise<QuestionResult> {
   const answerer = options.answerer ?? defaultQuestionAnswerer;
-  const r = await answerer({ cwd, expert, question });
+  const r = await answerer({
+    cwd,
+    expert,
+    question,
+    configDir: options.configDir,
+    modelSlot: options.modelSlot,
+  });
   return {
     expert: expert.domain,
     question,
@@ -498,12 +547,19 @@ async function defaultQuestionAnswerer(args: {
   cwd: string;
   expert: ExpertDomain;
   question: string;
+  configDir?: string;
+  modelSlot?: { provider: string; model: string };
 }): Promise<{ answer: string; citations: string[]; confidence: "high" | "medium" | "low" }> {
   return new Promise((resolve, reject) => {
     try {
       const bin = process.env["PI_BIN"] ?? "pi";
+      const env: NodeJS.ProcessEnv = { ...process.env };
+      if (args.modelSlot) {
+        env["AGENTIFY_LEARN_MODEL"] = `${args.modelSlot.provider}/${args.modelSlot.model}`;
+      }
       const proc = spawn(bin, ["-p", args.expert.questionPath, args.question, "--cwd", args.cwd], {
         stdio: ["ignore", "pipe", "pipe"],
+        env,
       });
       let stdout = "";
       proc.stdout.on("data", (d: Buffer) => { stdout += d.toString("utf-8"); });
