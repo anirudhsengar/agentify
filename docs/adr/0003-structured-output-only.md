@@ -15,7 +15,7 @@ The builder writes its findings through the `write_map` /
 `write_map_delta` custom tools into a single strict TypeBox schema:
 the **codebase map** (`src/core/audit/schema.ts`, the only file that
 defines the map schema). Every write is validated against the schema
-before it is persisted to `.pi/agentify/codebase_map.json`.
+before it is persisted to `<stateDir>/codebase_map.json`.
 
 Downstream artifacts (AGENTS.md, feature agents, experts) are grounded
 in this validated map. We never parse free-form LLM text as data.

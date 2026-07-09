@@ -30,6 +30,7 @@ import { Value } from "typebox/value";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { LEGACY_PI_STATE_RELATIVE_DIR } from "../state-dir.ts";
 import {
     CodebaseMapSchema,
     ConfidenceSchema,
@@ -44,18 +45,56 @@ import {
     type CoverageDimension,
 } from "./schema.ts";
 
-const AGENTIFY_OUTPUT_DIR = path.join(".pi", "agentify");
-const MAP_FILENAME = "codebase_map.json";
-const DRAFT_DIR = path.join(AGENTIFY_OUTPUT_DIR, ".agentify");
-const DRAFT_PATH = path.join(DRAFT_DIR, "draft.json");
-const HISTORY_DIR = path.join(AGENTIFY_OUTPUT_DIR, "history");
+/**
+ * @deprecated Historical constant kept for backward compatibility.
+ * Use `createWriteMapTools({ stateDir })` instead. Always resolves
+ * to the legacy `.pi/agentify/` path.
+ */
+export const AGENTIFY_OUTPUT_DIR = LEGACY_PI_STATE_RELATIVE_DIR;
+/** @deprecated See {@link AGENTIFY_OUTPUT_DIR}. */
+export const MAP_FILENAME = "codebase_map.json";
+/** @deprecated See {@link AGENTIFY_OUTPUT_DIR}. */
+export const DRAFT_DIR = path.join(LEGACY_PI_STATE_RELATIVE_DIR, ".agentify");
+/** @deprecated See {@link AGENTIFY_OUTPUT_DIR}. */
+export const DRAFT_PATH = path.join(DRAFT_DIR, "draft.json");
+/** @deprecated See {@link AGENTIFY_OUTPUT_DIR}. */
+export const HISTORY_DIR = path.join(LEGACY_PI_STATE_RELATIVE_DIR, "history");
 
-/** Absolute path to the canonical codebase map for a given repo root. */
-export function canonicalMapPath(cwd: string): string {
-    return path.join(cwd, AGENTIFY_OUTPUT_DIR, MAP_FILENAME);
+// ----------------------------------------------------------------------------
+// Session state dir (ADR 0020).
+//
+// The audit resolves its state dir from the user's selected provider at the
+// top of each run. The two `write_map` tools consult the per-session
+// `currentSessionStateDir` for write/read paths; run-agentify.ts resets it
+// at the top of every audit. Defaults to `LEGACY_PI_STATE_RELATIVE_DIR` so
+// any existing direct caller (e.g. tests) keeps the prior behavior.
+// ----------------------------------------------------------------------------
+let currentSessionStateDir = LEGACY_PI_STATE_RELATIVE_DIR;
+
+/**
+ * Set the per-session state dir that the legacy `writeMapTool` and
+ * `writeMapDeltaTool` use for write/read paths. Called by `run-agentify.ts`
+ * at the start of each audit run (ADR 0020). Tests that bypass
+ * `run-agentify.ts` (e.g. `tests/audit/coverage-gate.test.ts`) keep the
+ * default legacy path.
+ */
+export function setMapSessionStateDir(stateDir: string): void {
+  currentSessionStateDir = stateDir;
 }
 
-/** Relative path (posix-style) of the transient draft transport dir. */
+/**
+ * @deprecated Probe the legacy `.pi/agentify/codebase_map.json` path.
+ * Use `loadCanonicalMapAt(cwd, stateDir)` instead.
+ */
+export function canonicalMapPath(cwd: string): string {
+    return path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, MAP_FILENAME);
+}
+
+/**
+ * @deprecated Relative path (posix-style) of the transient draft
+ * transport dir under the legacy `.pi/agentify/`. Use
+ * `createWriteMapTools({ stateDir })` instead.
+ */
 export const DRAFT_TRANSPORT_DIR = DRAFT_DIR;
 
 /**
@@ -64,6 +103,10 @@ export const DRAFT_TRANSPORT_DIR = DRAFT_DIR;
  * JSON, or does not satisfy the schema. Used by the post-run success
  * gate (see ADR 0014) so success reflects the real map, not merely
  * the existence of output files.
+ *
+ * @deprecated Probes the legacy `.pi/agentify/codebase_map.json`
+ * path. Use `loadCanonicalMapAt(cwd, stateDir)` with the
+ * resolved state dir.
  */
 export function loadCanonicalMap(cwd: string): CodebaseMap | null {
     const filePath = canonicalMapPath(cwd);
@@ -82,6 +125,67 @@ export function loadCanonicalMap(cwd: string): CodebaseMap | null {
         return null;
     }
     return Value.Check(CodebaseMapSchema, parsed) ? (parsed as CodebaseMap) : null;
+}
+
+/**
+ * State-dir-aware variant of `loadCanonicalMap`. The post-run
+ * success gate uses this when the audit is wired to a
+ * provider-scoped state dir (ADR 0020).
+ */
+export function loadCanonicalMapAt(cwd: string, stateDir: string): CodebaseMap | null {
+    // Try the resolved state dir first, then fall back to the
+    // legacy `.pi/agentify/` path for backward compat with test
+    // fakes and older runs that don't know about the resolved
+    // state dir.
+    const candidates = [
+        path.join(cwd, stateDir, MAP_FILENAME),
+        path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, MAP_FILENAME),
+    ];
+    for (const filePath of candidates) {
+        if (!fs.existsSync(filePath)) continue;
+        let raw: string;
+        try {
+            raw = fs.readFileSync(filePath, "utf-8");
+        } catch {
+            return null;
+        }
+        if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(raw);
+        } catch {
+            return null;
+        }
+        if (Value.Check(CodebaseMapSchema, parsed)) {
+            return parsed as CodebaseMap;
+        }
+    }
+    return null;
+}
+
+/**
+ * Configuration for the state-dir-aware factory
+ * `createWriteMapTools`. `stateDir` is the audit's resolved state
+ * directory (relative to the repo root, no trailing slash); the
+ * canonical codebase map, draft transport, and history are all
+ * laid out under that dir.
+ */
+export interface MapPathConfig {
+  /** State dir, e.g. ".claude/agentify". */
+  stateDir: string;
+  /** Override the canonical map filename. Defaults to
+   *  `codebase_map.json`. */
+  mapFilename?: string;
+}
+
+export interface MapTools {
+  writeMapTool: ToolDefinition;
+  writeMapDeltaTool: ToolDefinition;
+  /** Absolute path of the canonical map for a given repo root. */
+  canonicalMapPath: (cwd: string) => string;
+  /** Posix-style relative path of the canonical map, e.g.
+   *  `.claude/agentify/codebase_map.json`. */
+  canonicalMapRelative: string;
 }
 
 function formatCoverageClosure(map: CodebaseMap): {
@@ -163,20 +267,20 @@ function consumeReserve(dim: CoverageDimension): { allowed: boolean; reason?: st
 }
 
 // ============================================================================
-// Map persistence helpers
+// Map persistence helpers (state-dir-aware via `currentSessionStateDir`)
 // ============================================================================
 
 function writeCanonicalMap(cwd: string, map: CodebaseMap): { path: string; size_bytes: number } {
-    const dir = path.join(cwd, AGENTIFY_OUTPUT_DIR);
+    const dir = path.join(cwd, currentSessionStateDir);
     fs.mkdirSync(dir, { recursive: true });
 
     // Archive the existing map before overwriting. Always on;
     // re-running agentify in the same codebase preserves a
-    // timestamped previous copy under .pi/agentify/history/.
+    // timestamped previous copy under <stateDir>/history/.
     const existingPath = path.join(dir, MAP_FILENAME);
     if (fs.existsSync(existingPath)) {
         try {
-            const histDir = path.join(cwd, HISTORY_DIR);
+            const histDir = path.join(dir, "history");
             fs.mkdirSync(histDir, { recursive: true });
             const isoTs = new Date().toISOString().replace(/[:.]/g, "-");
             const archivePath = path.join(histDir, `codebase_map.${isoTs}.previous.json`);
@@ -194,7 +298,7 @@ function writeCanonicalMap(cwd: string, map: CodebaseMap): { path: string; size_
 
 /** Atomic write-then-rename for the draft transport. */
 function writeDraftAtomically(cwd: string, content: string): string {
-    const dir = path.join(cwd, DRAFT_DIR);
+    const dir = path.join(cwd, currentSessionStateDir, ".agentify");
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(cwd, DRAFT_PATH);
     const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;

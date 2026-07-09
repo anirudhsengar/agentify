@@ -19,10 +19,12 @@ import {
   saveAgentifyConfig,
 } from "./agentify-config.ts";
 import { selectModelForRole } from "./models/resolver.ts";
+import { resolveCanonicalStateDir } from "./state-dir.ts";
+import { revertLastRun } from "./revert.ts";
 import type { AgentifyProvider, AgentifyUi, ModelRole } from "./types.ts";
 
 /** Names of the public config-utility subcommands this module dispatches. */
-export const SUBCOMMAND_NAMES = ["login", "logout", "models"] as const;
+export const SUBCOMMAND_NAMES = ["login", "logout", "models", "revert"] as const;
 export type SubcommandName = (typeof SUBCOMMAND_NAMES)[number];
 
 export interface SubcommandContext {
@@ -685,6 +687,68 @@ function modelsUnset(ctx: SubcommandContext, positional: ReadonlyArray<string>):
   return Promise.resolve(0);
 }
 
+const REVERT_FLAGS = new Set(["to", "keep-alongside", "json"]);
+const REVERT_TAKES_VALUE = new Set(["to"]);
+
+/**
+ * `agentify revert` — undo the last agentify run. Reads the
+ * manifest, deletes the alongside `*.agentify.*` files, restores
+ * the user's pre-existing files from the snapshot, and removes
+ * any files agentify created from scratch. Single-shot, not a
+ * stack — a second `revert` on the same manifest is a no-op.
+ */
+export async function revertCommand(
+  argv: ReadonlyArray<string>,
+  ctx: SubcommandContext,
+): Promise<number> {
+  const parsed = parseFlags(argv, {
+    flags: REVERT_FLAGS,
+    takesValue: REVERT_TAKES_VALUE,
+  });
+  if (parsed.errors.length > 0) {
+    for (const err of parsed.errors) ctx.err.write(`agentify: revert: ${err}\n`);
+    return 1;
+  }
+  for (const pos of parsed.positional) {
+    ctx.err.write(`agentify: revert: unexpected positional argument '${pos}'\n`);
+    return 1;
+  }
+  const stateDir = resolveCanonicalStateDir(ctx.cwd, []).relativeDir;
+  const includeAlongside = parsed.flags["keep-alongside"] !== true;
+  const runId = typeof parsed.flags.to === "string" ? parsed.flags.to : undefined;
+  const result = await revertLastRun({
+    cwd: ctx.cwd,
+    stateDir,
+    runId,
+    includeAlongside,
+    ui: ctx.ui,
+  });
+  if (parsed.flags.json === true) {
+    ctx.out.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    ctx.out.write(`agentify: revert complete\n`);
+    ctx.out.write(
+      `  alongside removed: ${result.alongsideRemoved.length}\n`,
+    );
+    ctx.out.write(`  user files restored: ${result.userRestored.length}\n`);
+    ctx.out.write(
+      `  agentify-created files removed: ${result.createdRemoved.length}\n`,
+    );
+    if (result.kept.length > 0) {
+      ctx.out.write(
+        `  alongside files kept (--keep-alongside): ${result.kept.length}\n`,
+      );
+    }
+    if (result.errors.length > 0) {
+      ctx.out.write(`  errors: ${result.errors.length}\n`);
+      for (const err of result.errors.slice(0, 8)) {
+        ctx.out.write(`    ${err}\n`);
+      }
+    }
+  }
+  return result.errors.length > 0 ? 1 : 0;
+}
+
 export async function modelsCommand(
   argv: ReadonlyArray<string>,
   ctx: SubcommandContext,
@@ -787,12 +851,17 @@ export async function dispatchSubcommand(
     process.exitCode = code;
     return true;
   }
+  if (head === "revert") {
+    const code = await revertCommand(argv.slice(1), ctx);
+    process.exitCode = code;
+    return true;
+  }
   return false;
 }
 
 export function runUnknownSubcommand(name: string, ctx: SubcommandContext): number {
   ctx.err.write(
-    `agentify: unknown subcommand '${name}'. Known subcommands: login, logout, models. Run \`agentify --help\` for usage.\n`,
+    `agentify: unknown subcommand '${name}'. Known subcommands: login, logout, models, revert. Run \`agentify --help\` for usage.\n`,
   );
   return 1;
 }
@@ -822,5 +891,12 @@ export function printSubcommandHelp(out: NodeJS.WritableStream): void {
   out.write(`  agentify models unset\n`);
   out.write(`    Clear provider and model from config.json (preserves\n`);
   out.write(`    thinkingLevel).\n`);
+  out.write(`\nOperational subcommands (mutate the repo):\n`);
+  out.write(`  agentify revert [--to <run-id>] [--keep-alongside] [--json]\n`);
+  out.write(`    Undo the most recent agentify run. Removes *.agentify.*\n`);
+  out.write(`    alongside files, restores user files from the snapshot,\n`);
+  out.write(`    and deletes files agentify created from scratch. Single-\n`);
+  out.write(`    shot, not a history. --keep-alongside preserves the\n`);
+  out.write(`    alongside files. --json emits structured output.\n`);
 }
 

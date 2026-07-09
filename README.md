@@ -90,20 +90,53 @@ greenfield session. The model submits a typed formation payload through
 gate, so agentify rejects PRDs, plans, issues, or specs beyond the
 user-approved milestone. agentify deterministically renders `CONTEXT.md`,
 `GOALS.md`, PRDs, plans, issues, and specs from that payload, records
-artifact validation and resume context in
-`.pi/agentify/greenfield-state.json`, and installs the GitHub runtime
-scaffold only after the artifacts pass the substance gate. The state file also
-includes a structured `github_handoff` with the next issue title, body, labels,
-and artifact paths, so post-bootstrap work can enter the same GitHub loop
-without relying on prose alone. Approved unblocked implementation handoffs can
-activate the issue explicitly, applying both `agent:queued` and
-`agent:implement` after the trusted workflow checks referenced blockers; draft
-slices and blocked work remain queued only. It then proceeds one selected
-goal/sub-goal at a time through the same build chain. Post-launch drill issues
-receive that formation resume context, and the credential-free model run can
-request child, PRD, or implementation issues through structured output that the
-trusted workflow applies with the right labels. Subsequent runs attach to that
-initialized state instead of acting like a separate tool family.
+artifact validation and resume context in `<stateDir>/greenfield-state.json`,
+and installs the GitHub runtime scaffold only after the artifacts pass the
+substance gate. The state file also includes a structured `github_handoff`
+with the next issue title, body, labels, and artifact paths, so
+post-bootstrap work can enter the same GitHub loop without relying on prose
+alone. Approved unblocked implementation handoffs can activate the issue
+explicitly, applying both `agent:queued` and `agent:implement` after the
+trusted workflow checks referenced blockers; draft slices and blocked work
+remain queued only. It then proceeds one selected goal/sub-goal at a time
+through the same build chain. Post-launch drill issues receive that
+formation resume context, and the credential-free model run can request
+child, PRD, or implementation issues through structured output that the
+trusted workflow applies with the right labels. Subsequent runs attach to
+that initialized state instead of acting like a separate tool family.
+
+## Where does agentify write?
+
+The audit's **state directory** is now provider-scoped (ADR 0020).
+The user picks their harness at runtime, and the audit writes its
+internal state under the matching dotdir:
+
+| User picks                       | State dir                |
+|----------------------------------|--------------------------|
+| `claude-code`                    | `.claude/agentify/`      |
+| `codex` (no `claude-code`)       | `.agents/agentify/`      |
+| `pi` (no `claude-code`/`codex`)  | `.pi/agentify/`          |
+| only non-premium agents          | `.agents/agentify/`      |
+
+Inside that state dir agentify stores:
+
+- `codebase_map.json` — the canonical structured audit
+- `manifest.json` — the managed-file manifest (with a `state_dir` field)
+- `greenfield-state.json` / `greenfield-formation.json` (greenfield only)
+- `agents/`, `prompts/`, `workflows/`, `extensions/`, `skills/`,
+  `experts/`, `logs/`, `history/` — audit scratch surface
+  fanned out per the chosen provider's harness exporters
+
+The per-harness output dirs (`.claude/agents/`, `.codex/agents/`,
+`.pi/skills/`, `.agents/skills/`, etc.) are unchanged — they
+remain the registry-driven fan-out destinations.
+
+**Migration**: repos that already have a legacy `.pi/agentify/`
+directory are detected on the next run. The audit logs
+`agentify: detected legacy state at .pi/agentify/; future
+runs will use <chosen-state-dir>` and writes continue there.
+Users reclaim disk space manually when ready:
+`mv .pi/agentify <newStateDir>` (or `rm -rf .pi/agentify`).
 
 ## What Gets Written
 
@@ -122,8 +155,8 @@ On a successful **brownfield** audit, agentify writes into your repo:
 
 On a successful **greenfield** formation, agentify writes
 `CONTEXT.md`, `GOALS.md`, `docs/prds/*`, `docs/plans/*`,
-`docs/issues/*`, `specs/*`, `.pi/agentify/greenfield-formation.json`,
-`.pi/agentify/greenfield-state.json`, `.pi/agentify/manifest.json`, and
+`docs/issues/*`, `specs/*`, `<stateDir>/greenfield-formation.json`,
+`<stateDir>/greenfield-state.json`, `<stateDir>/manifest.json`, and
 the same GitHub runtime scaffold.
 
 Generated files carry an `agentify:managed` marker. agentify never

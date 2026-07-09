@@ -17,7 +17,7 @@ separation is the point. The spec carries all the context the implementer needs.
 ## Workflow
 
 1. Read `specs/README.md` for the Spec Format (the section set for this change type).
-2. Read `.pi/conditional_docs.md` (if present) and load any feature docs whose conditions
+2. Read ``<agentify-state-dir>/conditional_docs.md`` (if present) and load any feature docs whose conditions
    match the task. Read `AGENTS.md` for project context; read `CONTEXT.md` for domain
    language. If a `/<feature>` specialist owns the area, lift its types/conventions/pitfalls.
 3. Explore the codebase to identify the **Relevant Files**, existing patterns, and the

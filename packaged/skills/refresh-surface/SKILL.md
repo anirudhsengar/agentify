@@ -14,15 +14,15 @@ evolution loop ([ADR-0012](../../../docs/adr/0012-evolution-loop.md)).
 
 1. **Scope the change.** `git diff <last-refresh>..HEAD --stat` (fall back to the diff
    against the previous commit on the default branch). Map changed files to feature areas
-   using `.pi/agents/*.md` (each specialist's `## Scope` paths).
+   using `<agentify-state-dir>/agents/*.md` (each specialist's `## Scope` paths).
 2. **Decide delta vs full:**
    - **Delta** (default) — the diff touches files inside known feature areas only.
-     Re-explore just those areas and update their `.pi/agents/<feature>.md`,
-     the affected sections of `AGENTS.md`, and `.pi/conditional_docs.md`.
+     Re-explore just those areas and update their ```<agentify-state-dir>/agents`/<feature>.md`,
+     the affected sections of `AGENTS.md`, and ``<agentify-state-dir>/conditional_docs.md``.
    - **Full** — the diff touches `module_graph` edges, shared state, the manifest, or
      adds/removes top-level areas. A cross-cutting change can invalidate areas the diff
      doesn't name, so run a full `/agentify` instead.
-3. **Re-sync experts.** For each expert domain (`.pi/prompts/experts/<domain>/`) whose
+3. **Re-sync experts.** For each expert domain (``<agentify-state-dir>/prompts/experts/<domain>/`) whose
    `primary_paths` the diff touched, run that domain's `self-improve` (`USE_DIFF=true`).
    In CI, also read the workflow-provided stale-experts JSON file and treat every domain
    listed in `stale[]` as affected; it is produced before the model runs by comparing

@@ -213,14 +213,23 @@ export function loadAgentsFromDir(
 }
 
 /**
- * Walk up from `cwd` looking for the nearest `.pi/agents/`
- * directory. Returns null if none found.
+ * Walk up from `cwd` looking for the nearest feature-agent
+ * directory. The audit's active state dir is supplied so the
+ * walker probes the resolved location first; legacy `.pi/agents/`
+ * is checked last for backward compat with repos mid-migration
+ * (ADR 0020).
  */
-export function findNearestProjectAgentsDir(cwd: string): string | null {
+export function findNearestProjectAgentsDir(
+  cwd: string,
+  stateDir: string = ".pi/agentify",
+): string | null {
+  const dirsToCheck = [stateDir, ".pi/agentify"];
   let current = cwd;
   while (true) {
-    const candidate = path.join(current, ".pi", "agents");
-    if (isDirectory(candidate)) return candidate;
+    for (const candidateBase of dirsToCheck) {
+      const candidate = path.join(current, candidateBase, "agents");
+      if (isDirectory(candidate)) return candidate;
+    }
     const parent = path.dirname(current);
     if (parent === current) return null;
     current = parent;

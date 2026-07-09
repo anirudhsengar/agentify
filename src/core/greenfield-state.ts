@@ -3,9 +3,25 @@ import * as path from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
-import { readGreenfieldFormation, type GreenfieldFormation } from "./greenfield-artifacts.ts";
+import { LEGACY_PI_STATE_RELATIVE_DIR } from "./state-dir.ts";
+import {
+  readGreenfieldFormation,
+  readGreenfieldFormationAt,
+  type GreenfieldFormation,
+} from "./greenfield-artifacts.ts";
 
-export const GREENFIELD_STATE_RELATIVE_PATH = ".pi/agentify/greenfield-state.json";
+/** Posix-style relative path of the greenfield state file under the
+ *  supplied agentify state dir (ADR 0020). */
+export function greenfieldStateRelativePath(stateDir: string): string {
+  return path.join(stateDir, "greenfield-state.json");
+}
+
+/** @deprecated Use `greenfieldStateRelativePath(stateDir)`. Always
+ *  resolves to the legacy `.pi/agentify/` path. */
+export const GREENFIELD_STATE_RELATIVE_PATH = path.join(
+  LEGACY_PI_STATE_RELATIVE_DIR,
+  "greenfield-state.json",
+);
 
 export const GreenfieldCheckpointSchema = StringEnum([
   "wide_idea",
@@ -431,8 +447,8 @@ function githubResumeFor(checkpoint: GreenfieldCheckpoint, formation: Greenfield
   }
 }
 
-function artifactBullets(artifactPaths: string[]): string {
-  if (artifactPaths.length === 0) return "- `.pi/agentify/greenfield-state.json`";
+function artifactBullets(artifactPaths: string[], statePath: string): string {
+  if (artifactPaths.length === 0) return `- \`${statePath}\``;
   return artifactPaths.map((artifactPath) => `- \`${artifactPath}\``).join("\n");
 }
 
@@ -448,9 +464,9 @@ function githubHandoffFor(
   checkpoint: GreenfieldCheckpoint,
   formation: GreenfieldFormation | null,
   artifactPaths: string[],
+  statePath: string,
 ): GreenfieldGitHubHandoff {
   const focus = firstGoalTitle(formation) ?? formation?.project_name ?? "the greenfield project";
-  const statePath = GREENFIELD_STATE_RELATIVE_PATH;
   const specPath = firstArtifact(artifactPaths, "specs/");
   const issuePath = firstArtifact(artifactPaths, "docs/issues/");
   const planPath = firstArtifact(artifactPaths, "docs/plans/");
@@ -468,7 +484,7 @@ function githubHandoffFor(
         "",
         "## Artifacts",
         "",
-        artifactBullets(artifactPaths),
+        artifactBullets(artifactPaths, statePath),
         "",
         "## Requested action",
         "",
@@ -495,7 +511,7 @@ function githubHandoffFor(
         "",
         "## Artifacts",
         "",
-        artifactBullets(artifactPaths),
+        artifactBullets(artifactPaths, statePath),
         "",
         "## Requested action",
         "",
@@ -517,7 +533,7 @@ function githubHandoffFor(
       "",
       "## Artifacts",
       "",
-      artifactBullets(artifactPaths),
+      artifactBullets(artifactPaths, statePath),
       "",
       "## Requested action",
       "",
@@ -550,7 +566,12 @@ export function buildGreenfieldState(cwd: string, params: BuildGreenfieldStatePa
       local_resume: localResumeFor(checkpoint, formation),
       github_resume: githubResumeFor(checkpoint, formation),
     },
-    github_handoff: githubHandoffFor(checkpoint, formation, artifactPaths),
+    github_handoff: githubHandoffFor(
+      checkpoint,
+      formation,
+      artifactPaths,
+      GREENFIELD_STATE_RELATIVE_PATH,
+    ),
   };
 }
 
@@ -564,6 +585,84 @@ export function writeGreenfieldState(cwd: string, params: BuildGreenfieldStatePa
 
 export function readGreenfieldState(cwd: string): GreenfieldState | null {
   const filePath = path.join(cwd, GREENFIELD_STATE_RELATIVE_PATH);
+  if (!fs.existsSync(filePath)) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+  } catch {
+    return null;
+  }
+  return Value.Check(GreenfieldStateSchema, parsed) ? (parsed as GreenfieldState) : null;
+}
+
+/**
+ * Build the greenfield-state payload using a provider-scoped state
+ * dir (ADR 0020). The github handoff body now references the
+ * supplied `<stateDir>/greenfield-state.json` rather than the
+ * legacy `.pi/agentify/` path. This is the function new audit code
+ * should call; the legacy `buildGreenfieldState(cwd, params)` is
+ * kept for backward compatibility.
+ */
+export function buildGreenfieldStateAt(
+  cwd: string,
+  params: BuildGreenfieldStateParams,
+  stateDir: string,
+): GreenfieldState {
+  const checkpoint = inferGreenfieldCheckpoint(cwd);
+  // Formation lookup is unchanged — formation always lives under
+  // the active state dir per `readGreenfieldFormationAt`.
+  const formation = readGreenfieldFormationAt(cwd, stateDir);
+  const artifactPaths = durableArtifactPaths(cwd);
+  const statePath = greenfieldStateRelativePath(stateDir);
+  return {
+    schema_version: "1",
+    updated_at: params.nowIso ?? new Date().toISOString(),
+    checkpoint,
+    turns: params.turns,
+    cost_usd: params.costUsd,
+    aborted: params.aborted,
+    checkpoints: checkpointsFor(cwd),
+    next_actions: nextActionsFor(checkpoint),
+    artifact_validation: validateGreenfieldArtifacts(cwd),
+    resume: {
+      source: formation ? "formation" : "filesystem",
+      stop_at: formation?.stop_at ?? null,
+      current_focus: firstGoalTitle(formation),
+      artifact_paths: artifactPaths,
+      local_resume: localResumeFor(checkpoint, formation),
+      github_resume: githubResumeFor(checkpoint, formation),
+    },
+    github_handoff: githubHandoffFor(checkpoint, formation, artifactPaths, statePath),
+  };
+}
+
+/**
+ * Write the greenfield-state payload at `<stateDir>/greenfield-state.json`.
+ * Use this when the audit is wired to a provider-scoped state dir;
+ * the legacy `writeGreenfieldState(cwd, params)` always writes to
+ * `.pi/agentify/greenfield-state.json` and is preserved for callers
+ * that have not yet been migrated.
+ */
+export function writeGreenfieldStateAt(
+  cwd: string,
+  params: BuildGreenfieldStateParams,
+  stateDir: string,
+): GreenfieldState {
+  const state = buildGreenfieldStateAt(cwd, params, stateDir);
+  const filePath = path.join(cwd, stateDir, "greenfield-state.json");
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o644 });
+  return state;
+}
+
+/**
+ * Read the greenfield-state payload at `<stateDir>/greenfield-state.json`.
+ * Returns null when the file is missing or fails schema
+ * validation. Use this from the greenfield run path when the audit
+ * is wired to a provider-scoped state dir.
+ */
+export function readGreenfieldStateAt(cwd: string, stateDir: string): GreenfieldState | null {
+  const filePath = path.join(cwd, stateDir, "greenfield-state.json");
   if (!fs.existsSync(filePath)) return null;
   let parsed: unknown;
   try {

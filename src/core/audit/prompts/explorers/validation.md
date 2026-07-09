@@ -142,7 +142,7 @@ focus_acknowledged: <echo of FOCUS>
  API changes, an integration test that exercises the endpoint
  end-to-end is the proof. Record what you find.
 - **E2E files feed the review agent**: in the feedback-loop surface, the
- `/review` slash command (lives in `.pi/agents/review.md`)
+ `/review` slash command (lives in <stateDir>/agents/review.md`)
  reads the E2E test files as **navigation hints** — it does
  NOT execute them. Record the file paths so the review
  agent knows where to look. Cap the list at 20 to keep

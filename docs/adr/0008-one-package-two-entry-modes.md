@@ -1,12 +1,19 @@
 # ADR 0008: One package, two entry modes
 
-Status: Accepted (amended 2026-07-09)
+Status: Accepted (amended 2026-07-09; further amended 2026-07-09 by ADR 0020)
 
 ## Context
 
 agentify began as a Pi extension named "GreenField" with several
 public command families (webhook, aiw, orchestrator, expert). That
 surface was large, confusing, and leaked internal machinery to users.
+
+The `.pi/agentify/` directory used for internal state was a
+direct carry-over from the Pi extension era. With the harness
+picker introduced in ADR 0018, that hardcoding no longer matches
+the user's actual target. Per ADR 0020, the audit's state dir
+is now derived from the user's selected provider rather than
+the legacy `.pi/agentify/` constant.
 
 ## Decision
 

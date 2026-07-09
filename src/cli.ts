@@ -206,12 +206,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   };
   if (argv.length > 0) {
     const head = argv[0];
-    if (head === "login" || head === "logout" || head === "models") {
+    if (head === "login" || head === "logout" || head === "models" || head === "revert") {
       await dispatchSubcommand(argv, subcommandCtx);
       return;
     }
     throw new Error(
-      `unknown subcommand '${head}'. Known subcommands: login, logout, models. Run \`agentify --help\` for usage.`,
+      `unknown subcommand '${head}'. Known subcommands: login, logout, models, revert. Run \`agentify --help\` for usage.`,
     );
   }
 
@@ -259,6 +259,24 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     argv.splice(targetsIndex, 2);
   }
 
+  // --plan: dry-run mode. Runs the full audit (the LLM is called so
+  // the plan reflects what the real run would do) but never writes to
+  // the repo. Output is the would-be plan. Combined with --json it
+  // emits structured JSON to stdout instead of the human-readable
+  // ui.info lines.
+  let dryRun = false;
+  const planIndex = argv.indexOf("--plan");
+  if (planIndex >= 0) {
+    dryRun = true;
+    argv.splice(planIndex, 1);
+  }
+  let jsonOutput = false;
+  const jsonIndex = argv.indexOf("--json");
+  if (jsonIndex >= 0) {
+    jsonOutput = true;
+    argv.splice(jsonIndex, 1);
+  }
+
   await runAgentifyApp({
     args: argv,
     cwd: process.cwd(),
@@ -266,6 +284,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     runtime: new PiSdkRuntime(),
     mode,
     targetsOverride,
+    dryRun,
+    jsonOutput,
   });
 }
 

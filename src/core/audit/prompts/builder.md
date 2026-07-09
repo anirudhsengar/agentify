@@ -72,8 +72,8 @@ them would shadow the canonical versions. The shipped skills are:
 > `/plan-build-review-fix`, `/scout-then-plan` — plus `/drill-me`,
 > `/to-*`, `/tdd`, `/domain-modeling`, `/codebase-design`, etc.
 
-So you do **NOT** write `.pi/agents/{scout,review,implement,test,
-fix,document}.md` or `.pi/prompts/{plan,plan-build,
+So you do **NOT** write `<stateDir>/agents/{scout,review,implement,test,
+fix,document}.md` or `<stateDir>/prompts/{plan,plan-build,
 plan-build-review,plan-build-review-fix,scout-then-plan}.md`. Those
 are shipped skills the user already has.
 
@@ -81,7 +81,7 @@ You **DO** emit the codebase-emergent intelligence those shipped
 skills *consume* as structured `artifact_intents` in the map:
 `AGENTS.md` sections, the `/<feature>` specialists,
 `specs/README.md`, `ai_docs/README.md`, feedback-loop metadata,
-proposed domain-model notes, `.pi/extensions/*` candidates,
+proposed domain-model notes, `<stateDir>/extensions/*` candidates,
 per-type/per-area templates, and expert prompts. The shipped
 `/review`, `/implement`, `/spec`, `/test`, `/fix`, `/document`
 read this rendered context at runtime.
@@ -150,8 +150,8 @@ each section and each feature is discovered, not templated.
   emit a 300-line intent and tell the user to trim it.
 - **Do not write user-facing generated files directly.**
   Do not call `write`/`edit` for `AGENTS.md`, `specs/README.md`,
-  `ai_docs/README.md`, `.pi/agents`, `.pi/prompts`,
-  `.pi/extensions`, scaffold files, setup docs, or harness
+  `ai_docs/README.md`, `<stateDir>/agents`, `<stateDir>/prompts`,
+  `<stateDir>/extensions`, scaffold files, setup docs, or harness
   exports. The CLI renders and transactionally applies those
   files from validated `artifact_intents`.
 - **Tool preference.** `read` over `bash` for contents;
@@ -171,10 +171,10 @@ each section and each feature is discovered, not templated.
 - **No auto-commit.** The CLI writes files after validation; the user commits.
 - **No MCP.** Skills, CLIs, and direct file reads only.
 - **Key paths (facts, not variables).**
-  The codebase map lives at `.pi/agentify/codebase_map.json`.
+  The codebase map lives at `<stateDir>/codebase_map.json`.
   Always use `write_map` to persist it — never write the JSON
   directly. Custom sub-agent prompts go in
-  `.pi/agentify/sub-agent-prompts/`. The custom explorer template is at
+  `<stateDir>/sub-agent-prompts/`. The custom explorer template is at
   `src/core/audit/prompts/explorers/_template.md`. The schema
   contract is `src/core/audit/schema.ts`. The 9 fixed-mode
   explorer prompts are in
@@ -452,14 +452,14 @@ Templates` section below) and persist it under
    concrete index of which provider docs the user should
    vendor, lifted from `meta.external_dependencies`.
 
-Do **NOT** write `.pi/agents/scout.md`, `.pi/agents/review.md`, or
-`.pi/prompts/plan.md` — `/scout`, `/review`, and `/spec` are
+Do **NOT** write `<stateDir>/agents/scout.md`, `<stateDir>/agents/review.md`, or
+`<stateDir>/prompts/plan.md` — `/scout`, `/review`, and `/spec` are
 **shipped skills** (see the Emission Contract). Re-emitting them
 would shadow the canonical versions.
 
 **Plus N feature agent files:**
 
-3. **`.pi/agents/<feature>.md`** — one per feature
+3. **`<stateDir>/agents/<feature>.md`** — one per feature
    identified in Phase 1. Each is a **feature-specialized
    agent** with rich, feature-specific context. The user
    invokes it with `/<feature> <query>` in Pi. The agent
@@ -497,7 +497,7 @@ clear signal of importance) and note the cap in
 
 Emits the *storage* the feedback-loop skills (`/test`, `/fix`,
 `/document`, `/review`) write to. The loop commands themselves are
-**shipped skills** — do NOT emit `.pi/agents/{test,fix,document}.md`
+**shipped skills** — do NOT emit `<stateDir>/agents/{test,fix,document}.md`
 or a review agent (see the Emission Contract). You create the
 directories and state; the shipped skills do the work.
 
@@ -511,7 +511,7 @@ directories and state; the shipped skills do the work.
    the `app_fix_reports/` layout (patch reports).
 4. **`app_docs/agentic_kpis.md`** — the KPI dashboard. Initial state
    has all KPIs at zero; populated by `/document` over time.
-5. **`.pi/conditional_docs.md`** — the context file mapping feature
+5. **`<stateDir>/conditional_docs.md`** — the context file mapping feature
    docs → conditions. Bootstrap with one entry per existing
    `ai_docs/*` file (from `documentation.has_ai_docs`). New entries
    are appended by `/document`.
@@ -551,10 +551,10 @@ shows; do not invent terms or decisions.
 **Always runs after Phase 7.** Emits two new kinds of
 files into the user's codebase:
 
-- **`.pi/extensions/<name>.ts`** — one TypeScript
+- **`<stateDir>/extensions/<name>.ts`** — one TypeScript
   extension per custom-tool candidate. Each registers one
   `pi.registerTool()` that wraps the existing command.
-- **`.pi/skills/<name>/SKILL.md`** — one skill directory
+- **`<stateDir>/skills/<name>/SKILL.md`** — one skill directory
   per skill candidate. Each ships a `SKILL.md` (and
   optionally supporting scripts).
 
@@ -591,7 +591,7 @@ args are split at write time so the runtime never parses
 a shell string.
 
 ```typescript
-// .pi/extensions/<tool_name>.ts
+// <stateDir>/extensions/<tool_name>.ts
 //
 // Generated by agentify (custom-tool surface).
 // Wraps `<existing_command>` as a typed custom tool.
@@ -663,7 +663,7 @@ template MUST still avoid shell. Either:
   candidate.
 
 **Skill template.** For each skill candidate that passes
-the skip rules, write a directory `.pi/skills/<name>/`
+the skip rules, write a directory `<stateDir>/skills/<name>/`
 with `SKILL.md`. Frontmatter is required (per the Agent
 Skills spec).
 
@@ -728,7 +728,7 @@ the `issue_types` array) and the per-area templates
    The 9 classes from the schema enum (`chore`, `bug`,
    `feature`, `refactor`, `security`, `docs`, `test`,
    `perf`, `chore_deps`) each get a
-   `.pi/prompts/<type>.md` file.
+   `<stateDir>/prompts/<type>.md` file.
 
 2. **0–3 per-area templates** derived from
    `meta.lifecycle.per_area_template_candidates`. A
@@ -742,7 +742,7 @@ the `issue_types` array) and the per-area templates
 **Skip rules:**
 
 1. **Overwrite protection** — if a
-   `.pi/prompts/<name>.md` file already exists, skip it
+   `<stateDir>/prompts/<name>.md` file already exists, skip it
    (the user has hand-curated it). Note the skip in the
    completion summary.
 2. **No `issue_types` entries** — if
@@ -810,7 +810,7 @@ below. The plan is a spec; a fresh agent will run
 
 ## Workflow
 1. Read `specs/README.md` for the Spec Format conventions.
-2. Read `.pi/conditional_docs.md` (if it exists) and
+2. Read `<stateDir>/conditional_docs.md` (if it exists) and
    find feature docs relevant to $ARGUMENTS.
 3. Read `AGENTS.md` for project context.
 4. Explore the codebase to identify Relevant Files,
@@ -882,7 +882,7 @@ $ARGUMENTS = <one-sentence <type> task in the <area_name> area>
 ## Goal
 Write a plan for $ARGUMENTS to `specs/<type>-<slug>.md`
 using the <Type> Spec Format from
-`.pi/prompts/<type>.md`, ENRICHED with the area-specific
+`<stateDir>/prompts/<type>.md`, ENRICHED with the area-specific
 context below.
 
 ## Area context (lifted from `<source_feature_agent>`)
@@ -900,11 +900,11 @@ context below.
 - ...
 
 ## Workflow
-1. Read `.pi/prompts/<type>.md` to load the base Plan
+1. Read `<stateDir>/prompts/<type>.md` to load the base Plan
    Format.
 2. Read `<source_feature_agent>` for the area context
    (already inlined above).
-3. Read `AGENTS.md` and `.pi/conditional_docs.md`.
+3. Read `AGENTS.md` and `<stateDir>/conditional_docs.md`.
 4. Explore the codebase as needed to identify Relevant
    Files.
 5. `think hard` about the plan structure.
@@ -928,7 +928,7 @@ context below.
 
 ## Instructions
 - `MUST` follow the <Type> Spec Format from
-  `.pi/prompts/<type>.md`.
+  `<stateDir>/prompts/<type>.md`.
 - `MUST` include area-specific Key Types, Conventions,
   and Pitfalls in the relevant sections of the plan.
 - `MUST NOT` invent files or commands. If a path is
@@ -954,28 +954,28 @@ domain has rich enough context to support them.
 
 **The 3–5 deliverables per expert domain, in this order:**
 
-1. **`.pi/prompts/experts/<domain>/expertise.yaml`** —
+1. **`<stateDir>/prompts/experts/<domain>/expertise.yaml`** —
    the 1000-line mental model. Mandatory.
-2. **`.pi/prompts/experts/<domain>/question.md`** —
+2. **`<stateDir>/prompts/experts/<domain>/question.md`** —
    question-answering without coding. Mandatory. Reads
    the YAML first, validates against the code, answers.
-3. **`.pi/prompts/experts/<domain>/self-improve.md`** —
+3. **`<stateDir>/prompts/experts/<domain>/self-improve.md`** —
    sync the YAML with the code. Mandatory. Diff the YAML
    against the code, update the YAML, enforce the
    1000-line cap, validate with `yaml.safe_load`.
-4. **`.pi/prompts/experts/<domain>/plan.md`** —
+4. **`<stateDir>/prompts/experts/<domain>/plan.md`** —
    expertise-aware planning. Optional. Emit when the
    domain has ≥1 of {stable_types, ≥3 patterns, ≥3
    pitfalls}. Loads the YAML, then returns a domain-aware
    implementation plan.
-5. **`.pi/prompts/experts/<domain>/plan_build_improve.md`**
+5. **`<stateDir>/prompts/experts/<domain>/plan_build_improve.md`**
    — expertise-aware plan-build-improve. Optional. Same
    signal as #4.
 
 **Skip rules (overwrite protection):**
 
 - If a domain folder already exists in
-  `.pi/prompts/experts/`, skip the entire domain (the
+  `<stateDir>/prompts/experts/`, skip the entire domain (the
   user has hand-curated it). Note the skip in the
   completion summary.
 - If a single file exists inside the folder, do NOT
@@ -991,7 +991,7 @@ fields from the map and the feature reports. Hard-cap at
 websocket / aiw examples:
 
 ```yaml
-# .pi/prompts/experts/<domain>/expertise.yaml
+# <stateDir>/prompts/experts/<domain>/expertise.yaml
 #
 # Generated by agentify (expert-prompt surface).
 # The mental model for the <domain> area of this codebase.
@@ -1064,7 +1064,7 @@ argument-hint: "<question>"
 
 ## Variables
 USER_QUESTION: $1
-EXPERTISE_PATH: .pi/prompts/experts/<domain>/expertise.yaml
+EXPERTISE_PATH: <stateDir>/prompts/experts/<domain>/expertise.yaml
 
 ## Instructions
 - This is a question-answering task only — DO NOT write, edit, or create any files.
@@ -1088,7 +1088,7 @@ argument-hint: "[true|false]  (optional: true = git-diff scoped, false = full re
 
 ## Variables
 USE_DIFF: $1  # true|false, defaults to false
-EXPERTISE_PATH: .pi/prompts/experts/<domain>/expertise.yaml
+EXPERTISE_PATH: <stateDir>/prompts/experts/<domain>/expertise.yaml
 
 ## Instructions
 - `MUST` keep `EXPERTISE_PATH` under 1000 lines. The cap
@@ -1150,7 +1150,7 @@ argument-hint: "<one-sentence task>"
 
 ## Variables
 USER_TASK: $1
-EXPERTISE_PATH: .pi/prompts/experts/<domain>/expertise.yaml
+EXPERTISE_PATH: <stateDir>/prompts/experts/<domain>/expertise.yaml
 
 ## Workflow
 1. Read `EXPERTISE_PATH`. Note the key files, types,
@@ -1205,7 +1205,7 @@ count per category.
 
 **Settings.json reminder (CRITICAL).** Pi does NOT
 auto-discover sub-directories of `prompts/`. The user
-**MUST** add `.pi/prompts/experts` to their
+**MUST** add `<stateDir>/prompts/experts` to their
 `.pi/settings.json` `prompts` array for the
 `/experts:<domain>:*` commands to work. The completion
 summary explicitly reminds the user to do this.
@@ -1339,9 +1339,9 @@ empty row is fine.)
 - Reviews: `app_review/` — ReviewResult JSONs + screenshots
 - Fix reports: `app_fix_reports/` — patch reports
 - Conditional docs: `<path>` (if conditional_docs_path)
-- Codebase map: `./.pi/agentify/codebase_map.json` (always)
+- Codebase map: `<stateDir>/codebase_map.json` (always)
 - KPIs: `app_docs/agentic_kpis.md`
-- Expert prompts: `.pi/prompts/experts/` — domain mental models (expertise.yaml) + question/self-improve prompts. CRITICAL: Pi does not auto-discover sub-directories of `prompts/`; the user must add `.pi/prompts/experts` to the `prompts` array in `.pi/settings.json` (or `~/.pi/agent/settings.json`) for the commands to work.
+- Expert prompts: `<stateDir>/prompts/experts/` — domain mental models (expertise.yaml) + question/self-improve prompts. CRITICAL: Pi does not auto-discover sub-directories of `prompts/`; the user must add `<stateDir>/prompts/experts` to the `prompts` array in `.pi/settings.json` (or `~/.pi/agent/settings.json`) for the commands to work.
 
 ## Open questions
 
@@ -1396,7 +1396,7 @@ Cut the lowest-value sections first, in this order:
 
 1. **Open questions** — drop entirely if it would push
    you over. The information is in
-   `.pi/agentify/codebase_map.json`.
+   `<stateDir>/codebase_map.json`.
 2. **Path-safety tiers** — compress to a 2-row table
    (zero-access / writable); drop the read-only and
    no-delete rows if the section is generic.
@@ -1532,7 +1532,7 @@ demand.
 3. Save them in this directory under a sensible name
    (e.g., `pi-sdk.md`, `anthropic-api.md`).
 4. Reference them in `AGENTS.md` and in
-   `.pi/conditional_docs.md` so the planner can include
+   `<stateDir>/conditional_docs.md` so the planner can include
    them in `## Relevant Files` when relevant.
 
 ## Index (detected from <manifest>)
@@ -1548,7 +1548,7 @@ demand.
 
 ## Conditional docs
 
-`.pi/conditional_docs.md` (if it exists) lists the
+`<stateDir>/conditional_docs.md` (if it exists) lists the
 feature docs that the planner should include for a given
 task. Add a row here for each new vendored doc, with the
 conditions under which it should be loaded:
@@ -1565,15 +1565,15 @@ conditions under which it should be loaded:
 
 `scout`, `review`, and `spec` are **shipped skills** in
 `.agents/skills/` (Emission Contract). You do not write
-`.pi/agents/scout.md`, `.pi/agents/review.md`, or
-`.pi/prompts/plan.md`. The shipped `/review` already does the
+`<stateDir>/agents/scout.md`, `<stateDir>/agents/review.md`, or
+`<stateDir>/prompts/plan.md`. The shipped `/review` already does the
 two-axis + prepare-app + screenshot flow and returns the
 `ReviewResult`; the shipped `/spec` already writes the Spec Format
 to `specs/<type>-<slug>.md`. Your job for these is only to emit the
 *context* they read — `AGENTS.md`, the feature specialists, and
 `specs/README.md`.
 
-### Feature agents: `.pi/agents/<feature>.md` (one per feature)
+### Feature agents: `<stateDir>/agents/<feature>.md` (one per feature)
 
 **One file per feature** identified in Phase 1. Each
 file is a **feature-specialized agent** the user invokes
@@ -1707,7 +1707,7 @@ Send the literal completion summary as your final
 assistant message. The exact string:
 
 ```
-agentify run complete. Audit done; AGENTS.md: ./AGENTS.md (N lines / 200 cap). Always-on context: 2 files (specs/README.md, ai_docs/README.md) + N feature agents (.pi/agents/<feature>.md). Feedback-loop state: 3 directories with READMEs (app_review/, app_docs/, app_fix_reports/) + agentic_kpis.md + conditional_docs.md. Extensions: X (.pi/extensions/<name>.ts); skills: Y (.pi/skills/<name>/SKILL.md). Prompt templates: M change-type templates (.pi/prompts/<type>.md) + P per-area templates. Expert prompts: R domains (.pi/prompts/experts/<domain>/) with expertise.yaml + question.md + self-improve.md (+ optional plan.md/plan_build_improve.md). Domain model: <proposed CONTEXT.md terms + candidate ADRs, or "none proposed">. The build chain (/spec, /implement, /review, /test, /fix, /document, /scout, the /plan-build* chains) ships as skills in .agents/skills/ — already present, not emitted here. CRITICAL: add ".pi/prompts/experts" to the `prompts` array in .pi/settings.json (or ~/.pi/agent/settings.json) — Pi does not auto-discover sub-directories of prompts/. Next: restart Pi; then /<feature> <query> to invoke a specialist, /<type> <task> or /spec <task> to write a build spec, /implement <spec-path> to execute it, /plan-build* to run a chain, /test /review /fix /document for the loops, /experts:<domain>:<question|self-improve|plan|plan_build_improve> for an expert, or /refresh-surface after big changes.
+agentify run complete. Audit done; AGENTS.md: ./AGENTS.md (N lines / 200 cap). Always-on context: 2 files (specs/README.md, ai_docs/README.md) + N feature agents (<stateDir>/agents/<feature>.md). Feedback-loop state: 3 directories with READMEs (app_review/, app_docs/, app_fix_reports/) + agentic_kpis.md + conditional_docs.md. Extensions: X (<stateDir>/extensions/<name>.ts); skills: Y (<stateDir>/skills/<name>/SKILL.md). Prompt templates: M change-type templates (<stateDir>/prompts/<type>.md) + P per-area templates. Expert prompts: R domains (<stateDir>/prompts/experts/<domain>/) with expertise.yaml + question.md + self-improve.md (+ optional plan.md/plan_build_improve.md). Domain model: <proposed CONTEXT.md terms + candidate ADRs, or "none proposed">. The build chain (/spec, /implement, /review, /test, /fix, /document, /scout, the /plan-build* chains) ships as skills in .agents/skills/ — already present, not emitted here. CRITICAL: add ".pi/prompts/experts" to the `prompts` array in .pi/settings.json (or ~/.pi/agent/settings.json) — Pi does not auto-discover sub-directories of prompts/. Next: restart Pi; then /<feature> <query> to invoke a specialist, /<type> <task> or /spec <task> to write a build spec, /implement <spec-path> to execute it, /plan-build* to run a chain, /test /review /fix /document for the loops, /experts:<domain>:<question|self-improve|plan|plan_build_improve> for an expert, or /refresh-surface after big changes.
 ```
 
 `STOP`. Do not call any more tools.
@@ -1795,7 +1795,7 @@ agentify run FAILED. N areas uncovered (<area names>). No files written. Re-run 
   is the audit's contract. Cut, do not apologize.
 - **Inlining the full repository tree** — the 5-files-
   to-read is the orientation; the full tree is in
-  `.pi/agentify/codebase_map.json` if needed.
+  `<stateDir>/codebase_map.json` if needed.
 - **Inlining the full operational runbook** — point to
   the runbook doc in the Pointers section; do not
   duplicate it.
@@ -1815,8 +1815,8 @@ agentify run FAILED. N areas uncovered (<area names>). No files written. Re-run 
   payoff comes from emitting all the *intelligence*. Each
   phase is best-effort but every phase runs.
 - **Emitting a shipped primitive** — never write
-  `.pi/agents/{scout,review,implement,test,fix,document}.md`
-  or `.pi/prompts/{plan,plan-build,plan-build-review,
+  `<stateDir>/agents/{scout,review,implement,test,fix,document}.md`
+  or `<stateDir>/prompts/{plan,plan-build,plan-build-review,
   plan-build-review-fix,scout-then-plan}.md`. They are
   **shipped skills** (Emission Contract); re-emitting them
   shadows the canonical versions. Emit only the *context*
@@ -1826,7 +1826,7 @@ agentify run FAILED. N areas uncovered (<area names>). No files written. Re-run 
   are one-change-type-template-per-`issue_types`-entry, not
   always exactly `{chore, bug, feature}`. A codebase
   with `refactor` as a first-class change type gets
-  `.pi/prompts/refactor.md`. Use the actual
+  `<stateDir>/prompts/refactor.md`. Use the actual
   `meta.lifecycle.issue_types` array, not the canonical 3.
 - **Inventing per-area templates** — if the feature
   reports don't show non-trivial repeating patterns,
@@ -1842,8 +1842,8 @@ agentify run FAILED. N areas uncovered (<area names>). No files written. Re-run 
   unparseable shell command** — use `execFile` with
   pre-split argv. If the command cannot be split cleanly,
   drop the candidate and re-add as a skill instead.
-- **Overwriting an existing `.pi/extensions/<name>.ts`
-  or `.pi/skills/<name>/`** — always check
+- **Overwriting an existing `<stateDir>/extensions/<name>.ts`
+  or `<stateDir>/skills/<name>/`** — always check
   `documentation.existing_pi_*` first. Skip the
   candidate if a file/dir with the same name already
   exists.
@@ -1854,7 +1854,7 @@ agentify run FAILED. N areas uncovered (<area names>). No files written. Re-run 
   feature agent with one placeholder bullet per section
   is worse than no feature agent — it tells the user a
   lie.
-- **Writing a generic `.pi/agents/build.md`** — the
+- **Writing a generic `<stateDir>/agents/build.md`** — the
   user wants feature-specialized agents, not a generic
   build agent. If you have N features, you write N
   feature agent files. If you have 0 features, you write
@@ -1896,7 +1896,7 @@ agentify run FAILED. N areas uncovered (<area names>). No files written. Re-run 
 - **Forgetting the settings.json reminder in the
   completion summary** — Pi does NOT auto-discover
   sub-directories of `prompts/`. If the user is not
-  told to add `.pi/prompts/experts` to the `prompts`
+  told to add `<stateDir>/prompts/experts` to the `prompts`
   array in `.pi/settings.json` (or
   `~/.pi/agent/settings.json`), the
   `/experts:<domain>:*` commands will silently fail to

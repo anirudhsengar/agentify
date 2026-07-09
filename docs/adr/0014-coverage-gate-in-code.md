@@ -18,7 +18,7 @@ and the run log recorded coverage the map did not have.
 
 Success is decided from the **validated codebase map on disk**, not
 from file existence. `readFinalAuditState` reads
-`.pi/agentify/codebase_map.json`, validates it against the schema, and
+`<stateDir>/codebase_map.json`, validates it against the schema, and
 computes the real `coverage_summary`. A run is `success` only when:
 
 1. the map exists and validates,

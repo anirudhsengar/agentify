@@ -4,7 +4,29 @@ import fs from "node:fs";
 import path from "node:path";
 
 const repoRoot = path.resolve(process.argv[2] ?? ".");
-const manifestPath = path.join(repoRoot, ".pi", "agentify", "manifest.json");
+
+function resolveStateDir(repoRoot) {
+  const candidates = [".agents/agentify", ".claude/agentify", ".pi/agentify"];
+  for (const base of candidates) {
+    const manifestPath = path.join(repoRoot, base, "manifest.json");
+    if (fs.existsSync(manifestPath)) {
+      try {
+        const text = fs.readFileSync(manifestPath, "utf8");
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed.state_dir === "string") {
+          return parsed.state_dir;
+        }
+      } catch {
+        // fall through to manifest-relative fallback
+      }
+      return base;
+    }
+  }
+  return ".pi/agentify";
+}
+
+const stateDir = resolveStateDir(repoRoot);
+const manifestPath = path.join(repoRoot, stateDir, "manifest.json");
 
 function toPosix(value) {
   return value.split(path.sep).join("/");
@@ -20,11 +42,11 @@ function markerForPath(relativePath) {
   return "# agentify:managed";
 }
 
-function kindForPath(relativePath) {
+function kindForPath(relativePath, stateDir) {
   if (relativePath.startsWith(".codex/") || relativePath === "CLAUDE.md") return "harness_export";
   if (relativePath.startsWith(".claude/")) return "skill";
-  if (relativePath.startsWith(".pi/prompts/experts/")) return "expert";
-  if (relativePath.startsWith(".pi/agentify/")) return "state";
+  if (relativePath.startsWith(`${stateDir}/prompts/experts/`)) return "expert";
+  if (relativePath.startsWith(`${stateDir}/`)) return "state";
   return "audit";
 }
 
@@ -112,7 +134,7 @@ for (const file of manifest.files) {
     byPath.set(rel, {
       ...file,
       path: rel,
-      kind: file.kind ?? kindForPath(rel),
+      kind: file.kind ?? kindForPath(rel, stateDir),
       marker: file.marker ?? markerForPath(rel),
       sha256: sha256(content),
     });
@@ -129,7 +151,7 @@ for (const rel of candidateFiles()) {
   if (!carriesMarker(rel, text)) continue;
   byPath.set(rel, {
     path: rel,
-    kind: kindForPath(rel),
+    kind: kindForPath(rel, stateDir),
     required: isRequired(rel, mode),
     marker: markerForPath(rel),
     sha256: sha256(content),

@@ -67,6 +67,11 @@ export class PiSdkRuntime implements AgentRuntime {
       customTools.push(
         createSpawnExplorerTool({
           agentDir: options.spawnExplorerAgentDir,
+          // ADR 0020: thread the audit's resolved state dir into the
+          // tool so sub-agent logs land there and budget-recovery
+          // messages describe the right path. When unset, the tool
+          // defaults to the legacy `.pi/agentify/` location.
+          stateDir: options.spawnExplorerStateDir,
           explorerModel: explorerModelForSpawn,
           modelRegistry,
         }),

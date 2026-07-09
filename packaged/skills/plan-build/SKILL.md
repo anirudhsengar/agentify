@@ -11,7 +11,7 @@ never hides them — you can always run `/spec` and `/implement` by hand.
 
 ## Workflow
 
-1. Read `AGENTS.md`, `specs/README.md`, and `.pi/conditional_docs.md` (if present).
+1. Read `AGENTS.md`, `specs/README.md`, and ``<agentify-state-dir>/conditional_docs.md`` (if present).
 2. Run `/spec $ARGUMENTS`. It writes the build spec to `specs/<class>-<slug>.md` and
    returns the path. Read the spec; verify it has `## Validation Commands` (if missing,
    STOP and report).

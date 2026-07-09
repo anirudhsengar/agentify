@@ -75,12 +75,12 @@ discovery mirror (`.agents/skills/` for Codex/Pi + `.claude/skills/`
 for Claude Code) is generated into each target repo by the installer
 (`artifact-exporters.ts`).
 Generated intelligence (per repo, from the audit): `AGENTS.md`,
-`specs/README.md`, `ai_docs/README.md`, `.pi/agents/*.md`,
-`.pi/workflows/*.json`, expert directories, feedback-loop storage, and
-repo-specific `.pi/skills/`. The stamped GitHub implement/review workflows
-render `.pi/agents/*.md` specialist routing and `.pi/prompts/experts/*`
+`specs/README.md`, `ai_docs/README.md`, `<stateDir>/agents/*.md`,
+`<stateDir>/workflows/*.json`, expert directories, feedback-loop storage, and
+repo-specific `<stateDir>/skills/`. The stamped GitHub implement/review workflows
+render `<stateDir>/agents/*.md` specialist routing and `<stateDir>/prompts/experts/*`
 expert routing into prompt context, and implement also renders
-`.pi/workflows/*.json`, so the public issue/PR loop can use the generated
+`<stateDir>/workflows/*.json`, so the public issue/PR loop can use the generated
 specialist, expert, and workflow guidance even before the internal orchestrator
 is the hosted runtime.
 See [ADR 0009](adr/0009-machinery-shipped-intelligence-generated.md).

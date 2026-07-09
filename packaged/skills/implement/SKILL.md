@@ -19,7 +19,7 @@ stay runnable on its own.
 2. Read `AGENTS.md` for project conventions, pitfalls, and the validation surface.
 3. Read `CONTEXT.md` (if present) so names and interfaces match the project's domain
    language; respect ADRs in the area you're touching.
-4. Read `.pi/conditional_docs.md` (if present) and load any feature docs whose conditions
+4. Read ``<agentify-state-dir>/conditional_docs.md`` (if present) and load any feature docs whose conditions
    match the work. If a `/<feature>` specialist owns the affected area, lift its types,
    conventions, and pitfalls.
 

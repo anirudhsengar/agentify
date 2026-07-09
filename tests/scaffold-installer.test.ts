@@ -30,16 +30,24 @@ async function testInstallsManagedScaffoldFiles(): Promise<void> {
   }
 }
 
-async function testConflictsOnUserOwnedFiles(): Promise<void> {
-  const cwd = tempDir("agentify-scaffold-conflict-");
+async function testAlongsideOnUserOwnedFiles(): Promise<void> {
+  const cwd = tempDir("agentify-scaffold-alongside-");
   try {
     const workflow = path.join(cwd, ".github", "workflows", "agent-implement.yml");
     fs.mkdirSync(path.dirname(workflow), { recursive: true });
     fs.writeFileSync(workflow, "name: user-owned\n");
 
     const writes = installScaffoldRuntime({ cwd, packageRoot: packageRoot() });
-    const conflict = writes.find((write) => write.path === workflow);
-    assert.equal(conflict?.action, "conflict");
+    const record = writes.find((write) => write.path === workflow);
+    assert.equal(record?.action, "alongside");
+    // The user's file is left untouched.
+    assert.equal(fs.readFileSync(workflow, "utf-8"), "name: user-owned\n");
+    // Agentify's version is saved next to it.
+    const alongside = path.join(
+      cwd, ".github", "workflows", "agent-implement.agentify.yml",
+    );
+    assert.ok(fs.existsSync(alongside), `expected alongside file at ${alongside}`);
+    assert.match(fs.readFileSync(alongside, "utf-8"), /^# agentify:managed/m);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -47,7 +55,7 @@ async function testConflictsOnUserOwnedFiles(): Promise<void> {
 
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "installsManagedScaffoldFiles", fn: testInstallsManagedScaffoldFiles },
-  { name: "conflictsOnUserOwnedFiles", fn: testConflictsOnUserOwnedFiles },
+  { name: "alongsideOnUserOwnedFiles", fn: testAlongsideOnUserOwnedFiles },
 ];
 
 let passed = 0;

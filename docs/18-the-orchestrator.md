@@ -22,7 +22,7 @@ itself; it coordinates (`orchestrator-prompt.ts`).
 |--------|------|
 | `orchestrator-prompt.ts` | The orchestrator system prompt + boot substitutions |
 | `agent-manager.ts` | Spawns/among sub-agent sessions in-process |
-| `subagent-registry.ts` | Discovers `.pi/agents/*.md` + user config |
+| `subagent-registry.ts` | Discovers `<stateDir>/agents/*.md` + user config |
 | `workflow-runner.ts` | Walks JSON DAG workflows (`workflows/*.json`) |
 | `workflow-registry.ts` / `workflow-spec.ts` | Workflow definitions/types |
 | `aiw-bridge.ts` | Starts/polls AIWs from the orchestrator |
@@ -41,9 +41,9 @@ shipped loop today:
 
 1. **Scaffold workflows** (`scaffold/.github/workflows/*.yml`) —
    label-driven GitHub Actions running Pi. **This is the shipped async
-   loop.** The implement workflows render generated `.pi/workflows/*.json`
+   loop.** The implement workflows render generated `<stateDir>/workflows/*.json`
    specs into prompt context, and implement/review workflows render generated
-   `.pi/agents/*.md` specialist routing plus `.pi/prompts/experts/*`
+   `<stateDir>/agents/*.md` specialist routing plus `<stateDir>/prompts/experts/*`
    expert routing context. Issue implementation also runs a credential-free
    orchestration-planner prompt that emits a bounded structured route for the
    implementation agent. The trusted extractor rejects selected workflows,

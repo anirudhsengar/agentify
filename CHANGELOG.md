@@ -8,6 +8,22 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Provider-scoped audit state directory (ADR 0020)**: agentify
+  now resolves its internal state dir from the user's selected
+  coding agent at runtime. `claude-code` → `.claude/agentify/`,
+  `codex` → `.agents/agentify/`, `pi` → `.pi/agentify/`. Existing
+  repos that already have a legacy `.pi/agentify/` directory are
+  detected (read-only): the audit logs a one-line notice and
+  continues writing there until the user moves the files
+  manually. See `docs/adr/0020-provider-scoped-state-dir.md`.
+- `exportPi` skill-dir bug fix: Pi users now get their skill
+  pack at `.pi/skills/` (Pi's actual `skillsDir`) rather than
+  the previously incorrect `.agents/skills/` dispatch.
+
+### Changed
+
+- Slot consumers wired across every LLM call site (Phase 3 of ADR 0017):
+
 - Slot consumers wired across every LLM call site (Phase 3 of ADR 0017):
   - AIW phases (plan, build, review, fix) consume the `scoring`
     slot by default; `state.model_role` overrides per AIW.

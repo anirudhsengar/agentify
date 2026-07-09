@@ -39,15 +39,26 @@ export interface WorkflowDiscoveryResult {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGED_WORKFLOWS_DIR = path.join(HERE, "workflows");
 
-/** Walk up from cwd looking for the nearest `.pi/workflows/` directory. */
-function findNearestProjectWorkflowsDir(cwd: string): string | null {
+/**
+ * Walk up from cwd looking for the nearest project workflow
+ * directory. Probes the resolved state dir's `<stateDir>/workflows`
+ * first, falling back to the legacy `.pi/agentify/workflows` for
+ * backward compat (ADR 0020).
+ */
+function findNearestProjectWorkflowsDir(
+  cwd: string,
+  stateDir: string = ".pi/agentify",
+): string | null {
+  const dirsToCheck = [stateDir, ".pi/agentify"];
   let current = cwd;
   while (true) {
-    const candidate = path.join(current, ".pi", "workflows");
-    try {
-      if (fs.statSync(candidate).isDirectory()) return candidate;
-    } catch {
-      // not present
+    for (const candidateBase of dirsToCheck) {
+      const candidate = path.join(current, candidateBase, "workflows");
+      try {
+        if (fs.statSync(candidate).isDirectory()) return candidate;
+      } catch {
+        // not present
+      }
     }
     const parent = path.dirname(current);
     if (parent === current) return null;

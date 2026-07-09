@@ -5,29 +5,41 @@ import * as path from "node:path";
 import { VERSION as PI_SDK_VERSION } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { defaultConfigDir, ensureAgentifyConfig } from "./agentify-config.ts";
+import {
+  alongsidePathFor,
+  resolveActionForPath,
+  type ApplyPolicy,
+} from "./apply-policy.ts";
+import { resolveApplyPolicy } from "./agentifyrc.ts";
 import { exportAgenticSurface } from "./artifact-exporters.ts";
+import { newRunId, persistRunArtifacts } from "./revert.ts";
 import { packageRoot } from "./pi-sdk-runtime.ts";
 import { ProjectClassifier } from "./project-classifier.ts";
 import { installScaffoldRuntime } from "./scaffold-installer.ts";
 import { formatGitHubReadiness, inspectGitHubReadiness } from "./github-readiness.ts";
-import { validateGreenfieldArtifacts, writeGreenfieldState } from "./greenfield-state.ts";
-import {
-  readGreenfieldFormation,
-  renderGreenfieldArtifacts,
-} from "./greenfield-artifacts.ts";
 import { inspectAgentifyRepoState } from "./repo-status.ts";
 import { writeProjectState } from "./project-state.ts";
-import { renderBrownfieldArtifacts, type RenderedArtifact } from "./artifacts/renderers.ts";
 import {
-  CODEBASE_MAP_RELATIVE_PATH,
-  MANIFEST_RELATIVE_PATH,
+  renderBrownfieldArtifacts,
+  setRendererStateDir,
+  type RenderedArtifact,
+} from "./artifacts/renderers.ts";
+import {
+  codebaseMapRelativePath,
   kindForPath,
   manifestFileFromContent,
+  manifestRelativePath,
   markerForPath,
-  writeManifest,
+  readManifestAt,
+  sha256,
+  writeManifestAt,
   type ManagedManifest,
   type ManagedManifestFile,
 } from "./manifest.ts";
+import {
+  LEGACY_PI_STATE_RELATIVE_DIR,
+  resolveCanonicalStateDir,
+} from "./state-dir.ts";
 import type {
   AgentifyConfig,
   AgentifyTarget,
@@ -51,13 +63,22 @@ import {
 // so the tool factory is imported only in pi-sdk-runtime.ts.
 import {
   DRAFT_TRANSPORT_DIR,
-  loadCanonicalMap,
+  loadCanonicalMapAt,
+  setMapSessionStateDir,
   writeMapDeltaTool,
   writeMapTool,
 } from "./audit/write-map-tool.ts";
+import {
+  buildGreenfieldStateAt,
+  validateGreenfieldArtifacts,
+  writeGreenfieldStateAt,
+} from "./greenfield-state.ts";
+import {
+  readGreenfieldFormationAt,
+  renderGreenfieldArtifacts,
+} from "./greenfield-artifacts.ts";
 
 const AGENTS_MD_PATH = "AGENTS.md";
-const INTERNAL_MAP_DIR = path.join(".pi", "agentify");
 const BUILDER_TOOL_ALLOWLIST = [
   "read",
   "grep",
@@ -154,14 +175,43 @@ const GENERATED_SURFACE_PATHS = [
   "app_fix_reports",
 ] as const;
 
+// State-dir-aware paths. The audit resolves the active state dir
+// once at the top of `runBrownfieldAudit` / `runGreenfield` and
+// threads `stateDirRelative` through every writer. For cleanup
+// we still use the legacy `.pi/agentify/` path because that's
+// where the current code writes; the provider-scoped state dir
+// migration will be wired in Step 5 when snapshot persistence
+// lives under the resolved dir.
 const INTERNAL_STATE_PATHS = [
-  CODEBASE_MAP_RELATIVE_PATH,
-  MANIFEST_RELATIVE_PATH,
+  codebaseMapRelativePath(LEGACY_PI_STATE_RELATIVE_DIR),
+  manifestRelativePath(LEGACY_PI_STATE_RELATIVE_DIR),
 ] as const;
+
+/**
+ * Internal state paths (canonical map + managed manifest) under
+ * the supplied state dir. Used by the state-dir-aware snapshot
+ * path (ADR 0020).
+ */
+function internalStatePathsFor(stateDir: string): readonly string[] {
+  return [codebaseMapRelativePath(stateDir), manifestRelativePath(stateDir)];
+}
 
 function cleanupInternalScaffolding(cwd: string): void {
   try {
-    fs.rmSync(path.join(cwd, INTERNAL_MAP_DIR), { recursive: true, force: true });
+    fs.rmSync(path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR), { recursive: true, force: true });
+  } catch {
+    // Best effort cleanup.
+  }
+}
+
+/**
+ * State-dir-aware cleanup of the entire audit state dir. Used by
+ * the brownfield audit at the start of a run to ensure no stale
+ * state from a previous provider choice is left behind (ADR 0020).
+ */
+function cleanupInternalScaffoldingAt(cwd: string, stateDir: string): void {
+  try {
+    fs.rmSync(path.join(cwd, stateDir), { recursive: true, force: true });
   } catch {
     // Best effort cleanup.
   }
@@ -174,8 +224,28 @@ function cleanupInternalScaffolding(cwd: string): void {
 function cleanupTransientScaffolding(cwd: string): void {
   const transient = [
     path.join(cwd, DRAFT_TRANSPORT_DIR),
-    path.join(cwd, INTERNAL_MAP_DIR, "history"),
-    path.join(cwd, INTERNAL_MAP_DIR, "logs"),
+    path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, "history"),
+    path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, "logs"),
+  ];
+  for (const target of transient) {
+    try {
+      fs.rmSync(target, { recursive: true, force: true });
+    } catch {
+      // Best effort cleanup.
+    }
+  }
+}
+
+/**
+ * State-dir-aware transient cleanup. Mirrors
+ * `cleanupTransientScaffolding` but targets the resolved state dir
+ * (ADR 0020).
+ */
+function cleanupTransientScaffoldingAt(cwd: string, stateDir: string): void {
+  const transient = [
+    path.join(cwd, stateDir, ".agentify"),
+    path.join(cwd, stateDir, "history"),
+    path.join(cwd, stateDir, "logs"),
   ];
   for (const target of transient) {
     try {
@@ -334,6 +404,29 @@ function restoreInternalStateSnapshot(cwd: string, snapshot: AuditArtifactSnapsh
   }
 }
 
+/**
+ * State-dir-aware variant of `restoreInternalStateSnapshot`. Used
+ * when the audit is wired to a provider-scoped state dir (ADR 0020).
+ * The snapshot itself is built against the legacy constants for
+ * backward compat — the function shape matches the legacy version
+ * but operates on the supplied `stateDir`.
+ */
+function restoreInternalStateSnapshotAt(
+  cwd: string,
+  snapshot: AuditArtifactSnapshot,
+  stateDir: string,
+): void {
+  for (const rel of internalStatePathsFor(stateDir)) {
+    const filePath = path.join(cwd, rel);
+    const entry = snapshot.get(rel);
+    if (entry) {
+      restoreSnapshotFile(cwd, rel, entry);
+    } else {
+      fs.rmSync(filePath, { force: true });
+    }
+  }
+}
+
 function writeFileUnderRoot(root: string, relativePath: string, content: string | Buffer): void {
   const filePath = path.join(root, relativePath);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -365,29 +458,32 @@ function writeRenderedArtifactsToStaging(
 function copyCanonicalMapToStaging(
   cwd: string,
   stagingRoot: string,
+  stateDir: string,
   metadata: Map<string, ManagedManifestFile>,
 ): void {
-  const source = path.join(cwd, CODEBASE_MAP_RELATIVE_PATH);
+  const mapRelPath = codebaseMapRelativePath(stateDir);
+  const source = path.join(cwd, mapRelPath);
   if (!fs.existsSync(source)) return;
   const content = fs.readFileSync(source);
-  writeFileUnderRoot(stagingRoot, CODEBASE_MAP_RELATIVE_PATH, content);
-  metadata.set(CODEBASE_MAP_RELATIVE_PATH, manifestFileFromContent({
-    relativePath: CODEBASE_MAP_RELATIVE_PATH,
+  writeFileUnderRoot(stagingRoot, mapRelPath, content);
+  metadata.set(mapRelPath, manifestFileFromContent({
+    relativePath: mapRelPath,
     content,
     kind: "state",
     required: true,
-    marker: markerForPath(CODEBASE_MAP_RELATIVE_PATH),
+    marker: markerForPath(mapRelPath),
     source: "write_map",
   }));
 }
 
-function collectStagedFiles(stagingRoot: string): Array<{ relativePath: string; content: Buffer }> {
+function collectStagedFiles(stagingRoot: string, stateDir: string): Array<{ relativePath: string; content: Buffer }> {
+  const manifestRelPath = manifestRelativePath(stateDir);
   return listFilesRecursively(stagingRoot)
     .map((filePath) => ({
       relativePath: toRel(stagingRoot, filePath),
       content: fs.readFileSync(filePath),
     }))
-    .filter((file) => file.relativePath !== MANIFEST_RELATIVE_PATH);
+    .filter((file) => file.relativePath !== manifestRelPath);
 }
 
 function addWriteMetadata(
@@ -398,17 +494,27 @@ function addWriteMetadata(
 ): void {
   for (const write of writes) {
     if (write.action === "conflict") continue;
-    const relativePath = toRel(stagingRoot, write.path);
-    const filePath = path.join(stagingRoot, relativePath);
+    // For "alongside" actions, the writer wrote the content to
+    // `alongsidePath` (a sibling of the canonical). The manifest
+    // entry should key on the canonical path and record the
+    // alongside path so `verifyManifest` and `revert` can find it.
+    const contentPath = write.action === "alongside" && write.alongsidePath
+      ? write.alongsidePath
+      : write.path;
+    const canonicalRelative = toRel(stagingRoot, write.path);
+    const contentRelative = toRel(stagingRoot, contentPath);
+    const filePath = path.join(stagingRoot, contentRelative);
     if (!fs.existsSync(filePath)) continue;
     const content = fs.readFileSync(filePath);
-    metadata.set(relativePath, manifestFileFromContent({
-      relativePath,
+    const alongsideRel = write.action === "alongside" ? contentRelative : undefined;
+    metadata.set(canonicalRelative, manifestFileFromContent({
+      relativePath: canonicalRelative,
       content,
-      kind: kindForPath(relativePath),
+      kind: kindForPath(canonicalRelative),
       required: undefined,
-      marker: markerForPath(relativePath),
+      marker: markerForPath(canonicalRelative),
       source,
+      alongsidePath: alongsideRel,
     }));
   }
 }
@@ -426,6 +532,101 @@ function isConflictingDestination(
   return !fileHasManagedMarker(relativePath, content);
 }
 
+/**
+ * Format the post-run report from the apply step's writes array.
+ * The summary shows counts of each action (created, kept-user,
+ * saved-alongside, conflicts) and lists the alongside saves with
+ * their target paths. Output goes through `ui.info` so it appears
+ * in the same channel as the rest of the run's output.
+ *
+ * The report is deliberately deterministic and scannable: the
+ * counts line first, then the alongside list (capped at 16
+ * entries with a "… and N more" line), then any conflicts. The
+ * goal is that a user can see what happened at a glance without
+ * diffing the manifest.
+ */
+function formatApplyReport(
+  writes: readonly ArtifactWrite[],
+  cwd: string,
+): string[] {
+  const written = writes.filter((w) => w.action === "written");
+  const kept = writes.filter((w) => w.action === "skipped");
+  const alongside = writes.filter((w) => w.action === "alongside");
+  const conflicts = writes.filter((w) => w.action === "conflict");
+
+  const lines: string[] = [];
+  const conflictSuffix = conflicts.length > 0
+    ? `, ${conflicts.length} conflict(s)`
+    : "";
+  lines.push(
+    `agentify: apply report: ` +
+    `${written.length} created, ` +
+    `${kept.length} kept-user, ` +
+    `${alongside.length} saved-alongside` +
+    conflictSuffix +
+    ".",
+  );
+
+  if (alongside.length > 0) {
+    lines.push(
+      "agentify: agentify's versions saved alongside (suffix .agentify.<ext>):",
+    );
+    for (const w of alongside.slice(0, 16)) {
+      const rel = toRel(cwd, w.path);
+      const alongsideRel = w.alongsidePath ?? alongsidePathFor(rel);
+      lines.push(`agentify:   - ${rel} -> ${alongsideRel}`);
+    }
+    if (alongside.length > 16) {
+      lines.push(`agentify:   ... and ${alongside.length - 16} more`);
+    }
+  }
+
+  if (conflicts.length > 0) {
+    lines.push(
+      "agentify: conflicts (not written; requiredAction=abort in rc file):",
+    );
+    for (const w of conflicts.slice(0, 8)) {
+      lines.push(
+        `agentify:   - ${toRel(cwd, w.path)}: ${w.reason ?? "conflict"}`,
+      );
+    }
+  }
+
+  return lines;
+}
+
+/**
+ * Build the JSON shape for `--plan --json` output. Returns an
+ * object with counts and the would-be file actions, ready for
+ * `JSON.stringify`. The manifest is the dry-run manifest produced
+ * by `applyStagedBundle` — fully formed, just not written to disk.
+ */
+function planToJson(
+  applyResult: { writes: ArtifactWrite[]; manifest: ManagedManifest | null },
+  cwd: string,
+): unknown {
+  const writes = applyResult.writes.map((w) => {
+    const rel = toRel(cwd, w.path);
+    return {
+      path: rel,
+      action: w.action,
+      reason: w.reason ?? null,
+      alongside_path: w.alongsidePath ?? null,
+    };
+  });
+  return {
+    dry_run: true,
+    summary: {
+      created: writes.filter((w) => w.action === "written").length,
+      kept_user: writes.filter((w) => w.action === "skipped").length,
+      saved_alongside: writes.filter((w) => w.action === "alongside").length,
+      conflicts: writes.filter((w) => w.action === "conflict").length,
+    },
+    manifest: applyResult.manifest,
+    writes,
+  };
+}
+
 function applyStagedBundle(params: {
   cwd: string;
   stagingRoot: string;
@@ -433,22 +634,88 @@ function applyStagedBundle(params: {
   metadata: Map<string, ManagedManifestFile>;
   agentifyVersion: string;
   mode: Exclude<ProjectKind, "ambiguous">;
+  policy: ApplyPolicy;
+  runId: string;
+  stateDir: string;
+  dryRun?: boolean;
 }): { writes: ArtifactWrite[]; requiredConflictCount: number; manifest: ManagedManifest | null } {
-  const stagedFiles = collectStagedFiles(params.stagingRoot);
+  const stagedFiles = collectStagedFiles(params.stagingRoot, params.stateDir);
   const writes: ArtifactWrite[] = [];
-  const conflicted = new Set<string>();
+  const manifestFiles: ManagedManifestFile[] = [];
   let requiredConflictCount = 0;
 
   for (const file of stagedFiles) {
-    if (!isConflictingDestination(params.cwd, file.relativePath, params.snapshot)) continue;
-    const entry = params.metadata.get(file.relativePath)
+    const baseEntry = params.metadata.get(file.relativePath)
       ?? manifestFileFromContent({ relativePath: file.relativePath, content: file.content });
-    conflicted.add(file.relativePath);
-    if (entry.required) requiredConflictCount += 1;
+    const isRequired = baseEntry.required;
+
+    if (!isConflictingDestination(params.cwd, file.relativePath, params.snapshot)) {
+      // No conflict — write the canonical file in the repo and
+      // record the manifest entry unchanged.
+      const destination = path.join(params.cwd, file.relativePath);
+      const existing = fs.existsSync(destination) ? fs.readFileSync(destination) : null;
+      const writeAction = existing && Buffer.compare(existing, file.content) === 0 ? "skipped" : "written";
+      if (!params.dryRun) {
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        fs.writeFileSync(destination, file.content, { mode: 0o644 });
+      }
+      writes.push({ path: destination, action: writeAction });
+      manifestFiles.push(baseEntry);
+      continue;
+    }
+
+    // Conflict at the canonical path. Resolve per policy.
+    const action = resolveActionForPath(params.policy, file.relativePath, isRequired);
+
+    if (action === "abort") {
+      if (isRequired) requiredConflictCount += 1;
+      writes.push({
+        path: path.join(params.cwd, file.relativePath),
+        action: "conflict",
+        reason: isRequired
+          ? "required file conflict; set requiredAction to \"alongside\" in .agentifyrc to save alongside"
+          : "existing file is not agentify-managed",
+      });
+      continue;
+    }
+
+    if (action === "keep") {
+      // Leave the user's file; do not save agentify's version
+      // anywhere. Record the user's sha so `revert` knows the
+      // file was deliberately preserved.
+      const userContent = fs.readFileSync(path.join(params.cwd, file.relativePath));
+      const preservedSha = sha256(userContent);
+      writes.push({
+        path: path.join(params.cwd, file.relativePath),
+        action: "skipped",
+        reason: "user file kept; agentify's version discarded",
+      });
+      manifestFiles.push({ ...baseEntry, preservedSha256: preservedSha });
+      continue;
+    }
+
+    // action === "alongside" (default). Write the staged content
+    // to a sibling file next to the user's, leave the user's
+    // file untouched, and record both paths in the manifest.
+    const alongsideRel = alongsidePathFor(file.relativePath);
+    const alongsideDest = path.join(params.cwd, alongsideRel);
+    const userContent = fs.readFileSync(path.join(params.cwd, file.relativePath));
+    const preservedSha = sha256(userContent);
+    if (!params.dryRun) {
+      fs.mkdirSync(path.dirname(alongsideDest), { recursive: true });
+      fs.writeFileSync(alongsideDest, file.content, { mode: 0o644 });
+    }
     writes.push({
       path: path.join(params.cwd, file.relativePath),
-      action: "conflict",
-      reason: "existing file is not agentify-managed",
+      action: "alongside",
+      reason: "user file preserved; agentify's version saved alongside",
+      alongsidePath: alongsideRel,
+    });
+    manifestFiles.push({
+      ...baseEntry,
+      sha256: sha256(file.content),
+      alongsidePath: alongsideRel,
+      preservedSha256: preservedSha,
     });
   }
 
@@ -456,30 +723,31 @@ function applyStagedBundle(params: {
     return { writes, requiredConflictCount, manifest: null };
   }
 
-  const manifestFiles: ManagedManifestFile[] = [];
-  for (const file of stagedFiles) {
-    if (conflicted.has(file.relativePath)) continue;
-    const destination = path.join(params.cwd, file.relativePath);
-    const existing = fs.existsSync(destination) ? fs.readFileSync(destination) : null;
-    const action = existing && Buffer.compare(existing, file.content) === 0 ? "skipped" : "written";
-    fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.writeFileSync(destination, file.content, { mode: 0o644 });
-    writes.push({ path: destination, action });
-    manifestFiles.push(
-      params.metadata.get(file.relativePath)
-        ?? manifestFileFromContent({ relativePath: file.relativePath, content: file.content }),
-    );
+  // Dry-run (`--plan`): report the would-be plan but do not write
+  // anything to the repo. The manifest is computed but not written.
+  // The staging dir is still cleaned up by the caller.
+  if (params.dryRun) {
+    const dryManifest: ManagedManifest = {
+      schema_version: "2",
+      agentify_version: params.agentifyVersion,
+      generated_at: new Date().toISOString(),
+      mode: params.mode,
+      run_id: params.runId,
+      files: manifestFiles.sort((a, b) => a.path.localeCompare(b.path)),
+    };
+    return { writes, requiredConflictCount, manifest: dryManifest };
   }
 
   const manifest: ManagedManifest = {
-    schema_version: "1",
+    schema_version: "2",
     agentify_version: params.agentifyVersion,
     generated_at: new Date().toISOString(),
     mode: params.mode,
+    run_id: params.runId,
     files: manifestFiles.sort((a, b) => a.path.localeCompare(b.path)),
   };
-  writeManifest(params.cwd, manifest);
-  writes.push({ path: path.join(params.cwd, MANIFEST_RELATIVE_PATH), action: "written" });
+  writeManifestAt(params.cwd, manifest, params.stateDir);
+  writes.push({ path: path.join(params.cwd, manifestRelativePath(params.stateDir)), action: "written" });
   return { writes, requiredConflictCount, manifest };
 }
 
@@ -543,11 +811,11 @@ function readFinalAuditState(cwd: string): FinalAuditState {
 
   const total = COVERAGE_DIMENSIONS.length;
   const gapReasons: string[] = [];
-  const map = loadCanonicalMap(cwd);
+  const map = loadCanonicalMapAt(cwd, LEGACY_PI_STATE_RELATIVE_DIR);
 
   if (!map) {
     gapReasons.push(
-      "no valid codebase map at .pi/agentify/codebase_map.json (write_map was never completed or failed schema validation)",
+      `no valid codebase map at ${LEGACY_PI_STATE_RELATIVE_DIR}/codebase_map.json (write_map was never completed or failed schema validation)`,
     );
   }
 
@@ -654,15 +922,34 @@ async function runBrownfieldAudit(
   options: RunAgentifyOptions,
   config: AgentifyConfig,
 ): Promise<void> {
+  const stateDirResolved = resolveCanonicalStateDir(
+    options.cwd, options.targets, options.additionalAgents,
+  );
+  const stateDir = stateDirResolved.relativeDir;
+  if (stateDirResolved.legacy) {
+    options.ui.info(
+      `agentify: detected legacy state at ${LEGACY_PI_STATE_RELATIVE_DIR}/; future runs will use ${stateDir}`,
+    );
+  }
+  // Pin the legacy `write_map` / `write_map_delta` tools to the
+  // resolved state dir so canonical map writes land at
+  // `<stateDir>/codebase_map.json` rather than the historical
+  // `.pi/agentify/` location (ADR 0020).
+  setMapSessionStateDir(stateDir);
+  // Pin the artifact renderer session the same way so feature
+  // agents / prompts / workflows / skills / extensions land under
+  // the resolved state dir rather than the legacy
+  // `.pi/agentify/...` defaults (ADR 0020).
+  setRendererStateDir(stateDir);
   const internalStateSnapshot = collectInternalStateSnapshot(options.cwd);
-  cleanupInternalScaffolding(options.cwd);
+  cleanupInternalScaffoldingAt(options.cwd, stateDir);
   const artifactSnapshot = collectAuditArtifactSnapshot(options.cwd);
   // Absolute paths of pre-existing user-owned artifacts the builder
   // must not overwrite mid-session (B4 / defense repo protection).
   const protectedPaths = [...artifactSnapshot.entries()]
     .filter(([, entry]) => entry.ownership === "unmanaged")
     .map(([rel]) => path.resolve(options.cwd, rel));
-  const promptContent = loadBuilderPrompt();
+  const promptContent = loadBuilderPrompt(stateDir);
   const promptSha = crypto.createHash("sha256").update(promptContent).digest("hex");
   const log = new AgentifyLog({ cwd: options.cwd, configDir: defaultConfigDir() });
   const start = Date.now();
@@ -701,6 +988,7 @@ async function runBrownfieldAudit(
         // the session uses. ADR 0017.
       ],
       spawnExplorerAgentDir: defaultConfigDir(),
+      spawnExplorerStateDir: stateDir,
       signal: options.signal,
       onEvent: (event) => {
         const piType = (event as { type?: string }).type ?? "unknown";
@@ -753,7 +1041,7 @@ async function runBrownfieldAudit(
 
     // Preserve the canonical codebase map (ADR 0014); remove only the
     // transient draft/history/logs transport.
-    cleanupTransientScaffolding(options.cwd);
+    cleanupTransientScaffoldingAt(options.cwd, stateDir);
     let reportedStatus = finalState.status;
     if (finalState.status === "success") {
       const rollback = rollbackGeneratedSurface(options.cwd, artifactSnapshot);
@@ -763,14 +1051,14 @@ async function runBrownfieldAudit(
         );
       }
 
-      const map = loadCanonicalMap(options.cwd);
+      const map = loadCanonicalMapAt(options.cwd, stateDir);
       const renderResult = map
         ? renderBrownfieldArtifacts(map)
         : { artifacts: [], errors: ["validated codebase map disappeared before rendering"] };
 
       if (renderResult.errors.length > 0) {
         reportedStatus = "partial";
-        restoreInternalStateSnapshot(options.cwd, internalStateSnapshot);
+        restoreInternalStateSnapshotAt(options.cwd, internalStateSnapshot, stateDir);
         options.ui.error("agentify: audit artifacts failed deterministic rendering; no bundle was applied.");
         for (const reason of renderResult.errors.slice(0, 8)) {
           options.ui.error(`agentify:   - ${reason}`);
@@ -789,7 +1077,7 @@ async function runBrownfieldAudit(
         try {
           const metadata = new Map<string, ManagedManifestFile>();
           writeRenderedArtifactsToStaging(stagingRoot, renderResult.artifacts, metadata);
-          copyCanonicalMapToStaging(options.cwd, stagingRoot, metadata);
+          copyCanonicalMapToStaging(options.cwd, stagingRoot, stateDir, metadata);
           const exportResults = exportAgenticSurface({
             cwd: stagingRoot,
             packageRoot: packageRoot(),
@@ -805,6 +1093,21 @@ async function runBrownfieldAudit(
           });
           addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata);
 
+          // Persist the pre-run snapshot so `agentify revert` can
+          // restore the user's originals. Uses the same runId
+          // that the manifest will carry.
+          const runId = crypto.randomUUID();
+          if (!options.dryRun) {
+            const previousManifest = readManifestAt(options.cwd, stateDir);
+            persistRunArtifacts({
+              cwd: options.cwd,
+              stateDir,
+              runId,
+              snapshot: artifactSnapshot as unknown as Record<string, { content: Buffer; mode: number; ownership: "managed" | "unmanaged" }>,
+              previousManifest,
+            });
+          }
+
           const applyResult = applyStagedBundle({
             cwd: options.cwd,
             stagingRoot,
@@ -812,6 +1115,10 @@ async function runBrownfieldAudit(
             metadata,
             agentifyVersion: loadAgentifyVersion(),
             mode: "brownfield",
+            policy: resolveApplyPolicy(options.cwd, stateDir),
+            runId,
+            stateDir,
+            dryRun: options.dryRun,
           });
           const conflicts = applyResult.writes.filter((write) => write.action === "conflict");
           const scaffoldInstalled = applyResult.writes
@@ -824,7 +1131,7 @@ async function runBrownfieldAudit(
 
           if (applyResult.requiredConflictCount > 0) {
             reportedStatus = "partial";
-            restoreInternalStateSnapshot(options.cwd, internalStateSnapshot);
+            restoreInternalStateSnapshotAt(options.cwd, internalStateSnapshot, stateDir);
             options.ui.error(
               `agentify: required generated file conflict(s) blocked apply; no bundle files were written.`,
             );
@@ -842,20 +1149,40 @@ async function runBrownfieldAudit(
           } else {
             const repoState = inspectAgentifyRepoState(options.cwd, defaultConfigDir());
             reportedStatus = repoState.status === "ready" ? "success" : "partial";
-            options.ui.info(
-              `agentify: audit complete. ${repoState.featureAgentCount} feature agent(s), ` +
-                `${exportResults.length} harness export(s), ${scaffoldInstalled} scaffold file(s) installed, ` +
-                `${conflicts.length} optional conflict(s).`,
-            );
+            if (options.dryRun && options.jsonOutput && applyResult.manifest) {
+              // --plan --json: emit the would-be plan as JSON to
+              // stdout (via ui.status which goes to stdout) and
+              // skip the human-readable report. The manifest is
+              // dry-run (not written to disk) but is fully formed.
+              process.stdout.write(
+                JSON.stringify(planToJson(applyResult, options.cwd), null, 2) + "\n",
+              );
+            } else {
+              options.ui.info(
+                `agentify: audit complete. ${repoState.featureAgentCount} feature agent(s), ` +
+                  `${exportResults.length} harness export(s), ${scaffoldInstalled} scaffold file(s) installed, ` +
+                  `${conflicts.length} optional conflict(s).`,
+              );
+              for (const line of formatApplyReport(applyResult.writes, options.cwd)) {
+                options.ui.info(line);
+              }
+            }
             reportGitHubReadiness(options);
-            persistProjectState(options, {
-              projectKind: "brownfield",
-              runStatus: reportedStatus,
-              repoMode: "brownfield",
-              repoStatus: repoState.status,
-              featureAgentCount: repoState.featureAgentCount,
-              latestLogPath: log.logPath,
-            });
+            if (options.dryRun) {
+              // Dry-run: skip project state write so the next run
+              // doesn't see a stale "last run" record for a run
+              // that never actually wrote anything.
+              options.ui.info("agentify: dry-run complete; no files written, no project state recorded.");
+            } else {
+              persistProjectState(options, {
+                projectKind: "brownfield",
+                runStatus: reportedStatus,
+                repoMode: "brownfield",
+                repoStatus: repoState.status,
+                featureAgentCount: repoState.featureAgentCount,
+                latestLogPath: log.logPath,
+              });
+            }
           }
         } finally {
           fs.rmSync(stagingRoot, { recursive: true, force: true });
@@ -864,7 +1191,7 @@ async function runBrownfieldAudit(
       }
     } else {
       const rollback = rollbackGeneratedSurface(options.cwd, artifactSnapshot);
-      restoreInternalStateSnapshot(options.cwd, internalStateSnapshot);
+      restoreInternalStateSnapshotAt(options.cwd, internalStateSnapshot, stateDir);
       options.ui.error(
         `agentify: audit did not complete (${finalState.covered}/${finalState.total} dimensions closed); ` +
           "no harness export was run.",
@@ -908,7 +1235,7 @@ async function runBrownfieldAudit(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     rollbackGeneratedSurface(options.cwd, artifactSnapshot);
-    restoreInternalStateSnapshot(options.cwd, internalStateSnapshot);
+    restoreInternalStateSnapshotAt(options.cwd, internalStateSnapshot, stateDir);
     log.runEnd({ exit_code: -1, status: "error", error_message: message });
     options.ui.error(`agentify: ${message}`);
     throw err;
@@ -920,6 +1247,9 @@ async function runBrownfieldAudit(
 
 async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig): Promise<void> {
   options.ui.status("agentify: starting greenfield chat");
+  const stateDir = resolveCanonicalStateDir(
+    options.cwd, options.targets, options.additionalAgents,
+  ).relativeDir;
   const artifactSnapshot = collectAuditArtifactSnapshot(options.cwd);
   setThinkingLevel(config.thinkingLevel ?? "high");
   // Activate the defense hook for the greenfield session too. Without
@@ -943,7 +1273,7 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
   let artifactsValid = false;
   let validationReported = false;
   if (!result.aborted) {
-    const formation = readGreenfieldFormation(options.cwd);
+    const formation = readGreenfieldFormationAt(options.cwd, stateDir);
     if (!formation) {
       options.ui.error(
         "agentify: greenfield session did not submit structured artifacts with write_greenfield_artifacts; scaffold was not installed.",
@@ -976,6 +1306,18 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
               packageRoot: packageRoot(),
             });
             addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata);
+            // Persist the pre-run snapshot for `agentify revert`.
+            const runId = crypto.randomUUID();
+            if (!options.dryRun) {
+              const previousManifest = readManifestAt(options.cwd, stateDir);
+              persistRunArtifacts({
+                cwd: options.cwd,
+                stateDir,
+                runId,
+                snapshot: artifactSnapshot as unknown as Record<string, { content: Buffer; mode: number; ownership: "managed" | "unmanaged" }>,
+                previousManifest,
+              });
+            }
             const applyResult = applyStagedBundle({
               cwd: options.cwd,
               stagingRoot,
@@ -983,6 +1325,10 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
               metadata,
               agentifyVersion: loadAgentifyVersion(),
               mode: "greenfield",
+              policy: resolveApplyPolicy(options.cwd, stateDir),
+              runId,
+              stateDir,
+              dryRun: options.dryRun,
             });
             const conflicts = applyResult.writes.filter((write) => write.action === "conflict");
             scaffoldInstalled = applyResult.writes
@@ -993,6 +1339,15 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
               })
               .length;
             scaffoldConflicts = conflicts.length;
+            if (options.dryRun && options.jsonOutput && applyResult.manifest) {
+              process.stdout.write(
+                JSON.stringify(planToJson(applyResult, options.cwd), null, 2) + "\n",
+              );
+            } else {
+              for (const line of formatApplyReport(applyResult.writes, options.cwd)) {
+                options.ui.info(line);
+              }
+            }
             if (applyResult.requiredConflictCount > 0) {
               options.ui.error(
                 "agentify: required greenfield generated file conflict(s) blocked apply; no bundle files were written.",
@@ -1001,11 +1356,11 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
                 options.ui.error(`agentify:   - ${toRel(options.cwd, conflict.path)}: ${conflict.reason ?? "conflict"}`);
               }
             } else {
-              const greenfieldState = writeGreenfieldState(options.cwd, {
+              const greenfieldState = writeGreenfieldStateAt(options.cwd, {
                 turns: result.turns,
                 costUsd: result.costUsd,
                 aborted: result.aborted,
-              });
+              }, stateDir);
               artifactsValid = greenfieldState.artifact_validation.ok;
               if (!artifactsValid) {
                 options.ui.error(
@@ -1025,11 +1380,11 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
       }
     }
     if (!artifactsValid) {
-      const greenfieldState = writeGreenfieldState(options.cwd, {
+      const greenfieldState = writeGreenfieldStateAt(options.cwd, {
         turns: result.turns,
         costUsd: result.costUsd,
         aborted: result.aborted,
-      });
+      }, stateDir);
       if (!validationReported && !greenfieldState.artifact_validation.ok) {
         options.ui.error("agentify: greenfield artifacts did not pass the substance gate; scaffold was not installed.");
         for (const reason of greenfieldState.artifact_validation.reasons.slice(0, 8)) {
@@ -1048,7 +1403,12 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
       `${result.costUsd === null ? "" : `, $${result.costUsd.toFixed(4)}`}` +
       `${scaffoldSummary}.`,
   );
-  if (!result.aborted && artifactsValid) {
+  if (options.dryRun) {
+    // Dry-run: skip project state write so the next run doesn't
+    // see a stale "last run" record for a run that never actually
+    // wrote anything.
+    options.ui.info("agentify: dry-run complete; no files written, no project state recorded.");
+  } else if (!result.aborted && artifactsValid) {
     reportGitHubReadiness(options);
     // Derive repoStatus from the actual filesystem signals so the
     // persisted state agrees with what the next run's detection sees

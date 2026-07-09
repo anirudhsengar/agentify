@@ -77,8 +77,11 @@ export class ExpertRegistry {
     this.experts = experts;
   }
 
-  static fromCwd(cwd: string): ExpertRegistry {
-    const expertsDir = path.join(cwd, ".pi", "prompts", "experts");
+  static fromCwd(
+    cwd: string,
+    stateDir: string = ".pi/agentify",
+  ): ExpertRegistry {
+    const expertsDir = path.join(cwd, stateDir, "prompts", "experts");
     if (!fs.existsSync(expertsDir)) return new ExpertRegistry([]);
     const out: ExpertDomain[] = [];
     for (const entry of fs.readdirSync(expertsDir, { withFileTypes: true })) {
@@ -630,10 +633,27 @@ function toPosixRel(cwd: string, absolute: string): string {
   return path.relative(cwd, absolute).split(path.sep).join("/");
 }
 
+/**
+ * Match a known state-dir prefix for an expert directory. Tries
+ * each premium state dir in dispatch order
+ * (`.claude/agentify` → `.agents/agentify` → `.pi/agentify` →
+ * universal `.agents/agentify`) plus the legacy `.pi/` mapping
+ * for backward compat (ADR 0020).
+ */
+const KNOWN_STATE_DIRS = [
+  ".claude/agentify",
+  ".agents/agentify",
+  ".pi/agentify",
+] as const;
+
 function repoRootForExpert(expert: ExpertDomain): string | null {
-  const suffix = path.join(".pi", "prompts", "experts", expert.domain);
-  if (!expert.dir.endsWith(suffix)) return null;
-  return expert.dir.slice(0, -suffix.length).replace(/[\\/]+$/, "");
+  for (const stateDir of KNOWN_STATE_DIRS) {
+    const suffix = path.join(stateDir, "prompts", "experts", expert.domain);
+    if (expert.dir.endsWith(suffix)) {
+      return expert.dir.slice(0, -suffix.length).replace(/[\\/]+$/, "");
+    }
+  }
+  return null;
 }
 
 function normalizeRepoPath(value: string, cwd: string | null): string {

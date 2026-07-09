@@ -3,12 +3,14 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {
   CODEBASE_MAP_RELATIVE_PATH,
+  codebaseMapRelativePath,
   type ManagedManifestFile,
   REQUIRED_BROWNFIELD_FILES,
   REQUIRED_GREENFIELD_FILES,
   markerForPath,
   verifyManifest,
 } from "./manifest.ts";
+import { LEGACY_PI_STATE_RELATIVE_DIR } from "./state-dir.ts";
 
 export type AgentifyRepoMode = "brownfield" | "greenfield" | "unknown";
 export type AgentifyRepoStatus = "uninitialized" | "partial" | "ready";
@@ -56,8 +58,8 @@ function hashCwd(cwd: string): string {
   return crypto.createHash("sha256").update(cwd).digest("hex").slice(0, 6);
 }
 
-function countFeatureAgents(cwd: string): number {
-  const agentsDir = path.join(cwd, ".pi", "agents");
+function countFeatureAgents(cwd: string, stateDir: string): number {
+  const agentsDir = path.join(cwd, stateDir, "agents");
   if (!fs.existsSync(agentsDir)) return 0;
   return fs.readdirSync(agentsDir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
@@ -65,16 +67,16 @@ function countFeatureAgents(cwd: string): number {
     .length;
 }
 
-function countProjectWorkflows(cwd: string): number {
-  const workflowsDir = path.join(cwd, ".pi", "workflows");
+function countProjectWorkflows(cwd: string, stateDir: string): number {
+  const workflowsDir = path.join(cwd, stateDir, "workflows");
   if (!fs.existsSync(workflowsDir)) return 0;
   return fs.readdirSync(workflowsDir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
     .length;
 }
 
-function countExperts(cwd: string): number {
-  const expertsDir = path.join(cwd, ".pi", "prompts", "experts");
+function countExperts(cwd: string, stateDir: string): number {
+  const expertsDir = path.join(cwd, stateDir, "prompts", "experts");
   if (!fs.existsSync(expertsDir)) return 0;
   return fs.readdirSync(expertsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
@@ -82,8 +84,8 @@ function countExperts(cwd: string): number {
     .length;
 }
 
-function countSkillCandidates(cwd: string): number {
-  const skillsDir = path.join(cwd, ".pi", "skills");
+function countSkillCandidates(cwd: string, stateDir: string): number {
+  const skillsDir = path.join(cwd, stateDir, "skills");
   if (!fs.existsSync(skillsDir)) return 0;
   return fs.readdirSync(skillsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
@@ -150,15 +152,15 @@ function inspectManifestSurfaceCounts(
   };
 }
 
-function inspectSurfaceCounts(cwd: string): Pick<
+function inspectSurfaceCounts(cwd: string, stateDir: string): Pick<
   AgentifyRepoState,
   "featureAgentCount" | "workflowCount" | "expertCount" | "skillCount"
 > {
   return {
-    featureAgentCount: countFeatureAgents(cwd),
-    workflowCount: countProjectWorkflows(cwd),
-    expertCount: countExperts(cwd),
-    skillCount: countSkillCandidates(cwd),
+    featureAgentCount: countFeatureAgents(cwd, stateDir),
+    workflowCount: countProjectWorkflows(cwd, stateDir),
+    expertCount: countExperts(cwd, stateDir),
+    skillCount: countSkillCandidates(cwd, stateDir),
   };
 }
 
@@ -191,7 +193,11 @@ function collectUnmanaged(cwd: string, relatives: readonly string[]): string[] {
     .filter((relativePath) => !fileCarriesExpectedMarker(cwd, relativePath));
 }
 
-export function inspectAgentifyRepoState(cwd: string, configDir: string): AgentifyRepoState {
+export function inspectAgentifyRepoState(
+  cwd: string,
+  configDir: string,
+  stateDir: string = LEGACY_PI_STATE_RELATIVE_DIR,
+): AgentifyRepoState {
   const manifestVerification = verifyManifest(cwd);
   if (manifestVerification.manifest) {
     const counts = inspectManifestSurfaceCounts(cwd, manifestVerification.manifest.files);
@@ -211,12 +217,14 @@ export function inspectAgentifyRepoState(cwd: string, configDir: string): Agenti
     };
   }
 
-  const brownfieldFound = collectFound(cwd, BROWNFIELD_EXPECTED);
+  const brownfieldFound = collectFound(cwd, BROWNFIELD_EXPECTED).concat(
+    collectFound(cwd, [codebaseMapRelativePath(stateDir)]),
+  );
   const scaffoldFound = collectFound(cwd, SCAFFOLD_EXPECTED);
   const greenfieldFound = collectFound(cwd, GREENFIELD_SIGNALS);
 
   const found = [...brownfieldFound, ...greenfieldFound, ...scaffoldFound];
-  const counts = inspectSurfaceCounts(cwd);
+  const counts = inspectSurfaceCounts(cwd, stateDir);
   const latestLogPath = findLatestLogPath(cwd, configDir);
 
   if (brownfieldFound.length > 0) {

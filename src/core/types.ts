@@ -94,6 +94,17 @@ export interface RunAgentifyOptions {
    */
   mode?: "brownfield" | "greenfield";
   githubReadinessOverride?: GitHubReadiness;
+  /**
+   * Dry-run mode (`--plan`). The full audit runs (the LLM is called
+   * so the plan reflects what the real run would do), but the apply
+   * step never writes to the repo. Output is the would-be plan.
+   */
+  dryRun?: boolean;
+  /**
+   * When true, plan output is emitted as JSON to stdout instead of
+   * the human-readable ui.info lines. Only meaningful with `dryRun`.
+   */
+  jsonOutput?: boolean;
 }
 
 export interface AgentRuntimeSessionOptions {
@@ -141,6 +152,15 @@ export interface AgentRuntimeSessionOptions {
    * ADR 0017.
    */
   spawnExplorerAgentDir?: string;
+  /**
+   * Audit state dir for the `spawn_explorer` tool (ADR 0020). When the
+   * builder audit is wired to a provider-scoped state dir
+   * (`.claude/agentify/`, `.agents/agentify/`, `.pi/agentify/`), the
+   * tool writes its sub-agent logs there and emits a budget-recovery
+   * message that names the right path. Falls back to the legacy
+   * `.pi/agentify/` location when unset.
+   */
+  spawnExplorerStateDir?: string;
 }
 
 export interface AgentRuntimeResult {
@@ -162,8 +182,26 @@ export interface AgentRuntime {
 
 export interface ArtifactWrite {
   path: string;
-  action: "written" | "skipped" | "conflict";
+  /**
+   * - `"written"`: agentify wrote (or re-wrote with new content) the
+   *   file at `path`.
+   * - `"skipped"`: the file at `path` was already up to date (or
+   *   the user explicitly chose to keep a user-owned file with
+   *   no alongside save).
+   * - `"conflict"`: the canonical path is occupied by a user-owned
+   *   file and the policy resolved to `"abort"`. The file is left
+   *   untouched; the user must resolve via `.agentifyrc` or remove
+   *   their file.
+   * - `"alongside"`: the canonical path is occupied by a user-owned
+   *   file; agentify's version was saved to `alongsidePath` (a
+   *   sibling with a `.agentify<ext>` suffix) and the user's file
+   *   was left untouched.
+   */
+  action: "written" | "skipped" | "conflict" | "alongside";
   reason?: string;
+  /** Set when `action === "alongside"`. Repo-relative path of the
+   *  sibling file where agentify's version was saved. */
+  alongsidePath?: string;
 }
 
 export interface ArtifactExportResult {

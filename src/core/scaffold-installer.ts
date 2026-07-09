@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { alongsidePathFor } from "./apply-policy.ts";
 import { addMarkdownManagedMarker, AGENTIFY_MANAGED_MARKERS } from "./artifact-exporters.ts";
 import type { ArtifactWrite } from "./types.ts";
 
@@ -53,10 +54,17 @@ function copyManaged(source: string, destination: string): ArtifactWrite {
   if (fs.existsSync(destination)) {
     const existing = fs.readFileSync(destination, "utf-8");
     if (!existing.includes(marker)) {
+      // User-owned file at the destination. Save the
+      // agentify-managed copy alongside (`<basename>.agentify<ext>`)
+      // and leave the user's file untouched.
+      const alongside = alongsidePathFor(destination);
+      fs.mkdirSync(path.dirname(alongside), { recursive: true });
+      fs.writeFileSync(alongside, content, { mode: 0o644 });
       return {
         path: destination,
-        action: "conflict",
-        reason: "existing file is not agentify-managed",
+        action: "alongside",
+        reason: "user file preserved; scaffold saved alongside",
+        alongsidePath: alongside,
       };
     }
     if (existing === content) {

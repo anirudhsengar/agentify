@@ -14,7 +14,7 @@ not.
 - **Shipped machinery**: the skill pack (`packaged/skills/`) and the
   CI scaffold (`scaffold/`). Versioned with the package.
 - **Generated intelligence**: `AGENTS.md`, `specs/README.md`,
-  `ai_docs/README.md`, feature agents (`.pi/agents/<feature>.md`),
+  `ai_docs/README.md`, feature agents (`<stateDir>/agents/<feature>.md`),
   experts, and conditional docs. Emitted by the audit from the
   validated codebase map.
 

@@ -45,6 +45,23 @@ const SHELL_SYNTAX = /[;&|<>`$]/;
 
 const REQUIRED_ALWAYS_ON_DOCS = new Set(["specs/README.md", "ai_docs/README.md"]);
 
+// Session-scoped state dir (ADR 0020). The audit resolves its state dir
+// at the top of every run; the renderer helpers consult this via the
+// `stateDirFor` getter so the legacy literal doesn't need to be threaded
+// through every helper signature. Defaults to the historical
+// `.pi/agentify/` location so existing direct callers (tests) keep
+// the prior behavior.
+let currentRendererStateDir = ".pi/agentify";
+
+/** Set the per-session state dir used by the artifact renderers. */
+export function setRendererStateDir(stateDir: string): void {
+  currentRendererStateDir = stateDir;
+}
+
+function stateDirFor(): string {
+  return currentRendererStateDir;
+}
+
 function normalizePath(relativePath: string): string {
   return relativePath.replace(/\\/g, "/").replace(/^\.\/+/, "");
 }
@@ -643,7 +660,7 @@ function renderFallbackFeatureAgents(map: CodebaseMap): RenderedArtifact[] {
     .filter(isKebabName)
     .slice(0, 12)
     .map((name) => markdownArtifact({
-      relativePath: `.pi/agents/${name}.md`,
+      relativePath: `${stateDirFor()}/agents/${name}.md`,
       kind: "audit",
       required: false,
       source: "fallback-feature-agent-renderer",
@@ -737,7 +754,7 @@ function renderProjectWorkflowArtifacts(
       continue;
     }
     artifacts.push(jsonArtifact({
-      relativePath: `.pi/workflows/${agentName}-plan-build-review-fix.json`,
+      relativePath: `${stateDirFor()}/workflows/${agentName}-plan-build-review-fix.json`,
       kind: "workflow",
       required: false,
       source: "specialist-workflow-renderer",
@@ -909,7 +926,7 @@ function renderSkillCandidate(skill: SkillCandidateIntent): RenderedArtifact {
         .filter((line) => line.length > 0)
         .map((line, index) => `${index + 1}. ${line.replace(/^[-*]\s*/, "")}`);
   return markdownArtifact({
-    relativePath: `.pi/skills/${skill.name}/SKILL.md`,
+    relativePath: `${stateDirFor()}/skills/${skill.name}/SKILL.md`,
     kind: "skill",
     required: false,
     source: "skill-candidate-renderer",
@@ -985,7 +1002,7 @@ function renderCustomToolCandidate(tool: CustomToolCandidateIntent): RenderedArt
   if (!argv || argv.length === 0) return null;
   const [command, ...args] = argv;
   return hashCommentArtifact({
-    relativePath: `.pi/extensions/${tool.name}.ts`,
+    relativePath: `${stateDirFor()}/extensions/${tool.name}.ts`,
     kind: "extension",
     required: false,
     source: "custom-tool-candidate-renderer",
@@ -1196,10 +1213,14 @@ function renderLifecyclePromptArtifacts(map: CodebaseMap, existingPaths: Set<str
   return artifacts;
 }
 
-export function renderBrownfieldArtifacts(map: CodebaseMap): RenderArtifactsResult {
+export function renderBrownfieldArtifacts(
+  map: CodebaseMap,
+  options?: { stateDir?: string },
+): RenderArtifactsResult {
   const artifacts: RenderedArtifact[] = [];
   const errors: string[] = [];
   const intents = map.artifact_intents;
+  const stateDir = options?.stateDir ?? ".pi/agentify";
 
   const agentGuide = intents ? renderIntentAgentGuide(intents) : renderFallbackAgentGuide(map);
   if (countLines(agentGuide) > AGENTS_MD_MAX_LINES) {
@@ -1225,7 +1246,7 @@ export function renderBrownfieldArtifacts(map: CodebaseMap): RenderArtifactsResu
         continue;
       }
       artifacts.push(markdownArtifact({
-        relativePath: `.pi/agents/${agent.name}.md`,
+        relativePath: `${stateDir}/agents/${agent.name}.md`,
         kind: "audit",
         required: false,
         source: "feature-agent-renderer",
@@ -1239,7 +1260,7 @@ export function renderBrownfieldArtifacts(map: CodebaseMap): RenderArtifactsResu
         continue;
       }
       artifacts.push(markdownArtifact({
-        relativePath: `.pi/prompts/${prompt.name}.md`,
+        relativePath: `${stateDir}/prompts/${prompt.name}.md`,
         kind: "prompt",
         required: false,
         source: "prompt-template-renderer",
@@ -1261,7 +1282,7 @@ export function renderBrownfieldArtifacts(map: CodebaseMap): RenderArtifactsResu
         continue;
       }
       artifacts.push(hashCommentArtifact({
-        relativePath: `.pi/extensions/${extension.name}.ts`,
+        relativePath: `${stateDir}/extensions/${extension.name}.ts`,
         kind: "extension",
         required: false,
         source: "extension-candidate-renderer",

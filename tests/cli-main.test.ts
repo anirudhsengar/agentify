@@ -340,7 +340,7 @@ async function testBinUnknownSubcommandReturnsValidList(): Promise<void> {
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /Known subcommands: login, logout, models/,
+    /Known subcommands: login, logout, models, revert/,
   );
 }
 

@@ -27,11 +27,11 @@ agentify classifies the repository:
   fills a structured codebase map, and — only when every coverage
   dimension is closed — emits the agentic surface: `AGENTS.md`,
   `specs/README.md`, `ai_docs/README.md`, feature agents under
-  `.pi/agents/`, specialist workflow specs under `.pi/workflows/`,
-  expert directories, feedback-loop storage, repo-specific `.pi/skills/`
+  `<stateDir>/agents/`, specialist workflow specs under `<stateDir>/workflows/`,
+  expert directories, feedback-loop storage, repo-specific `<stateDir>/skills/`
   candidates, and the harness exports you selected. The GitHub implement
   and review scaffold summarizes `.pi/agents` into specialist routing
-  guidance, summarizes `.pi/prompts/experts` into expert routing guidance,
+  guidance, summarizes `<stateDir>/prompts/experts` into expert routing guidance,
   and implement also summarizes `.pi/workflows` into workflow routing
   guidance. It then stamps the GitHub Actions scaffold and reports GitHub
   readiness.
@@ -42,7 +42,7 @@ agentify classifies the repository:
   deterministically. The payload's `stop_at` field is a hard checkpoint
   gate: first formation normally stops at `goals`, and artifacts beyond
   the user-approved milestone are rejected. agentify records
-  `.pi/agentify/greenfield-state.json` with the current checkpoint, next
+  `<stateDir>/greenfield-state.json` with the current checkpoint, next
   actions, exact artifact paths, local/GitHub resume instructions, and
   artifact validation result, then stamps the same scaffold only after the
   planning artifacts pass the substance gate.
@@ -118,7 +118,7 @@ drives the loop:
 > This keeps write-capable automation gated.
 
 For greenfield repositories, the drill workflow also renders
-`.pi/agentify/greenfield-state.json` into the prompt as resume context. The
+`<stateDir>/greenfield-state.json` into the prompt as resume context. The
 agent sees the local checkpoint, current focus, artifact paths, local/GitHub
 continuation instructions, and the structured `github_handoff` before making
 its one transition. That handoff carries the next GitHub action, issue title,
@@ -148,7 +148,7 @@ delta re-audit and opens a PR when the generated surface drifts
 agentic surface current without another terminal invocation. Before the
 trusted workflow commits, it rejects refresh edits outside the agentic surface,
 checks the `AGENTS.md` line cap and expert YAML shape, and refreshes
-`.pi/agentify/manifest.json` hashes for changed managed files.
+`<stateDir>/manifest.json` hashes for changed managed files.
 
 ## What can fail, and where
 

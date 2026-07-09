@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { alongsidePathFor } from "./apply-policy.ts";
 import { getAgentById, type AgentId } from "./agent-registry.ts";
 import type { AgentifyTarget, ArtifactExportResult, ArtifactWrite } from "./types.ts";
 import { shippedSkillsSourceDir } from "./shipped-paths.ts";
@@ -40,20 +41,26 @@ interface AgentFile {
 }
 
 function writeManagedFile(filePath: string, content: string, marker: string): ArtifactWrite {
-  const relative = filePath;
   if (fs.existsSync(filePath)) {
     const existing = fs.readFileSync(filePath, "utf-8");
     if (!existing.includes(marker)) {
+      // User-owned file at the destination. Save agentify's
+      // version alongside (`<basename>.agentify<ext>`) and
+      // leave the user's file untouched.
+      const alongside = alongsidePathFor(filePath);
+      fs.mkdirSync(path.dirname(alongside), { recursive: true });
+      fs.writeFileSync(alongside, content, { mode: 0o644 });
       return {
-        path: relative,
-        action: "conflict",
-        reason: "existing file is not agentify-managed",
+        path: filePath,
+        action: "alongside",
+        reason: "user file preserved; agentify's version saved alongside",
+        alongsidePath: alongside,
       };
     }
   }
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, { mode: 0o644 });
-  return { path: relative, action: "written" };
+  return { path: filePath, action: "written" };
 }
 
 function addMarkdownMarker(raw: string, marker: string): string {
@@ -203,10 +210,19 @@ function exportClaude(cwd: string, packageRoot: string): ArtifactExportResult {
   if (fs.existsSync(agentsMd)) {
     const content = fs.readFileSync(agentsMd, "utf-8");
     if (!content.includes(MD_MARKER)) {
+      // Source AGENTS.md is user-owned. Rather than fail the
+      // entire Claude export, save the derived CLAUDE.md
+      // alongside (`CLAUDE.agentify.md`) and let the apply
+      // step decide what to do based on the user's policy.
+      const claudeMd = path.join(cwd, "CLAUDE.md");
+      const alongside = alongsidePathFor(claudeMd);
+      fs.mkdirSync(path.dirname(alongside), { recursive: true });
+      fs.writeFileSync(alongside, content, { mode: 0o644 });
       writes.push({
-        path: path.join(cwd, "CLAUDE.md"),
-        action: "conflict",
-        reason: "source AGENTS.md is not agentify-managed",
+        path: claudeMd,
+        action: "alongside",
+        reason: "source AGENTS.md is not agentify-managed; derived CLAUDE.md saved alongside",
+        alongsidePath: alongside,
       });
     } else {
       writes.push(writeManagedFile(
@@ -229,7 +245,14 @@ function exportClaude(cwd: string, packageRoot: string): ArtifactExportResult {
 
 function exportPi(cwd: string, packageRoot: string): ArtifactExportResult {
   const writes: ArtifactWrite[] = [];
-  exportSkills(packageRoot, path.join(cwd, ".agents", "skills"), writes);
+  // Pi's skillsDir per `AGENT_REGISTRY` (src/core/agent-registry.ts)
+  // is `.pi/skills`. Earlier versions wrote to `.agents/skills`,
+  // which silently matched Codex's universal dir but skipped the
+  // per-harness location the registry documents. Writes now land at
+  // `.pi/skills`; the dispatcher's `writtenDirs.add(".pi/skills")`
+  // in `exportAgenticSurface` is then consistent with what's
+  // actually on disk (ADR 0020, bug fix).
+  exportSkills(packageRoot, path.join(cwd, ".pi", "skills"), writes);
   return { target: "pi", writes };
 }
 

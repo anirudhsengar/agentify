@@ -8,9 +8,21 @@ import {
   AGENTIFY_MANAGED_MARKERS,
   addMarkdownManagedMarker,
 } from "./artifact-exporters.ts";
+import { LEGACY_PI_STATE_RELATIVE_DIR } from "./state-dir.ts";
 import type { ManagedArtifactKind, RenderedArtifact } from "./artifacts/renderers.ts";
 
-export const GREENFIELD_FORMATION_RELATIVE_PATH = ".pi/agentify/greenfield-formation.json";
+/** Posix-style relative path of the greenfield formation file under
+ *  the supplied agentify state dir (ADR 0020). */
+export function greenfieldFormationRelativePath(stateDir: string): string {
+  return path.join(stateDir, "greenfield-formation.json");
+}
+
+/** @deprecated Use `greenfieldFormationRelativePath(stateDir)`.
+ *  Always resolves to the legacy `.pi/agentify/` path. */
+export const GREENFIELD_FORMATION_RELATIVE_PATH = path.join(
+  LEGACY_PI_STATE_RELATIVE_DIR,
+  "greenfield-formation.json",
+);
 
 const GreenfieldUnitStatusSchema = StringEnum([
   "undrilled",
@@ -561,6 +573,7 @@ function validateFormationGate(formation: GreenfieldFormation): string[] {
 
 export function renderGreenfieldArtifacts(
   formation: GreenfieldFormation,
+  options?: { stateDir?: string },
 ): RenderGreenfieldArtifactsResult {
   const gateErrors = validateFormationGate(formation);
   if (gateErrors.length > 0) {
@@ -599,7 +612,56 @@ export function readGreenfieldFormation(cwd: string): GreenfieldFormation | null
   return Value.Check(GreenfieldFormationSchema, parsed) ? (parsed as GreenfieldFormation) : null;
 }
 
-export function createWriteGreenfieldArtifactsTool(): ToolDefinition {
+/**
+ * Write the greenfield formation payload at
+ * `<stateDir>/greenfield-formation.json` (ADR 0020). New audit
+ * code should call this when the audit is wired to a
+ * provider-scoped state dir.
+ */
+export function writeGreenfieldFormationAt(
+  cwd: string,
+  formation: GreenfieldFormation,
+  stateDir: string,
+): void {
+  const filePath = path.join(cwd, stateDir, "greenfield-formation.json");
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify(formation, null, 2)}\n`, { mode: 0o644 });
+}
+
+/**
+ * Read the greenfield formation payload at
+ * `<stateDir>/greenfield-formation.json` (ADR 0020). Returns null
+ * when the file is missing or fails schema validation.
+ */
+export function readGreenfieldFormationAt(
+  cwd: string,
+  stateDir: string,
+): GreenfieldFormation | null {
+  // Try the resolved state dir first, then fall back to the
+  // legacy `.pi/agentify/` path for backward compat with formations
+  // written by older runs and test fakes that don't know about
+  // the resolved state dir.
+  const candidates = [
+    path.join(cwd, stateDir, "greenfield-formation.json"),
+    path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, "greenfield-formation.json"),
+  ];
+  for (const filePath of candidates) {
+    if (!fs.existsSync(filePath)) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    } catch {
+      return null;
+    }
+    if (Value.Check(GreenfieldFormationSchema, parsed)) {
+      return parsed as GreenfieldFormation;
+    }
+  }
+  return null;
+}
+
+export function createWriteGreenfieldArtifactsTool(opts?: { stateDir?: string }): ToolDefinition {
+  const stateDir = opts?.stateDir;
   return defineTool({
     name: "write_greenfield_artifacts",
     label: "Write Greenfield Artifacts",
@@ -634,7 +696,11 @@ export function createWriteGreenfieldArtifactsTool(): ToolDefinition {
           details: { errors: renderResult.errors },
         };
       }
-      writeGreenfieldFormation(ctx.cwd, formation);
+      if (stateDir !== undefined) {
+        writeGreenfieldFormationAt(ctx.cwd, formation, stateDir);
+      } else {
+        writeGreenfieldFormation(ctx.cwd, formation);
+      }
       return {
         content: [{
           type: "text",
@@ -643,7 +709,9 @@ export function createWriteGreenfieldArtifactsTool(): ToolDefinition {
             `agentify will render ${renderResult.artifacts.length} managed artifact(s) after the session.`,
         }],
         details: {
-          path: path.join(ctx.cwd, GREENFIELD_FORMATION_RELATIVE_PATH),
+          path: stateDir !== undefined
+            ? path.join(ctx.cwd, stateDir, "greenfield-formation.json")
+            : path.join(ctx.cwd, GREENFIELD_FORMATION_RELATIVE_PATH),
           artifact_count: renderResult.artifacts.length,
           artifact_paths: renderResult.artifacts.map((artifact) => artifact.relativePath),
         },

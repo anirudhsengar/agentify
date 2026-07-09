@@ -7,13 +7,13 @@ disable-model-invocation: true
 # Scout-then-plan
 
 Enrich a `/spec` with feature-specialist recon first. **Dynamic** — it discovers the
-specialists at run time from `.pi/agents/*.md`, so adding a new `/<feature>` later
+specialists at run time from `<agentify-state-dir>/agents/*.md`, so adding a new `/<feature>` later
 extends this chain automatically. Never hard-code the feature list.
 
 ## Workflow
 
-1. Read `AGENTS.md` and `.pi/conditional_docs.md` (if present) for context.
-2. **Discover specialists.** List `.pi/agents/*.md`; read each one's frontmatter `name` +
+1. Read `AGENTS.md` and ``<agentify-state-dir>/conditional_docs.md`` (if present) for context.
+2. **Discover specialists.** List `<agentify-state-dir>/agents/*.md`; read each one's frontmatter `name` +
    `description`. Skip the cross-cutting primitives (`scout`, `review`, `test`, `fix`,
    `document`, `implement`) — they aren't feature scouts.
 3. **Pick relevant scouts.** Match the task against each specialist's `description`. If

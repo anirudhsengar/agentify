@@ -33,11 +33,14 @@ changed_paths() {
 }
 
 is_allowed_refresh_path() {
-  case "$1" in
-    AGENTS.md|CLAUDE.md|specs/README.md|ai_docs/README.md|.pi/conditional_docs.md|.pi/agentify/manifest.json)
+  local rel=$1
+  local state_dir
+  state_dir="$(dirname "$(dirname "$0")")/scripts/resolve-state-dir.sh" "$repo_root"
+  case "$rel" in
+    AGENTS.md|CLAUDE.md|specs/README.md|ai_docs/README.md|"$state_dir/conditional_docs.md"|"$state_dir/manifest.json")
       return 0
       ;;
-    .pi/agents/*.md|.pi/prompts/experts/*/expertise.yaml|.codex/agents/*.toml|.claude/agents/*.md)
+    "$state_dir"/agents/*.md|"$state_dir"/prompts/experts/*/expertise.yaml|.codex/agents/*.toml|.claude/agents/*.md)
       return 0
       ;;
     app_docs/*|app_review/*|app_fix_reports/*)

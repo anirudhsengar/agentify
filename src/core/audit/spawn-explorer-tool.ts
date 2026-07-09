@@ -51,6 +51,7 @@ import {
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { Model, Api } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
+import { LEGACY_PI_STATE_RELATIVE_DIR } from "../state-dir.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
 
@@ -233,38 +234,70 @@ const SpawnExplorerParams = Type.Object({
 
 let activeSpawnCount = 0;
 
-const BUDGET_RECOVERY = {
+/**
+ * @deprecated Default budget-recovery block used by tools created
+ * without an explicit stateDir. References the legacy
+ * `.pi/agentify/` paths. Use `buildBudgetRecovery(stateDir)` to
+ * construct a tool bound to a provider-scoped state dir (ADR 0020).
+ */
+const BUDGET_RECOVERY: {
+    can_continue: boolean;
+    actions: ReadonlyArray<string>;
+    state_files: ReadonlyArray<string>;
+} = {
     can_continue: true,
     actions: [
-        "Read .pi/agentify/codebase_map.json and the latest run log before dispatching any more explorers.",
+        `Read ${LEGACY_PI_STATE_RELATIVE_DIR}/codebase_map.json and the latest run log before dispatching any more explorers.`,
         "Reuse completed sub-agent reports and call write_map or write_map_delta with the strongest evidence already gathered.",
         "Narrow any remaining target_path/focus before retrying only if a budget remains.",
         "For genuinely unobservable gaps, record an honest null/open_question rather than inventing coverage.",
     ],
     state_files: [
-        ".pi/agentify/codebase_map.json",
-        ".pi/agentify/logs/*.jsonl",
-        ".pi/agentify/logs/*-spawn-*-report.txt",
+        `${LEGACY_PI_STATE_RELATIVE_DIR}/codebase_map.json`,
+        `${LEGACY_PI_STATE_RELATIVE_DIR}/logs/*.jsonl`,
+        `${LEGACY_PI_STATE_RELATIVE_DIR}/logs/*-spawn-*-report.txt`,
     ],
-} as const;
+};
 
-function budgetRecoveryText(): string {
+/**
+ * State-dir-aware budget recovery block. Constructed per tool
+ * instance so the LLM-facing recovery text describes the active
+ * state dir rather than the historical `.pi/agentify/` literal.
+ */
+function buildBudgetRecovery(stateDir: string): typeof BUDGET_RECOVERY {
+    return {
+        can_continue: true,
+        actions: [
+            `Read ${stateDir}/codebase_map.json and the latest run log before dispatching any more explorers.`,
+            "Reuse completed sub-agent reports and call write_map or write_map_delta with the strongest evidence already gathered.",
+            "Narrow any remaining target_path/focus before retrying only if a budget remains.",
+            "For genuinely unobservable gaps, record an honest null/open_question rather than inventing coverage.",
+        ],
+        state_files: [
+            `${stateDir}/codebase_map.json`,
+            `${stateDir}/logs/*.jsonl`,
+            `${stateDir}/logs/*-spawn-*-report.txt`,
+        ],
+    };
+}
+
+function budgetRecoveryText(stateDir: string): string {
     return (
-        "Resume path: read .pi/agentify/codebase_map.json and the latest run log, " +
+        `Resume path: read ${stateDir}/codebase_map.json and the latest run log, ` +
         "reuse completed sub-agent reports, persist the best known state with write_map/write_map_delta, " +
         "and use honest null/open_question entries for genuinely unobservable gaps."
     );
 }
 
-function makeBudgetError(text: string, budget: Record<string, number>): {
+function makeBudgetError(text: string, budget: Record<string, number>, stateDir: string): {
     content: Array<{ type: "text"; text: string }>;
     isError: true;
-    details: { budget: Record<string, number>; resume: typeof BUDGET_RECOVERY };
+    details: { budget: Record<string, number>; resume: ReturnType<typeof buildBudgetRecovery> };
 } {
     return {
-        content: [{ type: "text", text: `${text}\n\n${budgetRecoveryText()}` }],
+        content: [{ type: "text", text: `${text}\n\n${budgetRecoveryText(stateDir)}` }],
         isError: true,
-        details: { budget, resume: BUDGET_RECOVERY },
+        details: { budget, resume: buildBudgetRecovery(stateDir) },
     };
 }
 
@@ -278,9 +311,11 @@ function resolveExplorerPromptPath(mode: string): string {
     return path.join(EXPLORERS_DIR, file);
 }
 
-function readSubagentPrompt(mode: string): string {
+function readSubagentPrompt(mode: string, stateDir: string): string {
     const promptPath = resolveExplorerPromptPath(mode);
-    return fs.readFileSync(promptPath, "utf-8");
+    return fs
+        .readFileSync(promptPath, "utf-8")
+        .replace(/<stateDir>/g, stateDir);
 }
 
 /**
@@ -299,10 +334,11 @@ function resolveSubagentPrompt(
     inlinePrompt: string | undefined,
     promptFile: string | undefined,
     cwd: string,
+    stateDir: string,
 ): { prompt: string; source: "inline" | "file" | "fixed" } {
     if (mode === "custom") {
         if (inlinePrompt) {
-            return { prompt: inlinePrompt, source: "inline" };
+            return { prompt: inlinePrompt.replace(/<stateDir>/g, stateDir), source: "inline" };
         }
         if (promptFile) {
             // Resolve relative paths against the repo cwd, not the
@@ -315,7 +351,10 @@ function resolveSubagentPrompt(
                     `system_prompt_file '${promptFile}' resolves outside the repository.`,
                 );
             }
-            return { prompt: fs.readFileSync(resolved, "utf-8"), source: "file" };
+            return {
+                prompt: fs.readFileSync(resolved, "utf-8").replace(/<stateDir>/g, stateDir),
+                source: "file",
+            };
         }
         throw new Error(
             `custom mode requires either system_prompt or system_prompt_file. ` +
@@ -324,7 +363,7 @@ function resolveSubagentPrompt(
         );
     }
     // Fixed mode: load from disk.
-    return { prompt: readSubagentPrompt(mode), source: "fixed" };
+    return { prompt: readSubagentPrompt(mode, stateDir), source: "fixed" };
 }
 
 function extractFinalAssistantText(
@@ -375,9 +414,10 @@ function persistTruncatedReport(
     mode: string,
     runId: string,
     fullReport: string,
+    stateDir: string,
 ): string {
     try {
-        const logDir = path.join(cwd, ".pi", "agentify", "logs");
+        const logDir = path.join(cwd, stateDir, "logs");
         fs.mkdirSync(logDir, { recursive: true });
         const safeRunId = runId.replace(/[^a-zA-Z0-9-]/g, "-");
         const filePath = path.join(logDir, `${safeRunId}-spawn-${mode}-report.txt`);
@@ -425,6 +465,15 @@ export type CreateExplorerSession = (
 
 export interface SpawnExplorerToolOptions {
     agentDir: string;
+    /**
+     * Provider-scoped audit state dir (relative to the repo root,
+     * no trailing slash — e.g. ".claude/agentify"). Used as the
+     * destination for sub-agent logs and as the source of truth for
+     * budget-recovery messages. Defaults to the legacy
+     * `.pi/agentify/` path when omitted (backward compat for tests
+     * and direct callers that haven't migrated yet). See ADR 0020.
+     */
+    stateDir?: string;
     /**
      * Resolved model to use for explorer sub-agents. Computed by the
      * caller via `selectModelForRole(registry, config, "explorer")`.
@@ -483,6 +532,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
     const maxConcurrentSpawns = toolOptions.maxConcurrentSpawns ?? DEFAULT_MAX_CONCURRENT_SPAWNS;
     const maxSubagentDurationMs = toolOptions.maxSubagentDurationMs ?? DEFAULT_SUBAGENT_TIMEOUT_MS;
     const maxTotalCostUsd = toolOptions.maxTotalCostUsd ?? DEFAULT_MAX_TOTAL_COST_USD;
+    const stateDir = toolOptions.stateDir ?? LEGACY_PI_STATE_RELATIVE_DIR;
     const createSession: CreateExplorerSession = toolOptions.createSession ?? (async (sessionOptions) => {
         const { session } = await createAgentSession(sessionOptions);
         return { session: session as unknown as ExplorerSubSession };
@@ -620,6 +670,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 params.system_prompt,
                 params.system_prompt_file,
                 ctx.cwd,
+                stateDir,
             );
             subagentSystemPrompt = resolved.prompt;
             promptSource = resolved.source;
@@ -642,6 +693,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 `Error: spawn_explorer budget exhausted: ${totalSpawnCount}/${maxTotalSpawns} total sub-agents already dispatched. ` +
                 "Use the existing reports, write_map/write_map_delta, or mark the remaining gap honestly.",
                 { max_total_spawns: maxTotalSpawns },
+                stateDir,
             );
         }
         if (activeSpawnCount >= maxConcurrentSpawns) {
@@ -649,6 +701,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 `Error: spawn_explorer concurrency budget exhausted: ${activeSpawnCount}/${maxConcurrentSpawns} sub-agents already running. ` +
                 "Wait for current sub-agents to finish before dispatching more.",
                 { max_concurrent_spawns: maxConcurrentSpawns },
+                stateDir,
             );
         }
         if (maxTotalCostUsd !== null && totalCostUsd >= maxTotalCostUsd) {
@@ -659,6 +712,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     max_total_cost_usd: maxTotalCostUsd,
                     total_cost_usd: roundCost(totalCostUsd),
                 },
+                stateDir,
             );
         }
 
@@ -782,7 +836,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const { report, truncated, report_length } = truncateReport(rawReport);
             let truncatedPath = "";
             if (truncated) {
-                truncatedPath = persistTruncatedReport(ctx.cwd, mode, runId, rawReport);
+                truncatedPath = persistTruncatedReport(ctx.cwd, mode, runId, rawReport, stateDir);
             }
 
             // Count actual tool calls from the sub-agent for the step-cap diagnostic.
