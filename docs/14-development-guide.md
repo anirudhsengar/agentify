@@ -40,26 +40,52 @@ Tests are bare `tsx` scripts using `node:assert/strict`. They are
 hermetic: each creates temp dirs under `os.tmpdir()` and restores any
 env/`HOME` it overrides. The contract tests
 (`tests/test-*.sh`) guard repo invariants (skill mirror, skills-lock,
-scaffold payload completeness, single public command, docs presence).
+scaffold payload completeness, single public command, docs presence,
+config-subcommand dispatch in `src/core/cli-commands.ts`).
 
 When you add a unit test file, add it to the `test:unit` script in
 `package.json`.
 
+## Public CLI
+
+`agentify` is a single-package, single-runtime-entry CLI. The runtime
+entry is `agentify` with no positional arguments — that runs the
+brownfield audit or starts the greenfield chat. Three
+config-utility subcommands are also exposed
+([ADR 0008](adr/0008-one-package-two-entry-modes.md), amended
+2026-07-09):
+
+```bash
+agentify login [--provider <name>] [--key <key>]
+agentify logout [--provider <name> | --all] [--yes]
+agentify models list [--provider <name>]
+agentify models show
+agentify models set <provider>/<model>
+agentify models unset
+```
+
+These subcommands operate only on `~/.agentify/{config,auth}.json` and
+never invoke the runtime. Their handlers live in
+`src/core/cli-commands.ts`; dispatch is wired in `src/cli.ts` before
+`--mode` parsing. The defensive guard in `src/core/agentify-app.ts`
+catches any positional argument that survives dispatch and throws
+listing the valid subcommands.
+
+When adding a new public subcommand, update `src/core/cli-commands.ts`,
+extend the contract test in `tests/test-unification-invariants.sh`,
+and add unit tests in `tests/cli-commands.test.ts`. Operational
+subcommands (ones that start a runtime or mutate the repo) require a
+new ADR — the 2026-07-09 amendment is intentionally narrow.
+
 ## Running agentify without a TTY
 
 The CLI prompts interactively for provider/auth on first run. For CI or
-scripted use, pre-seed auth via environment (e.g. `OPENAI_API_KEY`) and
-pass the non-interactive flags:
-
-```bash
-agentify --non-interactive --assume brownfield
-```
-
-- `--non-interactive` (alias `--yes`): never prompt; fail with a clear
-  message if a required input is missing.
-- `--assume brownfield|greenfield`: skip project-kind classification
-  for ambiguous repos.
-- `--config-dir <dir>`: use a different agentify state directory.
+scripted use, pre-seed auth via environment (e.g. `OPENAI_API_KEY`)
+before running `agentify`; it will not prompt and will fail with a
+clear message if a required input is missing. Use `--mode brownfield`
+or `--mode greenfield` to skip project-kind classification for
+ambiguous repos. `agentify login --provider <name> --key <key>` and
+`agentify logout --all --yes` are non-interactive by design.
 
 ## Release
 

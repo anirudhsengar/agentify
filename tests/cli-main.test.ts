@@ -4,7 +4,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { authPath, saveAgentifyConfig } from "../src/core/agentify-config.ts";
+import { authPath, defaultConfigDir, saveAgentifyConfig } from "../src/core/agentify-config.ts";
 import { writeProjectState } from "../src/core/project-state.ts";
 import { runAgentifyApp } from "../src/core/agentify-app.ts";
 import { AGENTIFY_MANAGED_MARKERS } from "../src/core/artifact-exporters.ts";
@@ -145,138 +145,156 @@ const READY_GITHUB: GitHubReadiness = {
   ],
 };
 
-async function testRejectsLegacySubcommands(): Promise<void> {
-  const cwd = tempDir("agentify-cli-main-subcommands-");
-  const configDir = tempDir("agentify-cli-main-config-");
+/**
+ * Run `fn` with HOME pointed at a fresh temp dir so `defaultConfigDir()`
+ * (the only remaining way to find the agentify state dir) resolves
+ * there. Returns the temp configDir the function observed.
+ */
+async function withTempHome<T>(fn: (configDir: string) => Promise<T>): Promise<T> {
+  const prevHome = process.env["HOME"];
+  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-cli-main-home-"));
+  process.env["HOME"] = tempHome;
+  const configDir = defaultConfigDir();
   try {
-    await assert.rejects(
-      () => runAgentifyApp({
-        args: ["webhook", "status"],
-        cwd,
-        configDir,
-        ui: new TestUi(),
-        runtime: new BrownfieldFakeRuntime(),
-      }),
-      /no longer accepts subcommands/,
-    );
+    return await fn(configDir);
   } finally {
-    fs.rmSync(cwd, { recursive: true, force: true });
-    fs.rmSync(configDir, { recursive: true, force: true });
+    if (prevHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = prevHome;
+    fs.rmSync(tempHome, { recursive: true, force: true });
   }
+}
+
+async function testRejectsLegacySubcommands(): Promise<void> {
+  await withTempHome(async () => {
+    const cwd = tempDir("agentify-cli-main-subcommands-");
+    try {
+      await assert.rejects(
+        () => runAgentifyApp({
+          args: ["webhook", "status"],
+          cwd,
+          ui: new TestUi(),
+          runtime: new BrownfieldFakeRuntime(),
+        }),
+        /does not accept 'webhook'/,
+      );
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
 }
 
 async function testRunsThroughSingleEntrypoint(): Promise<void> {
-  const cwd = tempDir("agentify-cli-main-run-");
-  const configDir = tempDir("agentify-cli-main-run-config-");
-  try {
-    fs.writeFileSync(path.join(cwd, "package.json"), "{}\n");
-    saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
-    fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
+  await withTempHome(async (configDir) => {
+    const cwd = tempDir("agentify-cli-main-run-");
+    try {
+      fs.writeFileSync(path.join(cwd, "package.json"), "{}\n");
+      saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
+      fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
 
-    const ui = new TestUi();
-    const runtime = new BrownfieldFakeRuntime();
-    await runAgentifyApp({
-      args: [],
-      cwd,
-      configDir,
-      ui,
-      runtime,
-      assumeProjectKind: "brownfield",
-      githubReadinessOverride: READY_GITHUB,
-    });
+      const ui = new TestUi();
+      const runtime = new BrownfieldFakeRuntime();
+      await runAgentifyApp({
+        args: [],
+        cwd,
+        ui,
+        runtime,
+        mode: "brownfield",
+        githubReadinessOverride: READY_GITHUB,
+      });
 
-    assert.equal(runtime.sessionCalls, 1);
-    assert.ok(fs.existsSync(path.join(cwd, "AGENTS.md")));
-    assert.ok(fs.existsSync(path.join(cwd, ".codex", "agents", "payments.toml")));
-    assert.ok(fs.existsSync(path.join(cwd, ".claude", "agents", "payments.md")));
-  } finally {
-    fs.rmSync(cwd, { recursive: true, force: true });
-    fs.rmSync(configDir, { recursive: true, force: true });
-  }
+      assert.equal(runtime.sessionCalls, 1);
+      assert.ok(fs.existsSync(path.join(cwd, "AGENTS.md")));
+      assert.ok(fs.existsSync(path.join(cwd, ".codex", "agents", "payments.toml")));
+      assert.ok(fs.existsSync(path.join(cwd, ".claude", "agents", "payments.md")));
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
 }
 
 async function testAttachesToInitializedRepoWithoutRerun(): Promise<void> {
-  const cwd = tempDir("agentify-cli-main-attach-");
-  const configDir = tempDir("agentify-cli-main-attach-config-");
-  try {
-    seedReadyRepo(cwd, configDir);
-    const ui = new TestUi();
-    const runtime = new BrownfieldFakeRuntime();
+  await withTempHome(async (configDir) => {
+    const cwd = tempDir("agentify-cli-main-attach-");
+    try {
+      seedReadyRepo(cwd, configDir);
+      const ui = new TestUi();
+      const runtime = new BrownfieldFakeRuntime();
 
-    await runAgentifyApp({
-      args: [],
-      cwd,
-      configDir,
-      ui,
-      runtime,
-      githubReadinessOverride: READY_GITHUB,
-    });
+      await runAgentifyApp({
+        args: [],
+        cwd,
+        ui,
+        runtime,
+        githubReadinessOverride: READY_GITHUB,
+      });
 
-    assert.equal(runtime.sessionCalls, 0);
-    assert.ok(ui.statuses.some((message) => message.includes("attached to initialized brownfield repo")));
-    assert.ok(ui.infos.some((message) => message.includes("feature_agents=1, workflows=1, experts=1, skills=1")));
-    assert.ok(ui.infos.some((message) => message.includes("last_run=2026-07-05T00:00:00Z")));
-    assert.ok(ui.infos.some((message) => message.includes("latest log")));
-    assert.ok(ui.infos.some((message) => message.includes("GitHub bootstrap is ready")));
-  } finally {
-    fs.rmSync(cwd, { recursive: true, force: true });
-    fs.rmSync(configDir, { recursive: true, force: true });
-  }
+      assert.equal(runtime.sessionCalls, 0);
+      assert.ok(ui.statuses.some((message) => message.includes("attached to initialized brownfield repo")));
+      assert.ok(ui.infos.some((message) => message.includes("feature_agents=1, workflows=1, experts=1, skills=1")));
+      assert.ok(ui.infos.some((message) => message.includes("last_run=2026-07-05T00:00:00Z")));
+      assert.ok(ui.infos.some((message) => message.includes("latest log")));
+      assert.ok(ui.infos.some((message) => message.includes("GitHub bootstrap is ready")));
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
 }
 
 async function testRecoversPartialRepo(): Promise<void> {
-  const cwd = tempDir("agentify-cli-main-recover-");
-  const configDir = tempDir("agentify-cli-main-recover-config-");
-  try {
-    fs.writeFileSync(
-      path.join(cwd, "AGENTS.md"),
-      `${AGENTIFY_MANAGED_MARKERS.markdown}\n# partial\n`,
-    );
-    writeProjectState(configDir, {
-      cwd,
-      lastRunAt: "2026-07-04T12:00:00Z",
-      projectKind: "brownfield",
-      runStatus: "partial",
-      repoMode: "brownfield",
-      repoStatus: "partial",
-      featureAgentCount: 0,
-      latestLogPath: null,
-      github: {
-        hasGitDirectory: true,
-        hasGitHubRemote: true,
-        ghCliAvailable: true,
-        originUrl: "git@github.com:owner/repo.git",
-      },
-    });
-    saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
-    fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
+  await withTempHome(async (configDir) => {
+    const cwd = tempDir("agentify-cli-main-recover-");
+    try {
+      fs.writeFileSync(
+        path.join(cwd, "AGENTS.md"),
+        `${AGENTIFY_MANAGED_MARKERS.markdown}\n# partial\n`,
+      );
+      writeProjectState(configDir, {
+        cwd,
+        lastRunAt: "2026-07-04T12:00:00Z",
+        projectKind: "brownfield",
+        runStatus: "partial",
+        repoMode: "brownfield",
+        repoStatus: "partial",
+        featureAgentCount: 0,
+        latestLogPath: null,
+        github: {
+          hasGitDirectory: true,
+          hasGitHubRemote: true,
+          ghCliAvailable: true,
+          originUrl: "git@github.com:owner/repo.git",
+        },
+      });
+      saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
+      fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
 
-    const ui = new TestUi();
-    const runtime = new BrownfieldFakeRuntime();
-    await runAgentifyApp({
-      args: [],
-      cwd,
-      configDir,
-      ui,
-      runtime,
-      assumeProjectKind: "brownfield",
-      githubReadinessOverride: READY_GITHUB,
-    });
+      const ui = new TestUi();
+      const runtime = new BrownfieldFakeRuntime();
+      await runAgentifyApp({
+        args: [],
+        cwd,
+        ui,
+        runtime,
+        mode: "brownfield",
+        githubReadinessOverride: READY_GITHUB,
+      });
 
-    assert.equal(runtime.sessionCalls, 1);
-    assert.ok(ui.statuses.some((message) => message.includes("detected incomplete setup; recovering")));
-    assert.ok(ui.infos.some((message) => message.includes("previous run ended with partial at 2026-07-04T12:00:00Z")));
-    assert.ok(ui.infos.some((message) => message.includes("missing specs/README.md")));
-    assert.ok(fs.existsSync(path.join(cwd, "specs", "README.md")));
-    assert.ok(fs.existsSync(path.join(cwd, "SETUP.md")));
-  } finally {
-    fs.rmSync(cwd, { recursive: true, force: true });
-    fs.rmSync(configDir, { recursive: true, force: true });
-  }
+      assert.equal(runtime.sessionCalls, 1);
+      assert.ok(ui.statuses.some((message) => message.includes("detected incomplete setup; recovering")));
+      assert.ok(ui.infos.some((message) => message.includes("previous run ended with partial at 2026-07-04T12:00:00Z")));
+      assert.ok(ui.infos.some((message) => message.includes("missing specs/README.md")));
+      assert.ok(fs.existsSync(path.join(cwd, "specs", "README.md")));
+      assert.ok(fs.existsSync(path.join(cwd, "SETUP.md")));
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
 }
 
 async function testBinPrintsConciseErrors(): Promise<void> {
-  const result = spawnSync(process.execPath, ["bin/agentify.js", "foo"], {
+  // `--mode bogus` triggers a thrown error in src/cli.ts that the bin
+  // wrapper turns into a one-line `agentify: <msg>` on stderr with no
+  // stack trace leak.
+  const result = spawnSync(process.execPath, ["bin/agentify.js", "--mode", "bogus"], {
     cwd: path.resolve("."),
     encoding: "utf-8",
   });
@@ -285,12 +303,52 @@ async function testBinPrintsConciseErrors(): Promise<void> {
   assert.doesNotMatch(result.stderr, /Error:|at .*\.ts|at .*\.js/);
 }
 
+async function testBinDispatchesLoginAndExitsZero(): Promise<void> {
+  await withTempHome(async () => {
+    // openai-codex is OAuth-only; `login --provider openai-codex` should
+    // print instructions and exit 0 without writing or prompting.
+    const result = spawnSync(
+      process.execPath,
+      ["bin/agentify.js", "login", "--provider", "openai-codex"],
+      { cwd: path.resolve("."), encoding: "utf-8" },
+    );
+    assert.equal(result.status, 0, `expected exit 0; stderr=${result.stderr}`);
+    assert.match(result.stdout, /OpenAI Codex uses OAuth/);
+    assert.match(result.stdout, /pi auth login openai-codex/);
+  });
+}
+
+async function testBinDispatchesLoginWithBadProviderExitsNonzero(): Promise<void> {
+  const result = spawnSync(
+    process.execPath,
+    ["bin/agentify.js", "login", "--provider", "fake"],
+    { cwd: path.resolve("."), encoding: "utf-8" },
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /^agentify: login: unknown provider 'fake'/);
+}
+
+async function testBinUnknownSubcommandReturnsValidList(): Promise<void> {
+  const result = spawnSync(process.execPath, ["bin/agentify.js", "foo"], {
+    cwd: path.resolve("."),
+    encoding: "utf-8",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /Known subcommands: login, logout, models/,
+  );
+}
+
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "rejectsLegacySubcommands", fn: testRejectsLegacySubcommands },
   { name: "runsThroughSingleEntrypoint", fn: testRunsThroughSingleEntrypoint },
   { name: "attachesToInitializedRepoWithoutRerun", fn: testAttachesToInitializedRepoWithoutRerun },
   { name: "recoversPartialRepo", fn: testRecoversPartialRepo },
   { name: "binPrintsConciseErrors", fn: testBinPrintsConciseErrors },
+  { name: "binDispatchesLoginAndExitsZero", fn: testBinDispatchesLoginAndExitsZero },
+  { name: "binDispatchesLoginWithBadProviderExitsNonzero", fn: testBinDispatchesLoginWithBadProviderExitsNonzero },
+  { name: "binUnknownSubcommandReturnsValidList", fn: testBinUnknownSubcommandReturnsValidList },
 ];
 
 let passed = 0;

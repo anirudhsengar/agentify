@@ -2,6 +2,7 @@ import { runAgentify } from "./run-agentify.ts";
 import { formatGitHubReadiness, inspectGitHubReadiness } from "./github-readiness.ts";
 import { readProjectState } from "./project-state.ts";
 import { inspectAgentifyRepoState } from "./repo-status.ts";
+import { defaultConfigDir } from "./agentify-config.ts";
 import type { AgentifyTarget, RunAgentifyOptions } from "./types.ts";
 
 const DEFAULT_TARGETS: ReadonlyArray<AgentifyTarget> = ["codex", "claude", "pi"];
@@ -21,8 +22,9 @@ function reportGitHubReadiness(options: RunAgentifyAppOptions): void {
 }
 
 function attachToInitializedRepo(options: RunAgentifyAppOptions): void {
-  const repoState = inspectAgentifyRepoState(options.cwd, options.configDir);
-  const projectState = readProjectState(options.configDir, options.cwd);
+  const configDir = defaultConfigDir();
+  const repoState = inspectAgentifyRepoState(options.cwd, configDir);
+  const projectState = readProjectState(configDir, options.cwd);
   options.ui.status(`agentify: attached to initialized ${repoState.mode} repo`);
   options.ui.info(
     `agentify: status=ready, feature_agents=${repoState.featureAgentCount}, workflows=${repoState.workflowCount}, experts=${repoState.expertCount}, skills=${repoState.skillCount}, found=${repoState.found.length}`,
@@ -43,17 +45,18 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
   if (options.args.length > 0) {
     const first = options.args[0];
     throw new Error(
-      `agentify no longer accepts subcommands (${first}). Run \`agentify\` with no positional arguments.`,
+      `agentify does not accept '${first}'. Known subcommands: login, logout, models. Run \`agentify --help\` for usage.`,
     );
   }
 
-  const repoState = inspectAgentifyRepoState(options.cwd, options.configDir);
+  const configDir = defaultConfigDir();
+  const repoState = inspectAgentifyRepoState(options.cwd, configDir);
   if (repoState.status === "ready") {
     attachToInitializedRepo(options);
     return;
   }
   if (repoState.status === "partial") {
-    const projectState = readProjectState(options.configDir, options.cwd);
+    const projectState = readProjectState(configDir, options.cwd);
     options.ui.status("agentify: detected incomplete setup; recovering");
     if (projectState) {
       options.ui.info(
@@ -67,12 +70,11 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
 
   await runAgentify({
     cwd: options.cwd,
-    configDir: options.configDir,
     ui: options.ui,
     runtime: options.runtime,
     targets: options.targets ?? DEFAULT_TARGETS,
     signal: options.signal,
-    assumeProjectKind: options.assumeProjectKind,
+    mode: options.mode,
     configOverride: options.configOverride,
     githubReadinessOverride: options.githubReadinessOverride,
   });

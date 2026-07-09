@@ -28,11 +28,14 @@ agentify
 ```
 
 For CI or scripted use, pre-seed auth via a provider environment
-variable (e.g. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) and run
-non-interactively:
+variable (e.g. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) before running
+`agentify`. The CLI will not prompt and will fail with a clear error
+if a required input is missing. Pass `--mode brownfield` or
+`--mode greenfield` to skip project-kind classification for
+ambiguous repos:
 
 ```bash
-agentify --non-interactive --assume brownfield
+agentify --mode brownfield
 ```
 
 See [docs/lifecycle/README.md](docs/lifecycle/README.md) for the full
@@ -140,22 +143,36 @@ gaps and rolls back generated surface writes.
 ## Command Surface
 
 ```bash
-agentify [--non-interactive] [--assume brownfield|greenfield] [--config-dir <dir>]
+# Runtime entry — the only public command that runs the audit/attach loop.
+agentify [--mode brownfield|greenfield]
 agentify --help
 agentify --version
+
+# Config-utility subcommands — manage ~/.agentify/{config,auth}.json only;
+# they never invoke the runtime.
+agentify login [--provider <name>] [--key <key>]
+agentify logout [--provider <name> | --all] [--yes]
+agentify models list [--provider <name>]
+agentify models show
+agentify models set <provider>/<model>
+agentify models unset
 ```
 
-That is the only public CLI entrypoint. Bootstrap, attach, recovery,
-and future lifecycle operations all start from `agentify` itself. The
-flags above tune a single run (non-interactive/CI use, forced project
-kind, alternate state dir); there are no subcommands.
+The runtime entry (`agentify` with no positional arguments) is what
+performs the brownfield audit or starts the greenfield chat. The
+config-utility subcommands exist to inspect and edit `~/.agentify/`
+without manually editing files. The `--mode` flag skips project-kind
+classification for ambiguous repos. Internal runtimes (`webhook`,
+`aiw`, `orchestrator`, `expert`) are library-only and never appear as
+subcommands. See [ADR 0008](docs/adr/0008-one-package-two-entry-modes.md).
 
 ## Troubleshooting
 
 - **"Cannot prompt because stdin is not interactive"** — you ran
   agentify without a TTY and without pre-configured auth. Set a provider
-  env var (e.g. `OPENAI_API_KEY`) or create `~/.agentify/auth.json`, and
-  pass `--non-interactive --assume brownfield`.
+  env var (e.g. `OPENAI_API_KEY`) or create `~/.agentify/auth.json`
+  before running `agentify`. Pass `--mode brownfield` to skip
+  classification for an ambiguous repo.
 - **"audit did not complete"** — the audit did not close every coverage
   dimension, so no files were exported. agentify prints the specific
   gaps and the path to a JSONL run log under `~/.agentify/logs/agentify/`.

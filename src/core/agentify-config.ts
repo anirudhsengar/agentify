@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { AuthStorage } from "@earendil-works/pi-coding-agent";
 import {
   AGENTIFY_PROVIDERS,
   getProviderEnvValue,
@@ -119,21 +120,23 @@ export async function ensureAgentifyConfig(
 
   const selected = AGENTIFY_PROVIDERS.find((provider) => provider.value === providerValue)!;
   const envKey = getProviderEnvValue(selected.value);
-  let auth = readJsonObject(authPath(configDir));
   if (!envKey) {
     if (selected.env.length === 0) {
       throw new Error(
         `${selected.label} uses OAuth in Pi. agentify can use existing credentials, ` +
-          "but cannot start that login flow yet.",
+          "but cannot start that login flow yet. Use `agentify login --provider " +
+          selected.value +
+          "` to see setup instructions.",
       );
     }
     const key = await ui.promptSecret(credentialPrompt(selected.label, selected.env));
     if (!key.trim()) throw new Error("No API key provided.");
-    auth = {
-      ...auth,
-      [selected.value]: { type: "api_key", key: key.trim() },
-    };
-    writeJson0600(authPath(configDir), auth);
+    // Route through AuthStorage so the file is written under a lock with
+    // 0600 semantics — same surface the login/logout subcommands use.
+    AuthStorage.create(authPath(configDir)).set(selected.value, {
+      type: "api_key",
+      key: key.trim(),
+    });
   }
 
   config = {

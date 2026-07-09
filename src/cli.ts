@@ -1,15 +1,18 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline/promises";
-import { stdin as input, stdout as output } from "node:process";
-import { defaultConfigDir } from "./core/agentify-config.ts";
+import { stdin as input, stdout as output, stderr as errOutput } from "node:process";
 import { PiSdkRuntime, packageRoot } from "./core/pi-sdk-runtime.ts";
 import { runAgentifyApp } from "./core/agentify-app.ts";
+import { defaultConfigDir } from "./core/agentify-config.ts";
+import {
+  dispatchSubcommand,
+  printSubcommandHelp,
+  type SubcommandContext,
+} from "./core/cli-commands.ts";
 import type { AgentifyUi } from "./core/types.ts";
 
 class ConsoleUi implements AgentifyUi {
-  constructor(private readonly nonInteractive = false) {}
-
   status(message: string): void {
     output.write(`${message}\n`);
   }
@@ -23,18 +26,11 @@ class ConsoleUi implements AgentifyUi {
   }
 
   private ensureInteractive(message: string): void {
-    if (this.nonInteractive) {
-      throw new Error(
-        `${message} Running non-interactively (--non-interactive). ` +
-          "Pre-configure auth via a provider env var (e.g. OPENAI_API_KEY / ANTHROPIC_API_KEY) " +
-          "or ~/.agentify/auth.json, and pass --assume brownfield|greenfield for ambiguous repos.",
-      );
-    }
     if (!input.isTTY) {
       throw new Error(
         `${message} Cannot prompt because stdin is not interactive. ` +
-          "Pre-configure auth via a provider env var or ~/.agentify/auth.json, " +
-          "or run with --non-interactive and --assume for scripted use.",
+          "Pre-configure auth via a provider env var (e.g. OPENAI_API_KEY / ANTHROPIC_API_KEY) " +
+          "or ~/.agentify/auth.json before running agentify.",
       );
     }
   }
@@ -117,45 +113,22 @@ function printHelp(): void {
 
 Usage:
   agentify [options]
+  agentify <subcommand> [subcommand-options]
 
 Options:
   -h, --help                 Show this help and exit.
   -v, --version              Print the version and exit.
-  --config-dir <dir>         Use a different agentify state dir (default ~/.agentify).
-  --non-interactive, --yes   Never prompt. Requires pre-configured auth
-                             (provider env var or ~/.agentify/auth.json).
-  --assume <kind>            Skip classification for ambiguous repos.
-                             <kind> is 'brownfield' or 'greenfield'.
+  --mode <kind>              Skip project-kind classification for ambiguous
+                             repos. <kind> is 'brownfield' or 'greenfield'.
 
 Run agentify in the current repository. Existing repos are audited and exported for
 Codex, Claude Code, and Pi. Empty/new repos start a local-first greenfield chat.
 
-agentify exposes one public CLI entrypoint. Bootstrap, attach, and recovery all
-start from \`agentify\` itself. After bootstrap, work through GitHub issues, comments,
-and PRs (see docs/lifecycle/README.md).
+agentify exposes one public runtime entrypoint: \`agentify\` with no positional
+arguments. Bootstrap, attach, and recovery all start there. After bootstrap, work
+through GitHub issues, comments, and PRs (see docs/lifecycle/README.md).
 `);
-}
-
-function takeFlagValue(argv: string[], names: string[]): string | undefined {
-  for (let i = 0; i < argv.length; i++) {
-    if (names.includes(argv[i])) {
-      const value = argv[i + 1];
-      argv.splice(i, value ? 2 : 1);
-      return value;
-    }
-  }
-  return undefined;
-}
-
-function takeBooleanFlag(argv: string[], names: string[]): boolean {
-  let found = false;
-  for (let i = argv.length - 1; i >= 0; i--) {
-    if (names.includes(argv[i])) {
-      argv.splice(i, 1);
-      found = true;
-    }
-  }
-  return found;
+  printSubcommandHelp(output);
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
@@ -167,29 +140,48 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     output.write(`${readPackageVersion()}\n`);
     return;
   }
-  // Parse flags from argv so the single public entrypoint stays one
-  // command while supporting non-interactive/scripted use.
-  const configDir = takeFlagValue(argv, ["--config-dir", "--configDir"])
-    ?? defaultConfigDir();
-  const nonInteractive = takeBooleanFlag(argv, ["--non-interactive", "--yes", "-y"]);
-  const assumeRaw = takeFlagValue(argv, ["--assume", "--assume-kind"]);
-  let assumeProjectKind: "brownfield" | "greenfield" | undefined;
-  if (assumeRaw !== undefined) {
-    if (assumeRaw !== "brownfield" && assumeRaw !== "greenfield") {
+
+  // Subcommand dispatch runs BEFORE --mode parsing so that flags belonging
+  // to a subcommand (e.g. `models list --provider x`) are not consumed by
+  // the top-level parser.
+  const ui = new ConsoleUi();
+  const subcommandCtx: SubcommandContext = {
+    cwd: process.cwd(),
+    configDir: defaultConfigDir(),
+    ui,
+    out: output,
+    err: errOutput,
+  };
+  if (argv.length > 0) {
+    const head = argv[0];
+    if (head === "login" || head === "logout" || head === "models") {
+      await dispatchSubcommand(argv, subcommandCtx);
+      return;
+    }
+    throw new Error(
+      `unknown subcommand '${head}'. Known subcommands: login, logout, models. Run \`agentify --help\` for usage.`,
+    );
+  }
+
+  let mode: "brownfield" | "greenfield" | undefined;
+  const modeIndex = argv.indexOf("--mode");
+  if (modeIndex >= 0) {
+    const value = argv[modeIndex + 1];
+    if (value !== "brownfield" && value !== "greenfield") {
       throw new Error(
-        `--assume must be 'brownfield' or 'greenfield' (got '${assumeRaw}').`,
+        `--mode must be 'brownfield' or 'greenfield' (got '${value}').`,
       );
     }
-    assumeProjectKind = assumeRaw;
+    mode = value;
+    argv.splice(modeIndex, 2);
   }
 
   await runAgentifyApp({
     args: argv,
     cwd: process.cwd(),
-    configDir,
-    ui: new ConsoleUi(nonInteractive),
+    ui,
     runtime: new PiSdkRuntime(),
-    assumeProjectKind,
+    mode,
   });
 }
 
@@ -200,4 +192,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exitCode = 1;
   });
 }
-

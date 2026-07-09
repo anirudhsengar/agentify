@@ -403,6 +403,19 @@ fi
 if grep -q 'agentify expert' README.md docs/lifecycle/README.md; then
   fail "README.md and docs/lifecycle/README.md must not present expert as a public command"
 fi
+
+# 16b. Config-utility subcommands are the only public subcommands and
+#      must be implemented in src/core/cli-commands.ts (ADR 0008 amendment
+#      2026-07-09).
+[ -f src/core/cli-commands.ts ] || fail "src/core/cli-commands.ts must exist"
+for sub in login logout models; do
+  if ! grep -q "\"$sub\"" src/core/cli-commands.ts; then
+    fail "src/core/cli-commands.ts must dispatch the '$sub' subcommand"
+  fi
+done
+if grep -q '"webhook"\|"aiw"\|"orchestrator"\|"expert"' src/core/cli-commands.ts; then
+  fail "src/core/cli-commands.ts must not dispatch internal runtimes as subcommands"
+fi
 for f in src/cli-webhook.ts src/cli-aiw.ts src/cli-orchestrator.ts src/cli-expert.ts tests/cli-expert.test.ts; do
   if [ -e "$f" ]; then
     fail "legacy adapter/test should be removed: $f"
