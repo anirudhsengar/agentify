@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { Model, Api } from "@earendil-works/pi-ai";
+import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
 import { createSpawnExplorerTool } from "../../src/core/audit/spawn-explorer-tool.ts";
 
 function tempDir(name: string): string {
@@ -35,12 +37,38 @@ function assertBudgetResume(result: { details?: unknown }): void {
   );
 }
 
+/**
+ * Stub `explorerModel` + `modelRegistry` for budget tests — these tests
+ * never reach the model resolution path because the budget gate fires
+ * before any sub-session is created.
+ */
+function stubExplorerArgs() {
+  const stubModel = {
+    id: "stub",
+    name: "stub",
+    provider: "stub",
+    baseUrl: "",
+    reasoning: false,
+    input: ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 0,
+    maxTokens: 0,
+    api: "openai-completions",
+  } as unknown as Model<Api>;
+  const stubRegistry = {
+    find: () => undefined,
+    getAvailable: () => [],
+  } as unknown as ModelRegistry;
+  return { explorerModel: stubModel, modelRegistry: stubRegistry };
+}
+
 async function testRejectsWhenTotalSpawnBudgetIsExhausted(): Promise<void> {
   const cwd = tempDir("spawn-budget-total");
   try {
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
       maxTotalSpawns: 0,
+      ...stubExplorerArgs(),
     });
     const result = await tool.execute(
       "test-spawn-budget-total",
@@ -66,6 +94,7 @@ async function testRejectsWhenConcurrentSpawnBudgetIsExhausted(): Promise<void> 
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
       maxConcurrentSpawns: 0,
+      ...stubExplorerArgs(),
     });
     const result = await tool.execute(
       "test-spawn-budget-concurrent",
@@ -91,6 +120,7 @@ async function testRejectsWhenCostBudgetIsExhausted(): Promise<void> {
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
       maxTotalCostUsd: 0.01,
+      ...stubExplorerArgs(),
       createSession: async () => ({
         session: {
           messages: [

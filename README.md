@@ -153,9 +153,11 @@ agentify --version
 agentify login [--provider <name>] [--key <key>]
 agentify logout [--provider <name> | --all] [--yes]
 agentify models list [--provider <name>]
-agentify models show
-agentify models set <provider>/<model>
-agentify models unset
+agentify models show [--resolved]
+agentify models set <provider>/<model>             # legacy: writes to provider/model
+agentify models set <slot> <provider>/<model>      # slot: primary|explorer|scoring
+agentify models unset                                # legacy: clears provider/model
+agentify models unset <slot>                         # clears that slot
 ```
 
 The runtime entry (`agentify` with no positional arguments) is what
@@ -164,7 +166,31 @@ config-utility subcommands exist to inspect and edit `~/.agentify/`
 without manually editing files. The `--mode` flag skips project-kind
 classification for ambiguous repos. Internal runtimes (`webhook`,
 `aiw`, `orchestrator`, `expert`) are library-only and never appear as
-subcommands. See [ADR 0008](docs/adr/0008-one-package-two-entry-modes.md).
+subcommands. See [ADR 0008](docs/adr/0008-one-package-two-entry-modes.md)
+and [ADR 0017](docs/adr/0017-named-model-slots.md) for the slot
+design.
+
+### Model slots
+
+agentify exposes three named model slots so you can assign different
+models to different parts of the audit (ADR 0017):
+
+| Slot | Default consumer |
+| --- | --- |
+| `primary` | Brownfield/greenfield builder, orchestrator host, AIW phase, webhook task |
+| `explorer` | `spawn_explorer` sub-agents |
+| `scoring` | Reserved for future lightweight judgment-call surfaces |
+
+When a slot is unset, the resolver falls back to `primary` (or, if
+neither slot is set, to the legacy `provider`/`model` fields).
+**agentify never silently picks a "weaker" model** when you've
+explicitly configured one — see the "max quality is the floor"
+invariant in [ADR 0017](docs/adr/0017-named-model-slots.md).
+
+On first run, agentify prompts for a model strategy:
+"Use one model for everything" (sets `primary` only) or
+"Assign different models per role" (prompts for primary, then
+optionally explorer/scoring). The CLI lets you change this later.
 
 ## Troubleshooting
 

@@ -49,6 +49,7 @@ import {
     type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
+import type { Model, Api } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
@@ -104,20 +105,11 @@ const MODE_TO_FILE: Record<string, string> = {
 // sub-agent with the composed system prompt (inline or as a file).
 const CUSTOM_TEMPLATE_PATH = path.join(EXPLORERS_DIR, "_template.md");
 
-// Per-mode model selection (Phase 2.7). The `custom` mode inherits
-// from the parent (the builder picks the model per-topic).
-const MODE_MODEL_DEFAULT: Record<string, string> = {
-    topography: "haiku",
-    module_graph: "sonnet",
-    type_tracer: "sonnet",
-    conventions: "sonnet",
-    operational: "sonnet",
-    security: "sonnet",
-    pitfalls: "sonnet",
-    validation: "haiku",
-    gap_filler: "opus",
-    custom: "sonnet",
-};
+// Per-mode model selection (Phase 2.7). DELETED in Phase 2 (ADR 0017):
+// sub-agents now run on the configured `explorer` slot model — every
+// mode resolves to the same Model. The `model` parameter still accepts
+// `"inherit" | "haiku" | "sonnet" | "opus"` literals for back-compat,
+// which override the slot on a per-call basis via `LITERAL_TO_MODEL`.
 
 /** Per-mode step caps (Phase 4.6). */
 const MODE_STEP_DEFAULTS: Record<string, { reads: number; bash: number; steps: number }> = {
@@ -138,6 +130,18 @@ const ModelChoice = StringEnum(
     ["inherit", "haiku", "sonnet", "opus"] as const,
     { default: "inherit" },
 );
+
+/**
+ * Map the `model` literal to a concrete (provider, id) pair. The
+ * resolver picks the model that has auth configured; if the literal
+ * points at a model the user's auth doesn't cover, the resolver
+ * throws a clear `NoAuthForProviderError`. Phase 2 / ADR 0017.
+ */
+const LITERAL_TO_MODEL: Record<string, { provider: string; id: string }> = {
+    haiku: { provider: "anthropic", id: "claude-haiku-4-5-20251001" },
+    sonnet: { provider: "anthropic", id: "claude-sonnet-4-6" },
+    opus: { provider: "anthropic", id: "claude-opus-4-8" },
+};
 
 const SpawnExplorerParams = Type.Object({
     mode: Type.Optional(ExplorerMode),
@@ -421,6 +425,21 @@ export type CreateExplorerSession = (
 
 export interface SpawnExplorerToolOptions {
     agentDir: string;
+    /**
+     * Resolved model to use for explorer sub-agents. Computed by the
+     * caller via `selectModelForRole(registry, config, "explorer")`.
+     * When `params.model === "inherit"` (the default), this is the
+     * model passed to `createSession`. When the user overrides with
+     * `haiku`/`sonnet`/`opus`, this is replaced with a literal lookup.
+     */
+    explorerModel: Model<Api>;
+    /**
+     * ModelRegistry used to resolve literal overrides
+     * (`haiku`/`sonnet`/`opus`) against the user's auth. Required so
+     * we can throw `NoAuthForProviderError` rather than silently
+     * downgrade.
+     */
+    modelRegistry: import("@earendil-works/pi-coding-agent").ModelRegistry;
     /** Hard cap for total sub-agents spawned by this tool instance. */
     maxTotalSpawns?: number;
     /** Hard cap for concurrently running sub-agents across tool instances. */
@@ -534,11 +553,54 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             }
         }
 
-        // Resolve model (Phase 2.7).
+        // Resolve the sub-agent's model (Phase 2 / ADR 0017). Default
+        // is the explorer slot (passed via `toolOptions.explorerModel`).
+        // Explicit `model: haiku|sonnet|opus` literals are resolved
+        // against the user's auth via `modelRegistry.find`; if the
+        // literal points at a model the user can't actually call,
+        // we return a clear error rather than silently downgrading.
         const modelChoice = params.model ?? "inherit";
-        const resolvedModel = modelChoice === "inherit"
-            ? MODE_MODEL_DEFAULT[mode] ?? "sonnet"
-            : modelChoice;
+        let subAgentModel: Model<Api>;
+        let subAgentModelLabel: string;
+        if (modelChoice === "inherit") {
+            subAgentModel = toolOptions.explorerModel;
+            subAgentModelLabel = `${subAgentModel.provider}/${subAgentModel.id}`;
+        } else {
+            const literal = LITERAL_TO_MODEL[modelChoice];
+            if (!literal) {
+                return {
+                    content: [{ type: "text", text: `Error: unknown model literal '${modelChoice}'` }],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+            const found = toolOptions.modelRegistry.find(literal.provider, literal.id);
+            if (!found) {
+                return {
+                    content: [{
+                        type: "text",
+                        text: `Error: spawn_explorer model '${literal.provider}/${literal.id}' is not in the model registry. ` +
+                            `Run \`agentify models list --provider ${literal.provider}\` to see available models.`,
+                    }],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+            const available = toolOptions.modelRegistry.getAvailable();
+            if (!available.some((m) => m.id === found.id && m.provider === found.provider)) {
+                return {
+                    content: [{
+                        type: "text",
+                        text: `Error: spawn_explorer model '${literal.provider}/${literal.id}' is known but unavailable with the current credentials. ` +
+                            `Run \`agentify login --provider ${literal.provider}\` first.`,
+                    }],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+            subAgentModel = found;
+            subAgentModelLabel = `${found.provider}/${found.id}`;
+        }
 
         // Resolve step caps (Phase 4.6).
         const stepDefaults = MODE_STEP_DEFAULTS[mode] ?? { reads: 10, bash: 2, steps: 15 };
@@ -614,7 +676,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         const summarySuffix = params.summary ? `\n\n# Focus\n\n${params.summary}` : "";
         const constraintsBlock =
             `\n\n# Constraints (from parent)\n` +
-            `- Model: ${resolvedModel}\n` +
+            `- Model: ${subAgentModelLabel}\n` +
             `- Step cap: ${maxSteps} total (${maxReads} reads, ${maxBash} bash invocations max)\n` +
             `- Return ## Report within ~${maxSteps * 1000} tokens.`;
         const task = mode === "custom"
@@ -679,7 +741,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const { session: createdSession } = await createSession({
                 cwd: ctx.cwd,
                 agentDir: toolOptions.agentDir,
-                model: ctx.model,
+                model: subAgentModel,
                 modelRegistry: ctx.modelRegistry,
                 thinkingLevel: parentThinkingLevel === "unknown" ? undefined : parentThinkingLevel,
                 tools: [...toolsForMode],
@@ -768,7 +830,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     {
                         type: "text",
                         text:
-                            `Sub-agent (mode=${mode}, model=${resolvedModel}) explored ${params.target_path} in ${durationMs}ms. ` +
+                            `Sub-agent (mode=${mode}, model=${subAgentModelLabel}) explored ${params.target_path} in ${durationMs}ms. ` +
                             `reads=${readCount}/${maxReads}, bash=${bashCount}/${maxBash}, ${costText}${stepWarning}${costWarning}.\n\n` +
                             report,
                     },
@@ -780,7 +842,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     resolved_target_path: resolvedTarget,
                     focus: params.focus ?? null,
                     summary: params.summary ?? null,
-                    model: resolvedModel,
+                    model: subAgentModelLabel,
                     tools: toolsForMode,
                     duration_ms: durationMs,
                     report_length,

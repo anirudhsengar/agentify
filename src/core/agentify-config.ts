@@ -1,14 +1,14 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { AuthStorage } from "@earendil-works/pi-coding-agent";
+import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import {
   AGENTIFY_PROVIDERS,
   getProviderEnvValue,
   hasProviderEnvironmentAuth,
   isAgentifyProvider,
 } from "./provider-auth.ts";
-import type { AgentifyConfig, AgentifyProvider, AgentifyUi } from "./types.ts";
+import type { AgentifyConfig, AgentifyProvider, AgentifyUi, ModelRole, ModelSlot } from "./types.ts";
 
 export function defaultConfigDir(): string {
   return path.join(os.homedir(), ".agentify");
@@ -31,6 +31,33 @@ function readJsonObject(filePath: string): Record<string, unknown> {
     : {};
 }
 
+/**
+ * Pure read of one slot entry. Returns `undefined` for any malformed
+ * shape (non-string provider, unknown provider, non-string model, or
+ * empty model). The whole `modelsByRole` object becomes `undefined`
+ * when every slot is missing.
+ */
+function readSlot(rawSlot: unknown): ModelSlot | undefined {
+  if (!rawSlot || typeof rawSlot !== "object" || Array.isArray(rawSlot)) return undefined;
+  const slot = rawSlot as Record<string, unknown>;
+  if (typeof slot.provider !== "string" || !isAgentifyProvider(slot.provider)) return undefined;
+  if (typeof slot.model !== "string" || slot.model.length === 0) return undefined;
+  return { provider: slot.provider, model: slot.model };
+}
+
+function readModelsByRole(
+  raw: Record<string, unknown>,
+): AgentifyConfig["modelsByRole"] {
+  const slotRaw = raw.modelsByRole;
+  if (!slotRaw || typeof slotRaw !== "object" || Array.isArray(slotRaw)) return undefined;
+  const obj = slotRaw as Record<string, unknown>;
+  const primary = readSlot(obj.primary);
+  const explorer = readSlot(obj.explorer);
+  const scoring = readSlot(obj.scoring);
+  if (!primary && !explorer && !scoring) return undefined;
+  return { primary, explorer, scoring };
+}
+
 export function loadAgentifyConfig(configDir: string): AgentifyConfig {
   const raw = readJsonObject(configPath(configDir));
   const provider = typeof raw.provider === "string" && isAgentifyProvider(raw.provider)
@@ -42,6 +69,7 @@ export function loadAgentifyConfig(configDir: string): AgentifyConfig {
     thinkingLevel: typeof raw.thinkingLevel === "string"
       ? raw.thinkingLevel as AgentifyConfig["thinkingLevel"]
       : undefined,
+    modelsByRole: readModelsByRole(raw),
   };
 }
 
@@ -97,9 +125,124 @@ function credentialPrompt(label: string, env: readonly string[]): string {
   return `${label} API key (${env.join(" or ")})`;
 }
 
+const SLOT_NAMES: ReadonlySet<ModelRole> = new Set(["primary", "explorer", "scoring"]);
+
+/** True iff `value` is a valid `ModelRole` literal. */
+export function isModelRole(value: string): value is ModelRole {
+  return SLOT_NAMES.has(value as ModelRole);
+}
+
+/**
+ * First-run interactive picker: prompt the user to assign models to
+ * the `primary` slot (and optionally `explorer`/`scoring`). Returns
+ * the synthesized `AgentifyConfig.modelsByRole` block — `undefined`
+ * when the user declined or the registry has nothing to offer.
+ */
+async function promptModelStrategy(
+  ui: AgentifyUi,
+  providerValue: AgentifyProvider,
+  configDir: string,
+): Promise<AgentifyConfig["modelsByRole"] | undefined> {
+  const authStorage = AuthStorage.create(authPath(configDir));
+  const registry = ModelRegistry.create(authStorage, path.join(configDir, "models.json"));
+  const providerModels = registry
+    .getAvailable()
+    .filter((m) => m.provider === providerValue);
+
+  const modelChoices = providerModels.map((m) => ({
+    label:
+      `${m.id} (${m.reasoning ? "thinking" : "no-thinking"}, ` +
+      `${Math.round(m.contextWindow / 1000)}K ctx)`,
+    value: `${m.provider}/${m.id}`,
+  }));
+
+  // Empty registry edge case: still let the user proceed; the resolver
+  // will surface a clear error on the next command.
+  const choices =
+    modelChoices.length > 0
+      ? modelChoices
+      : [{ label: "(no models available — proceed anyway)", value: "" }];
+
+  const strategy = await ui.promptSelect(
+    "How would you like to assign models in agentify?",
+    [
+      { label: "Use one model for everything (recommended)", value: "single" },
+      { label: "Assign different models per role", value: "split" },
+    ],
+  );
+
+  if (strategy === "single") {
+    const primaryChoice = await ui.promptSelect("Choose your primary model:", choices);
+    const primary = parseSlotChoice(primaryChoice);
+    return primary ? { primary } : undefined;
+  }
+
+  // Split path: prompt primary (required), then optionally explorer + scoring.
+  const primaryChoice = await ui.promptSelect("Primary model (required):", choices);
+  const primary = parseSlotChoice(primaryChoice);
+  if (!primary) return undefined;
+
+  let explorer: ModelSlot | undefined;
+  const wantExplorer = await ui.promptSelect("Configure a separate explorer model?", [
+    { label: "Skip — use primary", value: "skip" },
+    { label: "Pick a model", value: "pick" },
+  ]);
+  if (wantExplorer === "pick") {
+    const choice = await ui.promptSelect("Explorer model:", choices);
+    explorer = parseSlotChoice(choice);
+  }
+
+  let scoring: ModelSlot | undefined;
+  const wantScoring = await ui.promptSelect("Configure a separate scoring model?", [
+    { label: "Skip — use primary", value: "skip" },
+    { label: "Pick a model", value: "pick" },
+  ]);
+  if (wantScoring === "pick") {
+    const choice = await ui.promptSelect("Scoring model:", choices);
+    scoring = parseSlotChoice(choice);
+  }
+
+  return {
+    primary,
+    explorer,
+    scoring,
+  };
+}
+
+function parseSlotChoice(choice: string): ModelSlot | undefined {
+  if (!choice) return undefined;
+  const slashIdx = choice.indexOf("/");
+  if (slashIdx < 0) return undefined;
+  const provider = choice.slice(0, slashIdx);
+  const model = choice.slice(slashIdx + 1);
+  if (!isAgentifyProvider(provider) || model.length === 0) return undefined;
+  return { provider, model };
+}
+
+export interface EnsureAgentifyConfigOptions {
+  /**
+   * Override the model-strategy picker. When provided, the function
+   * skips the interactive "use one model vs. assign per role" prompt
+   * and uses this strategy directly. Useful for tests and CI.
+   *
+   * Values:
+   * - `"prompt"` (default): ask the user via `ui.promptSelect`
+   * - `"single"`: set primary only, no per-role branching
+   * - `"skip"`: don't prompt at all; leave `modelsByRole` unset
+   */
+  modelStrategy?: "prompt" | "single" | "skip";
+  /**
+   * When `modelStrategy === "prompt"`, the picker pulls the next
+   * `promptSelect`/`promptSecret` answers from this queue. The first
+   * call is the strategy choice; the rest are model choices.
+   */
+  strategyAnswers?: string[];
+}
+
 export async function ensureAgentifyConfig(
   configDir: string,
   ui: AgentifyUi,
+  options: EnsureAgentifyConfigOptions = {},
 ): Promise<AgentifyConfig> {
   let config = loadAgentifyConfig(configDir);
   if (hasAnyUsableAuth(configDir, config)) {
@@ -139,10 +282,50 @@ export async function ensureAgentifyConfig(
     });
   }
 
+  // First-run model strategy picker (Phase 2, ADR 0017). Only fires
+  // when nothing is configured: no slot config, no legacy fields.
+  const hasSlotConfig =
+    !!config.modelsByRole &&
+    (!!config.modelsByRole.primary ||
+      !!config.modelsByRole.explorer ||
+      !!config.modelsByRole.scoring);
+  const hasLegacyConfig = !!config.provider && !!config.model;
+
+  let modelsByRole: AgentifyConfig["modelsByRole"];
+  if (!hasSlotConfig && !hasLegacyConfig) {
+    if (options.modelStrategy === "single") {
+      // Caller (test or CI) wants only primary; pick a sensible default
+      // from the registry if available.
+      const authStorage = AuthStorage.create(authPath(configDir));
+      const registry = ModelRegistry.create(
+        authStorage,
+        path.join(configDir, "models.json"),
+      );
+      const providerModels = registry
+        .getAvailable()
+        .filter((m) => m.provider === selected.value);
+      const primary = providerModels[0];
+      if (primary && isAgentifyProvider(primary.provider)) {
+        modelsByRole = {
+          primary: { provider: primary.provider, model: primary.id },
+        };
+      } else {
+        modelsByRole = undefined;
+      }
+    } else if (options.modelStrategy === "skip") {
+      modelsByRole = undefined;
+    } else {
+      modelsByRole = await promptModelStrategy(ui, selected.value, configDir);
+    }
+  } else {
+    modelsByRole = config.modelsByRole;
+  }
+
   config = {
     ...config,
     provider: selected.value,
     thinkingLevel: config.thinkingLevel ?? "high",
+    ...(modelsByRole ? { modelsByRole } : {}),
   };
   saveAgentifyConfig(configDir, config);
   return config;

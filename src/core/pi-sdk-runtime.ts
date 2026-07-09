@@ -7,7 +7,6 @@ import {
   DefaultResourceLoader,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import type { Api, Model } from "@earendil-works/pi-ai";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type {
   AgentRuntime,
@@ -19,6 +18,8 @@ import { authPath } from "./agentify-config.ts";
 import { getProviderEnvValue } from "./provider-auth.ts";
 import { makeDefenseHook } from "./audit/defense-hook.ts";
 import { createWriteGreenfieldArtifactsTool } from "./greenfield-artifacts.ts";
+import { createSpawnExplorerTool } from "./audit/spawn-explorer-tool.ts";
+import { resolveModelOrThrow, selectModelForRole } from "./models/resolver.ts";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SHIPPED_SKILLS_DIR = path.join(PACKAGE_ROOT, ".agents", "skills");
@@ -32,20 +33,6 @@ type MessageEndEventLike = {
   message?: { usage?: UsageLike };
 };
 
-function selectModel(
-  registry: ModelRegistry,
-  config: AgentifyConfig,
-): Model<Api> | undefined {
-  if (config.provider && config.model) {
-    return registry.find(config.provider, config.model);
-  }
-  const available = registry.getAvailable();
-  if (config.provider) {
-    return available.find((model) => model.provider === config.provider);
-  }
-  return available[0];
-}
-
 export class PiSdkRuntime implements AgentRuntime {
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     const authStorage = AuthStorage.create(authPath(options.configDir));
@@ -54,7 +41,36 @@ export class PiSdkRuntime implements AgentRuntime {
       if (envKey) authStorage.setRuntimeApiKey(options.config.provider, envKey);
     }
     const modelRegistry = ModelRegistry.create(authStorage, path.join(options.configDir, "models.json"));
-    const selectedModel = selectModel(modelRegistry, options.config);
+    const selectedModel = resolveModelOrThrow(
+      modelRegistry,
+      options.config,
+      options.modelRole ?? "primary",
+    );
+    // ADR 0017: when the caller asks for a spawn_explorer tool, build it
+    // here so it can use the same registry + the resolved explorer slot.
+    // If explorer resolution throws (slot set but model missing or
+    // unauthenticated), we degrade gracefully — the spawn_explorer tool
+    // gets `selectedModel` (the parent's model) and the literal-mapping
+    // path will produce a clear error if invoked.
+    let explorerModelForSpawn: typeof selectedModel = selectedModel;
+    if (options.spawnExplorerAgentDir) {
+      const explorerResolved = selectModelForRole(
+        modelRegistry,
+        options.config,
+        "explorer",
+      );
+      if (explorerResolved) explorerModelForSpawn = explorerResolved.model;
+    }
+    const customTools = [...(options.customTools ?? [])];
+    if (options.spawnExplorerAgentDir && explorerModelForSpawn) {
+      customTools.push(
+        createSpawnExplorerTool({
+          agentDir: options.spawnExplorerAgentDir,
+          explorerModel: explorerModelForSpawn,
+          modelRegistry,
+        }),
+      );
+    }
     const resourceLoader = new DefaultResourceLoader({
       cwd: options.cwd,
       agentDir: options.configDir,
@@ -87,7 +103,7 @@ export class PiSdkRuntime implements AgentRuntime {
       thinkingLevel: options.config.thinkingLevel,
       resourceLoader,
       tools: options.tools,
-      customTools: options.customTools,
+      customTools,
       sessionManager: SessionManager.inMemory(options.cwd),
     });
     const session = created.session;

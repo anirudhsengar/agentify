@@ -8,6 +8,31 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Named model slots (ADR 0017): `primary`, `explorer`, `scoring`.
+  - `AgentifyConfig.modelsByRole?: Partial<Record<ModelRole, ModelSlot>>`
+    plus `AgentRuntimeSessionOptions.modelRole?: ModelRole`.
+  - Slot-aware resolver in `src/core/models/resolver.ts` with
+    4-tier precedence (explicit slot → inherited primary → legacy
+    fields → registry default). Tier-1 misses throw — agentify never
+    silently downgrades from an explicit user choice.
+  - CLI: `models set <slot> <provider>/<model>` and
+    `models unset <slot>` for slot management; legacy
+    `models set <provider>/<model>` and `models unset` still work.
+    `models show` keeps the three pinned lines and appends a
+    `slots:` block; `models show --resolved` prints the final
+    resolved model per role.
+  - First-run picker: on a fresh install, `ensureAgentifyConfig`
+    prompts for a model strategy (one model for everything vs.
+    different models per role) before saving the config.
+  - `spawn_explorer` is now slot-aware: sub-agents run on the
+    resolved `explorer` slot model. The advisory-only
+    `MODE_MODEL_DEFAULT` table is deleted; the `haiku`/`sonnet`/
+    `opus` literals now map to specific known model IDs and error
+    cleanly if the user's auth doesn't cover them.
+  - Logout cleanup: `agentify logout --provider <name>` clears any
+    slot whose provider matches the logged-out provider.
+  - "max quality is the floor" invariant: unset slots fall back to
+    `primary`; explicit user choices are never silently overridden.
 - New config-utility subcommands (ADR 0008 amendment, 2026-07-09) that
   manage `~/.agentify/{config,auth}.json` without invoking the audit
   runtime:
@@ -46,12 +71,13 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- ADR 0008 amended to permit config-utility subcommands. The single
-  runtime entry (`agentify` with no arguments) is unchanged; new
-  subcommands operate only on the agentify config directory and never
-  invoke the runtime. Defensive guard in `src/core/agentify-app.ts`
-  rewritten to throw on unknown positional arguments with a message
-  listing valid subcommands.
+- ADR 0017 introduced; ADR 0008 amended to permit config-utility
+  subcommands. The single runtime entry (`agentify` with no
+  arguments) is unchanged; new subcommands operate only on the
+  agentify config directory and never invoke the runtime.
+  Defensive guard in `src/core/agentify-app.ts` rewritten to throw
+  on unknown positional arguments with a message listing valid
+  subcommands.
 - `ensureAgentifyConfig` now writes `auth.json` via `AuthStorage`
   (file-locked) instead of `writeJson0600`, matching the write path
   used by `agentify login`.

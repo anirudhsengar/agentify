@@ -59,9 +59,11 @@ config-utility subcommands are also exposed
 agentify login [--provider <name>] [--key <key>]
 agentify logout [--provider <name> | --all] [--yes]
 agentify models list [--provider <name>]
-agentify models show
-agentify models set <provider>/<model>
-agentify models unset
+agentify models show [--resolved]
+agentify models set <provider>/<model>             # legacy: writes to provider/model
+agentify models set <slot> <provider>/<model>      # slot: primary|explorer|scoring
+agentify models unset                                # legacy: clears provider/model
+agentify models unset <slot>                         # clears that slot
 ```
 
 These subcommands operate only on `~/.agentify/{config,auth}.json` and
@@ -76,6 +78,42 @@ extend the contract test in `tests/test-unification-invariants.sh`,
 and add unit tests in `tests/cli-commands.test.ts`. Operational
 subcommands (ones that start a runtime or mutate the repo) require a
 new ADR — the 2026-07-09 amendment is intentionally narrow.
+
+## Model slots (ADR 0017)
+
+The `models` subcommands manage named model slots:
+
+- `primary` — every existing `runSession` caller (brownfield, greenfield,
+  orchestrator host, AIW phase, webhook task).
+- `explorer` — consumed by `spawn_explorer` sub-agents.
+- `scoring` — reserved for future lightweight judgment-call surfaces.
+
+The resolver (`src/core/models/resolver.ts`) follows a 4-tier
+precedence: explicit slot → inherited primary → legacy fields →
+registry default. **Max quality is the floor**: unset slots fall back
+to `primary`, and an explicit user choice is never silently overridden
+(tier-1 misses throw a clear error).
+
+On first run, `ensureAgentifyConfig` prompts for a model strategy
+(one model vs. different models per role). The CLI lets you change
+this later — `models set primary openai/gpt-4o` writes the primary
+slot, `models set explorer anthropic/claude-haiku-4-5-20251001`
+writes the explorer slot. Auto-populate: when you set `explorer` or
+`scoring` without `primary` being set, primary is synthesized from
+the legacy `provider`/`model` fields.
+
+`spawn_explorer` is wired to the resolved `explorer` slot. The
+advisory-only `MODE_MODEL_DEFAULT` table is deleted; the
+`haiku`/`sonnet`/`opus` literals now map to specific known model IDs
+(anthropic/claude-haiku-4-5-20251001, claude-sonnet-4-6,
+claude-opus-4-8) and error cleanly if your auth doesn't cover them.
+
+When extending the slot system: add the slot name to `ModelRole` in
+`src/core/types.ts` (the `Partial<Record<ModelRole, ModelSlot>>`
+shape will refuse to compile until all consumers update). Update the
+resolver, the CLI parser, the spawn_explorer wiring, and add tests.
+Wiring a new call site to a non-`primary` slot is just a matter of
+setting `modelRole: "<slot>"` on the `AgentRuntimeSessionOptions`.
 
 ## Running agentify without a TTY
 

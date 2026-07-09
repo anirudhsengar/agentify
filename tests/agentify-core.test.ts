@@ -7,6 +7,7 @@ import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import {
   authPath,
   configPath,
+  defaultConfigDir,
   ensureAgentifyConfig,
   saveAgentifyConfig,
 } from "../src/core/agentify-config.ts";
@@ -146,6 +147,24 @@ function withNoProviderEnv(fn: () => Promise<void>): Promise<void> {
   });
 }
 
+/**
+ * Run `fn` with HOME pointed at a fresh temp dir so `defaultConfigDir()`
+ * resolves there. Returns the temp configDir the function observed.
+ */
+async function withTempHome<T>(fn: (configDir: string) => Promise<T>): Promise<T> {
+  const prevHome = process.env["HOME"];
+  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-core-home-"));
+  process.env["HOME"] = tempHome;
+  const configDir = defaultConfigDir();
+  try {
+    return await fn(configDir);
+  } finally {
+    if (prevHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = prevHome;
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+}
+
 async function testProjectClassifier(): Promise<void> {
   const empty = tempDir("empty");
   assert.equal(ProjectClassifier.classify(empty).kind, "greenfield");
@@ -171,7 +190,9 @@ async function testAuthPromptAnd0600Write(): Promise<void> {
   await withNoProviderEnv(async () => {
     const configDir = tempDir("auth");
     const ui = new TestUi(["openai"], ["sk-test"]);
-    const config = await ensureAgentifyConfig(configDir, ui);
+    // Skip the first-run model-strategy picker; this test only cares
+    // about the auth gate and the 0600 file permissions.
+    const config = await ensureAgentifyConfig(configDir, ui, { modelStrategy: "skip" });
     assert.equal(config.provider, "openai");
     assert.equal(config.thinkingLevel, "high");
     assert.match(fs.readFileSync(authPath(configDir), "utf-8"), /sk-test/);
@@ -227,112 +248,116 @@ async function testArtifactExporter(): Promise<void> {
 }
 
 async function testBrownfieldRunWithFakeRuntime(): Promise<void> {
-  const cwd = tempDir("run");
-  const configDir = tempDir("config");
-  fs.writeFileSync(path.join(cwd, "package.json"), "{}\n");
-  saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
-  fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
+  await withTempHome(async (configDir) => {
+    const cwd = tempDir("run");
+    try {
+      fs.writeFileSync(path.join(cwd, "package.json"), "{}\n");
+      saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
+      fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
 
-  const ui = new TestUi();
-  await runAgentify({
-    cwd,
-    configDir,
-    ui,
-    runtime: new BrownfieldFakeRuntime(),
-    targets: ["codex", "claude", "pi"],
-    assumeProjectKind: "brownfield",
-    githubReadinessOverride: READY_GITHUB,
+      const ui = new TestUi();
+      await runAgentify({
+        cwd,
+        ui,
+        runtime: new BrownfieldFakeRuntime(),
+        targets: ["codex", "claude", "pi"],
+        mode: "brownfield",
+        githubReadinessOverride: READY_GITHUB,
+      });
+
+      assert.ok(fs.existsSync(path.join(cwd, ".codex", "agents", "payments.toml")));
+      assert.ok(fs.existsSync(path.join(cwd, ".claude", "agents", "payments.md")));
+      assert.ok(fs.existsSync(path.join(cwd, ".github", "workflows", "agent-implement.yml")));
+      assert.ok(fs.existsSync(path.join(cwd, "SETUP.md")));
+      assert.ok(
+        fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf-8")
+          .includes(AGENTIFY_MANAGED_MARKERS.markdown),
+      );
+      assert.ok(
+        fs.readFileSync(path.join(cwd, ".pi", "agents", "payments.md"), "utf-8")
+          .includes(AGENTIFY_MANAGED_MARKERS.markdown),
+      );
+      assert.ok(ui.infos.some((message) => message.includes("audit complete")));
+      assert.ok(ui.infos.some((message) => message.includes("scaffold file(s) installed")));
+      assert.ok(ui.infos.some((message) => message.includes("GitHub bootstrap is ready")));
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
   });
-
-  assert.ok(fs.existsSync(path.join(cwd, ".codex", "agents", "payments.toml")));
-  assert.ok(fs.existsSync(path.join(cwd, ".claude", "agents", "payments.md")));
-  assert.ok(fs.existsSync(path.join(cwd, ".github", "workflows", "agent-implement.yml")));
-  assert.ok(fs.existsSync(path.join(cwd, "SETUP.md")));
-  assert.ok(
-    fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf-8")
-      .includes(AGENTIFY_MANAGED_MARKERS.markdown),
-  );
-  assert.ok(
-    fs.readFileSync(path.join(cwd, ".pi", "agents", "payments.md"), "utf-8")
-      .includes(AGENTIFY_MANAGED_MARKERS.markdown),
-  );
-  assert.ok(ui.infos.some((message) => message.includes("audit complete")));
-  assert.ok(ui.infos.some((message) => message.includes("scaffold file(s) installed")));
-  assert.ok(ui.infos.some((message) => message.includes("GitHub bootstrap is ready")));
 }
 
 async function testGreenfieldRunWithFakeRuntime(): Promise<void> {
   const cwd = tempDir("greenfield");
-  const configDir = tempDir("greenfield-config");
-  saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
-  fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
+  await withTempHome(async (configDir) => {
+    saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
+    fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
 
-  const ui = new TestUi();
-  await runAgentify({
-    cwd,
-    configDir,
-    ui,
-    runtime: new GreenfieldFakeRuntime(),
-    targets: ["codex", "claude", "pi"],
-    assumeProjectKind: "greenfield",
-    githubReadinessOverride: READY_GITHUB,
+    const ui = new TestUi();
+    await runAgentify({
+      cwd,
+      ui,
+      runtime: new GreenfieldFakeRuntime(),
+      targets: ["codex", "claude", "pi"],
+      mode: "greenfield",
+      githubReadinessOverride: READY_GITHUB,
+    });
+
+    assert.ok(fs.existsSync(path.join(cwd, "CONTEXT.md")));
+    assert.ok(fs.existsSync(path.join(cwd, "GOALS.md")));
+    assert.ok(fs.existsSync(path.join(cwd, "docs", "issues", "001-import-invoices.md")));
+    assert.ok(fs.existsSync(path.join(cwd, "specs", "feature-first.md")));
+    assert.ok(
+      fs.readFileSync(path.join(cwd, "GOALS.md"), "utf-8")
+        .includes(AGENTIFY_MANAGED_MARKERS.markdown),
+    );
+    assert.ok(fs.existsSync(path.join(cwd, ".pi", "agentify", "greenfield-state.json")));
+    const greenfieldState = readGreenfieldState(cwd);
+    assert.equal(greenfieldState?.checkpoint, "spec");
+    assert.equal(greenfieldState?.artifact_validation.ok, true);
+    assert.equal(greenfieldState?.resume.source, "formation");
+    assert.equal(greenfieldState?.resume.stop_at, "spec");
+    assert.ok(greenfieldState?.resume.artifact_paths.includes("specs/feature-first.md"));
+    assert.ok(greenfieldState?.resume.github_resume.includes("agent:queued"));
+    assert.equal(greenfieldState?.github_handoff.action, "open_implementation_issue");
+    assert.deepEqual(greenfieldState?.github_handoff.labels, ["agent:queued", "agent:implement"]);
+    assert.ok(greenfieldState?.github_handoff.body.includes("specs/feature-first.md"));
+    assert.ok(greenfieldState?.next_actions.some((action) => action.includes("/implement")));
+    const manifest = readManifest(cwd);
+    assert.equal(manifest?.mode, "greenfield");
+    assert.ok(manifest?.files.some((file) => file.path === "GOALS.md" && file.required));
+    assert.ok(fs.existsSync(path.join(cwd, ".github", "workflows", "agent-implement.yml")));
+    assert.ok(fs.existsSync(path.join(cwd, "SETUP.md")));
+    assert.ok(ui.infos.some((message) => message.includes("greenfield session complete")));
+    assert.ok(ui.infos.some((message) => message.includes("scaffold file(s) installed")));
+    assert.ok(ui.infos.some((message) => message.includes("GitHub bootstrap is ready")));
   });
-
-  assert.ok(fs.existsSync(path.join(cwd, "CONTEXT.md")));
-  assert.ok(fs.existsSync(path.join(cwd, "GOALS.md")));
-  assert.ok(fs.existsSync(path.join(cwd, "docs", "issues", "001-import-invoices.md")));
-  assert.ok(fs.existsSync(path.join(cwd, "specs", "feature-first.md")));
-  assert.ok(
-    fs.readFileSync(path.join(cwd, "GOALS.md"), "utf-8")
-      .includes(AGENTIFY_MANAGED_MARKERS.markdown),
-  );
-  assert.ok(fs.existsSync(path.join(cwd, ".pi", "agentify", "greenfield-state.json")));
-  const greenfieldState = readGreenfieldState(cwd);
-  assert.equal(greenfieldState?.checkpoint, "spec");
-  assert.equal(greenfieldState?.artifact_validation.ok, true);
-  assert.equal(greenfieldState?.resume.source, "formation");
-  assert.equal(greenfieldState?.resume.stop_at, "spec");
-  assert.ok(greenfieldState?.resume.artifact_paths.includes("specs/feature-first.md"));
-  assert.ok(greenfieldState?.resume.github_resume.includes("agent:queued"));
-  assert.equal(greenfieldState?.github_handoff.action, "open_implementation_issue");
-  assert.deepEqual(greenfieldState?.github_handoff.labels, ["agent:queued", "agent:implement"]);
-  assert.ok(greenfieldState?.github_handoff.body.includes("specs/feature-first.md"));
-  assert.ok(greenfieldState?.next_actions.some((action) => action.includes("/implement")));
-  const manifest = readManifest(cwd);
-  assert.equal(manifest?.mode, "greenfield");
-  assert.ok(manifest?.files.some((file) => file.path === "GOALS.md" && file.required));
-  assert.ok(fs.existsSync(path.join(cwd, ".github", "workflows", "agent-implement.yml")));
-  assert.ok(fs.existsSync(path.join(cwd, "SETUP.md")));
-  assert.ok(ui.infos.some((message) => message.includes("greenfield session complete")));
-  assert.ok(ui.infos.some((message) => message.includes("scaffold file(s) installed")));
-  assert.ok(ui.infos.some((message) => message.includes("GitHub bootstrap is ready")));
 }
 
 async function testInvalidGreenfieldArtifactsRemainPartial(): Promise<void> {
   const cwd = tempDir("greenfield-invalid");
-  const configDir = tempDir("greenfield-invalid-config");
-  saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
-  fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
+  await withTempHome(async (configDir) => {
+    saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
+    fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
 
-  const ui = new TestUi();
-  await runAgentify({
-    cwd,
-    configDir,
-    ui,
-    runtime: new PlaceholderGreenfieldFakeRuntime(),
-    targets: ["codex", "claude", "pi"],
-    assumeProjectKind: "greenfield",
-    githubReadinessOverride: READY_GITHUB,
+    const ui = new TestUi();
+    await runAgentify({
+      cwd,
+      ui,
+      runtime: new PlaceholderGreenfieldFakeRuntime(),
+      targets: ["codex", "claude", "pi"],
+      mode: "greenfield",
+      githubReadinessOverride: READY_GITHUB,
+    });
+
+    const state = readGreenfieldState(cwd);
+    assert.equal(state?.artifact_validation.ok, false);
+    assert.ok(state?.artifact_validation.reasons.some((reason) => reason.includes("GOALS.md")));
+    assert.ok(!fs.existsSync(path.join(cwd, "SETUP.md")), "invalid greenfield artifacts must not install scaffold");
+    assert.equal(readProjectState(configDir, cwd)?.runStatus, "partial");
+    assert.ok(ui.errors.some((message) => message.includes("substance gate")));
+    assert.ok(ui.infos.some((message) => message.includes("scaffold not installed")));
+    assert.ok(!ui.infos.some((message) => message.includes("GitHub bootstrap is ready")));
   });
-
-  const state = readGreenfieldState(cwd);
-  assert.equal(state?.artifact_validation.ok, false);
-  assert.ok(state?.artifact_validation.reasons.some((reason) => reason.includes("GOALS.md")));
-  assert.ok(!fs.existsSync(path.join(cwd, "SETUP.md")), "invalid greenfield artifacts must not install scaffold");
-  assert.equal(readProjectState(configDir, cwd)?.runStatus, "partial");
-  assert.ok(ui.errors.some((message) => message.includes("substance gate")));
-  assert.ok(ui.infos.some((message) => message.includes("scaffold not installed")));
-  assert.ok(!ui.infos.some((message) => message.includes("GitHub bootstrap is ready")));
 }
 
 await testProjectClassifier();

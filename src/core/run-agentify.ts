@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { VERSION as PI_SDK_VERSION } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-import { ensureAgentifyConfig } from "./agentify-config.ts";
+import { defaultConfigDir, ensureAgentifyConfig } from "./agentify-config.ts";
 import { exportAgenticSurface } from "./artifact-exporters.ts";
 import { packageRoot } from "./pi-sdk-runtime.ts";
 import { ProjectClassifier } from "./project-classifier.ts";
@@ -47,7 +47,8 @@ import {
   setAgentifySessionActive,
   setThinkingLevel,
 } from "./audit/state.ts";
-import { createSpawnExplorerTool } from "./audit/spawn-explorer-tool.ts";
+// spawn_explorer is constructed inside PiSdkRuntime.runSession (ADR 0017),
+// so the tool factory is imported only in pi-sdk-runtime.ts.
 import {
   DRAFT_TRANSPORT_DIR,
   loadCanonicalMap,
@@ -627,7 +628,7 @@ function persistProjectState(options: RunAgentifyOptions, params: {
   latestLogPath: string | null;
 }): void {
   const readiness = getGitHubReadiness(options);
-  writeProjectState(options.configDir, {
+  writeProjectState(defaultConfigDir(), {
     cwd: options.cwd,
     lastRunAt: new Date().toISOString(),
     projectKind: params.projectKind,
@@ -659,7 +660,7 @@ async function runBrownfieldAudit(
     .map(([rel]) => path.resolve(options.cwd, rel));
   const promptContent = loadBuilderPrompt();
   const promptSha = crypto.createHash("sha256").update(promptContent).digest("hex");
-  const log = new AgentifyLog({ cwd: options.cwd, configDir: options.configDir });
+  const log = new AgentifyLog({ cwd: options.cwd, configDir: defaultConfigDir() });
   const start = Date.now();
   const sessionId = getOrCreateSessionId();
   setThinkingLevel(config.thinkingLevel ?? "high");
@@ -681,7 +682,7 @@ async function runBrownfieldAudit(
   try {
     const runtimeResult = await options.runtime.runSession({
       cwd: options.cwd,
-      configDir: options.configDir,
+      configDir: defaultConfigDir(),
       config,
       systemPrompt: promptContent,
       userPrompt: buildBrownfieldUserPrompt(options.targets),
@@ -691,8 +692,11 @@ async function runBrownfieldAudit(
       customTools: [
         writeMapTool,
         writeMapDeltaTool,
-        createSpawnExplorerTool({ agentDir: options.configDir }),
+        // spawn_explorer is created inside PiSdkRuntime.runSession so it
+        // can use the same ModelRegistry + explorer slot the rest of
+        // the session uses. ADR 0017.
       ],
+      spawnExplorerAgentDir: defaultConfigDir(),
       signal: options.signal,
       onEvent: (event) => {
         const piType = (event as { type?: string }).type ?? "unknown";
@@ -831,7 +835,7 @@ async function runBrownfieldAudit(
               latestLogPath: log.logPath,
             });
           } else {
-            const repoState = inspectAgentifyRepoState(options.cwd, options.configDir);
+            const repoState = inspectAgentifyRepoState(options.cwd, defaultConfigDir());
             reportedStatus = repoState.status === "ready" ? "success" : "partial";
             options.ui.info(
               `agentify: audit complete. ${repoState.featureAgentCount} feature agent(s), ` +
@@ -922,7 +926,7 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
   try {
     result = await options.runtime.runGreenfield({
       cwd: options.cwd,
-      configDir: options.configDir,
+      configDir: defaultConfigDir(),
       config,
       signal: options.signal,
     });
@@ -1045,7 +1049,7 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
     // persisted state agrees with what the next run's detection sees
     // (a greenfield session that only installed scaffold, with no
     // GOALS.md / docs planning artifacts, is not "ready").
-    const repoState = inspectAgentifyRepoState(options.cwd, options.configDir);
+    const repoState = inspectAgentifyRepoState(options.cwd, defaultConfigDir());
     persistProjectState(options, {
       projectKind: "greenfield",
       runStatus: "success",
@@ -1077,9 +1081,9 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
 
 export async function runAgentify(options: RunAgentifyOptions): Promise<void> {
   const config = options.configOverride
-    ?? await ensureAgentifyConfig(options.configDir, options.ui);
-  const classification = options.assumeProjectKind
-    ? { kind: options.assumeProjectKind }
+    ?? await ensureAgentifyConfig(defaultConfigDir(), options.ui);
+  const classification = options.mode
+    ? { kind: options.mode }
     : ProjectClassifier.classify(options.cwd);
   let kind = classification.kind;
   if (kind === "ambiguous") {

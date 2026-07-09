@@ -9,10 +9,31 @@ export type ProjectKind = "brownfield" | "greenfield" | "ambiguous";
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
+/**
+ * Named model slot role. Phase 2+ (ADR 0017). `primary` is the default
+ * resolver role; every existing `runSession` call site defaults to it.
+ * `explorer` is consumed by `spawn_explorer` sub-agents. `scoring` is
+ * reserved for future lightweight judgment-call surfaces.
+ */
+export type ModelRole = "primary" | "explorer" | "scoring";
+
+export interface ModelSlot {
+  provider: AgentifyProvider;
+  model: string;
+}
+
 export interface AgentifyConfig {
   provider?: AgentifyProvider;
   model?: string;
   thinkingLevel?: ThinkingLevel;
+  /**
+   * Per-role model overrides. When a slot is unset, the resolver falls
+   * back to `primary`, then to the legacy `provider`/`model` fields,
+   * then to `registry.getAvailable()[0]` (terminal default). The
+   * resolver NEVER silently picks a "weaker" model over an explicit
+   * user choice.
+   */
+  modelsByRole?: Partial<Record<ModelRole, ModelSlot>>;
 }
 
 export interface AgentifyUi {
@@ -36,14 +57,17 @@ export interface GitHubReadiness {
 
 export interface RunAgentifyOptions {
   cwd: string;
-  configDir: string;
   ui: AgentifyUi;
   runtime: AgentRuntime;
   targets: ReadonlyArray<AgentifyTarget>;
   configOverride?: AgentifyConfig;
   args?: string;
   signal?: AbortSignal;
-  assumeProjectKind?: ProjectKind;
+  /**
+   * Skip project-kind classification for ambiguous repos. Values are
+   * `"brownfield"` or `"greenfield"`. Surfaced to users as `--mode`.
+   */
+  mode?: "brownfield" | "greenfield";
   githubReadinessOverride?: GitHubReadiness;
 }
 
@@ -81,6 +105,17 @@ export interface AgentRuntimeSessionOptions {
    * aborted. Undefined = no timeout.
    */
   timeoutMs?: number;
+  /**
+   * Which named slot role this session is filling. Defaults to
+   * `"primary"` when unset. See `ModelRole` and ADR 0017.
+   */
+  modelRole?: ModelRole;
+  /**
+   * When set, the runtime constructs a `spawn_explorer` tool bound to
+   * the resolved `explorer` slot model and appends it to `customTools`.
+   * ADR 0017.
+   */
+  spawnExplorerAgentDir?: string;
 }
 
 export interface AgentRuntimeResult {

@@ -514,6 +514,212 @@ async function dispatchReturnsTrueForKnownSubcommand(): Promise<void> {
 }
 
 // ===========================================================================
+// Phase 2 — slot-aware models set/unset + --resolved flag (ADR 0017)
+// ===========================================================================
+
+async function modelsSetAssignsToPrimarySlot(): Promise<void> {
+  await withTempHome(async (configDir) => {
+    fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    AuthStorage.create(authPath(configDir)).set("openai", { type: "api_key", key: "sk-test" });
+    const ui = new TestUi();
+    const { ctx, out, err } = makeCtx(ui, { configDir });
+    const code = await modelsCommand(["set", "primary", "openai/gpt-4o"], ctx);
+    assert.equal(code, 0);
+    assert.equal(err.text(), "");
+    assert.ok(out.text().includes("set primary slot to openai/gpt-4o"));
+    const config = loadAgentifyConfig(configDir);
+    assert.deepEqual(config.modelsByRole?.primary, { provider: "openai", model: "gpt-4o" });
+  });
+}
+
+async function modelsSetAssignsToExplorerSlot(): Promise<void> {
+  await withTempHome(async (configDir) => {
+    fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    AuthStorage.create(authPath(configDir)).set("openai", { type: "api_key", key: "sk-test" });
+    // Pre-seed primary so explorer slot can be set (auto-populate guard).
+    saveAgentifyConfig(configDir, {
+      provider: "openai",
+      model: "gpt-4o",
+      thinkingLevel: "high",
+      modelsByRole: { primary: { provider: "openai", model: "gpt-4o" } },
+    });
+    const ui = new TestUi();
+    const { ctx, out, err } = makeCtx(ui, { configDir });
+    const code = await modelsCommand(["set", "explorer", "openai/gpt-4o-mini"], ctx);
+    assert.equal(code, 0);
+    assert.equal(err.text(), "");
+    assert.ok(out.text().includes("set explorer slot to openai/gpt-4o-mini"));
+    const config = loadAgentifyConfig(configDir);
+    assert.deepEqual(config.modelsByRole?.primary, { provider: "openai", model: "gpt-4o" });
+    assert.deepEqual(config.modelsByRole?.explorer, { provider: "openai", model: "gpt-4o-mini" });
+  });
+}
+
+async function modelsSetExplorerAutoPopulatesPrimaryFromLegacy(): Promise<void> {
+  await withTempHome(async (configDir) => {
+    fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    AuthStorage.create(authPath(configDir)).set("openai", { type: "api_key", key: "sk-test" });
+    // Pre-seed legacy fields; no modelsByRole.primary.
+    saveAgentifyConfig(configDir, { provider: "openai", model: "gpt-4o", thinkingLevel: "high" });
+    const ui = new TestUi();
+    const { ctx, err } = makeCtx(ui, { configDir });
+    const code = await modelsCommand(["set", "explorer", "openai/gpt-4o-mini"], ctx);
+    assert.equal(code, 0);
+    assert.equal(err.text(), "");
+    const config = loadAgentifyConfig(configDir);
+    // Both primary (synthesized) and explorer should be set.
+    assert.deepEqual(config.modelsByRole?.primary, { provider: "openai", model: "gpt-4o" });
+    assert.deepEqual(config.modelsByRole?.explorer, { provider: "openai", model: "gpt-4o-mini" });
+  });
+}
+
+async function modelsSetExplorerWithoutLegacyOrPrimaryErrors(): Promise<void> {
+  await withTempHome(async (configDir) => {
+    fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    AuthStorage.create(authPath(configDir)).set("openai", { type: "api_key", key: "sk-test" });
+    // No legacy fields, no modelsByRole.primary → explorer set should error.
+    const ui = new TestUi();
+    const { ctx, err } = makeCtx(ui, { configDir });
+    const code = await modelsCommand(["set", "explorer", "openai/gpt-4o-mini"], ctx);
+    assert.equal(code, 1);
+    assert.ok(err.text().includes("requires a primary model"));
+    const config = loadAgentifyConfig(configDir);
+    assert.equal(config.modelsByRole, undefined);
+  });
+}
+
+async function modelsSetExplorerWithNoProviderAuthErrors(): Promise<void> {
+  await withTempHome(async (configDir) => {
+    fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    // Seed openai auth so the explorer slot can be set, but anthropic has no auth.
+    AuthStorage.create(authPath(configDir)).set("openai", { type: "api_key", key: "sk-test" });
+    saveAgentifyConfig(configDir, { provider: "openai", model: "gpt-4o", thinkingLevel: "high" });
+    const ui = new TestUi();
+    const { ctx, err } = makeCtx(ui, { configDir });
+    // anthropic has no auth → registry has the model but `getAvailable()`
+    // excludes it → "unavailable with your current credentials" error.
+    const code = await modelsCommand(["set", "explorer", "anthropic/claude-haiku-4-5-20251001"], ctx);
+    assert.equal(code, 1);
+    assert.ok(err.text().includes("unavailable with your current credentials"));
+  });
+}
+
+async function modelsSetBackCompatNoSlotWritesToLegacyFields(): Promise<void> {
+  await withTempHome(async (configDir) => {
+    fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    AuthStorage.create(authPath(configDir)).set("openai", { type: "api_key", key: "sk-test" });
+    const ui = new TestUi();
+    const { ctx, out, err } = makeCtx(ui, { configDir });
+    // No slot → legacy path: writes to provider/model, leaves modelsByRole untouched.
+    const code = await modelsCommand(["set", "openai/gpt-4o"], ctx);
+    assert.equal(code, 0);
+    assert.equal(err.text(), "");
+    assert.ok(out.text().includes("set model to openai/gpt-4o"));
+    const config = loadAgentifyConfig(configDir);
+    assert.equal(config.provider, "openai");
+    assert.equal(config.model, "gpt-4o");
+    assert.equal(config.modelsByRole, undefined);
+  });
+}
+
+async function modelsUnsetOnSlotClearsThatSlotOnly(): Promise<void> {
+  await withTempHome(async (configDir) => {
+    fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    saveAgentifyConfig(configDir, {
+      provider: "openai",
+      thinkingLevel: "high",
+      modelsByRole: {
+        primary: { provider: "openai", model: "gpt-4o" },
+        explorer: { provider: "openai", model: "gpt-4o-mini" },
+      },
+    });
+    const ui = new TestUi();
+    const { ctx, out } = makeCtx(ui, { configDir });
+    const code = await modelsCommand(["unset", "explorer"], ctx);
+    assert.equal(code, 0);
+    assert.ok(out.text().includes("unset explorer slot"));
+    const config = loadAgentifyConfig(configDir);
+    assert.deepEqual(config.modelsByRole?.primary, { provider: "openai", model: "gpt-4o" });
+    assert.equal(config.modelsByRole?.explorer, undefined);
+  });
+}
+
+async function modelsUnsetOnPrimaryKeepsLegacyFieldsIntact(): Promise<void> {
+  await withTempHome(async (configDir) => {
+    fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    saveAgentifyConfig(configDir, {
+      provider: "openai",
+      model: "gpt-4o",
+      thinkingLevel: "high",
+      modelsByRole: { primary: { provider: "openai", model: "gpt-4o" } },
+    });
+    const ui = new TestUi();
+    const { ctx, out } = makeCtx(ui, { configDir });
+    const code = await modelsCommand(["unset", "primary"], ctx);
+    assert.equal(code, 0);
+    assert.ok(out.text().includes("unset primary slot"));
+    const config = loadAgentifyConfig(configDir);
+    // Legacy fields untouched.
+    assert.equal(config.provider, "openai");
+    assert.equal(config.model, "gpt-4o");
+    assert.equal(config.thinkingLevel, "high");
+    // Primary slot cleared; since it's the only slot, the whole object is dropped.
+    assert.equal(config.modelsByRole, undefined);
+  });
+}
+
+async function modelsShowIncludesSlotsBlockUnderneathPinnedLines(): Promise<void> {
+  await withTempHome(async (configDir) => {
+    fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    saveAgentifyConfig(configDir, {
+      provider: "openai",
+      model: "gpt-4o",
+      thinkingLevel: "high",
+      modelsByRole: { primary: { provider: "openai", model: "gpt-4o" } },
+    });
+    AuthStorage.create(authPath(configDir)).set("openai", { type: "api_key", key: "sk-test" });
+    const ui = new TestUi();
+    const { ctx, out } = makeCtx(ui, { configDir });
+    const code = await modelsCommand(["show"], ctx);
+    assert.equal(code, 0);
+    const text = out.text();
+    // Three pinned lines first (test pinned via modelsShowPrintsCurrentConfigAndAvailableCount).
+    assert.ok(text.includes("provider:    openai"));
+    assert.ok(text.includes("model:       gpt-4o"));
+    assert.ok(text.includes("thinking:    high"));
+    // Slots block underneath.
+    assert.ok(text.includes("slots:"));
+    assert.ok(text.includes("primary"));
+    assert.ok(text.includes("explorer"));
+    assert.ok(text.includes("scoring"));
+    assert.ok(text.includes("openai/gpt-4o"));
+    assert.ok(text.includes("(unset — uses primary)"));
+  });
+}
+
+async function modelsShowResolvedPrintsFinalResolvedModelsPerRole(): Promise<void> {
+  await withTempHome(async (configDir) => {
+    fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    saveAgentifyConfig(configDir, {
+      provider: "openai",
+      model: "gpt-4o",
+      thinkingLevel: "high",
+    });
+    AuthStorage.create(authPath(configDir)).set("openai", { type: "api_key", key: "sk-test" });
+    const ui = new TestUi();
+    const { ctx, out } = makeCtx(ui, { configDir });
+    const code = await modelsCommand(["show", "--resolved"], ctx);
+    assert.equal(code, 0);
+    const text = out.text();
+    assert.ok(text.includes("primary"));
+    assert.ok(text.includes("explorer"));
+    assert.ok(text.includes("scoring"));
+    assert.ok(text.includes("openai/gpt-4o"));
+    assert.ok(text.includes("inherits primary"), "explorer/scoring should annotate inheritance");
+  });
+}
+
+// ===========================================================================
 // Test runner
 // ===========================================================================
 
@@ -539,6 +745,17 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "modelsSetRejectsMalformedFormat", fn: modelsSetRejectsMalformedFormat },
   { name: "modelsUnsetClearsProviderModelPreservesThinking", fn: modelsUnsetClearsProviderModelPreservesThinking },
   { name: "dispatchReturnsTrueForKnownSubcommand", fn: dispatchReturnsTrueForKnownSubcommand },
+  // Phase 2 — slot-aware models set/unset (ADR 0017)
+  { name: "modelsSetAssignsToPrimarySlot", fn: modelsSetAssignsToPrimarySlot },
+  { name: "modelsSetAssignsToExplorerSlot", fn: modelsSetAssignsToExplorerSlot },
+  { name: "modelsSetExplorerAutoPopulatesPrimaryFromLegacy", fn: modelsSetExplorerAutoPopulatesPrimaryFromLegacy },
+  { name: "modelsSetExplorerWithoutLegacyOrPrimaryErrors", fn: modelsSetExplorerWithoutLegacyOrPrimaryErrors },
+  { name: "modelsSetExplorerWithNoProviderAuthErrors", fn: modelsSetExplorerWithNoProviderAuthErrors },
+  { name: "modelsSetBackCompatNoSlotWritesToLegacyFields", fn: modelsSetBackCompatNoSlotWritesToLegacyFields },
+  { name: "modelsUnsetOnSlotClearsThatSlotOnly", fn: modelsUnsetOnSlotClearsThatSlotOnly },
+  { name: "modelsUnsetOnPrimaryKeepsLegacyFieldsIntact", fn: modelsUnsetOnPrimaryKeepsLegacyFieldsIntact },
+  { name: "modelsShowIncludesSlotsBlockUnderneathPinnedLines", fn: modelsShowIncludesSlotsBlockUnderneathPinnedLines },
+  { name: "modelsShowResolvedPrintsFinalResolvedModelsPerRole", fn: modelsShowResolvedPrintsFinalResolvedModelsPerRole },
 ];
 
 let passed = 0;

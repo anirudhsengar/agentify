@@ -18,7 +18,8 @@ import {
   loadAgentifyConfig,
   saveAgentifyConfig,
 } from "./agentify-config.ts";
-import type { AgentifyProvider, AgentifyUi } from "./types.ts";
+import { selectModelForRole } from "./models/resolver.ts";
+import type { AgentifyProvider, AgentifyUi, ModelRole } from "./types.ts";
 
 /** Names of the public config-utility subcommands this module dispatches. */
 export const SUBCOMMAND_NAMES = ["login", "logout", "models"] as const;
@@ -285,12 +286,37 @@ export async function logoutCommand(
       ctx.out.write(`no stored credentials for ${provider}; nothing to remove from auth.json\n`);
     }
     const existing = loadAgentifyConfig(ctx.configDir);
+    // Clear legacy fields if they pointed at the logged-out provider.
+    let updated = existing;
     if (existing.provider === provider) {
-      saveAgentifyConfig(ctx.configDir, {
-        ...existing,
-        provider: undefined,
-        model: undefined,
-      });
+      updated = { ...updated, provider: undefined, model: undefined };
+    }
+    // Phase 2 (ADR 0017): also clear any slot whose provider matches.
+    if (existing.modelsByRole) {
+      const slots = { ...existing.modelsByRole };
+      let changed = false;
+      for (const role of ["primary", "explorer", "scoring"] as const) {
+        const slot = slots[role];
+        if (slot && slot.provider === provider) {
+          slots[role] = undefined;
+          changed = true;
+        }
+      }
+      if (changed) {
+        const filtered: typeof updated.modelsByRole = {
+          primary: slots.primary,
+          explorer: slots.explorer,
+          scoring: slots.scoring,
+        };
+        const allUnset = !filtered.primary && !filtered.explorer && !filtered.scoring;
+        updated = {
+          ...updated,
+          modelsByRole: allUnset ? undefined : filtered,
+        };
+      }
+    }
+    if (updated !== existing) {
+      saveAgentifyConfig(ctx.configDir, updated);
     }
     ctx.out.write(`logged out ${provider}\n`);
     return 0;
@@ -325,8 +351,9 @@ export async function logoutCommand(
     ...existing,
     provider: undefined,
     model: undefined,
+    modelsByRole: undefined,
   });
-  ctx.out.write("logged out all providers; provider and model cleared from config\n");
+  ctx.out.write("logged out all providers; provider, model, and slots cleared from config\n");
   return 0;
 }
 
@@ -413,17 +440,53 @@ function modelsList(ctx: SubcommandContext, providerFilter: string | undefined):
   return Promise.resolve(0);
 }
 
-function modelsShow(ctx: SubcommandContext): Promise<number> {
+function modelsShow(ctx: SubcommandContext, resolved: boolean): Promise<number> {
   const config = loadAgentifyConfig(ctx.configDir);
+  // Three pinned lines — test `modelsShowPrintsCurrentConfigAndAvailableCount`
+  // asserts these exact substrings, so the format and order must not change.
   ctx.out.write(`provider:    ${config.provider ?? "(unset)"}\n`);
   ctx.out.write(`model:       ${config.model ?? "(unset)"}\n`);
   ctx.out.write(`thinking:    ${config.thinkingLevel ?? "(unset)"}\n`);
+
   const authStorage = buildAuthStorage(ctx.configDir);
   const registry = buildModelRegistry(authStorage, ctx.configDir);
-  const available = registry.getAvailable();
-  ctx.out.write(`available models: ${available.length}\n`);
-  if (available.length === 0) {
-    ctx.out.write("no auth configured — run `agentify login`\n");
+
+  if (resolved) {
+    // Final resolved model per role.
+    const roles: ReadonlyArray<ModelRole> = ["primary", "explorer", "scoring"];
+    const sources = new Map<ModelRole, string>();
+    for (const role of roles) {
+      try {
+        const r = selectModelForRole(registry, config, role);
+        if (r) {
+          ctx.out.write(`${role.padEnd(11)} ${r.model.provider}/${r.model.id}`);
+          if (r.source === "inherited-primary") sources.set(role, "(inherits primary)");
+          else if (r.source === "legacy-fields") sources.set(role, "(from legacy fields)");
+          else if (r.source === "registry-default") sources.set(role, "(registry default)");
+          else sources.set(role, "");
+          ctx.out.write(`${sources.get(role) ? "  " + sources.get(role) : ""}\n`);
+        } else {
+          ctx.out.write(`${role.padEnd(11)} (no models available)\n`);
+        }
+      } catch (err) {
+        ctx.err.write(`agentify: models show: ${(err as Error).message}\n`);
+        return Promise.resolve(1);
+      }
+    }
+    return Promise.resolve(0);
+  }
+
+  // Default: append a `slots:` block under the pinned three lines.
+  ctx.out.write(`available models: ${registry.getAvailable().length}\n\n`);
+  ctx.out.write("slots:\n");
+  const slots: ReadonlyArray<ModelRole> = ["primary", "explorer", "scoring"];
+  for (const role of slots) {
+    const slot = config.modelsByRole?.[role];
+    if (slot) {
+      ctx.out.write(`  ${role.padEnd(9)} ${slot.provider}/${slot.model}\n`);
+    } else {
+      ctx.out.write(`  ${role.padEnd(9)} (unset — uses primary)\n`);
+    }
   }
   return Promise.resolve(0);
 }
@@ -433,40 +496,88 @@ function modelsSet(
   positional: ReadonlyArray<string>,
 ): Promise<number> {
   if (positional.length === 0) {
-    ctx.err.write("agentify: models set: usage: agentify models set <provider>/<model>\n");
+    ctx.err.write(
+      "agentify: models set: usage: agentify models set <provider>/<model>\n" +
+        "                              agentify models set <slot> <provider>/<model>   " +
+        "(slot: primary|explorer|scoring)\n",
+    );
     return Promise.resolve(1);
   }
-  if (positional.length > 1) {
-    ctx.err.write(`agentify: models set: unexpected argument: ${positional[1]}\n`);
+
+  // Slot path: 2 positionals, first is a valid ModelRole.
+  if (positional.length === 2) {
+    const maybeSlot = positional[0];
+    if (isModelRole(maybeSlot)) {
+      const slot = maybeSlot as ModelRole;
+      const target = positional[1];
+      const parsed = parseProviderSlashModel(target, ctx.err);
+      if (!parsed) return Promise.resolve(1);
+      const { provider, modelId } = parsed;
+      const authStorage = buildAuthStorage(ctx.configDir);
+      const registry = buildModelRegistry(authStorage, ctx.configDir);
+      const found = registry.find(provider, modelId);
+      if (!found) {
+        ctx.err.write(
+          `agentify: models set: model '${modelId}' not found for provider '${provider}'. ` +
+            `Run \`agentify models list --provider ${provider}\` to see available models.\n`,
+        );
+        return Promise.resolve(1);
+      }
+      const available = registry.getAvailable();
+      if (!available.some((m) => m.id === modelId && m.provider === provider)) {
+        ctx.err.write(
+          `agentify: models set: model '${modelId}' is known to ${providerLabel(provider)} ` +
+            "but unavailable with your current credentials — run `agentify login`.\n",
+        );
+        return Promise.resolve(1);
+      }
+      const existing = loadAgentifyConfig(ctx.configDir);
+
+      // Slot inheritance: when setting explorer/scoring without primary
+      // set, auto-populate primary from legacy fields (Phase 2 / ADR 0017).
+      let primarySlot = existing.modelsByRole?.primary;
+      if (!primarySlot && slot !== "primary") {
+        if (existing.provider && existing.model) {
+          primarySlot = { provider: existing.provider, model: existing.model };
+        } else {
+          ctx.err.write(
+            `agentify: models set ${slot}: requires a primary model. ` +
+              `Run \`agentify models set primary <provider>/<model>\` first, ` +
+              "or use the legacy `agentify models set <provider>/<model>` to set the default.\n",
+          );
+          return Promise.resolve(1);
+        }
+      }
+
+      const updatedModelsByRole: Record<ModelRole, { provider: AgentifyProvider; model: string } | undefined> = {
+        primary: slot === "primary" ? { provider, model: modelId } : primarySlot,
+        explorer: slot === "explorer" ? { provider, model: modelId } : existing.modelsByRole?.explorer,
+        scoring: slot === "scoring" ? { provider, model: modelId } : existing.modelsByRole?.scoring,
+      };
+      saveAgentifyConfig(ctx.configDir, {
+        ...existing,
+        modelsByRole: updatedModelsByRole,
+      });
+      ctx.out.write(`set ${slot} slot to ${provider}/${modelId}\n`);
+      return Promise.resolve(0);
+    }
+    // First arg looks like a slot but isn't valid.
+    ctx.err.write(
+      `agentify: models set: '${maybeSlot}' is not a valid slot. Valid slots: primary, explorer, scoring.\n`,
+    );
     return Promise.resolve(1);
   }
+
+  if (positional.length > 2) {
+    ctx.err.write(`agentify: models set: unexpected argument: ${positional[2]}\n`);
+    return Promise.resolve(1);
+  }
+
+  // Legacy path: 1 positional `provider/model`.
   const target = positional[0];
-  const slashIdx = target.indexOf("/");
-  if (slashIdx < 0) {
-    ctx.err.write(
-      `agentify: models set: '${target}' must be in <provider>/<model> form\n`,
-    );
-    return Promise.resolve(1);
-  }
-  const providerStr = target.slice(0, slashIdx);
-  const modelId = target.slice(slashIdx + 1);
-  if (modelId.length === 0 || providerStr.length === 0) {
-    ctx.err.write(
-      `agentify: models set: '${target}' must be in <provider>/<model> form\n`,
-    );
-    return Promise.resolve(1);
-  }
-  if (modelId.includes("/")) {
-    ctx.err.write(
-      `agentify: models set: '${target}' must contain exactly one '/'\n`,
-    );
-    return Promise.resolve(1);
-  }
-  if (!isAgentifyProvider(providerStr)) {
-    ctx.err.write(`agentify: models set: unknown provider '${providerStr}'\n`);
-    return Promise.resolve(1);
-  }
-  const provider = providerStr as AgentifyProvider;
+  const parsed = parseProviderSlashModel(target, ctx.err);
+  if (!parsed) return Promise.resolve(1);
+  const { provider, modelId } = parsed;
 
   const authStorage = buildAuthStorage(ctx.configDir);
   const registry = buildModelRegistry(authStorage, ctx.configDir);
@@ -497,18 +608,80 @@ function modelsSet(
   return Promise.resolve(0);
 }
 
+function isModelRole(value: string): value is ModelRole {
+  return value === "primary" || value === "explorer" || value === "scoring";
+}
+
+interface ParsedProviderModel {
+  provider: AgentifyProvider;
+  modelId: string;
+}
+
+function parseProviderSlashModel(
+  target: string,
+  err: NodeJS.WritableStream,
+): ParsedProviderModel | null {
+  const slashIdx = target.indexOf("/");
+  if (slashIdx < 0) {
+    err.write(`agentify: models set: '${target}' must be in <provider>/<model> form\n`);
+    return null;
+  }
+  const providerStr = target.slice(0, slashIdx);
+  const modelId = target.slice(slashIdx + 1);
+  if (modelId.length === 0 || providerStr.length === 0) {
+    err.write(`agentify: models set: '${target}' must be in <provider>/<model> form\n`);
+    return null;
+  }
+  if (modelId.includes("/")) {
+    err.write(`agentify: models set: '${target}' must contain exactly one '/'\n`);
+    return null;
+  }
+  if (!isAgentifyProvider(providerStr)) {
+    err.write(`agentify: models set: unknown provider '${providerStr}'\n`);
+    return null;
+  }
+  return { provider: providerStr as AgentifyProvider, modelId };
+}
+
 function modelsUnset(ctx: SubcommandContext, positional: ReadonlyArray<string>): Promise<number> {
-  if (positional.length > 0) {
-    ctx.err.write(`agentify: models unset: unexpected argument: ${positional[0]}\n`);
+  const existing = loadAgentifyConfig(ctx.configDir);
+
+  if (positional.length === 0) {
+    // Legacy path: clear provider + model.
+    saveAgentifyConfig(ctx.configDir, {
+      ...existing,
+      provider: undefined,
+      model: undefined,
+    });
+    ctx.out.write("cleared provider and model from config\n");
+    return Promise.resolve(0);
+  }
+  if (positional.length > 1) {
+    ctx.err.write(`agentify: models unset: unexpected argument: ${positional[1]}\n`);
     return Promise.resolve(1);
   }
-  const existing = loadAgentifyConfig(ctx.configDir);
+  const slotName = positional[0];
+  if (!isModelRole(slotName)) {
+    ctx.err.write(
+      `agentify: models unset: '${slotName}' is not a valid slot. Valid slots: primary, explorer, scoring.\n`,
+    );
+    return Promise.resolve(1);
+  }
+  const slot = slotName as ModelRole;
+  if (!existing.modelsByRole?.[slot]) {
+    ctx.out.write(`slot '${slot}' is already unset\n`);
+    return Promise.resolve(0);
+  }
+  const updatedModelsByRole: Record<ModelRole, { provider: AgentifyProvider; model: string } | undefined> = {
+    primary: slot === "primary" ? undefined : existing.modelsByRole.primary,
+    explorer: slot === "explorer" ? undefined : existing.modelsByRole.explorer,
+    scoring: slot === "scoring" ? undefined : existing.modelsByRole.scoring,
+  };
   saveAgentifyConfig(ctx.configDir, {
     ...existing,
-    provider: undefined,
-    model: undefined,
+    modelsByRole: updatedModelsByRole,
   });
-  ctx.out.write("cleared provider and model from config\n");
+  ctx.out.write(`unset ${slot} slot\n`);
   return Promise.resolve(0);
 }
 
@@ -545,7 +718,7 @@ export async function modelsCommand(
 
   if (action === "show") {
     const parsed = parseFlags(rest, {
-      flags: new Set<string>(),
+      flags: new Set(["resolved"]),
       takesValue: new Set<string>(),
     });
     if (parsed.errors.length > 0) {
@@ -556,7 +729,7 @@ export async function modelsCommand(
       ctx.err.write(`agentify: models show: unexpected argument: ${parsed.positional[0]}\n`);
       return 1;
     }
-    return modelsShow(ctx);
+    return modelsShow(ctx, parsed.flags.resolved === true);
   }
 
   if (action === "set") {
