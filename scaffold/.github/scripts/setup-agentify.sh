@@ -51,15 +51,18 @@ set_variable_if_present PI_THINKING
 set_variable_if_present AGENT_BOT_LOGIN
 
 missing=0
+secret_names=$(gh secret list "${repo_args[@]}" --json name --jq '.[].name')
+variable_names=$(gh variable list "${repo_args[@]}" --json name --jq '.[].name')
+
 for secret in PI_API_KEY AGENT_PAT; do
-  if ! gh secret list "${repo_args[@]}" --json name --jq '.[].name' | grep -Fxq "$secret"; then
+  if ! grep -Fxq "$secret" <<<"$secret_names"; then
     echo "Missing Actions secret: $secret" >&2
     missing=1
   fi
 done
 
 for variable in PI_VERSION PI_MODEL AGENT_BOT_LOGIN; do
-  if ! gh variable list "${repo_args[@]}" --json name --jq '.[].name' | grep -Fxq "$variable"; then
+  if ! grep -Fxq "$variable" <<<"$variable_names"; then
     echo "Missing Actions variable: $variable" >&2
     missing=1
   fi

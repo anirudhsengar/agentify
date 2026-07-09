@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {
   CODEBASE_MAP_RELATIVE_PATH,
+  type ManagedManifestFile,
   REQUIRED_BROWNFIELD_FILES,
   REQUIRED_GREENFIELD_FILES,
   markerForPath,
@@ -16,6 +17,9 @@ export interface AgentifyRepoState {
   mode: AgentifyRepoMode;
   status: AgentifyRepoStatus;
   featureAgentCount: number;
+  workflowCount: number;
+  expertCount: number;
+  skillCount: number;
   missing: string[];
   found: string[];
   latestLogPath: string | null;
@@ -61,6 +65,103 @@ function countFeatureAgents(cwd: string): number {
     .length;
 }
 
+function countProjectWorkflows(cwd: string): number {
+  const workflowsDir = path.join(cwd, ".pi", "workflows");
+  if (!fs.existsSync(workflowsDir)) return 0;
+  return fs.readdirSync(workflowsDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .length;
+}
+
+function countExperts(cwd: string): number {
+  const expertsDir = path.join(cwd, ".pi", "prompts", "experts");
+  if (!fs.existsSync(expertsDir)) return 0;
+  return fs.readdirSync(expertsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .filter((entry) => fs.existsSync(path.join(expertsDir, entry.name, "expertise.yaml")))
+    .length;
+}
+
+function countSkillCandidates(cwd: string): number {
+  const skillsDir = path.join(cwd, ".pi", "skills");
+  if (!fs.existsSync(skillsDir)) return 0;
+  return fs.readdirSync(skillsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .filter((entry) => fs.existsSync(path.join(skillsDir, entry.name, "SKILL.md")))
+    .length;
+}
+
+function manifestFileCarriesMarker(cwd: string, file: ManagedManifestFile): boolean {
+  const filePath = path.join(cwd, file.path);
+  if (!fs.existsSync(filePath)) return false;
+  if (file.marker === "sha256") return true;
+  return fs.readFileSync(filePath, "utf-8").includes(file.marker);
+}
+
+function countFeatureAgentsFromManifest(cwd: string, files: ManagedManifestFile[]): number {
+  return files
+    .filter((file) => file.path.startsWith(".pi/agents/") && file.path.endsWith(".md"))
+    .filter((file) => manifestFileCarriesMarker(cwd, file))
+    .filter((file) => {
+      const name = path.basename(file.path);
+      return !["scout.md", "review.md", "implement.md", "test.md", "fix.md", "document.md"].includes(name);
+    })
+    .length;
+}
+
+function countWorkflowsFromManifest(cwd: string, files: ManagedManifestFile[]): number {
+  return files
+    .filter((file) => file.kind === "workflow" && file.path.startsWith(".pi/workflows/") && file.path.endsWith(".json"))
+    .filter((file) => manifestFileCarriesMarker(cwd, file))
+    .length;
+}
+
+function countExpertsFromManifest(cwd: string, files: ManagedManifestFile[]): number {
+  const domains = new Set<string>();
+  for (const file of files) {
+    if (file.kind !== "expert" || !file.path.endsWith("/expertise.yaml")) continue;
+    if (!manifestFileCarriesMarker(cwd, file)) continue;
+    const match = /^\.pi\/prompts\/experts\/([^/]+)\/expertise\.yaml$/.exec(file.path);
+    if (match) domains.add(match[1]!);
+  }
+  return domains.size;
+}
+
+function countSkillsFromManifest(cwd: string, files: ManagedManifestFile[]): number {
+  const skills = new Set<string>();
+  for (const file of files) {
+    if (file.kind !== "skill" || !file.path.endsWith("/SKILL.md")) continue;
+    if (!manifestFileCarriesMarker(cwd, file)) continue;
+    const match = /^\.pi\/skills\/([^/]+)\/SKILL\.md$/.exec(file.path);
+    if (match) skills.add(match[1]!);
+  }
+  return skills.size;
+}
+
+function inspectManifestSurfaceCounts(
+  cwd: string,
+  files: ManagedManifestFile[],
+): Pick<AgentifyRepoState, "featureAgentCount" | "workflowCount" | "expertCount" | "skillCount"> {
+  return {
+    featureAgentCount: countFeatureAgentsFromManifest(cwd, files),
+    workflowCount: countWorkflowsFromManifest(cwd, files),
+    expertCount: countExpertsFromManifest(cwd, files),
+    skillCount: countSkillsFromManifest(cwd, files),
+  };
+}
+
+function inspectSurfaceCounts(cwd: string): Pick<
+  AgentifyRepoState,
+  "featureAgentCount" | "workflowCount" | "expertCount" | "skillCount"
+> {
+  return {
+    featureAgentCount: countFeatureAgents(cwd),
+    workflowCount: countProjectWorkflows(cwd),
+    expertCount: countExperts(cwd),
+    skillCount: countSkillCandidates(cwd),
+  };
+}
+
 function findLatestLogPath(cwd: string, configDir: string): string | null {
   const logDir = path.join(configDir, "logs", "agentify");
   if (!fs.existsSync(logDir)) return null;
@@ -93,7 +194,7 @@ function collectUnmanaged(cwd: string, relatives: readonly string[]): string[] {
 export function inspectAgentifyRepoState(cwd: string, configDir: string): AgentifyRepoState {
   const manifestVerification = verifyManifest(cwd);
   if (manifestVerification.manifest) {
-    const featureAgentCount = countFeatureAgents(cwd);
+    const counts = inspectManifestSurfaceCounts(cwd, manifestVerification.manifest.files);
     const latestLogPath = findLatestLogPath(cwd, configDir);
     const missing = [
       ...manifestVerification.missing,
@@ -103,7 +204,7 @@ export function inspectAgentifyRepoState(cwd: string, configDir: string): Agenti
     return {
       mode: manifestVerification.mode,
       status: manifestVerification.valid ? "ready" : "partial",
-      featureAgentCount,
+      ...counts,
       missing,
       found: manifestVerification.found,
       latestLogPath,
@@ -115,7 +216,7 @@ export function inspectAgentifyRepoState(cwd: string, configDir: string): Agenti
   const greenfieldFound = collectFound(cwd, GREENFIELD_SIGNALS);
 
   const found = [...brownfieldFound, ...greenfieldFound, ...scaffoldFound];
-  const featureAgentCount = countFeatureAgents(cwd);
+  const counts = inspectSurfaceCounts(cwd);
   const latestLogPath = findLatestLogPath(cwd, configDir);
 
   if (brownfieldFound.length > 0) {
@@ -126,7 +227,7 @@ export function inspectAgentifyRepoState(cwd: string, configDir: string): Agenti
     return {
       mode: "brownfield",
       status: missing.length === 0 && unmanaged.length === 0 ? "ready" : "partial",
-      featureAgentCount,
+      ...counts,
       missing: [...missing, ...unmanaged.map((entry) => `${entry} (unmanaged)`)],
       found,
       latestLogPath,
@@ -141,7 +242,7 @@ export function inspectAgentifyRepoState(cwd: string, configDir: string): Agenti
     return {
       mode: "greenfield",
       status: missing.length === 0 && unmanaged.length === 0 ? "ready" : "partial",
-      featureAgentCount,
+      ...counts,
       missing: [...missing, ...unmanaged.map((entry) => `${entry} (unmanaged)`)],
       found,
       latestLogPath,
@@ -154,7 +255,7 @@ export function inspectAgentifyRepoState(cwd: string, configDir: string): Agenti
     return {
       mode: "unknown",
       status: "partial",
-      featureAgentCount,
+      ...counts,
       missing,
       found,
       latestLogPath,
@@ -164,7 +265,7 @@ export function inspectAgentifyRepoState(cwd: string, configDir: string): Agenti
   return {
     mode: "unknown",
     status: "uninitialized",
-    featureAgentCount,
+    ...counts,
     missing: [],
     found: [],
     latestLogPath,

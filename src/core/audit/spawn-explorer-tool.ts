@@ -63,6 +63,7 @@ const MAX_REPORT_BYTES = 32_000;
 const DEFAULT_MAX_TOTAL_SPAWNS = 64;
 const DEFAULT_MAX_CONCURRENT_SPAWNS = 4;
 const DEFAULT_SUBAGENT_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_MAX_TOTAL_COST_USD = 10;
 
 // The 9 dimension-shaped modes plus a 10th "custom" mode (Phase 2.10)
 // that takes an inline or file-based system prompt composed by the
@@ -228,15 +229,38 @@ const SpawnExplorerParams = Type.Object({
 
 let activeSpawnCount = 0;
 
+const BUDGET_RECOVERY = {
+    can_continue: true,
+    actions: [
+        "Read .pi/agentify/codebase_map.json and the latest run log before dispatching any more explorers.",
+        "Reuse completed sub-agent reports and call write_map or write_map_delta with the strongest evidence already gathered.",
+        "Narrow any remaining target_path/focus before retrying only if a budget remains.",
+        "For genuinely unobservable gaps, record an honest null/open_question rather than inventing coverage.",
+    ],
+    state_files: [
+        ".pi/agentify/codebase_map.json",
+        ".pi/agentify/logs/*.jsonl",
+        ".pi/agentify/logs/*-spawn-*-report.txt",
+    ],
+} as const;
+
+function budgetRecoveryText(): string {
+    return (
+        "Resume path: read .pi/agentify/codebase_map.json and the latest run log, " +
+        "reuse completed sub-agent reports, persist the best known state with write_map/write_map_delta, " +
+        "and use honest null/open_question entries for genuinely unobservable gaps."
+    );
+}
+
 function makeBudgetError(text: string, budget: Record<string, number>): {
     content: Array<{ type: "text"; text: string }>;
     isError: true;
-    details: { budget: Record<string, number> };
+    details: { budget: Record<string, number>; resume: typeof BUDGET_RECOVERY };
 } {
     return {
-        content: [{ type: "text", text }],
+        content: [{ type: "text", text: `${text}\n\n${budgetRecoveryText()}` }],
         isError: true,
-        details: { budget },
+        details: { budget, resume: BUDGET_RECOVERY },
     };
 }
 
@@ -385,6 +409,16 @@ function buildRunId(): string {
     return `spawn-${Date.now()}-${sha256(os.tmpdir() + process.pid + Math.random().toString())}`;
 }
 
+export interface ExplorerSubSession {
+    dispose: () => void;
+    prompt: (text: string) => Promise<void>;
+    messages: unknown[];
+}
+
+export type CreateExplorerSession = (
+    options: Parameters<typeof createAgentSession>[0],
+) => Promise<{ session: ExplorerSubSession }>;
+
 export interface SpawnExplorerToolOptions {
     agentDir: string;
     /** Hard cap for total sub-agents spawned by this tool instance. */
@@ -393,13 +427,49 @@ export interface SpawnExplorerToolOptions {
     maxConcurrentSpawns?: number;
     /** Wall-clock timeout for a single sub-agent prompt. */
     maxSubagentDurationMs?: number;
+    /** Hard cap for cumulative provider-reported sub-agent cost. Pass null to disable. */
+    maxTotalCostUsd?: number | null;
+    /** Test seam for running a fake sub-agent without contacting a model provider. */
+    createSession?: CreateExplorerSession;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
+
+function roundCost(costUsd: number): number {
+    return Number(costUsd.toFixed(12));
+}
+
+function extractSessionCostUsd(messages: ReadonlyArray<unknown>): number | null {
+    let total = 0;
+    let found = false;
+    for (const message of messages) {
+        if (!isRecord(message)) continue;
+        const usage = message.usage;
+        if (!isRecord(usage)) continue;
+        const cost = usage.cost;
+        const totalCost = isRecord(cost) ? cost.total : cost;
+        if (typeof totalCost !== "number" || !Number.isFinite(totalCost) || totalCost < 0) {
+            continue;
+        }
+        total += totalCost;
+        found = true;
+    }
+    return found ? roundCost(total) : null;
 }
 
 export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): ToolDefinition {
     const maxTotalSpawns = toolOptions.maxTotalSpawns ?? DEFAULT_MAX_TOTAL_SPAWNS;
     const maxConcurrentSpawns = toolOptions.maxConcurrentSpawns ?? DEFAULT_MAX_CONCURRENT_SPAWNS;
     const maxSubagentDurationMs = toolOptions.maxSubagentDurationMs ?? DEFAULT_SUBAGENT_TIMEOUT_MS;
+    const maxTotalCostUsd = toolOptions.maxTotalCostUsd ?? DEFAULT_MAX_TOTAL_COST_USD;
+    const createSession: CreateExplorerSession = toolOptions.createSession ?? (async (sessionOptions) => {
+        const { session } = await createAgentSession(sessionOptions);
+        return { session: session as unknown as ExplorerSubSession };
+    });
     let totalSpawnCount = 0;
+    let totalCostUsd = 0;
 
     return defineTool({
     name: "spawn_explorer",
@@ -418,7 +488,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         "specialist. Pass the prompt via `system_prompt` (inline) or `system_prompt_file` (path). " +
         `Hard dispatch budgets: max ${maxTotalSpawns} total sub-agents per audit, ` +
         `max ${maxConcurrentSpawns} concurrent sub-agents, and max ${maxSubagentDurationMs}ms ` +
-        "wall-clock time per sub-agent. Dispatch as many as the topic decomposition needs within those bounds. " +
+        "wall-clock time per sub-agent" +
+        (maxTotalCostUsd === null ? "" : `, plus max $${maxTotalCostUsd.toFixed(2)} provider-reported sub-agent cost`) +
+        ". Dispatch as many as the topic decomposition needs within those bounds. " +
         "Default mode: topography. Reports exceeding 32 KB are truncated; the full report is " +
         "persisted to the log dir. target_path is domain-locked to ctx.cwd unless " +
         "allow_external_paths is true (logged). Use the `model` parameter to override the per-mode " +
@@ -490,7 +562,6 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             subagentSystemPrompt = resolved.prompt;
             promptSource = resolved.source;
         } catch (err) {
-            activeSpawnCount -= 1;
             const msg = err instanceof Error ? err.message : String(err);
             return {
                 content: [
@@ -518,6 +589,16 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 { max_concurrent_spawns: maxConcurrentSpawns },
             );
         }
+        if (maxTotalCostUsd !== null && totalCostUsd >= maxTotalCostUsd) {
+            return makeBudgetError(
+                `Error: spawn_explorer cost budget exhausted: $${totalCostUsd.toFixed(4)}/$${maxTotalCostUsd.toFixed(4)} ` +
+                "provider-reported sub-agent cost already used. Reuse existing reports, narrow the audit, or mark remaining uncertainty honestly.",
+                {
+                    max_total_cost_usd: maxTotalCostUsd,
+                    total_cost_usd: roundCost(totalCostUsd),
+                },
+            );
+        }
 
         activeSpawnCount += 1;
         totalSpawnCount += 1;
@@ -540,8 +621,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             ? `${params.target_path}${summarySuffix}${constraintsBlock}`
             : `${params.target_path} ${params.focus ?? ""}${summarySuffix}${constraintsBlock}`;
 
-        type SubSession = { dispose: () => void; prompt: (text: string) => Promise<void>; messages: unknown[] };
-        let session: SubSession | undefined;
+        let session: ExplorerSubSession | undefined;
 
         try {
             // Build a clean resource loader for the sub-agent:
@@ -596,7 +676,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             // builder. A sub-agent running at the SDK default would
             // silently do less reasoning and produce weaker reports.
             const parentThinkingLevel = getThinkingLevel();
-            const { session: createdSession } = await createAgentSession({
+            const { session: createdSession } = await createSession({
                 cwd: ctx.cwd,
                 agentDir: toolOptions.agentDir,
                 model: ctx.model,
@@ -605,7 +685,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 tools: [...toolsForMode],
                 resourceLoader,
             });
-            session = createdSession as unknown as SubSession;
+            session = createdSession;
 
             // Send the task and wait for the sub-agent to finish, with
             // a hard wall-clock timeout. The session is disposed in the
@@ -646,6 +726,10 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             // Count actual tool calls from the sub-agent for the step-cap diagnostic.
             const subagentMessages =
                 session.messages as ReadonlyArray<{ role?: string; content?: unknown }>;
+            const sessionCostUsd = extractSessionCostUsd(session.messages);
+            if (sessionCostUsd !== null) {
+                totalCostUsd = roundCost(totalCostUsd + sessionCostUsd);
+            }
             let readCount = 0;
             let bashCount = 0;
             for (const m of subagentMessages) {
@@ -668,6 +752,16 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     : readCount >= maxReads * 0.8
                     ? ` [WARNING: 80% of reads used: ${readCount}/${maxReads}]`
                     : "";
+            const costText = sessionCostUsd === null
+                ? "cost=unknown"
+                : `cost=$${sessionCostUsd.toFixed(4)}, total_cost=$${totalCostUsd.toFixed(4)}` +
+                  (maxTotalCostUsd === null ? "" : `/$${maxTotalCostUsd.toFixed(4)}`);
+            const costWarning =
+                maxTotalCostUsd !== null && totalCostUsd > maxTotalCostUsd
+                    ? " [WARNING: sub-agent cost budget exceeded; future spawns will be refused]"
+                    : maxTotalCostUsd !== null && totalCostUsd >= maxTotalCostUsd * 0.8
+                    ? " [WARNING: 80% of sub-agent cost budget used]"
+                    : "";
 
             return {
                 content: [
@@ -675,7 +769,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                         type: "text",
                         text:
                             `Sub-agent (mode=${mode}, model=${resolvedModel}) explored ${params.target_path} in ${durationMs}ms. ` +
-                            `reads=${readCount}/${maxReads}, bash=${bashCount}/${maxBash}${stepWarning}.\n\n` +
+                            `reads=${readCount}/${maxReads}, bash=${bashCount}/${maxBash}, ${costText}${stepWarning}${costWarning}.\n\n` +
                             report,
                     },
                 ],
@@ -694,6 +788,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     report_truncated_path: truncatedPath || null,
                     reads: readCount,
                     bash: bashCount,
+                    cost_usd: sessionCostUsd,
+                    total_cost_usd: totalCostUsd,
+                    max_total_cost_usd: maxTotalCostUsd,
                     max_reads: maxReads,
                     max_bash: maxBash,
                     max_steps: maxSteps,

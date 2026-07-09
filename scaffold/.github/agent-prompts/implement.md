@@ -64,6 +64,12 @@ workflows, specialists, experts, and validation focus. It is guidance from a
 separate routing pass, not permission to skip repository context, ignore issue
 acceptance criteria, or weaken safety/validation rules.
 
+If the orchestration plan selects any specialists or experts, your final reply
+must include a `## Routing evidence` section that lists each selected
+specialist/expert and the generated file path you read, such as
+`.pi/agents/<name>.md` or `.pi/prompts/experts/<domain>/expertise.yaml`. The
+trusted workflow checks this transcript before publishing a PR.
+
 This is the same skill a developer runs locally — CI just supplies the issue
 context and handles the git plumbing.
 

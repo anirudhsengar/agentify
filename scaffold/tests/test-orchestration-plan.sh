@@ -6,6 +6,35 @@ extractor="$repo_root/.github/scripts/extract-orchestration-plan.sh"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+workflow_context="$tmp/workflow-context.md"
+specialist_context="$tmp/specialist-context.md"
+expert_context="$tmp/expert-context.md"
+
+cat > "$workflow_context" <<'EOF'
+## Project Workflow Context
+
+### `payments-plan-build-review-fix`
+
+- Path: `.pi/workflows/payments.json`
+EOF
+
+cat > "$specialist_context" <<'EOF'
+## Specialist Routing Context
+
+### `payments`
+
+- Path: `.pi/agents/payments.md`
+EOF
+
+cat > "$expert_context" <<'EOF'
+## Expert Routing Context
+
+### `billing`
+
+- Path: `.pi/prompts/experts/billing/expertise.yaml`
+- Test command: `npm test -- payments`
+EOF
+
 valid="$tmp/valid.txt"
 cat > "$valid" <<'EOF'
 Routing complete.
@@ -20,7 +49,7 @@ Routing complete.
 </output>
 EOF
 
-bash "$extractor" "$valid" "$tmp/plan.md"
+bash "$extractor" "$valid" "$tmp/plan.md" "$workflow_context" "$specialist_context" "$expert_context"
 grep -q '^## Orchestration Plan$' "$tmp/plan.md" || {
   echo "expected orchestration plan heading" >&2
   exit 1
@@ -77,5 +106,39 @@ cat > "$too_many" <<'EOF'
 EOF
 if bash "$extractor" "$too_many" "$tmp/too-many-plan.md" >/dev/null 2>&1; then
   echo "expected too many selected workflows to fail" >&2
+  exit 1
+fi
+
+unknown="$tmp/unknown.txt"
+cat > "$unknown" <<'EOF'
+<output>
+{
+  "summary": "Unknown generated context entries.",
+  "selectedWorkflows": ["missing-workflow"],
+  "selectedSpecialists": ["missing-specialist"],
+  "selectedExperts": ["missing-expert"],
+  "validationFocus": []
+}
+</output>
+EOF
+if bash "$extractor" "$unknown" "$tmp/unknown-plan.md" "$workflow_context" "$specialist_context" "$expert_context" >/dev/null 2>&1; then
+  echo "expected selections not present in generated context to fail" >&2
+  exit 1
+fi
+
+unknown_command="$tmp/unknown-command.txt"
+cat > "$unknown_command" <<'EOF'
+<output>
+{
+  "summary": "Unknown validation focus command.",
+  "selectedWorkflows": [],
+  "selectedSpecialists": [],
+  "selectedExperts": ["billing"],
+  "validationFocus": ["npm run secret-smoke"]
+}
+</output>
+EOF
+if bash "$extractor" "$unknown_command" "$tmp/unknown-command-plan.md" "$workflow_context" "$specialist_context" "$expert_context" >/dev/null 2>&1; then
+  echo "expected validationFocus command not present in generated context to fail" >&2
   exit 1
 fi

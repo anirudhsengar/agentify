@@ -53,6 +53,12 @@ matching expert, read the listed `expertise.yaml` and use its durable domain
 invariants, pitfalls, conventions, and validation commands as part of the
 Standards axis.
 
+If the PR diff matches any generated specialists or experts, your review
+summary must include a `## Routing evidence` section that lists each matching
+specialist/expert and the generated file path you read, such as
+`.pi/agents/<name>.md` or `.pi/prompts/experts/<domain>/expertise.yaml`. The
+trusted workflow checks your transcript before posting the review result.
+
 You may make small, obviously-correct fixup commits (typos, an obviously
 missing test, a lint fix) directly on `${BRANCH}` if you're confident. Do
 NOT make substantial design changes — flag those in your summary instead

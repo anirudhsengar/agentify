@@ -294,6 +294,9 @@ async function testGreenfieldRunWithFakeRuntime(): Promise<void> {
   assert.equal(greenfieldState?.resume.stop_at, "spec");
   assert.ok(greenfieldState?.resume.artifact_paths.includes("specs/feature-first.md"));
   assert.ok(greenfieldState?.resume.github_resume.includes("agent:queued"));
+  assert.equal(greenfieldState?.github_handoff.action, "open_implementation_issue");
+  assert.deepEqual(greenfieldState?.github_handoff.labels, ["agent:queued", "agent:implement"]);
+  assert.ok(greenfieldState?.github_handoff.body.includes("specs/feature-first.md"));
   assert.ok(greenfieldState?.next_actions.some((action) => action.includes("/implement")));
   const manifest = readManifest(cwd);
   assert.equal(manifest?.mode, "greenfield");

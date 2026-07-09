@@ -85,7 +85,7 @@ export function markerForPath(relativePath: string): string {
 
 export function kindForPath(relativePath: string): ManagedArtifactKind {
   const normalized = normalizePath(relativePath);
-  if (normalized.startsWith(".agents/") || normalized.startsWith(".claude/")) return "skill";
+  if (normalized.startsWith(".agents/") || normalized.startsWith(".claude/") || normalized.startsWith(".pi/skills/")) return "skill";
   if (normalized.startsWith(".codex/") || normalized === "CLAUDE.md") return "harness_export";
   if (normalized.startsWith(".github/") || normalized === "SETUP.md") return "scaffold";
   if (normalized.startsWith(".pi/prompts/experts/")) return "expert";

@@ -33,3 +33,4 @@ standalone CLI (`agentify`); see [0008](0008-one-package-two-entry-modes.md).
 | [0012](0012-evolution-loop.md) | The self-refresh evolution loop | Accepted |
 | [0013](0013-webhook-server.md) | Internal webhook server (parked) | Accepted |
 | [0014](0014-coverage-gate-in-code.md) | Coverage gate enforced in code | Accepted |
+| [0015](0015-public-orchestration-plane.md) | Public orchestration plane is GitHub Actions | Accepted |

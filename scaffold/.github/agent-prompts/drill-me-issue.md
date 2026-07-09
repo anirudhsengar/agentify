@@ -42,6 +42,30 @@ this context, ask one clarifying question instead of guessing.
 
 ${FORMATION_RESUME_CONTEXT}
 
+If the rendered context contains `### Structured GitHub Handoff`, use that
+handoff as the default issue-request shape for this one transition unless the
+current issue thread clearly supersedes it. Map the handoff by `Action`:
+
+- `open_drill_issue` -> return one `childIssues[]` entry with the handoff title
+  and body, then stop.
+- `create_implementation_issues` -> return the requested implementation issue
+  breakdown when it is approved; otherwise present the breakdown in `reply` and
+  stop in `awaiting_issue_approval`.
+- `open_implementation_issue` -> return one `implementationIssues[]` entry with
+  the handoff title and body. Ensure the body includes `## What to build`,
+  `## Acceptance criteria`, and `## Blocked by`; if any are missing, ask one
+  clarifying question instead of inventing the missing release-critical details.
+  If the Structured GitHub Handoff labels include `agent:implement` and the
+  issue is approved/unblocked, set `"activate": true` on that
+  `implementationIssues[]` entry so the trusted workflow applies both
+  `agent:queued` and `agent:implement`.
+
+Use the Structured GitHub Handoff labels as the intended workflow labels, but
+do not include labels in final output objects; the trusted workflow applies the
+right labels for each issue array. Only use the optional `activate` boolean on
+implementation issue requests to ask the trusted workflow to apply
+`agent:implement`. Do not perform more than this one transition.
+
 # RESUME STATE
 
 Bot replies end with a hidden state marker:
@@ -139,6 +163,10 @@ exactly as headings:
 - `## What to build`
 - `## Acceptance criteria`
 - `## Blocked by`
+
+Implementation issue requests may also include `"activate": true` when an
+approved, unblocked slice should start immediately. Omit it or set it to
+`false` when the issue should remain queued for later human activation.
 
 Use `## Blocked by` with concrete `#123` issue references when this slice
 depends on earlier work, or `None - can start immediately.` when unblocked.

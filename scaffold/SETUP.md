@@ -90,3 +90,72 @@ bash tests/run.sh
 
 This checks the shell behavior, skill/lock consistency, workflow security
 guards, label contract, and drill-workflow triggers.
+
+## 5. Live-smoke the GitHub runtime
+
+After the scaffold is pushed and Actions secrets/variables are configured, run:
+
+```sh
+bash .github/scripts/smoke-github-runtime.sh --evidence-file docs/release/smoke-implement-preflight.json
+```
+
+This creates a temporary issue, applies `agent:implement` without
+`agent:queued`, and waits for the trusted implement preflight to refuse the run.
+That validates GitHub events, labels, workflow execution, and trusted issue
+comments without starting a Pi model run. Pass `--repo owner/name` outside a
+checkout, or `--keep-issue` if you want to inspect the smoke issue afterward.
+The optional `--evidence-file` argument writes JSON with the issue, PR, or
+workflow URL that proves the smoke passed. The evidence also records the commit
+SHA from `AGENTIFY_SMOKE_COMMIT_SHA`, or from `git rev-parse HEAD` when run
+inside a checkout.
+
+To smoke the post-launch drill workflow without starting a model run, run:
+
+```sh
+bash .github/scripts/smoke-drill-github-runtime.sh --evidence-file docs/release/smoke-drill-preflight.json
+```
+
+This creates a temporary `agent:drill-me` issue with a trusted smoke marker and
+waits for `agent-drill-me-issue.yml` to comment, remove the trigger label, and
+stop before checkout or Pi starts.
+
+To smoke the public retry command without starting a model run, run:
+
+```sh
+bash .github/scripts/smoke-retry-github-runtime.sh --evidence-file docs/release/smoke-retry.json
+```
+
+This creates a temporary blocked issue, posts `/agent retry`, waits for the
+trusted command router to remove blocked/in-progress state and queue
+`agent:implement`, then closes the issue. Because the issue is not
+`agent:queued`, the follow-on implement workflow should stop at preflight.
+
+For a model-backed staged-repo smoke, run:
+
+```sh
+bash .github/scripts/smoke-model-github-runtime.sh --confirm-model-run --evidence-file docs/release/smoke-model-implement.json
+```
+
+This creates a queued smoke issue, applies `agent:implement`, and waits for the
+implementation workflow to open a draft PR. It starts Pi through GitHub Actions
+and can spend provider tokens, so run the no-LLM smoke first and use this only
+in a staging repository or during release qualification.
+
+To smoke the review workflow against that PR, run:
+
+```sh
+bash .github/scripts/smoke-review-github-runtime.sh --confirm-model-run --pr <number> --evidence-file docs/release/smoke-review.json
+```
+
+This applies `agent:review` to an agent-owned PR and waits for the review
+workflow to approve it, requeue implementation, or mark it blocked.
+
+To smoke the self-refresh workflow, run:
+
+```sh
+bash .github/scripts/smoke-refresh-github-runtime.sh --confirm-model-run --evidence-file docs/release/smoke-refresh.json
+```
+
+This dispatches `agent-refresh-surface.yml` on the default branch and waits for
+the workflow run to complete successfully. It starts Pi and can spend provider
+tokens.

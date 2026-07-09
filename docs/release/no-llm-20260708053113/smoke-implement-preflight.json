@@ -1,0 +1,12 @@
+{
+  "schema": "agentify.smoke-evidence.v1",
+  "gate": "implement_preflight",
+  "repo": "anirudhsengar/agentify-staging-no-llm-20260708053113",
+  "result": "passed",
+  "commit_sha": "e20d03d47de5a8c7c1958ab51ab5077c13277ba8",
+  "completed_at": "2026-07-08T08:29:35Z",
+  "issue_url": "https://github.com/anirudhsengar/agentify-staging-no-llm-20260708053113/issues/15",
+  "pr_url": "",
+  "workflow_url": "https://github.com/anirudhsengar/agentify-staging-no-llm-20260708053113/actions/runs/28928787955",
+  "details": "Trusted implement preflight refused an unqueued issue before Pi started."
+}

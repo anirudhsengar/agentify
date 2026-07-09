@@ -72,7 +72,8 @@ under `~/.agentify/`. The audit writes codebase-specific intelligence to
 the current repository, exports supported harness surfaces, installs the
 GitHub runtime scaffold, and reports GitHub readiness plus next-step
 setup guidance. Later runs attach to an initialized repo, report last
-run status and the latest log path, and recover incomplete setup when
+run status, installed surface counts (feature agents, workflows, experts,
+and repo skills), the latest log path, and recover incomplete setup when
 needed. User-owned files are reported as conflicts and left intact.
 
 ## New Repo
@@ -85,13 +86,18 @@ user-approved milestone. agentify deterministically renders `CONTEXT.md`,
 `GOALS.md`, PRDs, plans, issues, and specs from that payload, records
 artifact validation and resume context in
 `.pi/agentify/greenfield-state.json`, and installs the GitHub runtime
-scaffold only after the artifacts pass the substance gate. It then
-proceeds one selected goal/sub-goal at a time through the same build
-chain. Post-launch drill issues receive that formation resume context, and
-the credential-free model run can request child, PRD, or implementation issues
-through structured output that the trusted workflow applies with the right
-labels. Subsequent runs attach to that initialized state instead of acting like
-a separate tool family.
+scaffold only after the artifacts pass the substance gate. The state file also
+includes a structured `github_handoff` with the next issue title, body, labels,
+and artifact paths, so post-bootstrap work can enter the same GitHub loop
+without relying on prose alone. Approved unblocked implementation handoffs can
+activate the issue explicitly, applying both `agent:queued` and
+`agent:implement` after the trusted workflow checks referenced blockers; draft
+slices and blocked work remain queued only. It then proceeds one selected
+goal/sub-goal at a time through the same build chain. Post-launch drill issues
+receive that formation resume context, and the credential-free model run can
+request child, PRD, or implementation issues through structured output that the
+trusted workflow applies with the right labels. Subsequent runs attach to that
+initialized state instead of acting like a separate tool family.
 
 ## What Gets Written
 
@@ -166,7 +172,8 @@ kind, alternate state dir); there are no subcommands.
 Webhook, AIW, orchestrator, and expert modules may still exist
 internally. The public GitHub loop uses generated workflow/specialist/expert
 context plus the orchestration-planner prompt; it does not expose the internal
-OrchestratorHost as a public command or hosted control plane.
+OrchestratorHost as a public command or hosted control plane. See
+[ADR 0015](docs/adr/0015-public-orchestration-plane.md).
 
 The shipped skill pack lives in `.agents/skills/` and is mirrored to
 `.claude/skills/` for harnesses that support skills. Those skills are

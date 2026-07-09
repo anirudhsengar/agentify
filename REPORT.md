@@ -1,6 +1,6 @@
 # Agentify Production Readiness Report
 
-Date: 2026-07-06
+Date: 2026-07-07
 
 ## Executive Verdict
 
@@ -10,20 +10,21 @@ rendering, transactional apply/rollback, managed-file manifests, a stamped
 GitHub Actions runtime, a shipped skill pack, a defense hook, and a large test
 surface.
 
-It does not yet fully satisfy the stated vision of "install agentify, run one
-command, and the repository lives on its own with specialized agents, experts,
-complex workflows, and an orchestrator." The brownfield bootstrap and
-GitHub-label PR loop are real. The expert system, prompt/skill generation, and
-orchestrator-led self-management story are only partially connected to the
-public product, though generated workflow specs are now injected into the
-public implement prompts as routing guidance and issue implementation now runs
-a credential-free orchestration-planner pass before the build agent.
+It does not yet fully satisfy the most ambitious version of "install agentify,
+run one command, and the repository lives on its own with specialized agents,
+experts, complex workflows, and an orchestrator." The brownfield bootstrap and
+GitHub-label PR loop are real. ADR 0015 now makes the product boundary explicit:
+public v1 is orchestrated by the scaffolded GitHub Actions loop, including a
+credential-free orchestration-planner pass over generated workflows,
+specialists, and experts, while the internal OrchestratorHost remains
+foundation code rather than the installed runtime.
 
 My current production-readiness rating is:
 
 - Private dogfood: yes, after fixing the failing docs link.
 - External beta: close, but only with clear limitations around experts,
-  greenfield, and the orchestrator being internal.
+  greenfield, and the decision that public v1 uses GitHub Actions orchestration
+  rather than the internal OrchestratorHost runtime.
 - Public "best agentic engineering tool" release: not yet.
 
 If I had to score it today, I would call it a 7/10 engineering foundation and
@@ -54,7 +55,24 @@ The first remediation pass closed several issues found below:
 - The issue implementation workflow now runs a separate credential-free
   orchestration planner before the build agent. The planner consumes generated
   workflow, specialist, and expert context, emits bounded structured routing
-  JSON, and a trusted script renders that plan into the implementation prompt.
+  JSON, and a trusted script validates selected workflow/specialist/expert
+  names plus validation-focus commands against the generated context before
+  rendering that plan into the implementation prompt.
+- The issue implementation workflow now delegates duplicate-open-PR refusal to
+  `check-existing-issue-pr.sh`, with fixture coverage for closing-keyword
+  matching, false positives such as `#420`, malformed JSON, and invalid issue
+  numbers.
+- PR review fixup pushes now use the same trusted `push-updated-branch.sh`
+  path as update-branch, including the `agent/*` branch guard, `AGENT_PAT`
+  token scoping, force-with-lease, and review-specific stale-branch failure
+  reasons.
+- PR review verdict side effects now delegate to
+  `complete-review-handoff.sh`: approval comments/labels/ready transitions use
+  `GITHUB_TOKEN`, while request-changes requeues implementation with
+  `AGENT_PAT`.
+- PR-scoped failure handoff for `agent:review` and `agent:update-branch` now
+  delegates to `mark-pr-workflow-failure.sh`, which applies `agent:blocked`
+  and posts the retry comment from one tested trusted path.
 - Generated expert routing context now carries bounded durable knowledge from
   `expertise.yaml`, including key files, key types, patterns, pitfalls,
   conventions, and test paths. The public implement, implement-PR, and review
@@ -68,6 +86,11 @@ The first remediation pass closed several issues found below:
 - The refresh workflow now has a consistent git handoff: the model leaves edits
   uncommitted, the trusted workflow commits/pushes/opens the PR, and the
   workflow still opens a PR if the model already committed changes.
+- The refresh workflow now validates the model's diff before the trusted
+  commit/PR handoff. `validate-refresh-surface.sh` rejects product-code edits,
+  oversized `AGENTS.md`, missing managed markers, and malformed expert YAML;
+  `refresh-managed-manifest.mjs` updates managed-file manifest hashes for
+  refreshed surface files before the PR is opened.
 - The drill-me issue workflow now requires final structured output, validates
   it with a trusted shell renderer, and posts the success-path issue reply
   itself after any PR work. "No repo file changes" now still advances the
@@ -81,8 +104,24 @@ The first remediation pass closed several issues found below:
 - Expert matching now normalizes absolute and relative touched paths, so
   internal AIW/orchestrator self-improve triggers can actually match generated
   expert domains.
-- `spawn_explorer` now enforces hard total-spawn, concurrent-spawn, and
-  per-subagent wall-clock budgets instead of relying only on prompt guidance.
+- The public GitHub model loops now verify routing evidence after model runs.
+  Issue implementation checks the orchestration planner's selected specialists
+  and experts with `verify-routing-evidence.sh`; PR feedback and review check
+  changed paths against generated specialists/experts with
+  `verify-diff-routing-evidence.sh`. Matching transcripts must include a
+  `## Routing evidence` section citing the selected or matched `.pi/agents/*`
+  and `expertise.yaml` files before PR publication, fixup push, or review
+  handoff can continue.
+- Re-running `agentify` in an initialized repository now reports managed
+  feature-agent, workflow, expert, and repo-skill counts, so attach/status is a
+  useful operator check of the installed agentic surface instead of just a
+  rerun guard.
+- `spawn_explorer` now enforces hard total-spawn, concurrent-spawn,
+  per-subagent wall-clock, and provider-reported cumulative cost budgets
+  instead of relying only on prompt guidance. Budget exhaustion now returns a
+  structured resume contract that points the builder at the canonical map,
+  run logs, completed reports, `write_map`/`write_map_delta`, and honest nulls
+  for genuinely unobservable gaps.
 - Generated-output tests now include quality fixtures that check fallback
   specialists are actionable, not just present. They verify scope, first files,
   validation commands, pitfalls, shared package boundaries, and user-workflow
@@ -110,22 +149,132 @@ The first remediation pass closed several issues found below:
 - Greenfield state now persists resume context: whether it came from typed
   formation or filesystem fallback, the approved `stop_at` checkpoint, current
   focus, exact artifact paths, a local continuation instruction, and a GitHub
-  continuation instruction.
+  continuation instruction. It also persists a structured `github_handoff`
+  with the next GitHub action, issue title, body, labels, and artifact paths,
+  so spec-ready formation can hand off to `agent:queued` + `agent:implement`
+  without relying on prose-only instructions.
 - The GitHub drill-me workflow now renders that greenfield resume state through
   a trusted scaffold script and injects it into the prompt before the model
-  makes its one-transition issue move. The drill model reads captured issue
-  JSON without GitHub credentials and returns structured child/PRD/implementation
-  issue requests; a trusted shell step creates or reuses the issues and appends
-  links before the state marker. The scaffold contract suite now simulates the
-  formation-state -> drill-prompt -> trusted queued-issue path.
+  makes its one-transition issue move. That rendered context now includes the
+  structured `github_handoff` section, so the model sees the generated next
+  action, issue title, labels, artifact paths, and body. The drill prompt now
+  maps those actions into `childIssues[]` or `implementationIssues[]` final
+  output, while still requiring approval before creating implementation slices.
+  Approved, unblocked implementation handoffs can set `activate: true`; the
+  trusted issue applier then checks referenced blockers and applies both
+  `agent:queued` and `agent:implement` only when no blocker remains open. When
+  a matching issue already exists, activation uses that issue's current GitHub
+  body and state as authoritative, so stale handoff text cannot bypass blockers
+  recorded on the live issue.
+  The drill model reads captured issue JSON without GitHub credentials and
+  returns structured child/PRD/implementation issue requests; a trusted shell
+  step creates or reuses the issues and appends links before the state marker.
+  The scaffold contract suite now simulates the formation-state -> drill-prompt
+  -> trusted queued-issue path.
+- The stamped scaffold now includes `smoke-github-runtime.sh`, a no-LLM live
+  GitHub smoke gate that creates a temporary issue, applies `agent:implement`
+  without `agent:queued`, and waits for the trusted implement preflight refusal
+  before closing the issue. The script now preflights that
+  `agent-implement.yml` is actually installed before creating a smoke issue,
+  has fake-`gh` contract coverage, and is documented in stamped `SETUP.md`.
+- The stamped scaffold now also includes `smoke-drill-github-runtime.sh`, a
+  no-LLM live GitHub smoke gate that creates a temporary `agent:drill-me` issue
+  with an exact smoke title plus trusted smoke marker and waits for
+  `agent-drill-me-issue.yml` to comment, remove the trigger label, and exit
+  before checkout or Pi starts. The smoke now requires `AGENT_BOT_LOGIN`, which
+  matches the drill workflow's need to ignore comments authored by `AGENT_PAT`
+  and avoid reply loops.
+- The stamped scaffold now also includes `smoke-retry-github-runtime.sh`, a
+  no-LLM live GitHub smoke gate that creates a temporary blocked issue, posts
+  `/agent retry`, waits for the trusted command router to remove
+  blocked/in-progress state and queue `agent:implement`, then closes the issue.
+- The no-LLM implement, drill, and retry smokes were run against a private
+  staged repository stamped from the scaffold:
+  `anirudhsengar/agentify-staging-no-llm-20260708053113` at
+  `e20d03d47de5a8c7c1958ab51ab5077c13277ba8`. Evidence JSON is stored under
+  `docs/release/no-llm-20260708053113/` and passes
+  `npm run verify:smoke-evidence -- --profile no-llm ...`. The default
+  verifier profile still requires all six public-release gates. The no-LLM
+  evidence now records both the issue URL and the matching Actions workflow run
+  URL for each gate. Workflow run lookup is time-bounded to runs created after
+  the smoke starts, so evidence cannot silently reuse a stale run from an
+  earlier issue. The first drill smoke exposed a real bug: the drill workflow
+  skipped bot-authored events before checking the exact no-model smoke marker.
+  The workflow now handles that exact marker before bot self-loop skipping, and
+  the staged rerun passed.
+- Staged `Validate agentify` then exposed a shell robustness bug: GitHub list
+  preflights piped fake or real `gh` output directly into early-exiting `grep`
+  under `set -euo pipefail`, so long output could produce a broken pipe. The
+  smoke/setup scripts now capture full list output before matching required
+  labels, secrets, and variables; contract coverage includes a long variable
+  list regression. The final staged push has both `Validate agentify` and
+  `Agent Refresh Surface` passing. Refresh now skips cleanly when model runtime
+  configuration is absent instead of failing a no-LLM repository on every
+  default-branch push.
+- The stamped scaffold now also includes `smoke-model-github-runtime.sh`, an
+  explicit-confirmation staged-repo smoke gate that creates a queued issue,
+  applies `agent:implement`, and waits for the model-backed implement workflow
+  to open a draft PR. It checks required workflow installation, labels,
+  secrets, and implement variables before triggering the model run, without
+  incorrectly requiring the drill-only `AGENT_BOT_LOGIN` variable.
+- The stamped scaffold now also includes `smoke-review-github-runtime.sh`, an
+  explicit-confirmation staged-repo smoke gate that applies `agent:review` to
+  an agent-owned PR and waits for approval, implementation requeue, or a
+  blocked failure. It checks the review workflow installation before editing PR
+  labels.
+- The stamped scaffold now also includes `smoke-refresh-github-runtime.sh`, an
+  explicit-confirmation staged-repo smoke gate that dispatches
+  `agent-refresh-surface.yml` and waits for the workflow run to complete
+  successfully.
+- Release qualification now has a durable evidence ledger at
+  `docs/release-evidence.md`, and the invariant suite requires release
+  readiness to point at it. The ledger records local gates, staged GitHub smoke
+  links, model/provider details, and expert outcome transcript scores so
+  release decisions do not depend on memory or console scrollback.
+- Expert outcome evidence now has an executable replay gate:
+  `npm run score:expert-outcomes -- <manifest>` loads generated
+  `expertise.yaml`, baseline transcripts, and expert-guided transcripts, then
+  fails if the expert-guided output misses required expertise checks or fails
+  to beat the baseline by the configured delta. File-backed manifests are
+  pinned to the staged repository, candidate commit, capture timestamp,
+  provider, and model.
+- The six stamped GitHub smoke scripts now accept `--evidence-file` and write
+  `agentify.smoke-evidence.v1` JSON with the gate, repository, candidate
+  commit SHA, pass result, completion time, issue/PR URL where applicable, and
+  a repository-matching workflow run URL that proves the Actions execution. The
+  workflow run lookup is time-bounded to runs created after each smoke starts,
+  so concurrent or stale runs cannot satisfy the evidence contract. This turns
+  staged smoke output into durable release evidence instead of console
+  scrollback.
+- Smoke evidence now has an executable verifier:
+  `npm run verify:smoke-evidence -- <files>` fails if a required smoke gate is
+  missing, duplicated, failed, from a different repository, or lacks a
+  repository-matching URL that proves the run. The verifier also has an
+  explicit `--profile no-llm` mode for beta hardening evidence that requires
+  only implement preflight, drill preflight, and retry command gates, while the
+  default profile remains the full six-gate public-release check. All six gates
+  now require repository-matching workflow run URLs, not just issue or PR URLs.
+- Public release qualification now has a composed gate:
+  `npm run qualify:release-evidence -- --repo <owner/name> --commit <sha> --since <iso> --expert <manifest> --smoke <file>...`
+  requires staged GitHub smoke evidence from the expected repository and
+  candidate commit, inside an explicit evidence window, plus expert outcome
+  transcript evidence pinned to the same repository, commit, and evidence
+  window to pass together, and requires expert evidence across plan, review,
+  and refresh modes, so release candidates cannot satisfy only one side of the
+  evidence contract, stale evidence, evidence from the wrong repo/commit, or a
+  single narrow expert replay.
 
 Remaining major gaps are still real: greenfield is still weaker than
 brownfield because local terminal formation and post-launch GitHub drilling
-still need live GitHub smoke evidence beyond the now-stubbed readiness,
-PR-publication, handoff, failure, and retry paths, more ecosystem-specific
-generated-output fixtures are still useful beyond the newly added small
-library and Rails-style app shapes, and the orchestrator remains internal
-rather than a public installed runtime.
+still need model-backed staged evidence beyond the now-passing no-LLM
+preflight/drill/retry smoke gates, the shipped model-backed
+issue-to-draft-PR/review/refresh smoke gates, and the stubbed
+readiness/PR-publication/handoff/failure/retry paths. The evidence ledger now
+records the no-LLM staged run, but it is not a substitute for model-backed
+implementation/review/refresh runs with real provider credentials. More
+ecosystem-specific generated-output fixtures are still useful beyond the newly
+added small library and Rails-style app shapes, and the orchestrator remains
+internal rather than a public installed runtime.
 
 ## What I Inspected
 
@@ -244,15 +393,15 @@ Validation" below.
 
 | Vision element | Current status | Assessment |
 |---|---:|---|
-| One-command install/bootstrap | Strong | `agentify` is the only public command and handles bootstrap, attach, and recovery. |
+| One-command install/bootstrap | Strong | `agentify` is the only public command and handles bootstrap, attach, recovery, and installed surface status. |
 | Brownfield repository audit | Strong | Structured TypeBox map, explorer sub-agents, deterministic renderers, coverage gate. |
-| Greenfield project formation | Improved | Uses typed formation output, code-enforced `stop_at` gates, deterministic renderers, checkpoint state, persisted resume context, managed markers, a manifest, a substance gate, credential-free GitHub drill prompt handoff, trusted structured issue creation/reuse, blocked-dependency gating, and a simulated handoff to `/agent implement`; still needs live/stubbed full CI workflow coverage. |
+| Greenfield project formation | Improved | Uses typed formation output, code-enforced `stop_at` gates, deterministic renderers, checkpoint state, persisted resume context, structured GitHub handoff data, managed markers, a manifest, a substance gate, credential-free GitHub drill prompt handoff, trusted structured issue creation/reuse, blocked-dependency gating, and a simulated handoff to `/agent implement`; still needs live/stubbed full CI workflow coverage. |
 | Specialized feature agents | Improved | `.pi/agents` are generated, exported to Codex/Claude surfaces, and injected into GitHub implement/review prompts as trusted routing context. |
 | Agent experts | Improved | The renderer emits runtime-compatible expert directories, the runtime discovers them, refresh receives stale-domain signals, and GitHub implement/review prompts receive trusted expert routing context with durable patterns, conventions, pitfalls, key files/types, and test paths. |
 | Complex AI workflows | Bridged into prompts | AIW and orchestrator workflow code exists and is tested; generated repos now include project workflow specs that the orchestrator registry can discover, and the GitHub implement loop receives those specs as trusted routing context. |
-| Orchestrator agent | Public routing planner + internal host | Strong foundation code, plus generated agents/workflows/experts now line up with registry consumers and prompts. Issue implementation now has a credential-free orchestration-planner pass, but the installed public runtime still does not execute the internal OrchestratorHost DAG/control-plane loop. |
+| Orchestrator agent | Public GitHub orchestration plane + internal host | ADR 0015 makes the public v1 decision explicit: issue implementation uses a credential-free orchestration-planner pass over generated workflows/specialists/experts, while the internal OrchestratorHost DAG/control-plane remains foundation code for a future product line. |
 | GitHub issue -> PR loop | Strong | Label-driven implement/review/update loops are real, drill-me can now post structured success replies, generated specialist/expert/workflow context is injected before model runs, the public orchestration planner selects a route for issue implementation, and token isolation is preserved. |
-| Self-refresh / evolution loop | Improved | The default-branch trigger is fixed, stale experts are detected deterministically, and refresh PR handoff is robust when edits are uncommitted or already committed; refresh is still prompt-driven and needs broader output-quality checks. |
+| Self-refresh / evolution loop | Improved | The default-branch trigger is fixed, stale experts are detected deterministically, refresh PR handoff is robust when edits are uncommitted or already committed, refresh diffs are validated before commit/PR handoff, and managed-file manifest hashes are refreshed deterministically. |
 | Production packaging | Improved | Package fields and ADRs are coherent, the missing roadmap link is fixed, and `npm test` passes. |
 
 ## Production Blockers
@@ -321,9 +470,9 @@ repo and proves `WorkflowRegistry.fromCwd()` discovers
 `<domain>_plan_build_review_fix`, with a `subagent` scout step followed by the
 AIW step. The stamped `agent-implement` and `agent-implement-pr` workflows now
 also run `render-workflow-context.sh` and inject that summary into the
-credential-free implementation prompts. This is not yet public orchestrator
-hosting, but it closes a real schema -> renderer -> runtime-consumer -> public
-prompt gap.
+credential-free implementation prompts. This is the public v1 orchestration
+bridge, not internal OrchestratorHost hosting, and it closes a real schema ->
+renderer -> runtime-consumer -> public prompt gap.
 
 ### Fixed P0. The builder prompt promised artifacts the renderer did not emit
 
@@ -358,7 +507,9 @@ That gap is now narrowed. The renderer now emits:
 - runtime-compatible expert directories from `grade7_evidence`.
 
 The renderer tests now cover feedback-loop state, skill candidates,
-custom-tool extensions, lifecycle prompt templates, and expert discovery.
+custom-tool extensions, lifecycle prompt templates, expert discovery, and
+expert planning prompts that force cited, risk-aware plans from durable
+expertise.
 
 Remaining alignment work: keep the builder prompt, schema descriptions, and
 public docs in lockstep as the generated surface evolves. The artifact families
@@ -408,11 +559,12 @@ weak. The builder prompt tells the agent to use those reasons as the next
 per-dimension validators and the immediate `write_map` feedback.
 
 Remaining audit-quality work: keep broadening the output-quality fixtures into
-more ecosystem-specific shapes beyond the current TypeScript CLI, monorepo,
+more ecosystem-specific shapes beyond the current TypeScript CLI, no-test
+TypeScript CLI with strong typecheck, complex generated-code app, monorepo,
 frontend, backend service, sparse-test repo, domain-doc-heavy repo, small
 library, and Rails-style application coverage.
 
-### Partially fixed P1. The public product does not use the internal orchestrator
+### Fixed P1. The public orchestrator product line is now explicit
 
 The stated vision includes an orchestrator agent that can call specialized
 agents and workflows. That code exists. `OrchestratorHost` owns an agent
@@ -421,36 +573,37 @@ auto-improve scheduler: `src/core/orchestrator/host.ts:99-162`. Its chat
 session intentionally has no built-in read/write/bash tools, only management
 tools: `src/core/orchestrator/host.ts:233-247`.
 
-The architecture docs are clear that this is internal:
-`docs/18-the-orchestrator.md:1-14`. They also state the shipped async loop is
-the GitHub Actions scaffold, not orchestrator or AIW:
-`docs/18-the-orchestrator.md:34-50`,
-`docs/lifecycle/README.md:98-101`.
+The architecture docs and ADR now make the product decision explicit:
+`docs/18-the-orchestrator.md:1-14`,
+`docs/adr/0015-public-orchestration-plane.md`. The shipped async orchestration
+plane is the GitHub Actions scaffold, not orchestrator or AIW:
+`docs/18-the-orchestrator.md:34-50`, `docs/lifecycle/README.md:98-101`.
 
 Impact: agentify now satisfies "GitHub issues drive Pi prompt workflows with a
 separate orchestration-planner pass over generated workflows, specialists, and
-experts" more than "GitHub issues trigger the internal OrchestratorHost to
-execute DAGs and delegate to managed worker agents." That is a much closer
-public loop than raw prompt routing, but still narrower than the full vision.
+experts." It does not claim "GitHub issues trigger the internal
+OrchestratorHost to execute DAGs and delegate to managed worker agents."
+That narrower scope is now an accepted v1 product decision, not an ambiguous
+half-implemented promise.
 
 Completed bridge:
 
 1. `orchestrate-issue.md` is a public, credential-free routing prompt for
    issue implementation.
-2. `extract-orchestration-plan.sh` validates the planner's structured output
-   and renders bounded markdown for the implementation prompt.
+2. `extract-orchestration-plan.sh` validates the planner's structured output,
+   rejects selected workflows/specialists/experts and validation-focus commands
+   that are not present in the generated context, and renders bounded markdown
+   for the implementation prompt.
 3. `agent-implement.yml` runs the orchestration planner before the build agent
    and injects the rendered plan as `ORCHESTRATION_PLAN`.
-4. Scaffold tests cover the extraction contract and prompt substitution.
+4. Scaffold tests cover the extraction contract, unknown generated-context
+   selections, unknown validation-focus commands, and prompt substitution.
 
-Strategic choice:
-
-- Option A: keep v1 honest. Market agentify as a GitHub Actions agentic
-  harness that generates repo-specific instructions and specialists.
-- Option B: promote orchestrator to the installed runtime. That means a real
-  hosted/deployed control plane story, queue, auth, logs, and failure handling.
-
-Do not claim Option B until it is actually wired into the public lifecycle.
+Accepted decision: keep public v1 honest as a GitHub Actions orchestration
+plane that generates and consumes repo-specific workflows, specialists, and
+experts. Promoting OrchestratorHost later requires a superseding ADR with a
+real hosted/deployed control plane story, queue, auth, logs, budget controls,
+and failure recovery.
 
 ### P1. Greenfield is materially weaker than brownfield
 
@@ -500,6 +653,10 @@ and draft PR creation now delegate to `publish-implementation-pr.sh`; a
 stubbed test proves only `agent/*` branches are force-pushed, `AGENT_PAT` is
 scoped into `gh`, malformed `gh pr create` output is rejected, and the PR
 number is written to the workflow output before the review-label step runs.
+Duplicate open-PR refusal now delegates to `check-existing-issue-pr.sh`; its
+contract test proves the trusted preflight only refuses PR bodies that actually
+close/fix/resolve the source issue and avoids false positives such as `#420`
+or non-closing references.
 No-change implementation detection now delegates to
 `verify-implementation-commits.sh`; a real temporary-git-repo scaffold test
 proves a branch with zero commits writes the trusted failure reason before the
@@ -509,10 +666,19 @@ Update-branch stale-push protection now delegates to
 `push-updated-branch.sh`; a stubbed scaffold test proves only `agent/*`
 branches are pushed, `AGENT_PAT` is scoped into `gh`, force-with-lease is used
 with the expected remote head SHA, and stale remote rejection writes the
-trusted failure reason.
+trusted failure reason. PR review fixup pushes now use the same trusted script
+with an operation label, so review-time fixup commits get the same branch guard
+and stale-remote handling as update-branch.
 Review verdict extraction now delegates to `extract-review-verdict.sh`, with
 fixture coverage for approve, request-changes, unsupported verdicts, missing
 summaries, and missing structured output.
+Review verdict side effects now delegate to `complete-review-handoff.sh`; a
+stubbed test proves approval comments, approval labels, draft-ready
+transitions, request-changes comments, and implementation requeue use the
+expected token boundary.
+PR-scoped failure handoff now delegates to `mark-pr-workflow-failure.sh` for
+review and update-branch runs; the contract test proves both retry labels,
+stored/default reasons, blocked labeling, workflow links, and input validation.
 Update-branch merge-resolution comment extraction now delegates to
 `extract-update-branch-comment.sh`, with fixture coverage for valid comments,
 missing comments, empty comments, and missing structured output.
@@ -528,15 +694,18 @@ The command router now has direct retry coverage: issue comments requeue
 `agent:implement`, PR comments requeue `agent:review`, and stale
 `agent:in-progress` labels are cleared before retry labels are added.
 
-Remaining gap: greenfield still needs live GitHub smoke evidence around real
-API behavior after draft PR creation. The local/stubbed side is now much
-stronger: `test-implementation-handoff-flow.sh` composes branch naming, PR
-metadata extraction, draft PR creation, and final source-issue handoff through
-fake `gh`/`git` with token checks. For the user's stated vision, brownfield
-remains the primary credible path until the greenfield workflow has equivalent
-live evidence to its rendering, gate, resume-state, dependency gating, trusted
-drill handoff, branch naming, PR metadata, trusted PR publication, trusted
-post-PR handoff, failure handoff, and command retry layers.
+Remaining gap: greenfield still needs live GitHub evidence around real API
+behavior after draft PR creation and model-backed implementation/review runs.
+The local/stubbed side is now much stronger:
+`test-implementation-handoff-flow.sh` composes branch naming, PR metadata
+extraction, draft PR creation, and final source-issue handoff through fake
+`gh`/`git` with token checks. The new `smoke-github-runtime.sh` and
+`smoke-drill-github-runtime.sh` add real GitHub no-LLM preflight smoke paths
+for implementation and post-launch drilling, but brownfield remains the primary
+credible path until greenfield has equivalent live evidence to its rendering,
+gate, resume-state, dependency gating, trusted drill handoff, branch naming, PR
+metadata, trusted PR publication, trusted post-PR handoff, failure handoff, and
+command retry layers.
 
 ### Fixed P1. Drill-me issue workflow could not ask follow-up questions on success
 
@@ -588,6 +757,16 @@ refresh branch. The prompt now says **do not commit**, and the workflow checks
 current, so already-committed refresh changes still produce a PR. Scaffold
 validation and the unification invariant guard both sides of that contract.
 
+The workflow now also validates the refresh boundary after the model run and
+again after manifest refresh. `validate-refresh-surface.sh` allows only the
+agentic surface files refresh is supposed to touch, enforces the 200-line
+`AGENTS.md` cap, requires managed markers, and rejects malformed expert YAML.
+`refresh-managed-manifest.mjs` updates hashes in `.pi/agentify/manifest.json`
+for changed or newly added managed surface files and drops removed optional
+refresh-managed files. Scaffold tests cover allowed refresh edits, product-code
+rejection, oversize `AGENTS.md`, malformed expert YAML, manifest hash refresh,
+new surface file insertion, expert manifest entries, and removed optional files.
+
 ### Fixed P1. Defense path guards did not cover all declared write tools
 
 The defense hook defines:
@@ -601,26 +780,34 @@ The zero-access, credential-store, protected-file, and repo-jail checks now run
 for `write_file` and `multi_edit` too. `tests/audit/defense-hardening.test.ts`
 now covers repo-jail and protected-path blocking for those write-like tools.
 
-### Partially fixed P2. `spawn_explorer` needed enforced audit budgets
+### Fixed P2. `spawn_explorer` needed enforced audit budgets and recovery
 
 The explorer tool initially said there was no hard cap on parallel sub-agents
 or action limits, then only warned after the fact when read/bash caps were
 exceeded.
 
-That is now partially corrected. `spawn_explorer` enforces:
+That is now corrected for dispatch, provider-reported spend, and continuation
+after exhaustion.
+`spawn_explorer` enforces:
 
 - max total sub-agent dispatches per audit tool instance;
 - max concurrent sub-agents across tool instances;
-- max wall-clock duration per sub-agent prompt.
+- max wall-clock duration per sub-agent prompt;
+- max cumulative provider-reported sub-agent cost per audit tool instance,
+  with each completed sub-agent's assistant-message usage folded into future
+  dispatch checks;
+- structured `resume` details on every budget refusal, including the canonical
+  map, run logs, completed report paths, concrete recovery actions, and the
+  instruction to use honest null/open-question entries rather than fabricate
+  coverage.
 
 The builder prompt now tells the agent to treat explorer-budget exhaustion as
-an instruction to reuse existing reports, narrow the target, or mark remaining
-uncertainty honestly. `tests/audit/spawn-explorer-budget.test.ts` covers the
-hard total and concurrent dispatch guards before any Pi session is created.
-
-Remaining budget work: enforce a true cost budget once sub-agent usage/cost is
-available from the SDK, and add explicit resume behavior after budget
-exhaustion.
+an instruction to inspect the `resume` details, reuse existing reports, persist
+the strongest partial state through `write_map`/`write_map_delta`, narrow the
+target only when budget remains, or mark remaining uncertainty honestly.
+`tests/audit/spawn-explorer-budget.test.ts` covers the hard total/concurrent
+dispatch guards, cumulative cost refusal with a fake sub-agent session, and the
+shared structured resume contract on each exhaustion mode.
 
 ### Partially fixed P2. Harness exports needed stronger specialist routing
 
@@ -637,13 +824,29 @@ prompts tell the agent to map expected or changed paths to specialists, read
 the matching `.pi/agents/*` file, and carry local pitfalls and validation
 commands into implementation or review output.
 
+For issue implementation, this is now more than prompt guidance:
+`verify-routing-evidence.sh` reads the trusted orchestration plan and generated
+specialist/expert context after the implementation model run. If the plan
+selected specialists or experts, the transcript must include a
+`## Routing evidence` section citing each selected generated file path before
+the workflow can proceed to commit verification and PR publication. Missing
+evidence writes the trusted failure reason consumed by
+`mark-implementation-failure.sh`.
+
+For PR feedback and automated review, `verify-diff-routing-evidence.sh` derives
+required routes from `git diff BASE...HEAD` plus generated specialist globs and
+expert paths. If the changed paths match generated routes, the implement-PR or
+review transcript must cite the matching generated files before fixup pushes or
+review handoff proceed. Missing evidence writes the same trusted failure reason
+path consumed by the PR blocked handoff.
+
 This is still not universal hard enforcement. Codex and Claude exports remain
 instruction surfaces, and prompt routing cannot guarantee domain locks or
-expert use across every harness. The strongest enforced agent routing still
-exists in the internal orchestrator code. The public claim is now stronger but
-still honest: GitHub Actions provides trusted specialist routing context before
-model execution; hosted orchestrator-level domain locks are a separate product
-decision.
+expert use across every harness. The strongest domain-locking still exists in
+the internal orchestrator code. The public claim is now stronger but still
+honest: GitHub Actions provides trusted specialist/expert routing context
+before model execution and a trusted transcript-evidence gate afterward;
+hosted orchestrator-level domain locks are a separate product decision.
 
 ## Current Validation
 
@@ -651,14 +854,23 @@ Commands run:
 
 ```bash
 npx tsx tests/agentify-core.test.ts
+npx tsx tests/audit/spawn-explorer-budget.test.ts
 npx tsx tests/generated-output-quality.test.ts
 npx tsx tests/greenfield-state.test.ts
 npx tsx tests/greenfield-artifacts.test.ts
 bash scaffold/tests/test-expert-context.sh
+bash scaffold/tests/test-complete-review-handoff.sh
 bash scaffold/tests/test-extract-review-verdict.sh
 bash scaffold/tests/test-extract-update-branch-comment.sh
+bash scaffold/tests/test-check-existing-issue-pr.sh
+bash scaffold/tests/test-mark-pr-workflow-failure.sh
+bash scaffold/tests/test-orchestration-plan.sh
 bash scaffold/tests/test-push-updated-branch.sh
+bash scaffold/tests/test-refresh-managed-manifest.sh
+bash scaffold/tests/test-smoke-github-runtime.sh
+bash scaffold/tests/test-validate-refresh-surface.sh
 bash scaffold/tests/test-verify-implementation-commits.sh
+bash scaffold/tests/test-verify-routing-evidence.sh
 bash scaffold/tests/test-workflow-simulation.sh
 npm run typecheck
 npm run release:check
@@ -695,13 +907,44 @@ No-change implementation handling is covered by
 `scaffold/tests/test-verify-implementation-commits.sh`, which runs the trusted
 script against a real temporary git repo and verifies both zero-commit failure
 and commit-ahead success.
+Duplicate-PR preflight handling is covered by
+`scaffold/tests/test-check-existing-issue-pr.sh`, which verifies exact closing
+keyword matches, non-closing references, invalid issue numbers, and malformed
+GitHub JSON before the implement workflow can run the model.
 Stale update-branch push handling is covered by
 `scaffold/tests/test-push-updated-branch.sh`, which verifies agent-branch
-guarding, token scoping, force-with-lease arguments, and stale rejection
-failure reasons.
+guarding, token scoping, force-with-lease arguments, and update-branch/review
+stale rejection failure reasons.
 Malformed review and update-branch model output handling is covered by
 `scaffold/tests/test-extract-review-verdict.sh` and
 `scaffold/tests/test-extract-update-branch-comment.sh`.
+Trusted review side effects are covered by
+`scaffold/tests/test-complete-review-handoff.sh`, which verifies the approval
+path, request-changes requeue path, unsupported verdict failure, and the
+`GITHUB_TOKEN`/`AGENT_PAT` boundary.
+PR-scoped review/update-branch failure comments are covered by
+`scaffold/tests/test-mark-pr-workflow-failure.sh`, which verifies blocked
+labeling, retry instructions, stored/default failure reasons, workflow links,
+and invalid input rejection.
+The stamped no-LLM live smoke gate is covered locally by
+`scaffold/tests/test-smoke-github-runtime.sh`, which verifies the fake-`gh`
+sequence for repository resolution, implement-workflow discovery, label
+checks, smoke issue creation, `agent:implement` labeling, preflight-refusal
+polling, and cleanup.
+The stamped drill no-LLM smoke gate is covered locally by
+`scaffold/tests/test-smoke-drill-github-runtime.sh`, which verifies workflow
+discovery, required label and `AGENT_PAT` checks, smoke issue creation,
+`agent:drill-me` labeling, no-model preflight polling, cleanup, and durable
+evidence output.
+The stamped retry smoke gate is covered locally by
+`scaffold/tests/test-smoke-retry-github-runtime.sh`, which verifies command
+router workflow discovery, required label and `AGENT_PAT` checks, blocked issue
+creation, `/agent retry` posting, retry-confirmation polling, and cleanup.
+Refresh handoff safety is covered by
+`scaffold/tests/test-validate-refresh-surface.sh` and
+`scaffold/tests/test-refresh-managed-manifest.sh`, which verify the agentic
+surface allowlist, `AGENTS.md` line cap, expert YAML checks, manifest hash
+updates, new managed file insertion, and removed optional file cleanup.
 
 ## Loop Engineering Assessment
 
@@ -717,12 +960,20 @@ Agentify already has important loops:
 
 The main gap is that these loops are not equally real in the public product.
 The GitHub loop is real. The AIW and orchestrator loops are internal. The
-expert loop now has runtime-compatible generated artifacts and public GitHub
-prompt routing that includes concrete expert knowledge, but still needs
-measured outcome quality evidence. The refresh loop has the right
+expert loop now has runtime-compatible generated artifacts, public GitHub
+prompt routing that includes concrete expert knowledge, and rendered plan
+prompts that require cited invariants, pitfalls, file/type references,
+validation selection, and stale-knowledge checks. It now also has a replay
+scorer that compares generic versus expert-guided planning/review/refresh
+transcripts against the expert's own files, patterns, pitfalls, validation, and
+staleness requirements. That scorer is now executable against a JSON manifest
+of real transcript files through `npm run score:expert-outcomes -- <manifest>`,
+and public release qualification now requires passing plan, review, and refresh
+expert cases. It still needs measured model-outcome evidence from a real
+dogfood transcript corpus. The refresh loop has the right
 default-branch trigger, deterministic stale expert detection, and a trusted
-git handoff, but remains prompt-driven and needs stronger deterministic
-guarantees.
+git handoff, and now has deterministic diff/manifest validation before PR
+creation. It still needs real-world outcome evidence from live refresh PRs.
 
 To reach "best in world", each loop needs:
 
@@ -736,8 +987,9 @@ To reach "best in world", each loop needs:
 8. Tests that simulate success, failure, partial progress, and recovery.
 
 Brownfield bootstrap is closest to that standard. Greenfield remains furthest;
-experts have crossed the structural, routing, and prompt-substance thresholds
-but still need outcome evidence.
+experts have crossed the structural, routing, and planning-prompt substance
+thresholds, and now have a replay scorer plus a manifest-driven release gate,
+but still need live dogfood outcome evidence.
 
 ## Harness Engineering Assessment
 
@@ -755,10 +1007,35 @@ The GitHub harness is not naive:
 - structured PR metadata and review verdict extraction;
 - requeue on review changes;
 - force-with-lease for PR mutation.
+- trusted script delegation for update-branch pushes and review fixup pushes.
+- trusted script delegation for review verdict comments, approval labeling,
+  draft-ready transitions, and request-changes requeueing.
+- trusted script delegation for PR-scoped failure handoff in review and
+  update-branch workflows.
+- trusted transcript-evidence verification for issue implementation routes
+  that selected generated specialists or experts.
+- trusted changed-path routing-evidence verification for implement-PR and
+  review runs whose diffs match generated specialists or experts.
+- a stamped no-LLM live GitHub smoke script that exercises the implement
+  workflow's trusted preflight refusal path.
+- a stamped no-LLM live GitHub smoke script that exercises the drill workflow's
+  trusted no-model smoke marker before Pi starts.
+- a stamped no-LLM live GitHub smoke script that exercises the `/agent retry`
+  recovery path through the trusted command router.
+- a stamped model-backed GitHub smoke script that exercises issue-to-draft-PR
+  creation after explicit confirmation.
+- a stamped model-backed review smoke script that exercises automated PR review
+  after explicit confirmation.
+- a stamped model-backed refresh smoke script that dispatches the refresh
+  workflow and waits for a successful run after explicit confirmation.
 
-The remaining harness gap is now more of a product-design decision than a
-missing edge-case test: decide whether refresh should use deterministic
-agentify renderers rather than direct prompt edits.
+The remaining harness gap is now model-backed live-environment evidence: the
+local/stubbed contracts are strong, the no-LLM preflight/drill/retry smokes have
+passed in a staged GitHub repository, and the model-backed
+implement/review/refresh smoke gates are shipped with machine-readable evidence
+output plus separate and composed verifiers, but the model-backed gates still
+need to be executed with real provider credentials before a broad public
+release.
 
 ## Agentic Engineering Assessment
 
@@ -812,46 +1089,54 @@ discovers them. The generated GitHub prompt context now includes expert
 patterns, conventions, pitfalls, key files/types, and test paths, with scaffold
 tests proving expert invariants survive through the public implement,
 implement-PR, and review prompt rendering path. Generated-output quality tests
-now also score expert expertise for actionable durable knowledge and
-self-improve validation guidance.
+now also score expert expertise for actionable durable knowledge,
+self-improve validation guidance, and plan prompts that require cited files,
+types, patterns, pitfalls, validation commands, and staleness checks before
+implementation. `tests/core/expert-outcome.test.ts` now replays generic versus
+expert-guided plan/review/refresh transcripts and verifies the expert-guided
+outputs score higher against durable expertise. The same module now loads a
+release manifest of transcript file paths pinned to repo, commit, capture
+timestamp, provider, and model, and
+`src/core/scripts/score-expert-outcomes.ts` makes that scoring executable from
+`npm run score:expert-outcomes -- <manifest>`.
 
 Remaining work:
 
-1. Add dogfood fixtures proving generated expertise improves planning and review
-   outcomes.
+1. Capture real dogfood transcript manifests from model runs across planning,
+   review, and refresh.
 
 Exit criteria: generated experts are not only discoverable, but measurably
 improve the agent's plans, reviews, and refresh behavior.
 
 ### Phase 3: Strengthen brownfield audit quality
 
-Completed: TypeScript CLI, monorepo, frontend, backend service, sparse-test,
+Completed: TypeScript CLI, no-test TypeScript CLI with strong typecheck,
+complex generated-code app, monorepo, frontend, backend service, sparse-test,
 small TypeScript library, Rails-style app, domain-doc-heavy, and expert-domain
 quality fixtures now score fallback `AGENTS.md`, specialist output, AI docs,
 conditional docs, project workflows, expert expertise, and lifecycle prompts
 for actionable validation, pitfalls, scope, first-file guidance,
-package-boundary evidence, user-workflow e2e coverage, honest missing-test
-signaling, domain-doc routing, and expert durable-knowledge quality.
+package-boundary evidence, source-of-truth boundaries for generated code,
+per-change validation commands such as codegen, line-cited pitfalls, generated
+skill usage/precondition/validation/reporting discipline, feedback-loop report
+templates, user-workflow e2e coverage, honest missing-test signaling,
+domain-doc routing, expert durable-knowledge quality, and typecheck-only
+validation surfaces.
 
 Remaining work:
 
-1. Add more benchmark fixtures:
-   - CLI with no tests but strong typecheck;
-   - app with complex generated code.
-2. Score output quality across generated skills, validation commands,
-   pitfalls, and feedback-loop docs.
+1. Add more benchmark fixtures for additional ecosystems as they become release
+   targets.
+2. Add replay/model-outcome fixtures once a stable dogfood corpus is available.
 
 Exit criteria: agentify can prove that its generated surface is useful, not
 just valid.
 
-### Phase 4: Decide the orchestrator product line
+### Phase 4: Preserve the public orchestration boundary
 
-Pick one:
-
-- Keep orchestrator internal and focus public v1 on GitHub Actions.
-- Promote orchestrator to the public installed runtime.
-
-If promoted, it needs a deployment and operations story:
+ADR 0015 picks the public v1 line: keep OrchestratorHost internal and focus the
+installed product on the GitHub Actions orchestration plane. Future promotion
+of OrchestratorHost needs a superseding ADR and an operations story:
 
 - where it runs;
 - how it authenticates GitHub events;
@@ -876,16 +1161,26 @@ renders deterministic managed `CONTEXT.md`, `GOALS.md`, PRD, plan, issue, and
 spec artifacts before scaffold install. The formation payload also carries a
 hard `stop_at` gate so a session cannot race ahead of the user-approved
 milestone. The greenfield state file now persists resume source, stop gate,
-current focus, exact artifact paths, and local/GitHub continuation instructions.
+current focus, exact artifact paths, local/GitHub continuation instructions,
+and a structured `github_handoff` with the next GitHub action, issue title,
+body, labels, and referenced artifacts. The scaffold resume renderer now
+includes that handoff in the drill prompt, and the prompt maps handoff actions
+to final-output issue arrays. Approved, unblocked implementation handoffs can
+activate the implement workflow through the trusted issue applier, with open
+blockers downgraded to queued-only. Reused implementation issues are activated
+against their current GitHub body and state, not the newly requested handoff
+body.
 The GitHub drill workflow now renders that resume context into its prompt before
 the model chooses a one-transition next step, and the trusted workflow applies
 structured issue requests after the credential-free model run.
 
 Remaining work:
 
-1. Add live/stubbed GitHub edge-case simulations for post-readiness CI behavior
-   such as branch creation, push/PR handoff, and reruns.
-2. Decide whether greenfield should remain secondary to brownfield or receive
+1. Execute and record the model-backed implement/review/refresh smoke gates in a
+   staged GitHub repository.
+2. Capture plan/review/refresh expert outcome transcript manifests from real
+   dogfood runs.
+3. Decide whether greenfield should remain secondary to brownfield or receive
    the same release bar.
 
 Exit criteria: greenfield has the same mechanical reliability as brownfield.
@@ -901,12 +1196,15 @@ repo, agentify can audit it, generate repo-specific agent context, install
 skills, stamp a GitHub runtime, and let GitHub issues drive implementation PRs.
 That is a real product foundation.
 
-It does not yet satisfy the full "agentic codebase lives on its own" vision.
-The installed public product is not actually orchestrator-led. Experts,
-skills, feedback-loop state, custom-tool candidates, and project workflow specs
-now have deterministic renderer coverage, experts and workflows are proven
-discoverable by their runtime registries, and generated workflows are injected
-into the GitHub implement prompts. Generated specialists are also injected into
+It does not yet satisfy the full "agentic codebase lives on its own" vision in
+the sense of a hosted internal OrchestratorHost running DAGs. ADR 0015 now
+defines the public v1 version of that vision: GitHub Actions is the shipped
+orchestration plane, and it consumes generated workflows, specialists, and
+experts through trusted prompt/context injection plus route validation.
+Experts, skills, feedback-loop state, custom-tool candidates, and project
+workflow specs now have deterministic renderer coverage, experts and workflows
+are proven discoverable by their runtime registries, generated workflows are
+injected into GitHub implement prompts, generated specialists are injected into
 GitHub implement/review prompts as routing context, and generated experts are
 injected into those prompts with concrete patterns, conventions, pitfalls, key
 files/types, and validation hints, but these loops still need outcome fixtures.

@@ -68,6 +68,21 @@ grep -q 'Branch advanced during update-branch run.' "$reason" || {
   exit 1
 }
 
+: > "$calls"
+rm -f "$reason"
+if CALLS_LOG="$calls" \
+  PATH="$bin_dir:$PATH" \
+  AGENT_PAT="agent-token" \
+  GIT_PUSH_FAIL="stale" \
+  bash "$pusher" "agent/issue-42" "abc123" "$reason" "review" >/dev/null 2>&1; then
+  echo "expected stale review push to fail" >&2
+  exit 1
+fi
+grep -q 'Branch advanced during review run.' "$reason" || {
+  echo "expected review-specific stale branch failure reason" >&2
+  exit 1
+}
+
 if CALLS_LOG="$calls" PATH="$bin_dir:$PATH" AGENT_PAT="agent-token" \
   bash "$pusher" "main" "abc123" "$reason" >/dev/null 2>&1; then
   echo "expected non-agent branch push to fail" >&2

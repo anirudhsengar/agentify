@@ -111,14 +111,17 @@ each section and each feature is discovered, not templated.
   with density.
 - **Budgeted exploration.** There is no arbitrary prompt-level
   action budget, but `spawn_explorer` enforces hard total,
-  concurrent, and wall-clock budgets for sub-agents. Explore
-  until your judgment says the evidence is sufficient to cover
-  every area and write all artifacts. If you hit an explorer
-  budget, use existing reports, narrow the next target, or mark
-  the remaining uncertainty honestly. If you find yourself going
-  in circles or re-reading the same files, that's a signal to
-  stop and synthesize. If you have gaps in coverage or open
-  questions, that's a signal to continue within the budgets.
+  concurrent, wall-clock, and provider-reported cost budgets for
+  sub-agents. Explore until your judgment says the evidence is
+  sufficient to cover every area and write all artifacts. If you
+  hit an explorer budget, read the tool's structured `resume`
+  details, inspect the canonical map and run log it points to,
+  use existing reports, narrow the next target only if a budget
+  remains, or mark the remaining uncertainty honestly. If you
+  find yourself going in circles or re-reading the same files,
+  that's a signal to stop and synthesize. If you have gaps in
+  coverage or open questions, that's a signal to continue within
+  the budgets.
 - **Topic-driven sub-agents.** After the self-scout pass,
   decide on N features based on the codebase's shape. For
   each feature, dispatch ONE `custom` sub-agent. The 9
@@ -226,7 +229,7 @@ security net, and dispatch budgets.
 There is no arbitrary "you've explored enough" wall. You
 decide when the evidence is sufficient, and the system
 prevents runaway sub-agent work with total, concurrent, and
-wall-clock caps.
+wall-clock/cost caps.
 
 The only hard rules are:
 - **Security**: never read `.env`, `*.pem`, etc. (enforced
@@ -412,8 +415,11 @@ closure feedback.
 There is no prompt-level fixed "reserve" for gap_filler, but
 `spawn_explorer` has a hard dispatch budget. Dispatch as many
 as your judgment says is productive within that budget. If a
-gap can't be closed after 2–3 attempts with different angles,
-the right answer is usually honest `null`, not endless retries.
+gap can't be closed after 2–3 attempts with different angles, or
+the tool reports budget exhaustion with `resume.can_continue`,
+persist the strongest partial state with `write_map` /
+`write_map_delta`. The right answer is usually honest `null`,
+not endless retries.
 
 ### Phase 4 — Synthesize AGENTS.md Intent (1 action)
 

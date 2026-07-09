@@ -117,6 +117,15 @@ jobs:
           model: ${{ vars.PI_MODEL }}
           thinking: ${{ vars.PI_THINKING || 'high' }}
 
+      - name: Verify changed-path routing evidence
+        run: |
+          bash .agentify-runtime/.github/scripts/verify-diff-routing-evidence.sh \
+            "${{ steps.pi_review.outputs.output-file }}" \
+            "$BASE_REF" \
+            "${RUNNER_TEMP}/specialist-context.md" \
+            "${RUNNER_TEMP}/expert-context.md" \
+            "${RUNNER_TEMP}/failure_reason.txt"
+
       - name: Extract verdict
         id: verdict
         env:
@@ -134,57 +143,17 @@ jobs:
             echo "No fixup commits."
             exit 0
           fi
-          : "${AGENT_PAT:?AGENT_PAT is required — see SETUP.md}"
-          GH_TOKEN="$AGENT_PAT" gh auth setup-git
-          set +e
-          git push --force-with-lease="refs/heads/$BRANCH:$BRANCH_HEAD_SHA" origin "$BRANCH" 2> push_err.txt
-          status=$?
-          set -e
-          if [ $status -ne 0 ]; then
-            if grep -qiE "non-fast-forward|rejected|fetch first|stale info" push_err.txt; then
-              echo "Branch advanced during review run." > "${RUNNER_TEMP}/failure_reason.txt"
-              cat push_err.txt
-              exit 1
-            fi
-            cat push_err.txt
-            exit $status
-          fi
+          bash .agentify-runtime/.github/scripts/push-updated-branch.sh \
+            "$BRANCH" "$BRANCH_HEAD_SHA" "${RUNNER_TEMP}/failure_reason.txt" review
 
-      - name: Post review
+      - name: Complete review handoff
         if: success()
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          verdict="${{ steps.verdict.outputs.value }}"
-          if [ "$verdict" = "approve" ]; then
-            {
-              echo "## Agent review — approved"
-              echo
-              cat "${RUNNER_TEMP}/summary.md"
-            } > "${RUNNER_TEMP}/review-comment.md"
-            gh pr comment "$PR_NUMBER" --body-file "${RUNNER_TEMP}/review-comment.md"
-            gh pr edit "$PR_NUMBER" --add-label "agent:approved"
-            gh pr ready "$PR_NUMBER" || true
-          elif [ "$verdict" = "request_changes" ]; then
-            {
-              echo "## Agent review — changes requested"
-              echo
-              cat "${RUNNER_TEMP}/summary.md"
-            } > "${RUNNER_TEMP}/review-comment.md"
-            gh pr comment "$PR_NUMBER" --body-file "${RUNNER_TEMP}/review-comment.md"
-          else
-            echo "Unexpected verdict: $verdict" > "${RUNNER_TEMP}/failure_reason.txt"
-            exit 1
-          fi
-
-      - name: Re-queue for implementation on request_changes
-        if: success() && steps.verdict.outputs.value == 'request_changes'
-        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AGENT_PAT: ${{ secrets.AGENT_PAT }}
         run: |
-          set -euo pipefail
-          : "${AGENT_PAT:?AGENT_PAT is required — see SETUP.md}"
-          GH_TOKEN="$AGENT_PAT" gh pr edit "$PR_NUMBER" --add-label "agent:implement"
+          bash .agentify-runtime/.github/scripts/complete-review-handoff.sh \
+            "$PR_NUMBER" "${{ steps.verdict.outputs.value }}" "${RUNNER_TEMP}/summary.md"
 
       - name: Mark blocked on failure
         if: failure()
@@ -192,21 +161,8 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          reason="(no reason file written — check workflow logs)"
-          if [ -f "${RUNNER_TEMP}/failure_reason.txt" ]; then
-            reason=$(cat "${RUNNER_TEMP}/failure_reason.txt")
-          fi
-          gh pr edit "$PR_NUMBER" --add-label "agent:blocked" || true
-          gh pr comment "$PR_NUMBER" --body "$(cat <<EOF
-          \`agent:review\` run failed.
-
-          **Reason:** $reason
-
-          **Workflow run:** $RUN_URL
-
-          Re-add \`agent:review\` to retry.
-          EOF
-          )"
+          bash .agentify-runtime/.github/scripts/mark-pr-workflow-failure.sh \
+            "$PR_NUMBER" "agent:review" "${RUNNER_TEMP}/failure_reason.txt" "$RUN_URL"
 
       - name: Always remove in-progress label
         if: always()

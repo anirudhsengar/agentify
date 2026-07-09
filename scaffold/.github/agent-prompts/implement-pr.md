@@ -58,6 +58,12 @@ context. If an expert matches, read the listed `expertise.yaml` before changing
 code, and carry its durable domain invariants and validation commands into your
 final PR comment.
 
+If the PR diff matches any generated specialists or experts, your final reply
+must include a `## Routing evidence` section that lists each matching
+specialist/expert and the generated file path you read, such as
+`.pi/agents/<name>.md` or `.pi/prompts/experts/<domain>/expertise.yaml`. The
+trusted workflow checks this transcript before pushing fixup commits.
+
 If a piece of feedback is wrong, out of scope, or you disagree with it,
 don't silently ignore it — say so in your final reply (the workflow posts
 your final message as a PR comment) and explain why.

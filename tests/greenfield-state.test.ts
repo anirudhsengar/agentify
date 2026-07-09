@@ -202,6 +202,12 @@ function testFormationBackedResumeContext(): void {
     assert.ok(state.resume.artifact_paths.includes("docs/issues/001-import-invoices.md"));
     assert.ok(state.resume.local_resume.includes("/implement"));
     assert.ok(state.resume.github_resume.includes("agent:queued"));
+    assert.equal(state.github_handoff.action, "open_implementation_issue");
+    assert.equal(state.github_handoff.title, "Implement Process invoices end to end");
+    assert.deepEqual(state.github_handoff.labels, ["agent:queued", "agent:implement"]);
+    assert.ok(state.github_handoff.artifact_paths.includes("specs/feature-first.md"));
+    assert.ok(state.github_handoff.body.includes("specs/feature-first.md"));
+    assert.ok(state.github_handoff.body.includes(".pi/agentify/greenfield-state.json"));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

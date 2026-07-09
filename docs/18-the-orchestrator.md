@@ -3,7 +3,10 @@
 Status: internal library code, not a public command. This document is
 architecture notes for contributors. The public product surface is the
 single `agentify` command ([ADR 0008](adr/0008-one-package-two-entry-modes.md))
-and the GitHub scaffold loop ([the lifecycle](lifecycle/README.md)).
+and the GitHub scaffold loop ([the lifecycle](lifecycle/README.md)). For public
+v1, ADR 0015 defines that GitHub Actions loop as the shipped orchestration
+plane, while this host remains internal foundation code:
+[ADR 0015](adr/0015-public-orchestration-plane.md).
 
 ## Purpose
 
@@ -43,7 +46,9 @@ shipped loop today:
    `.pi/agents/*.md` specialist routing plus `.pi/prompts/experts/*`
    expert routing context. Issue implementation also runs a credential-free
    orchestration-planner prompt that emits a bounded structured route for the
-   implementation agent. These workflows do not execute orchestrator DAGs.
+   implementation agent. The trusted extractor rejects selected workflows,
+   specialists, experts, or validation-focus commands that are not present in
+   the generated context. These workflows do not execute orchestrator DAGs.
 2. **AIW workflows** (`src/core/aiw/`) — fixed phase pipelines
    (plan → build → review → fix → ship), each phase a fresh Pi session,
    isolated in a git worktree.
@@ -54,8 +59,10 @@ AIW and orchestrator are internal alternatives / foundation code. Generated
 project workflow specs are already discoverable by the orchestrator registry,
 and the scaffold can read workflows, specialist routes, expert routes, and a
 structured orchestration route as prompt guidance, but public execution still
-belongs to GitHub Actions. See [ADR 0013](adr/0013-webhook-server.md) for the
-same "parked internal runtime" framing applied to the webhook server.
+belongs to GitHub Actions by decision, not by accident. See
+[ADR 0015](adr/0015-public-orchestration-plane.md) for the public
+orchestration decision and [ADR 0013](adr/0013-webhook-server.md) for the same
+"parked internal runtime" framing applied to the webhook server.
 
 ## Persistence
 

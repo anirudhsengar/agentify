@@ -177,21 +177,8 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          reason="(no reason file written — check workflow logs)"
-          if [ -f "${RUNNER_TEMP}/failure_reason.txt" ]; then
-            reason=$(cat "${RUNNER_TEMP}/failure_reason.txt")
-          fi
-          gh pr edit "$PR_NUMBER" --add-label "agent:blocked" || true
-          gh pr comment "$PR_NUMBER" --body "$(cat <<EOF
-          \`agent:update-branch\` run failed.
-
-          **Reason:** $reason
-
-          **Workflow run:** $RUN_URL
-
-          Re-add \`agent:update-branch\` to retry.
-          EOF
-          )"
+          bash .agentify-runtime/.github/scripts/mark-pr-workflow-failure.sh \
+            "$PR_NUMBER" "agent:update-branch" "${RUNNER_TEMP}/failure_reason.txt" "$RUN_URL"
 
       - name: Always remove in-progress label
         if: always()

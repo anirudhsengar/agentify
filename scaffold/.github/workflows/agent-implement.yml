@@ -62,20 +62,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -euo pipefail
-          existing=$(gh pr list \
-            --state open \
-            --search "in:body \"#${ISSUE_NUMBER}\"" \
-            --json number,url,body \
-            --jq "[.[] | select(.body | test(\"(?i)(closes|fixes|resolves)\\\\s+#${ISSUE_NUMBER}\\\\b\"))]")
-          count=$(echo "$existing" | jq 'length')
-          if [ "$count" -gt 0 ]; then
-            url=$(echo "$existing" | jq -r '.[0].url')
-            echo "existing_pr_url=$url" >> "$GITHUB_OUTPUT"
-            echo "refused=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "refused=false" >> "$GITHUB_OUTPUT"
-          fi
+          bash .agentify-runtime/.github/scripts/check-existing-issue-pr.sh \
+            "$ISSUE_NUMBER" "$GITHUB_OUTPUT"
 
       - name: Pre-flight refusal — comment + remove label, exit
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused == 'true'
@@ -171,7 +159,10 @@ jobs:
           TRANSCRIPT: ${{ steps.pi_orchestrate.outputs.output-file }}
         run: |
           bash .agentify-runtime/.github/scripts/extract-orchestration-plan.sh \
-            "$TRANSCRIPT" "${RUNNER_TEMP}/orchestration-plan.md"
+            "$TRANSCRIPT" "${RUNNER_TEMP}/orchestration-plan.md" \
+            "${RUNNER_TEMP}/workflow-context.md" \
+            "${RUNNER_TEMP}/specialist-context.md" \
+            "${RUNNER_TEMP}/expert-context.md"
 
       - name: Render implement prompt
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
@@ -199,6 +190,16 @@ jobs:
           provider: ${{ vars.PI_PROVIDER || 'anthropic' }}
           model: ${{ vars.PI_MODEL }}
           thinking: ${{ vars.PI_THINKING || 'high' }}
+
+      - name: Verify selected routing evidence
+        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
+        run: |
+          bash .agentify-runtime/.github/scripts/verify-routing-evidence.sh \
+            "${{ steps.pi_implement.outputs.output-file }}" \
+            "${RUNNER_TEMP}/orchestration-plan.md" \
+            "${RUNNER_TEMP}/specialist-context.md" \
+            "${RUNNER_TEMP}/expert-context.md" \
+            "${RUNNER_TEMP}/failure_reason.txt"
 
       - name: Verify commits were made
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'

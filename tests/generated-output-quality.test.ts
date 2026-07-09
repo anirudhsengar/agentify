@@ -340,6 +340,73 @@ function testSparseTestRepoIsHonestAboutMissingValidation(): void {
   assertContains(featurePrompt, /Typecheck: not configured/, "sparse feature prompt typecheck fallback");
 }
 
+function testCliWithNoTestsKeepsTypecheckAsPrimaryValidation(): void {
+  const base = makeValidCodebaseMap();
+  const map = makeValidCodebaseMap({
+    meta: {
+      ...base.meta,
+      project_type: "typescript-cli-no-tests",
+      languages: ["typescript"],
+      frameworks: ["tsx"],
+      domain_hypothesis: "A command-line tool with strong static contracts but no discovered test suite.",
+      suggested_subagent_domains: ["cli", "config"],
+    },
+    skeleton: {
+      ...base.skeleton,
+      top_level_tree: ["src/", "package.json", "tsconfig.json"],
+      entry_points: [
+        { path: "src/cli.ts", role: "CLI entry point", language: "typescript", run_command: "npm run dev -- --help" },
+      ],
+      first_5_files_for_fresh_agent: [
+        { path: "src/cli.ts", why: "Argument parsing and command dispatch boundary." },
+        { path: "src/config.ts", why: "Configuration schema and environment handling." },
+        { path: "tsconfig.json", why: "Strict typecheck contract for this no-test CLI." },
+      ],
+    },
+    pitfalls: [
+      {
+        module: "src/config.ts",
+        what: "Environment variables must be parsed through the config schema before use.",
+        consequence: "Commands can run with malformed paths or missing credentials.",
+        line_ref: 18,
+      },
+    ],
+    validation_surface: {
+      ...base.validation_surface,
+      test_command: "",
+      lint_command: "npm run lint",
+      typecheck_command: "npm run typecheck",
+      e2e_command: null,
+      per_change_type: {
+        chore: { mandatory: ["npm run typecheck"], optional: ["npm run lint"] },
+        bug: { mandatory: ["npm run typecheck"], optional: ["npm run dev -- --help"] },
+        feature: { mandatory: ["npm run typecheck"], optional: ["npm run lint"] },
+      },
+    },
+  });
+
+  const result = renderBrownfieldArtifacts(map);
+  assert.deepEqual(result.errors, []);
+  const artifacts = byPath(result.artifacts);
+
+  const agentsMd = artifactContent(artifacts, "AGENTS.md");
+  assertContains(agentsMd, /npm run typecheck/, "no-test CLI typecheck command");
+  assert.doesNotMatch(agentsMd, /No validation commands were identified/, "typecheck should count as validation");
+  assertContains(agentsMd, /Environment variables must be parsed through the config schema/, "no-test CLI config pitfall");
+
+  const specs = artifactContent(artifacts, "specs/README.md");
+  assertContains(specs, /bug: `npm run typecheck`/, "no-test CLI bug validation");
+  assertContains(specs, /feature: `npm run typecheck`/, "no-test CLI feature validation");
+
+  const cliSpecialist = artifactContent(artifacts, ".pi/agents/cli.md");
+  assertContains(cliSpecialist, /src\/cli\.ts/, "no-test CLI specialist entry file");
+  assertContains(cliSpecialist, /npm run typecheck/, "no-test CLI specialist validation");
+
+  const featurePrompt = artifactContent(artifacts, ".pi/prompts/feature.md");
+  assertContains(featurePrompt, /Typecheck: npm run typecheck/, "no-test CLI feature prompt typecheck");
+  assertContains(featurePrompt, /Test: not configured/, "no-test CLI honest test absence");
+}
+
 function testSmallLibrarySurfacePreservesPublicApiCompatibility(): void {
   const base = makeValidCodebaseMap();
   const map = makeValidCodebaseMap({
@@ -413,6 +480,180 @@ function testSmallLibrarySurfacePreservesPublicApiCompatibility(): void {
 
   const workflow = artifactContent(artifacts, ".pi/workflows/public-api-plan-build-review-fix.json");
   assertContains(workflow, /"subagent_template": "public-api"/, "public API workflow specialist step");
+}
+
+function testGeneratedCodeSurfacePreservesSourceOfTruthBoundaries(): void {
+  const base = makeValidCodebaseMap();
+  const map = makeValidCodebaseMap({
+    meta: {
+      ...base.meta,
+      project_type: "next-graphql-generated-code",
+      languages: ["typescript", "graphql"],
+      frameworks: ["next", "graphql-codegen", "zod"],
+      domain_hypothesis: "A dashboard app where GraphQL schema and generated TypeScript clients must stay in sync.",
+      suggested_subagent_domains: ["graphql", "generated-client"],
+    },
+    skeleton: {
+      ...base.skeleton,
+      top_level_tree: ["src/graphql/", "src/generated/", "src/features/orders/", "codegen.ts"],
+      entry_points: [
+        { path: "src/features/orders/order-dashboard.tsx", role: "orders dashboard route", language: "typescript", run_command: "npm run dev" },
+        { path: "src/graphql/schema.graphql", role: "GraphQL source schema", language: "graphql", run_command: "npm run codegen" },
+      ],
+      first_5_files_for_fresh_agent: [
+        { path: "src/graphql/schema.graphql", why: "Source of truth for generated GraphQL operation and type outputs." },
+        { path: "src/graphql/operations/orders.graphql", why: "Order dashboard operation definitions consumed by codegen." },
+        { path: "codegen.ts", why: "Code generator config and output ownership rules." },
+        { path: "src/generated/graphql.ts", why: "Generated client output; inspect but do not hand-edit." },
+        { path: "src/features/orders/order-dashboard.tsx", why: "User-facing dashboard consuming generated query types." },
+      ],
+    },
+    module_graph: {
+      ...base.module_graph,
+      edges: [
+        { from: "src/graphql/schema.graphql", to: "src/generated/graphql.ts", kind: "codegen source" },
+        { from: "src/graphql/operations/orders.graphql", to: "src/generated/graphql.ts", kind: "operation codegen" },
+        { from: "src/generated/graphql.ts", to: "src/features/orders/order-dashboard.tsx", kind: "typed generated client import" },
+      ],
+      shared_abstractions: [
+        "src/generated/graphql.ts is derived output; schema and operation files are the editable source of truth.",
+      ],
+    },
+    pitfalls: [
+      {
+        module: "src/generated/graphql.ts",
+        what: "Never hand-edit generated GraphQL client types.",
+        consequence: "The next codegen run will erase manual fixes and can leave UI code compiled against phantom fields.",
+        line_ref: 1,
+      },
+      {
+        module: "src/graphql/schema.graphql",
+        what: "Schema changes must be paired with operation updates and regenerated TypeScript.",
+        consequence: "Runtime queries can drift from generated types even while local UI code appears type-safe.",
+        line_ref: 12,
+      },
+    ],
+    validation_surface: {
+      ...base.validation_surface,
+      test_command: "npm run test -- orders-dashboard",
+      lint_command: "npm run lint",
+      typecheck_command: "npm run typecheck",
+      e2e_command: "npm run e2e -- orders",
+      per_change_type: {
+        chore: { mandatory: ["npm run codegen", "npm run typecheck"], optional: ["npm run lint"] },
+        bug: { mandatory: ["npm run codegen", "npm run typecheck", "npm run test -- orders-dashboard"], optional: [] },
+        feature: { mandatory: ["npm run codegen", "npm run typecheck", "npm run e2e -- orders"], optional: [] },
+      },
+    },
+  });
+
+  const result = renderBrownfieldArtifacts(map);
+  assert.deepEqual(result.errors, []);
+  const artifacts = byPath(result.artifacts);
+
+  const agentsMd = artifactContent(artifacts, "AGENTS.md");
+  assertContains(agentsMd, /src\/graphql\/schema\.graphql/, "generated-code source schema first file");
+  assertContains(agentsMd, /Never hand-edit generated GraphQL client types/, "generated-code no-hand-edit pitfall");
+  assertContains(agentsMd, /feature: `npm run codegen`, `npm run typecheck`, `npm run e2e -- orders`/, "generated-code feature validation");
+
+  const aiDocs = artifactContent(artifacts, "ai_docs/README.md");
+  assertContains(aiDocs, /src\/graphql\/schema\.graphql.*src\/generated\/graphql\.ts/, "generated-code schema to output edge");
+  assertContains(aiDocs, /src\/generated\/graphql\.ts.*src\/features\/orders\/order-dashboard\.tsx/, "generated-code output to UI edge");
+
+  const graphqlSpecialist = artifactContent(artifacts, ".pi/agents/graphql.md");
+  assertContains(graphqlSpecialist, /src\/graphql\/schema\.graphql/, "graphql specialist source schema");
+  assertContains(graphqlSpecialist, /npm run codegen/, "graphql specialist codegen validation");
+  assertContains(graphqlSpecialist, /Schema changes must be paired with operation updates/, "graphql specialist schema pitfall");
+
+  const generatedSpecialist = artifactContent(artifacts, ".pi/agents/generated-client.md");
+  assertContains(generatedSpecialist, /src\/generated\/graphql\.ts/, "generated client specialist output path");
+  assertContains(generatedSpecialist, /inspect but do not hand-edit/, "generated client specialist no-edit guidance");
+
+  const featurePrompt = artifactContent(artifacts, ".pi/prompts/feature.md");
+  assertContains(featurePrompt, /feature: `npm run codegen`, `npm run typecheck`, `npm run e2e -- orders`/, "generated-code feature prompt per-change validation");
+  assertContains(featurePrompt, /MUST cite concrete repository paths/, "generated-code feature prompt path requirement");
+}
+
+function testGeneratedSkillsFeedbackDocsAndPitfallsAreOperational(): void {
+  const base = makeValidCodebaseMap();
+  const map = makeValidCodebaseMap({
+    meta: {
+      ...base.meta,
+      project_type: "search-service",
+      domain_hypothesis: "A search service with cache reseeding and review-heavy operational changes.",
+      suggested_subagent_domains: ["search"],
+    },
+    skeleton: {
+      ...base.skeleton,
+      first_5_files_for_fresh_agent: [
+        { path: "src/search/index.ts", why: "Search query entry point." },
+        { path: "src/search/cache.ts", why: "Cache population and invalidation boundary." },
+        { path: "scripts/reseed-search-index.sh", why: "Operational reseed script wrapped by generated skill." },
+      ],
+    },
+    pitfalls: [
+      {
+        module: "src/search/cache.ts",
+        what: "Cache reseeds must be idempotent and scoped to one tenant.",
+        consequence: "A broad reseed can overwrite unrelated tenant search results.",
+        line_ref: 77,
+      },
+    ],
+    validation_surface: {
+      ...base.validation_surface,
+      test_command: "npm test -- search",
+      lint_command: "npm run lint",
+      typecheck_command: "npm run typecheck",
+      e2e_command: null,
+      per_change_type: {
+        chore: { mandatory: ["npm run lint", "npm run typecheck"], optional: [] },
+        bug: { mandatory: ["npm test -- search"], optional: [] },
+        feature: { mandatory: ["npm test -- search", "npm run typecheck"], optional: [] },
+      },
+    },
+    grade3_evidence: {
+      skill_candidates: [
+        {
+          name: "reseed-search",
+          purpose: "Safely reseed the search index for one tenant after schema or analyzer changes.",
+          steps_or_script_path: "scripts/reseed-search-index.sh",
+        },
+      ],
+      custom_tool_candidates: [],
+    },
+  });
+
+  const result = renderBrownfieldArtifacts(map);
+  assert.deepEqual(result.errors, []);
+  const artifacts = byPath(result.artifacts);
+
+  const agentsMd = artifactContent(artifacts, "AGENTS.md");
+  assertContains(agentsMd, /src\/search\/cache\.ts:77/, "line-cited AGENTS pitfall");
+  assertContains(agentsMd, /A broad reseed can overwrite unrelated tenant search results/, "AGENTS pitfall consequence");
+
+  const skill = artifactContent(artifacts, ".pi/skills/reseed-search/SKILL.md");
+  assertContains(skill, /## When To Use/, "generated skill usage boundary");
+  assertContains(skill, /Safely reseed the search index for one tenant/, "generated skill purpose");
+  assertContains(skill, /## Preconditions/, "generated skill preconditions");
+  assertContains(skill, /scripts\/reseed-search-index\.sh <args>/, "generated skill command");
+  assertContains(skill, /## Validation/, "generated skill validation section");
+  assertContains(skill, /Inspect the exit code/, "generated skill exit-code discipline");
+  assertContains(skill, /## Report/, "generated skill report section");
+  assertContains(skill, /residual risk/, "generated skill residual-risk report");
+
+  const appReview = artifactContent(artifacts, "app_review/README.md");
+  assertContains(appReview, /TestResult/, "app review test result guidance");
+  assertContains(appReview, /ReviewResult/, "app review review result guidance");
+  assertContains(appReview, /validation commands/, "app review validation command field");
+  assertContains(appReview, /screenshots or logs/, "app review evidence field");
+
+  const appDocs = artifactContent(artifacts, "app_docs/README.md");
+  assertContains(appDocs, /What changed/, "app docs durable change prompt");
+  assertContains(appDocs, /When to load/, "app docs conditional loading prompt");
+
+  const fixReports = artifactContent(artifacts, "app_fix_reports/README.md");
+  assertContains(fixReports, /blocker fixed/, "fix reports blocker field");
+  assertContains(fixReports, /residual risk/, "fix reports residual risk field");
 }
 
 function testRailsStyleSurfacePreservesMvcAndJobBoundaries(): void {
@@ -614,14 +855,94 @@ function testExpertSurfaceCarriesActionableDomainKnowledge(): void {
   assertContains(selfImprovePrompt, /npm test -- tests\/billing\/retry\.test\.ts/, "expert self-improve validation");
 }
 
+function testExpertPlanPromptForcesCitedRiskAwarePlanning(): void {
+  const base = makeValidCodebaseMap();
+  const map = makeValidCodebaseMap({
+    meta: {
+      ...base.meta,
+      project_type: "billing-service",
+      domain_hypothesis: "A recurring billing service where planning must preserve retry and capture invariants.",
+    },
+    grade7_evidence: {
+      expert_domains: [
+        {
+          domain: "billing",
+          rationale: "Billing plans need durable payment and retry knowledge.",
+          primary_paths: ["src/billing", "tests/billing"],
+          entry_points: ["src/billing/index.ts"],
+          test_paths: ["tests/billing/retry.test.ts", "tests/billing/capture.test.ts"],
+          key_files: [
+            {
+              path: "src/billing/index.ts",
+              purpose: "Coordinates invoice authorization, capture, and retry behavior.",
+              line_range: [1, 160],
+            },
+          ],
+          key_types: [
+            {
+              name: "InvoiceState",
+              path: "src/billing/types.ts:12",
+              purpose: "State machine that prevents capture before authorization.",
+            },
+          ],
+          patterns: [
+            {
+              name: "authorization-before-capture",
+              description: "Invoices cannot be captured before authorization succeeds.",
+              example_ref: "src/billing/index.ts:42",
+            },
+          ],
+          pitfalls: [
+            {
+              risk: "Retry handlers can double-charge customers.",
+              consequence: "A timed-out request and async retry can both capture the same invoice.",
+              reference: "src/billing/retry.ts:88",
+            },
+          ],
+          conventions: ["Amounts are stored in cents and never as floats."],
+          stability: "high",
+          recurrence: "high",
+          test_command: "npm test -- tests/billing/retry.test.ts",
+          last_updated: "2026-07-06T00:00:00.000Z",
+        },
+      ],
+    },
+  });
+
+  const result = renderBrownfieldArtifacts(map);
+  assert.deepEqual(result.errors, []);
+  const artifacts = byPath(result.artifacts);
+
+  const planPrompt = artifactContent(artifacts, ".pi/prompts/experts/billing/plan.md");
+  assertContains(planPrompt, /Required planning output/, "expert plan required output section");
+  assertContains(planPrompt, /cite the exact expertise entries or repository file:line refs/, "expert plan citations");
+  assertContains(planPrompt, /Relevant expert knowledge/, "expert plan knowledge section");
+  assertContains(planPrompt, /authorization-before-capture/, "expert plan includes pattern names");
+  assertContains(planPrompt, /Retry handlers can double-charge customers/, "expert plan includes pitfall risks");
+  assertContains(planPrompt, /InvoiceState/, "expert plan includes key types");
+  assertContains(planPrompt, /npm test -- tests\/billing\/retry\.test\.ts/, "expert plan validation command");
+  assertContains(planPrompt, /Staleness check/, "expert plan stale knowledge check");
+  assertContains(planPrompt, /Do not edit files in this mode/, "expert plan remains read-only");
+
+  const planBuildPrompt = artifactContent(artifacts, ".pi/prompts/experts/billing/plan_build_improve.md");
+  assertContains(planBuildPrompt, /Before editing/, "plan-build prompt pre-edit discipline");
+  assertContains(planBuildPrompt, /apply these expert constraints/, "plan-build prompt applies expert constraints");
+  assertContains(planBuildPrompt, /Run `npm test -- tests\/billing\/retry\.test\.ts`/, "plan-build prompt validation command");
+  assertContains(planBuildPrompt, /update `\.pi\/prompts\/experts\/billing\/expertise\.yaml`/, "plan-build prompt learn phase");
+}
+
 testTypescriptCliFallbackSurfaceIsActionable();
 testMonorepoFallbackSurfaceKeepsPackageBoundaries();
 testFrontendFallbackSurfaceKeepsUserWorkflowValidation();
 testBackendServiceSurfaceKeepsOperationalBoundaries();
 testSparseTestRepoIsHonestAboutMissingValidation();
+testCliWithNoTestsKeepsTypecheckAsPrimaryValidation();
 testSmallLibrarySurfacePreservesPublicApiCompatibility();
+testGeneratedCodeSurfacePreservesSourceOfTruthBoundaries();
+testGeneratedSkillsFeedbackDocsAndPitfallsAreOperational();
 testRailsStyleSurfacePreservesMvcAndJobBoundaries();
 testStrongDomainDocsArePreservedAndRoutable();
 testExpertSurfaceCarriesActionableDomainKnowledge();
+testExpertPlanPromptForcesCitedRiskAwarePlanning();
 
 console.log("generated-output quality tests passed.");

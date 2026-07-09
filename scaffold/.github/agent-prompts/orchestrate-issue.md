@@ -58,5 +58,5 @@ Emit a single `<output>` block as the **last thing** in your response:
 
 - Each array may be empty.
 - Names must match generated context names when selected.
-- `validationFocus` must contain concrete commands or be empty if the
-  repository context does not identify targeted validation.
+- `validationFocus` must contain concrete commands from the generated context
+  or be empty if the repository context does not identify targeted validation.

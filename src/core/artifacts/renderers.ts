@@ -85,6 +85,37 @@ function nonEmptyCommand(command: string | null | undefined): string | null {
   return trimmed && trimmed.length > 0 ? trimmed : null;
 }
 
+function uniqueCommands(commands: string[]): string[] {
+  return [...new Set(commands.map((command) => command.trim()).filter((command) => command.length > 0))];
+}
+
+function repositoryValidationCommands(map: CodebaseMap): string[] {
+  return uniqueCommands([
+    map.validation_surface.typecheck_command,
+    map.validation_surface.lint_command,
+    map.validation_surface.test_command,
+    map.validation_surface.e2e_command,
+  ].map(nonEmptyCommand).filter((command): command is string => command !== null));
+}
+
+function changeTypeValidationEntries(map: CodebaseMap): Array<{ changeType: string; mandatory: string[] }> {
+  return Object.entries(map.validation_surface.per_change_type).map(([changeType, commands]) => ({
+    changeType,
+    mandatory: uniqueCommands(commands.mandatory),
+  }));
+}
+
+function changeTypeValidationLines(map: CodebaseMap): string[] {
+  return changeTypeValidationEntries(map).map(({ changeType, mandatory }) => {
+    const commands = mandatory.map((command) => `\`${command}\``).join(", ") || "none";
+    return `- ${changeType}: ${commands}`;
+  });
+}
+
+function mandatoryChangeTypeCommands(map: CodebaseMap): string[] {
+  return uniqueCommands(changeTypeValidationEntries(map).flatMap((entry) => entry.mandatory));
+}
+
 function markdownArtifact(params: {
   relativePath: string;
   body: string;
@@ -260,6 +291,74 @@ function renderExpertSelfImprovePrompt(expert: ExpertDomainIntent): string {
   ].join("\n");
 }
 
+function expertKnowledgeMarkdown(expert: ExpertDomainIntent): string[] {
+  const testCommand = expert.test_command ?? "Use repository validation from AGENTS.md.";
+  return [
+    "## Relevant expert knowledge",
+    "",
+    `- Rationale: ${expert.rationale}`,
+    ...(
+      expert.primary_paths.length > 0
+        ? ["- Primary paths:", ...expert.primary_paths.map((pathName) => `  - \`${pathName}\``)]
+        : ["- Primary paths: none declared; infer from touched paths and domain name."]
+    ),
+    ...(
+      expert.entry_points.length > 0
+        ? ["- Entry points:", ...expert.entry_points.map((pathName) => `  - \`${pathName}\``)]
+        : []
+    ),
+    ...(
+      expert.key_files.length > 0
+        ? [
+            "- Key files:",
+            ...expert.key_files.map((file) =>
+              `  - \`${file.path}\` lines ${file.line_range[0]}-${file.line_range[1]}: ${file.purpose}`
+            ),
+          ]
+        : []
+    ),
+    ...(
+      expert.key_types.length > 0
+        ? [
+            "- Key types:",
+            ...expert.key_types.map((keyType) =>
+              `  - ${keyType.name} (\`${keyType.path}\`): ${keyType.purpose}`
+            ),
+          ]
+        : []
+    ),
+    ...(
+      expert.patterns.length > 0
+        ? [
+            "- Patterns to preserve:",
+            ...expert.patterns.map((pattern) =>
+              `  - ${pattern.name}: ${pattern.description} (${pattern.example_ref})`
+            ),
+          ]
+        : []
+    ),
+    ...(
+      expert.pitfalls.length > 0
+        ? [
+            "- Pitfalls to actively check:",
+            ...expert.pitfalls.map((pitfall) =>
+              `  - ${pitfall.risk}: ${pitfall.consequence} (${pitfall.reference})`
+            ),
+          ]
+        : []
+    ),
+    ...(
+      expert.conventions.length > 0
+        ? ["- Conventions:", ...expert.conventions.map((convention) => `  - ${convention}`)]
+        : []
+    ),
+    "- Validation:",
+    `  - ${testCommand}`,
+    ...expert.test_paths.map((pathName) => `  - \`${pathName}\``),
+    "",
+  ];
+}
+
 function renderExpertPlanPrompt(expert: ExpertDomainIntent): string {
   return [
     "---",
@@ -270,8 +369,17 @@ function renderExpertPlanPrompt(expert: ExpertDomainIntent): string {
     `# ${expert.domain} Expert Plan`,
     "",
     `Read .pi/prompts/experts/${expert.domain}/expertise.yaml and plan the requested task.`,
-    "Return a concise implementation plan with relevant files, invariants, validation commands, and risks.",
     "Do not edit files in this mode.",
+    "",
+    ...expertKnowledgeMarkdown(expert),
+    "## Required planning output",
+    "",
+    "- Task interpretation: restate the requested change in this domain's terms.",
+    "- Relevant files and types: cite the exact expertise entries or repository file:line refs that should shape the work.",
+    "- Invariants and pitfalls: name the patterns to preserve and the risks the implementation must avoid.",
+    "- Validation plan: pick the smallest sufficient command and test paths from the expert knowledge; explain any broader suite needed.",
+    "- Staleness check: if the expertise is stale, thin, or contradicted by the repository, name the files that must be re-read before implementation.",
+    "",
     "",
     "$ARGUMENTS",
     "",
@@ -288,7 +396,16 @@ function renderExpertPlanBuildImprovePrompt(expert: ExpertDomainIntent): string 
     `# ${expert.domain} Expert Plan Build Improve`,
     "",
     `Use .pi/prompts/experts/${expert.domain}/expertise.yaml before planning or editing.`,
+    "Before editing, produce the same risk-aware plan required by plan.md and apply these expert constraints to the implementation.",
     "Implement the task at the smallest safe scope, run the relevant validation, then update this expert's expertise.yaml if the work changed durable domain knowledge.",
+    "",
+    ...expertKnowledgeMarkdown(expert),
+    "## Required build loop",
+    "",
+    "- Plan against the key files, key types, patterns, pitfalls, conventions, and validation above.",
+    "- Edit only the smallest necessary domain surface.",
+    `- Run \`${expert.test_command ?? "the relevant repository validation from AGENTS.md"}\`.`,
+    `- If durable knowledge changes, update \`.pi/prompts/experts/${expert.domain}/expertise.yaml\` before finishing.`,
     "",
     "$ARGUMENTS",
     "",
@@ -362,12 +479,8 @@ function renderExpertDomainArtifacts(expert: ExpertDomainIntent): RenderedArtifa
 }
 
 function renderFallbackAgentGuide(map: CodebaseMap): string {
-  const validation = [
-    map.validation_surface.typecheck_command,
-    map.validation_surface.lint_command,
-    map.validation_surface.test_command,
-    map.validation_surface.e2e_command,
-  ].map(nonEmptyCommand).filter((command): command is string => command !== null);
+  const validation = repositoryValidationCommands(map);
+  const perChangeValidation = changeTypeValidationLines(map);
 
   const firstFiles = map.skeleton.first_5_files_for_fresh_agent
     .slice(0, 5)
@@ -375,7 +488,7 @@ function renderFallbackAgentGuide(map: CodebaseMap): string {
 
   const pitfalls = map.pitfalls
     .slice(0, 5)
-    .map((pitfall) => `- \`${pitfall.module}\`: ${oneLine(pitfall.what)} (${oneLine(pitfall.consequence)})`);
+    .map((pitfall) => `- \`${pitfall.module}:${pitfall.line_ref}\`: ${oneLine(pitfall.what)} (${oneLine(pitfall.consequence)})`);
   const validationLines = validation.length > 0
     ? validation.map((command) => `- \`${command}\``)
     : [
@@ -400,6 +513,10 @@ function renderFallbackAgentGuide(map: CodebaseMap): string {
     "## Validation",
     "",
     ...validationLines,
+    "",
+    "## Validation By Change Type",
+    "",
+    ...perChangeValidation,
     "",
     "## Conventions",
     "",
@@ -429,11 +546,6 @@ function renderIntentAgentGuide(intents: ArtifactIntents): string {
 }
 
 function renderFallbackSpecs(map: CodebaseMap): string {
-  const perChange = Object.entries(map.validation_surface.per_change_type)
-    .map(([changeType, commands]) => {
-      const mandatory = commands.mandatory.map((command) => `\`${command}\``).join(", ") || "none";
-      return `- ${changeType}: ${mandatory}`;
-    });
   return [
     "# Specs",
     "",
@@ -441,7 +553,7 @@ function renderFallbackSpecs(map: CodebaseMap): string {
     "",
     "## Validation By Change Type",
     "",
-    ...perChange,
+    ...changeTypeValidationLines(map),
     "",
   ].join("\n");
 }
@@ -488,12 +600,10 @@ function renderFallbackFeatureAgentBody(name: string, map: CodebaseMap): string 
     : map.skeleton.first_5_files_for_fresh_agent.slice(0, 5)
   ).map((entry) => `- \`${entry.path}\` - ${oneLine(entry.why)}`);
 
-  const validation = [
-    map.validation_surface.typecheck_command,
-    map.validation_surface.lint_command,
-    map.validation_surface.test_command,
-    map.validation_surface.e2e_command,
-  ].map(nonEmptyCommand).filter((command): command is string => command !== null);
+  const validation = uniqueCommands([
+    ...repositoryValidationCommands(map),
+    ...mandatoryChangeTypeCommands(map),
+  ]);
 
   const matchingPitfalls = map.pitfalls
     .filter((pitfall) => pitfall.module.includes(name) || pitfall.what.toLowerCase().includes(name))
@@ -552,12 +662,10 @@ function workflowNameForAgent(agentName: string): string {
 
 function renderSpecialistWorkflowSpec(agentName: string, map: CodebaseMap): WorkflowSpec {
   const title = titleCaseName(agentName);
-  const validation = [
-    map.validation_surface.typecheck_command,
-    map.validation_surface.lint_command,
-    map.validation_surface.test_command,
-    map.validation_surface.e2e_command,
-  ].map(nonEmptyCommand).filter((command): command is string => command !== null);
+  const validation = uniqueCommands([
+    ...repositoryValidationCommands(map),
+    ...mandatoryChangeTypeCommands(map),
+  ]);
 
   return {
     name: workflowNameForAgent(agentName),
@@ -706,6 +814,13 @@ function renderFeedbackLoopArtifacts(map: CodebaseMap, intents: ArtifactIntents 
         "Stores TestResult and ReviewResult artifacts produced by agentify review and test skills.",
         "Screenshots and visual evidence should live under branch-specific subdirectories.",
         "",
+        "## Required Entries",
+        "",
+        "- TestResult: validation commands, exit status, relevant stdout/stderr tail, and artifacts.",
+        "- ReviewResult: verdict, blockers, non-blocking risks, files reviewed, and follow-up recommendation.",
+        "- Evidence: screenshots or logs for UI, workflow, or operational changes.",
+        "- Traceability: branch, commit, issue/PR link, changed paths, and reviewer/agent identity.",
+        "",
       ].join("\n"),
     }),
     markdownArtifact({
@@ -718,6 +833,13 @@ function renderFeedbackLoopArtifacts(map: CodebaseMap, intents: ArtifactIntents 
         "",
         "Stores feature documentation written by the agentify document skill after reviewed changes.",
         "Keep durable application knowledge here and link it from `.pi/conditional_docs.md` when it should be loaded conditionally.",
+        "",
+        "## Entry Template",
+        "",
+        "- What changed: durable behavior, domain rule, workflow, or operational fact.",
+        "- Why it matters: the failure mode this knowledge prevents.",
+        "- When to load: trigger phrases or touched paths for `.pi/conditional_docs.md`.",
+        "- Validation: command or review evidence that proved the documented behavior.",
         "",
       ].join("\n"),
     }),
@@ -799,13 +921,33 @@ function renderSkillCandidate(skill: SkillCandidateIntent): RenderedArtifact {
       "",
       `# ${skill.name}`,
       "",
+      "## When To Use",
+      "",
+      oneLine(skill.purpose),
+      "",
+      "## Preconditions",
+      "",
+      "- Read `AGENTS.md` for current validation and ownership rules before running this skill.",
+      "- Confirm the script or command exists in the repository and understand any required arguments.",
+      "- Do not run against production data or credentials unless the task explicitly authorizes that environment.",
+      "",
       "## Workflow",
       "",
       ...workflow,
       "",
+      "## Validation",
+      "",
+      "- Inspect the exit code before deciding success.",
+      "- Read the final stdout/stderr lines and treat warnings as possible residual risk.",
+      "- If the skill changed repository files or state, run the relevant validation commands from `AGENTS.md`.",
+      "",
       "## Output",
       "",
       "Report success or failure clearly. If wrapping a script, inspect its exit code and last output lines before deciding the result.",
+      "",
+      "## Report",
+      "",
+      "Include the command run, arguments used, files or state touched, validation performed, and any residual risk.",
       "",
     ].join("\n"),
   });
@@ -963,6 +1105,10 @@ function renderIssueTypePrompt(map: CodebaseMap, issueType: string): RenderedArt
       "## Validation Surface",
       "",
       ...validationLines(map),
+      "",
+      "## Validation By Change Type",
+      "",
+      ...changeTypeValidationLines(map),
       "",
       "## Instructions",
       "",

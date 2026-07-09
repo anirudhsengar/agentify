@@ -76,6 +76,48 @@ else
   echo "- None recorded."
 fi
 
+if jq -e '.github_handoff | type == "object"' "$state_file" >/dev/null 2>&1; then
+  handoff_action=$(jq -r '.github_handoff.action // "unknown"' "$state_file")
+  handoff_title=$(jq -r '.github_handoff.title // "unknown"' "$state_file")
+  handoff_body=$(jq -r '.github_handoff.body // "unknown"' "$state_file")
+  cat <<EOF
+
+### Structured GitHub Handoff
+
+This is trusted generated handoff data for the next GitHub workflow step. Use it
+as the default issue shape unless the current issue thread explicitly supersedes
+it.
+
+- Action: \`$handoff_action\`
+- Title: $handoff_title
+
+#### Labels
+EOF
+
+  if jq -e '.github_handoff.labels | type == "array" and length > 0' "$state_file" >/dev/null 2>&1; then
+    jq -r '.github_handoff.labels[] | "- `" + . + "`"' "$state_file"
+  else
+    echo "- None recorded."
+  fi
+
+  cat <<'EOF'
+
+#### Handoff Artifact Paths
+EOF
+  if jq -e '.github_handoff.artifact_paths | type == "array" and length > 0' "$state_file" >/dev/null 2>&1; then
+    jq -r '.github_handoff.artifact_paths[] | "- `" + . + "`"' "$state_file"
+  else
+    echo "- None recorded."
+  fi
+
+  cat <<EOF
+
+#### Handoff Body
+
+$handoff_body
+EOF
+fi
+
 if jq -e '.artifact_validation.reasons | type == "array" and length > 0' "$state_file" >/dev/null 2>&1; then
   cat <<'EOF'
 

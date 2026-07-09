@@ -4,11 +4,20 @@ set -euo pipefail
 branch=${1:-}
 branch_head_sha=${2:-}
 failure_reason_file=${3:-}
+operation=${4:-update-branch}
 
 if [ -z "$branch" ] || [ -z "$branch_head_sha" ] || [ -z "$failure_reason_file" ]; then
-  echo "Usage: push-updated-branch.sh <agent-branch> <expected-head-sha> <failure-reason-file>" >&2
+  echo "Usage: push-updated-branch.sh <agent-branch> <expected-head-sha> <failure-reason-file> [operation]" >&2
   exit 2
 fi
+
+case "$operation" in
+  update-branch|review) ;;
+  *)
+    echo "Unsupported push operation: $operation" >&2
+    exit 2
+    ;;
+esac
 
 case "$branch" in
   agent/*) ;;
@@ -32,7 +41,7 @@ set -e
 
 if [ "$status" -ne 0 ]; then
   if grep -qiE "non-fast-forward|rejected|fetch first|stale info" "$push_err"; then
-    echo "Branch advanced during update-branch run." > "$failure_reason_file"
+    echo "Branch advanced during ${operation} run." > "$failure_reason_file"
     cat "$push_err"
     exit 1
   fi

@@ -54,6 +54,32 @@ jobs:
           set -euo pipefail
           : "${GH_TOKEN:?AGENT_PAT is required — see SETUP.md}"
           bot_login="${{ vars.AGENT_BOT_LOGIN }}"
+          marker="agentify-event:${EVENT_ID}"
+          already_processed=$(gh api "repos/${REPO_OWNER}/${REPO_NAME}/issues/${ISSUE_NUMBER}/comments" \
+            --paginate \
+            --jq "[.[] | select(.body | contains(\"$marker\"))] | length")
+          if [ "$already_processed" -gt 0 ]; then
+            echo "Event $EVENT_ID already has a completion marker — skipping duplicate delivery."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          issue_body=$(gh issue view "$ISSUE_NUMBER" --json body --jq '.body // ""')
+          if [ "$ISSUE_TITLE" = "agentify drill smoke: no-model preflight" ] \
+            && grep -Fq "agentify-drill-smoke-no-model" <<<"$issue_body"; then
+            smoke_comment=$(mktemp)
+            {
+              echo "agentify drill smoke preflight passed: no Pi model run started."
+              echo
+              echo "$marker"
+            } > "$smoke_comment"
+            gh issue edit "$ISSUE_NUMBER" --remove-label "agent:drill-me" || true
+            gh issue comment "$ISSUE_NUMBER" --body-file "$smoke_comment"
+            rm -f "$smoke_comment"
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if [ "$COMMENT_AUTHOR" = "github-actions[bot]" ] || { [ -n "$bot_login" ] && [ "$COMMENT_AUTHOR" = "$bot_login" ]; }; then
             echo "Comment author ($COMMENT_AUTHOR) is this bot — skipping to avoid a reply loop."
             echo "proceed=false" >> "$GITHUB_OUTPUT"
@@ -68,16 +94,6 @@ jobs:
               exit 0
               ;;
           esac
-
-          marker="agentify-event:${EVENT_ID}"
-          already_processed=$(gh api "repos/${REPO_OWNER}/${REPO_NAME}/issues/${ISSUE_NUMBER}/comments" \
-            --paginate \
-            --jq "[.[] | select(.body | contains(\"$marker\"))] | length")
-          if [ "$already_processed" -gt 0 ]; then
-            echo "Event $EVENT_ID already has a completion marker — skipping duplicate delivery."
-            echo "proceed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
 
           echo "proceed=true" >> "$GITHUB_OUTPUT"
 

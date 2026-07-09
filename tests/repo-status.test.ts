@@ -46,6 +46,9 @@ async function testReadyBrownfield(): Promise<void> {
       "specs/README.md",
       "ai_docs/README.md",
       ".pi/agentify/codebase_map.json",
+      ".pi/workflows/payments-plan-build-review-fix.json",
+      ".pi/prompts/experts/payments/expertise.yaml",
+      ".pi/skills/billing/SKILL.md",
       "SETUP.md",
       ".github/workflows/agent-implement.yml",
       ".github/actions/run-pi/action.yml",
@@ -59,10 +62,18 @@ async function testReadyBrownfield(): Promise<void> {
       mode: "brownfield",
       files,
     });
+    write(".pi/agents/user-extra.md", cwd);
+    write(".pi/workflows/user-extra.json", cwd);
+    write(".pi/prompts/experts/user-extra/expertise.yaml", cwd);
+    write(".pi/skills/user-extra/SKILL.md", cwd);
+
     const state = inspectAgentifyRepoState(cwd, configDir);
     assert.equal(state.mode, "brownfield");
     assert.equal(state.status, "ready");
     assert.equal(state.featureAgentCount, 1);
+    assert.equal(state.workflowCount, 1);
+    assert.equal(state.expertCount, 1);
+    assert.equal(state.skillCount, 1);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
     fs.rmSync(configDir, { recursive: true, force: true });

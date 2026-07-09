@@ -100,6 +100,45 @@ export const GreenfieldResumeSchema = Type.Object({
     "Persisted handoff context that makes local greenfield formation resumable and connects it to the GitHub loop.",
 });
 
+export const GreenfieldGitHubHandoffActionSchema = StringEnum([
+  "open_drill_issue",
+  "create_implementation_issues",
+  "open_implementation_issue",
+] as const, {
+  description:
+    "Machine-readable next GitHub action for continuing greenfield formation after bootstrap.",
+});
+
+export const GreenfieldGitHubHandoffSchema = Type.Object({
+  action: GreenfieldGitHubHandoffActionSchema,
+  title: Type.String({
+    description: "Suggested GitHub issue title for the next async greenfield step.",
+  }),
+  body: Type.String({
+    description:
+      "Suggested GitHub issue body with artifact references and state-file context.",
+  }),
+  labels: Type.Array(Type.String({
+    description: "GitHub label to apply to the handoff issue.",
+  }), {
+    description:
+      "Labels that trigger or prepare the next scaffold workflow.",
+    minItems: 1,
+    maxItems: 6,
+  }),
+  artifact_paths: Type.Array(Type.String({
+    description: "Repo-relative greenfield artifact path referenced by this handoff.",
+  }), {
+    description:
+      "Artifact files the GitHub issue should cite so the async workflow resumes from the right checkpoint.",
+    minItems: 0,
+    maxItems: 80,
+  }),
+}, {
+  description:
+    "Structured GitHub issue handoff for continuing greenfield work through the public scaffold loop.",
+});
+
 export const GreenfieldStateSchema = Type.Object({
   schema_version: Type.Literal("1", {
     description: "Version of the greenfield-state.json schema.",
@@ -128,6 +167,7 @@ export const GreenfieldStateSchema = Type.Object({
   }),
   artifact_validation: GreenfieldArtifactValidationSchema,
   resume: GreenfieldResumeSchema,
+  github_handoff: GreenfieldGitHubHandoffSchema,
 }, {
   description:
     "Checkpoint handoff written after greenfield formation so later runs can resume deliberately.",
@@ -136,6 +176,7 @@ export const GreenfieldStateSchema = Type.Object({
 export type GreenfieldCheckpoint = Static<typeof GreenfieldCheckpointSchema>;
 export type GreenfieldState = Static<typeof GreenfieldStateSchema>;
 export type GreenfieldArtifactValidation = Static<typeof GreenfieldArtifactValidationSchema>;
+export type GreenfieldGitHubHandoff = Static<typeof GreenfieldGitHubHandoffSchema>;
 
 export interface BuildGreenfieldStateParams {
   turns: number;
@@ -390,20 +431,107 @@ function githubResumeFor(checkpoint: GreenfieldCheckpoint, formation: Greenfield
   }
 }
 
-function resumeFor(cwd: string, checkpoint: GreenfieldCheckpoint): GreenfieldState["resume"] {
-  const formation = readGreenfieldFormation(cwd);
+function artifactBullets(artifactPaths: string[]): string {
+  if (artifactPaths.length === 0) return "- `.pi/agentify/greenfield-state.json`";
+  return artifactPaths.map((artifactPath) => `- \`${artifactPath}\``).join("\n");
+}
+
+function firstArtifact(artifactPaths: string[], prefix: string): string | null {
+  return artifactPaths.find((artifactPath) => artifactPath.startsWith(prefix)) ?? null;
+}
+
+function handoffTitle(verb: string, formation: GreenfieldFormation | null): string {
+  return `${verb} ${firstGoalTitle(formation) ?? formation?.project_name ?? "greenfield project"}`;
+}
+
+function githubHandoffFor(
+  checkpoint: GreenfieldCheckpoint,
+  formation: GreenfieldFormation | null,
+  artifactPaths: string[],
+): GreenfieldGitHubHandoff {
+  const focus = firstGoalTitle(formation) ?? formation?.project_name ?? "the greenfield project";
+  const statePath = GREENFIELD_STATE_RELATIVE_PATH;
+  const specPath = firstArtifact(artifactPaths, "specs/");
+  const issuePath = firstArtifact(artifactPaths, "docs/issues/");
+  const planPath = firstArtifact(artifactPaths, "docs/plans/");
+  const prdPath = firstArtifact(artifactPaths, "docs/prds/");
+
+  if (checkpoint === "spec") {
+    const target = specPath ?? issuePath ?? "the selected spec";
+    return {
+      action: "open_implementation_issue",
+      title: handoffTitle("Implement", formation),
+      body: [
+        "## Context",
+        "",
+        `Continue the greenfield project from \`${statePath}\`.`,
+        "",
+        "## Artifacts",
+        "",
+        artifactBullets(artifactPaths),
+        "",
+        "## Requested action",
+        "",
+        `Implement the next approved slice for ${focus}. Start from \`${target}\`.`,
+        "",
+        "## Labels",
+        "",
+        "Apply `agent:queued` first, then add `agent:implement` when ready to start the GitHub implementation loop.",
+      ].join("\n"),
+      labels: ["agent:queued", "agent:implement"],
+      artifact_paths: artifactPaths,
+    };
+  }
+
+  if (checkpoint === "issue_slices") {
+    const target = issuePath ?? planPath ?? "docs/issues/";
+    return {
+      action: "create_implementation_issues",
+      title: handoffTitle("Create implementation issues for", formation),
+      body: [
+        "## Context",
+        "",
+        `Continue the greenfield project from \`${statePath}\`.`,
+        "",
+        "## Artifacts",
+        "",
+        artifactBullets(artifactPaths),
+        "",
+        "## Requested action",
+        "",
+        `Turn the approved slices for ${focus} into implementation issues. Start from \`${target}\` and preserve blocked-by sections.`,
+      ].join("\n"),
+      labels: ["agent:drill-me"],
+      artifact_paths: artifactPaths,
+    };
+  }
+
+  const target = planPath ?? prdPath ?? "GOALS.md";
   return {
-    source: formation ? "formation" : "filesystem",
-    stop_at: formation?.stop_at ?? null,
-    current_focus: firstGoalTitle(formation),
-    artifact_paths: durableArtifactPaths(cwd),
-    local_resume: localResumeFor(checkpoint, formation),
-    github_resume: githubResumeFor(checkpoint, formation),
+    action: "open_drill_issue",
+    title: handoffTitle("Continue planning", formation),
+    body: [
+      "## Context",
+      "",
+      `Continue the greenfield project from \`${statePath}\`.`,
+      "",
+      "## Artifacts",
+      "",
+      artifactBullets(artifactPaths),
+      "",
+      "## Requested action",
+      "",
+      `Drill the next planning step for ${focus}. Start from \`${target}\` and produce the next approved artifact only.`,
+    ].join("\n"),
+    labels: ["agent:drill-me"],
+    artifact_paths: artifactPaths,
   };
 }
 
 export function buildGreenfieldState(cwd: string, params: BuildGreenfieldStateParams): GreenfieldState {
   const checkpoint = inferGreenfieldCheckpoint(cwd);
+  const formation = readGreenfieldFormation(cwd);
+  const artifactPaths = durableArtifactPaths(cwd);
   return {
     schema_version: "1",
     updated_at: params.nowIso ?? new Date().toISOString(),
@@ -414,7 +542,15 @@ export function buildGreenfieldState(cwd: string, params: BuildGreenfieldStatePa
     checkpoints: checkpointsFor(cwd),
     next_actions: nextActionsFor(checkpoint),
     artifact_validation: validateGreenfieldArtifacts(cwd),
-    resume: resumeFor(cwd, checkpoint),
+    resume: {
+      source: formation ? "formation" : "filesystem",
+      stop_at: formation?.stop_at ?? null,
+      current_focus: firstGoalTitle(formation),
+      artifact_paths: artifactPaths,
+      local_resume: localResumeFor(checkpoint, formation),
+      github_resume: githubResumeFor(checkpoint, formation),
+    },
+    github_handoff: githubHandoffFor(checkpoint, formation, artifactPaths),
   };
 }
 

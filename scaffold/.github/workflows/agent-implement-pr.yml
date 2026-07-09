@@ -164,6 +164,16 @@ jobs:
           model: ${{ vars.PI_MODEL }}
           thinking: ${{ vars.PI_THINKING || 'high' }}
 
+      - name: Verify changed-path routing evidence
+        if: steps.state.outputs.proceed == 'true' && steps.inputs.outputs.proceed == 'true'
+        run: |
+          bash .agentify-runtime/.github/scripts/verify-diff-routing-evidence.sh \
+            "${{ steps.pi_implement_pr.outputs.output-file }}" \
+            "$BASE_REF" \
+            "${RUNNER_TEMP}/specialist-context.md" \
+            "${RUNNER_TEMP}/expert-context.md" \
+            "${RUNNER_TEMP}/failure_reason.txt"
+
       - name: Push branch (abort cleanly if non-fast-forward)
         if: steps.state.outputs.proceed == 'true' && steps.inputs.outputs.proceed == 'true' && success()
         id: push

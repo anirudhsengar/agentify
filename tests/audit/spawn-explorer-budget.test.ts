@@ -12,6 +12,29 @@ function textFrom(result: { content?: Array<{ type?: string; text?: string }> })
   return result.content?.find((block) => block.type === "text")?.text ?? "";
 }
 
+function assertBudgetResume(result: { details?: unknown }): void {
+  const details = result.details as {
+    resume?: {
+      can_continue?: boolean;
+      actions?: string[];
+      state_files?: string[];
+    };
+  } | undefined;
+  assert.equal(details?.resume?.can_continue, true);
+  assert.ok(
+    details?.resume?.actions?.some((action) => action.includes("write_map")),
+    "budget recovery must tell the builder how to persist partial audit state",
+  );
+  assert.ok(
+    details?.resume?.actions?.some((action) => action.includes("honest null")),
+    "budget recovery must permit honest nulls for genuinely unobservable gaps",
+  );
+  assert.ok(
+    details?.resume?.state_files?.includes(".pi/agentify/codebase_map.json"),
+    "budget recovery must point at the canonical map",
+  );
+}
+
 async function testRejectsWhenTotalSpawnBudgetIsExhausted(): Promise<void> {
   const cwd = tempDir("spawn-budget-total");
   try {
@@ -31,6 +54,7 @@ async function testRejectsWhenTotalSpawnBudgetIsExhausted(): Promise<void> {
     assert.deepEqual((result.details as { budget?: { max_total_spawns?: number } } | undefined)?.budget, {
       max_total_spawns: 0,
     });
+    assertBudgetResume(result);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -55,6 +79,63 @@ async function testRejectsWhenConcurrentSpawnBudgetIsExhausted(): Promise<void> 
     assert.deepEqual((result.details as { budget?: { max_concurrent_spawns?: number } } | undefined)?.budget, {
       max_concurrent_spawns: 0,
     });
+    assertBudgetResume(result);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testRejectsWhenCostBudgetIsExhausted(): Promise<void> {
+  const cwd = tempDir("spawn-budget-cost");
+  try {
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      maxTotalCostUsd: 0.01,
+      createSession: async () => ({
+        session: {
+          messages: [
+            {
+              role: "assistant",
+              content: "## Report\n\nExploration complete.",
+              usage: { cost: { total: 0.02 } },
+            },
+          ],
+          async prompt(): Promise<void> {},
+          dispose(): void {},
+        },
+      }),
+    });
+
+    const first = await tool.execute(
+      "test-spawn-budget-cost-first",
+      { target_path: "." } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((first as { isError?: boolean }).isError, undefined);
+    assert.equal(
+      (first.details as { cost_usd?: number } | undefined)?.cost_usd,
+      0.02,
+    );
+
+    const second = await tool.execute(
+      "test-spawn-budget-cost-second",
+      { target_path: "." } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((second as { isError?: boolean }).isError, true);
+    assert.match(textFrom(second), /spawn_explorer cost budget exhausted/i);
+    assert.deepEqual(
+      (second.details as { budget?: { max_total_cost_usd?: number; total_cost_usd?: number } } | undefined)?.budget,
+      {
+        max_total_cost_usd: 0.01,
+        total_cost_usd: 0.02,
+      },
+    );
+    assertBudgetResume(second);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -62,5 +143,6 @@ async function testRejectsWhenConcurrentSpawnBudgetIsExhausted(): Promise<void> 
 
 await testRejectsWhenTotalSpawnBudgetIsExhausted();
 await testRejectsWhenConcurrentSpawnBudgetIsExhausted();
+await testRejectsWhenCostBudgetIsExhausted();
 
 console.log("spawn-explorer budget tests passed.");

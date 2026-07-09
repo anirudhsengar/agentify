@@ -25,7 +25,7 @@ function attachToInitializedRepo(options: RunAgentifyAppOptions): void {
   const projectState = readProjectState(options.configDir, options.cwd);
   options.ui.status(`agentify: attached to initialized ${repoState.mode} repo`);
   options.ui.info(
-    `agentify: status=ready, feature_agents=${repoState.featureAgentCount}, found=${repoState.found.length}`,
+    `agentify: status=ready, feature_agents=${repoState.featureAgentCount}, workflows=${repoState.workflowCount}, experts=${repoState.expertCount}, skills=${repoState.skillCount}, found=${repoState.found.length}`,
   );
   if (projectState) {
     options.ui.info(

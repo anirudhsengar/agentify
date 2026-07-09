@@ -91,6 +91,9 @@ function seedReadyRepo(cwd: string, configDir: string): void {
     ".github/actions/run-pi/action.yml",
     ".github/scripts/setup-agentify.sh",
     ".pi/agents/payments.md",
+    ".pi/workflows/payments-plan-build-review-fix.json",
+    ".pi/prompts/experts/payments/expertise.yaml",
+    ".pi/skills/billing/SKILL.md",
   ].map((relativePath) => {
     const filePath = path.join(cwd, relativePath);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -211,6 +214,7 @@ async function testAttachesToInitializedRepoWithoutRerun(): Promise<void> {
 
     assert.equal(runtime.sessionCalls, 0);
     assert.ok(ui.statuses.some((message) => message.includes("attached to initialized brownfield repo")));
+    assert.ok(ui.infos.some((message) => message.includes("feature_agents=1, workflows=1, experts=1, skills=1")));
     assert.ok(ui.infos.some((message) => message.includes("last_run=2026-07-05T00:00:00Z")));
     assert.ok(ui.infos.some((message) => message.includes("latest log")));
     assert.ok(ui.infos.some((message) => message.includes("GitHub bootstrap is ready")));

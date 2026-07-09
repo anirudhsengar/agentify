@@ -4,16 +4,23 @@
 # privileges or overrides the issue task.
 set -euo pipefail
 
-if [ "$#" -ne 2 ]; then
-  echo "usage: extract-orchestration-plan.sh <transcript> <output-markdown>" >&2
+if [ "$#" -ne 2 ] && [ "$#" -ne 5 ]; then
+  echo "usage: extract-orchestration-plan.sh <transcript> <output-markdown> [workflow-context specialist-context expert-context]" >&2
   exit 2
 fi
 
 transcript=$1
 output_markdown=$2
+workflow_context=${3:-}
+specialist_context=${4:-}
+expert_context=${5:-}
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 tmp_json=$(mktemp)
-trap 'rm -f "$tmp_json"' EXIT
+tmp_workflows=$(mktemp)
+tmp_specialists=$(mktemp)
+tmp_experts=$(mktemp)
+tmp_validation_commands=$(mktemp)
+trap 'rm -f "$tmp_json" "$tmp_workflows" "$tmp_specialists" "$tmp_experts" "$tmp_validation_commands"' EXIT
 
 bash "$script_dir/extract-output.sh" "$transcript" > "$tmp_json"
 
@@ -35,6 +42,57 @@ Orchestration plan must be JSON with:
 - validationFocus: single-line command strings, max 8 entries
 EOF
   exit 1
+fi
+
+context_names() {
+  local context_file=$1
+  local output_file=$2
+  sed -n 's/^### `\([^`][^`]*\)`$/\1/p' "$context_file" | sort -u > "$output_file"
+}
+
+context_validation_commands() {
+  : > "$tmp_validation_commands"
+  for context_file in "$@"; do
+    [ -f "$context_file" ] || continue
+    sed -n 's/^- Test command: `\([^`][^`]*\)`$/\1/p' "$context_file"
+  done | sort -u > "$tmp_validation_commands"
+}
+
+validate_known_names() {
+  local field=$1
+  local label=$2
+  local allowed_file=$3
+  local selected
+
+  while IFS= read -r selected; do
+    [ -n "$selected" ] || continue
+    if ! grep -Fxq "$selected" "$allowed_file"; then
+      echo "Orchestration plan selected unknown $label: $selected" >&2
+      exit 1
+    fi
+  done < <(jq -r --arg field "$field" '.[$field][]' "$tmp_json")
+}
+
+validate_known_validation_focus() {
+  local selected
+  while IFS= read -r selected; do
+    [ -n "$selected" ] || continue
+    if ! grep -Fxq "$selected" "$tmp_validation_commands"; then
+      echo "Orchestration plan selected unknown validationFocus command: $selected" >&2
+      exit 1
+    fi
+  done < <(jq -r '.validationFocus[]' "$tmp_json")
+}
+
+if [ -n "$workflow_context" ]; then
+  context_names "$workflow_context" "$tmp_workflows"
+  context_names "$specialist_context" "$tmp_specialists"
+  context_names "$expert_context" "$tmp_experts"
+  context_validation_commands "$workflow_context" "$specialist_context" "$expert_context"
+  validate_known_names "selectedWorkflows" "workflow" "$tmp_workflows"
+  validate_known_names "selectedSpecialists" "specialist" "$tmp_specialists"
+  validate_known_names "selectedExperts" "expert" "$tmp_experts"
+  validate_known_validation_focus
 fi
 
 {

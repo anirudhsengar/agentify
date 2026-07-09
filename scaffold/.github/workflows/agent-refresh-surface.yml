@@ -52,11 +52,34 @@ jobs:
       - name: Exclude trusted runtime checkout from refresh commits
         run: echo "/.agentify-runtime/" >> .git/info/exclude
 
+      - name: Check model runtime configuration
+        id: model_config
+        env:
+          PI_VERSION: ${{ vars.PI_VERSION }}
+          PI_MODEL: ${{ vars.PI_MODEL }}
+          PI_API_KEY: ${{ secrets.PI_API_KEY }}
+          AGENT_PAT: ${{ secrets.AGENT_PAT }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "$PI_VERSION" ] || missing+=("vars.PI_VERSION")
+          [ -n "$PI_MODEL" ] || missing+=("vars.PI_MODEL")
+          [ -n "$PI_API_KEY" ] || missing+=("secrets.PI_API_KEY")
+          [ -n "$AGENT_PAT" ] || missing+=("secrets.AGENT_PAT")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'configured=false\n' >> "$GITHUB_OUTPUT"
+            printf '::notice::Skipping refresh surface; missing model runtime configuration: %s\n' "${missing[*]}"
+            exit 0
+          fi
+          printf 'configured=true\n' >> "$GITHUB_OUTPUT"
+
       - name: Compute refresh branch name
+        if: steps.model_config.outputs.configured == 'true'
         id: branch
         run: echo "name=agent/refresh-surface-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
 
       - name: Create branch
+        if: steps.model_config.outputs.configured == 'true'
         env:
           BRANCH: ${{ steps.branch.outputs.name }}
         run: |
@@ -65,19 +88,23 @@ jobs:
           git checkout -b "$BRANCH"
 
       - name: Setup Pi
+        if: steps.model_config.outputs.configured == 'true'
         uses: ./.agentify-runtime/.github/actions/setup-pi
         with:
           version: ${{ vars.PI_VERSION }}
 
       - name: Detect stale experts
+        if: steps.model_config.outputs.configured == 'true'
         run: node .agentify-runtime/.github/scripts/detect-stale-experts.mjs . > "${RUNNER_TEMP}/stale-experts.json"
 
       - name: Render refresh prompt
+        if: steps.model_config.outputs.configured == 'true'
         env:
           STALE_EXPERTS_FILE: ${{ runner.temp }}/stale-experts.json
         run: envsubst < .agentify-runtime/.github/agent-prompts/refresh-surface.md > "${RUNNER_TEMP}/refresh-prompt.md"
 
       - name: Run Pi — refresh surface
+        if: steps.model_config.outputs.configured == 'true'
         uses: ./.agentify-runtime/.github/actions/run-pi
         with:
           prompt-file: ${{ runner.temp }}/refresh-prompt.md
@@ -86,7 +113,20 @@ jobs:
           model: ${{ vars.PI_MODEL }}
           thinking: ${{ vars.PI_THINKING || 'high' }}
 
+      - name: Validate refresh changed only the agentic surface
+        if: steps.model_config.outputs.configured == 'true'
+        run: bash .agentify-runtime/.github/scripts/validate-refresh-surface.sh "$BASE_REF"
+
+      - name: Refresh managed-file manifest hashes
+        if: steps.model_config.outputs.configured == 'true'
+        run: node .agentify-runtime/.github/scripts/refresh-managed-manifest.mjs .
+
+      - name: Validate refresh surface after manifest update
+        if: steps.model_config.outputs.configured == 'true'
+        run: bash .agentify-runtime/.github/scripts/validate-refresh-surface.sh "$BASE_REF"
+
       - name: Open PR if the surface changed
+        if: steps.model_config.outputs.configured == 'true'
         env:
           BRANCH: ${{ steps.branch.outputs.name }}
           AGENT_PAT: ${{ secrets.AGENT_PAT }}

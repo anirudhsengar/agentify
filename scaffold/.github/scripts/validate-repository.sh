@@ -104,6 +104,8 @@ require_text .github/workflows/agent-implement.yml 'uses: \./\.agentify-runtime/
   "both issue implementation agent runs must use trusted runtime actions"
 require_text .github/workflows/agent-implement.yml 'run-issue-readiness\.sh' \
   "issue implementation readiness preflight must delegate to a tested trusted script"
+require_text .github/workflows/agent-implement.yml 'check-existing-issue-pr\.sh' \
+  "issue implementation duplicate PR refusal must delegate to a tested trusted script"
 require_text .github/workflows/agent-implement.yml 'compute-implementation-branch\.sh' \
   "issue implementation branch naming must delegate to a tested trusted script"
 require_text .github/workflows/agent-implement.yml 'extract-pr-meta\.sh' \
@@ -120,12 +122,24 @@ require_text .github/workflows/agent-implement.yml 'orchestrate-issue\.md' \
   "issue implementation must run the public orchestration planner before implementation"
 require_text .github/workflows/agent-implement.yml 'extract-orchestration-plan\.sh' \
   "issue implementation must extract the structured orchestration plan through a tested trusted script"
+require_text .github/scripts/extract-orchestration-plan.sh 'validate_known_names' \
+  "orchestration plan extraction must validate selected names against generated context"
+require_text .github/scripts/extract-orchestration-plan.sh 'validate_known_validation_focus' \
+  "orchestration plan extraction must validate validation focus commands against generated context"
 require_text .github/workflows/agent-update-branch.yml 'push-updated-branch\.sh' \
   "update-branch stale push protection must delegate to a tested trusted script"
 require_text .github/workflows/agent-update-branch.yml 'extract-update-branch-comment\.sh' \
   "update-branch merge-resolution output validation must delegate to a tested trusted script"
+require_text .github/workflows/agent-update-branch.yml 'mark-pr-workflow-failure\.sh' \
+  "update-branch failure handoff must delegate to a tested trusted script"
 require_text .github/workflows/agent-review.yml 'extract-review-verdict\.sh' \
   "PR review verdict validation must delegate to a tested trusted script"
+require_text .github/workflows/agent-review.yml 'push-updated-branch\.sh' \
+  "PR review fixup pushes must delegate to a tested trusted script"
+require_text .github/workflows/agent-review.yml 'complete-review-handoff\.sh' \
+  "PR review verdict side effects must delegate to a tested trusted script"
+require_text .github/workflows/agent-review.yml 'mark-pr-workflow-failure\.sh' \
+  "PR review failure handoff must delegate to a tested trusted script"
 require_text .github/workflows/agent-drill-me-issue.yml 'uses: \./\.agentify-runtime/\.github/actions/run-pi' \
   "drill runs must use trusted default-branch runtime actions"
 require_text .github/workflows/agent-refresh-surface.yml 'path: \.agentify-runtime' \
@@ -136,6 +150,20 @@ require_text .github/workflows/agent-refresh-surface.yml 'git rev-list --count "
   "surface refresh workflow must push/open a PR even if Pi already committed changes"
 require_text .github/agent-prompts/refresh-surface.md 'Do NOT commit' \
   "surface refresh prompt must leave commits to the trusted workflow"
+require_text .github/workflows/agent-refresh-surface.yml 'validate-refresh-surface\.sh' \
+  "surface refresh must validate model changes before trusted commit/PR handoff"
+require_text .github/workflows/agent-refresh-surface.yml 'refresh-managed-manifest\.mjs' \
+  "surface refresh must update managed-file manifest hashes before trusted commit/PR handoff"
+require_text SETUP.md 'smoke-github-runtime\.sh' \
+  "SETUP.md must document the live GitHub smoke script"
+require_text SETUP.md 'smoke-model-github-runtime\.sh' \
+  "SETUP.md must document the model-backed GitHub smoke script"
+require_text SETUP.md 'smoke-review-github-runtime\.sh' \
+  "SETUP.md must document the model-backed review smoke script"
+require_text SETUP.md 'smoke-refresh-github-runtime\.sh' \
+  "SETUP.md must document the model-backed refresh smoke script"
+require_text SETUP.md 'smoke-retry-github-runtime\.sh' \
+  "SETUP.md must document the retry GitHub smoke script"
 
 require_text .github/workflows/agent-implement.yml 'render-workflow-context\.sh' \
   "issue implementation must inject generated project workflow context"
