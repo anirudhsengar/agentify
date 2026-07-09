@@ -5,6 +5,12 @@ agents/
 trees/
 specs/
 
+# Local Claude Code settings: per-developer only.
+# The shipped skill pack lives in .agents/skills/ (single source of
+# truth); the target-side mirror at .claude/skills/ is generated at
+# install-time by artifact-exporters, not committed here.
+.claude/
+
 # Test artifacts
 screenshots/
 videos/

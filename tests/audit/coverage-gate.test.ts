@@ -13,7 +13,7 @@ import {
 } from "../../src/core/audit/schema.ts";
 import { loadCanonicalMap, writeMapTool } from "../../src/core/audit/write-map-tool.ts";
 import { runAgentify } from "../../src/core/run-agentify.ts";
-import { saveAgentifyConfig, authPath } from "../../src/core/agentify-config.ts";
+import { authPath, defaultConfigDir, saveAgentifyConfig } from "../../src/core/agentify-config.ts";
 import { readProjectState } from "../../src/core/project-state.ts";
 import type {
   AgentRuntime,
@@ -43,6 +43,7 @@ class SilentUi implements AgentifyUi {
   info(m: string): void { this.infos.push(m); }
   error(m: string): void { this.errors.push(m); }
   async promptSelect(): Promise<string> { throw new Error("no prompt"); }
+  async promptMultiSelect(): Promise<ReadonlyArray<string>> { throw new Error("no prompt"); }
   async promptSecret(): Promise<string> { throw new Error("no prompt"); }
 }
 
@@ -63,13 +64,6 @@ function writeArtifacts(cwd: string, opts: { map?: unknown; agentsMdLines?: numb
   }
 }
 
-function makeConfiguredConfigDir(): string {
-  const configDir = tempDir("gate-config");
-  saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
-  fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
-  return configDir;
-}
-
 class ScriptedRuntime implements AgentRuntime {
   constructor(private readonly write: (cwd: string) => void) {}
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
@@ -82,33 +76,50 @@ class ScriptedRuntime implements AgentRuntime {
 }
 
 async function run(cwd: string, write: (cwd: string) => void): Promise<SilentUi> {
-  const configDir = makeConfiguredConfigDir();
-  const ui = new SilentUi();
-  await runAgentify({
-    cwd,
-    configDir,
-    ui,
-    runtime: new ScriptedRuntime(write),
-    targets: ["codex"],
-    assumeProjectKind: "brownfield",
-    githubReadinessOverride: READY_GITHUB,
-  });
-  return ui;
+  const prevHome = process.env["HOME"];
+  const tempHome = tempDir("gate-run-home");
+  process.env["HOME"] = tempHome;
+  try {
+    saveAgentifyConfig(defaultConfigDir(), { provider: "openai", thinkingLevel: "high" });
+    fs.writeFileSync(authPath(defaultConfigDir()), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
+    const ui = new SilentUi();
+    await runAgentify({
+      cwd,
+      ui,
+      runtime: new ScriptedRuntime(write),
+      targets: ["codex"],
+      mode: "brownfield",
+      githubReadinessOverride: READY_GITHUB,
+    });
+    return ui;
+  } finally {
+    if (prevHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = prevHome;
+  }
 }
 
 async function runWithState(cwd: string, write: (cwd: string) => void): Promise<{ ui: SilentUi; configDir: string }> {
-  const configDir = makeConfiguredConfigDir();
-  const ui = new SilentUi();
-  await runAgentify({
-    cwd,
-    configDir,
-    ui,
-    runtime: new ScriptedRuntime(write),
-    targets: ["codex", "claude", "pi"],
-    assumeProjectKind: "brownfield",
-    githubReadinessOverride: READY_GITHUB,
-  });
-  return { ui, configDir };
+  const prevHome = process.env["HOME"];
+  const tempHome = tempDir("gate-state-home");
+  process.env["HOME"] = tempHome;
+  try {
+    const configDir = defaultConfigDir();
+    saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
+    fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
+    const ui = new SilentUi();
+    await runAgentify({
+      cwd,
+      ui,
+      runtime: new ScriptedRuntime(write),
+      targets: ["codex", "claude", "pi"],
+      mode: "brownfield",
+      githubReadinessOverride: READY_GITHUB,
+    });
+    return { ui, configDir };
+  } finally {
+    if (prevHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = prevHome;
+  }
 }
 
 // --- assessCoverageClosure -------------------------------------------------

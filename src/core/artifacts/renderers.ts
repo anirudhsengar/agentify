@@ -7,10 +7,10 @@ import {
 } from "../audit/schema.ts";
 import { validateWorkflowSpec, type WorkflowSpec } from "../orchestrator/workflow-spec.ts";
 
-type ExpertDomainIntent = NonNullable<CodebaseMap["grade7_evidence"]>["expert_domains"][number];
+type ExpertDomainIntent = NonNullable<CodebaseMap["expert_evidence"]>["expert_domains"][number];
 type LegacyExpertIntent = ArtifactIntents["experts"][number];
-type SkillCandidateIntent = NonNullable<CodebaseMap["grade3_evidence"]>["skill_candidates"][number];
-type CustomToolCandidateIntent = NonNullable<CodebaseMap["grade3_evidence"]>["custom_tool_candidates"][number];
+type SkillCandidateIntent = NonNullable<CodebaseMap["customization_evidence"]>["skill_candidates"][number];
+type CustomToolCandidateIntent = NonNullable<CodebaseMap["customization_evidence"]>["custom_tool_candidates"][number];
 type PerAreaTemplateCandidateIntent = NonNullable<CodebaseMap["meta"]["lifecycle"]["per_area_template_candidates"]>[number];
 
 export type ManagedArtifactKind =
@@ -954,7 +954,7 @@ function renderSkillCandidate(skill: SkillCandidateIntent): RenderedArtifact {
 }
 
 function renderSkillCandidateArtifacts(map: CodebaseMap, errors: string[]): RenderedArtifact[] {
-  const skillCandidates = map.grade3_evidence?.skill_candidates ?? [];
+  const skillCandidates = map.customization_evidence?.skill_candidates ?? [];
   const existingSkills = new Set(map.meta.documentation.existing_pi_skills ?? []);
   const artifacts: RenderedArtifact[] = [];
   for (const skill of skillCandidates) {
@@ -1038,7 +1038,7 @@ function renderCustomToolCandidate(tool: CustomToolCandidateIntent): RenderedArt
 }
 
 function renderCustomToolCandidateArtifacts(map: CodebaseMap, errors: string[]): RenderedArtifact[] {
-  const customToolCandidates = map.grade3_evidence?.custom_tool_candidates ?? [];
+  const customToolCandidates = map.customization_evidence?.custom_tool_candidates ?? [];
   const existingExtensionNames = new Set(
     (map.meta.documentation.existing_pi_extensions ?? [])
       .map((entry) => normalizePath(entry).split("/").pop() ?? "")
@@ -1278,7 +1278,7 @@ export function renderBrownfieldArtifacts(map: CodebaseMap): RenderArtifactsResu
     errors,
   ));
 
-  const expertDomains = map.grade7_evidence?.expert_domains
+  const expertDomains = map.expert_evidence?.expert_domains
     ?? intents?.experts.map(legacyExpertToDomain)
     ?? [];
   for (const expert of expertDomains) {

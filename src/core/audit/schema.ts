@@ -895,7 +895,7 @@ const SecuritySurfaceSchema = Type.Object({
 // ============================================================================
 //
 // Declared before CodebaseMapSchema so the schema can reference it
-// in its top-level `grade3_evidence` field. Used by Phase 9.6 of
+// in its top-level `customization_evidence` field. Used by Phase 9.6 of
 // the builder prompt to emit .pi/extensions/*.ts and
 // .pi/skills/<name>/SKILL.md after the audit passes.
 
@@ -946,7 +946,7 @@ const SkillCandidateSchema = Type.Object({
     }),
 });
 
-export const Grade3EvidenceSchema = Type.Object({
+export const CustomizationEvidenceSchema = Type.Object({
     custom_tool_candidates: Type.Array(CustomToolCandidateSchema, {
         description:
             "Emergent list of pi.registerTool() candidates. " +
@@ -965,13 +965,13 @@ export const Grade3EvidenceSchema = Type.Object({
     }),
 });
 
-export type Grade3Evidence = Static<typeof Grade3EvidenceSchema>;
+export type CustomizationEvidence = Static<typeof CustomizationEvidenceSchema>;
 
 // ============================================================================
 // Agent-expert domains
 // ============================================================================
 //
-// Mirrors the grade3_evidence pattern. Each expert domain becomes
+// Mirrors the customization_evidence pattern. Each expert domain becomes
 // a folder under .pi/prompts/experts/<domain>/ containing
 // expertise.yaml + question.md + self-improve.md (+ optional
 // plan.md / plan_build_improve.md). Derived by the builder in
@@ -1053,7 +1053,7 @@ const ExpertDomainSchema = Type.Object({
     }),
 });
 
-export const Grade7EvidenceSchema = Type.Object({
+export const ExpertEvidenceSchema = Type.Object({
     expert_domains: Type.Array(ExpertDomainSchema, {
         description:
             "Emergent list of expert domains. Derived by the " +
@@ -1064,7 +1064,7 @@ export const Grade7EvidenceSchema = Type.Object({
     }),
 });
 
-export type Grade7Evidence = Static<typeof Grade7EvidenceSchema>;
+export type ExpertEvidence = Static<typeof ExpertEvidenceSchema>;
 
 // ============================================================================
 // Coverage matrix (the gate)
@@ -1216,7 +1216,7 @@ export const ArtifactIntentsSchema = Type.Object({
         minItems: 0,
         maxItems: 24,
         description:
-            "Legacy expert prompt material. Prefer grade7_evidence.expert_domains; " +
+            "Legacy expert prompt material. Prefer expert_evidence.expert_domains; " +
             "renderers convert either source into .pi/prompts/experts/<domain>/ " +
             "with expertise.yaml, question.md, self-improve.md, plan.md, and " +
             "plan_build_improve.md.",
@@ -1268,7 +1268,7 @@ export const CodebaseMapSchema = Type.Object({
     // package.json scripts). Used by Phase 9.6 to emit
     // .pi/extensions/*.ts and .pi/skills/<name>/SKILL.md. v1
     // maps without this field continue to parse.
-    grade3_evidence: Type.Optional(Grade3EvidenceSchema),
+    customization_evidence: Type.Optional(CustomizationEvidenceSchema),
     // Agent-expert domains. Emergent list of
     // expert domains derived by the LLM from the per-feature
     // reports (Phase 2) and D3.stable_types. Used by Phase
@@ -1276,7 +1276,7 @@ export const CodebaseMapSchema = Type.Object({
     // question.md, self-improve.md, [plan.md],
     // [plan_build_improve.md]}. v1 maps without this field
     // continue to parse.
-    grade7_evidence: Type.Optional(Grade7EvidenceSchema),
+    expert_evidence: Type.Optional(ExpertEvidenceSchema),
     // Structured output contract for all user-facing generated
     // intelligence. The LLM records intent here; TypeScript renderers
     // produce files later, after coverage closes and before the
@@ -1323,11 +1323,11 @@ export const PartialCodebaseMapSchema = Type.Object({
     open_questions: Type.Optional(OpenQuestionsSchema),
     exploration_log: Type.Optional(ExplorationLogSchema),
     // Also optional on the partial schema so
-    // write_map_delta can update grade3_evidence incrementally.
-    grade3_evidence: Type.Optional(Grade3EvidenceSchema),
+    // write_map_delta can update customization_evidence incrementally.
+    customization_evidence: Type.Optional(CustomizationEvidenceSchema),
     // Also optional on the partial schema
-    // so write_map_delta can update grade7_evidence incrementally.
-    grade7_evidence: Type.Optional(Grade7EvidenceSchema),
+    // so write_map_delta can update expert_evidence incrementally.
+    expert_evidence: Type.Optional(ExpertEvidenceSchema),
     artifact_intents: Type.Optional(ArtifactIntentsSchema),
 });
 

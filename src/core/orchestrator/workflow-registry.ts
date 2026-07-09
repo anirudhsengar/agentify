@@ -9,7 +9,7 @@
 // JSON is intentionally a stand-in for YAML — JSON is a strict
 // subset of YAML, no parser dep is required, and TypeBox validation
 // is uniform across `run_workflow` and `compose_workflow`. The plan
-// calls out JSON as the storage format (`docs/PLAN-class3-grade2.md`).
+// calls out JSON as the storage format.
 //
 // Every spec on disk is validated at parse time. Invalid specs are
 // logged via `errors[]` (mirroring SubagentRegistry) and excluded

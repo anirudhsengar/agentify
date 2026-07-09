@@ -1,8 +1,7 @@
 // auto-improve.ts — the orchestrator-side LEARN loop.
 //
 // Implements the "auto" half of ACT -> LEARN -> REUSE for
-// orchestrator-spawned sub-agents (per `docs/PLAN-class4.md` §
-// "Class 4 G1 — Auto-LEARN" and `principles/09-agent-experts.md`).
+// orchestrator-spawned sub-agents. See `principles/09-agent-experts.md`.
 //
 // On every `agent_end` event the OrchestratorHost calls
 // `scheduler.onAgentEnd(agentId)`. The scheduler:
@@ -27,7 +26,6 @@
 // (Class 4 G3).
 //
 // Source of truth:
-//   - docs/PLAN-class4.md § Class 4 G1
 //   - principles/09-agent-experts.md
 //   - principles/15-anti-patterns.md § "Agent Expert Anti-Patterns"
 //     ("self-improve invents facts", "self-improve never runs",

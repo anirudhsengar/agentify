@@ -21,6 +21,7 @@ import * as http from "node:http";
 import * as os from "node:os";
 import * as path from "node:path";
 import { startDaemon } from "../../src/core/webhook/index.ts";
+import { defaultConfigDir } from "../../src/core/agentify-config.ts";
 import { aiwPaths } from "../../src/core/aiw/paths.ts";
 import { aiwStatePaths } from "../../src/core/aiw/index.ts";
 import type { Trigger } from "../../src/core/webhook/state.ts";
@@ -100,7 +101,6 @@ function githubSignature(secret: string, body: string): string {
 }
 
 async function testEndToEnd(): Promise<void> {
-  const configDir = tempDir("aiw-e2e-cfg");
   const projectDir = tempDir("aiw-e2e-proj");
   fs.mkdirSync(path.join(projectDir, ".agentify"), { recursive: true });
   const trigger = makeGithubChoreZteTrigger();
@@ -111,10 +111,10 @@ async function testEndToEnd(): Promise<void> {
   );
   process.env["GH_CHORE_SECRET"] = "supersecret";
   const prevHome = process.env["HOME"];
-  process.env["HOME"] = tempDir("aiw-e2e-home");
+  const tempHome = tempDir("aiw-e2e-home");
+  process.env["HOME"] = tempHome;
 
   const daemon = await startDaemon({
-    configDir,
     cwd: projectDir,
     port: 0,
     dryRun: true, // dry-run so the per-phase LLM calls are skipped
@@ -150,12 +150,12 @@ async function testEndToEnd(): Promise<void> {
 
     // Wait for the workflow to complete and KPIs to update.
     await waitFor(() => {
-      const kpisFile = aiwPaths(configDir).kpisFile;
+      const kpisFile = aiwPaths(defaultConfigDir()).kpisFile;
       return fs.existsSync(kpisFile);
     }, 10_000);
 
     // Verify the AIW state.json shows the workflow completed.
-    const statePaths = aiwStatePaths(configDir, parsed.aiw_id) as AiwPaths;
+    const statePaths = aiwStatePaths(defaultConfigDir(), parsed.aiw_id) as AiwPaths;
     await waitFor(() => {
       const stateFile = statePaths.stateFile;
       if (!fs.existsSync(stateFile)) return false;
@@ -196,7 +196,6 @@ async function testEndToEnd(): Promise<void> {
 async function testSinglePromptTriggerStillWorks(): Promise<void> {
   // Backward-compat: a trigger WITHOUT aiw_workflow still runs the
   // single-prompt path (Class 2 Grade 1 behavior).
-  const configDir = tempDir("aiw-e2e-singleton");
   const projectDir = tempDir("aiw-e2e-proj-single");
   fs.mkdirSync(path.join(projectDir, ".agentify"), { recursive: true });
   const trigger: Trigger = {
@@ -223,7 +222,6 @@ async function testSinglePromptTriggerStillWorks(): Promise<void> {
   process.env["HOME"] = tempDir("aiw-e2e-home-single");
 
   const daemon = await startDaemon({
-    configDir,
     cwd: projectDir,
     port: 0,
     dryRun: true, // dry-run so no LLM is required

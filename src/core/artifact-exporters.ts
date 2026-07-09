@@ -1,6 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { getAgentById, type AgentId } from "./agent-registry.ts";
 import type { AgentifyTarget, ArtifactExportResult, ArtifactWrite } from "./types.ts";
+import { shippedSkillsSourceDir } from "./shipped-paths.ts";
 
 const MD_MARKER = "<!-- agentify:managed -->";
 const TOML_MARKER = "# agentify:managed";
@@ -17,7 +19,17 @@ const RESERVED_AGENT_FILES = new Set([
 export interface ArtifactExporterOptions {
   cwd: string;
   packageRoot: string;
+  /** Premium harness targets with full exporters (Codex / Claude / Pi). */
   targets: ReadonlyArray<AgentifyTarget>;
+  /**
+   * Non-premium agent IDs from the registry (Cursor / OpenCode /
+   * Windsurf / etc.). Each gets only the generic skill-pack writer —
+   * no feature-agent exports, no `CLAUDE.md`. The skillsDir for each
+   * is looked up in the agent registry; universal agents (sharing
+   * `.agents/skills` with Codex) are deduplicated against the premium
+   * exporters.
+   */
+  additionalAgents?: ReadonlyArray<string>;
 }
 
 interface AgentFile {
@@ -64,7 +76,7 @@ function copyManagedFile(source: string, destination: string, marker: string): A
 }
 
 function listSkillDirs(packageRoot: string): string[] {
-  const skillsDir = path.join(packageRoot, ".agents", "skills");
+  const skillsDir = shippedSkillsSourceDir(packageRoot);
   if (!fs.existsSync(skillsDir)) return [];
   return fs.readdirSync(skillsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
@@ -100,6 +112,22 @@ function exportSkills(
     const name = path.basename(sourceDir);
     copyDirManaged(sourceDir, path.join(destinationRoot, name), writes);
   }
+}
+
+/**
+ * Generic skill-pack writer: copies `packaged/skills/<name>` into
+ * `<cwd>/<skillsDir>/<name>` for any registry entry. Used for all
+ * non-premium agents and for any additional skillsDirs the user
+ * selected via the picker. Does not write feature-agent files or
+ * `CLAUDE.md` — only the skill pack itself.
+ */
+function exportSkillPackToDir(
+  cwd: string,
+  packageRoot: string,
+  skillsDir: string,
+  writes: ArtifactWrite[],
+): void {
+  exportSkills(packageRoot, path.join(cwd, skillsDir), writes);
 }
 
 function parseFrontmatter(content: string, fallbackName: string): AgentFile {
@@ -205,17 +233,56 @@ function exportPi(cwd: string, packageRoot: string): ArtifactExportResult {
   return { target: "pi", writes };
 }
 
+/**
+ * Drives the premium exporters (Codex / Claude / Pi) and the generic
+ * skill-pack writer (for non-premium agents and any dedup'd skillsDirs).
+ *
+ * Tracks which project-relative skillsDirs the premium exporters have
+ * already written to so the generic writer doesn't double-copy. Claude
+ * Code's `.claude/skills` and Pi's `.pi/skills` are agent-specific and
+ * never collide with other agents; Codex's `.agents/skills` collides
+ * with every universal agent (Cursor / OpenCode / etc.) — only one
+ * copy is written per run.
+ */
 export function exportAgenticSurface(options: ArtifactExporterOptions): ArtifactExportResult[] {
-  return options.targets.map((target) => {
+  const results: ArtifactExportResult[] = [];
+  const writtenDirs = new Set<string>();
+
+  // Premium exporters — each knows its own skillsDir.
+  for (const target of options.targets) {
     switch (target) {
       case "codex":
-        return exportCodex(options.cwd, options.packageRoot);
+        results.push(exportCodex(options.cwd, options.packageRoot));
+        writtenDirs.add(".agents/skills");
+        break;
       case "claude":
-        return exportClaude(options.cwd, options.packageRoot);
+        results.push(exportClaude(options.cwd, options.packageRoot));
+        writtenDirs.add(".claude/skills");
+        break;
       case "pi":
-        return exportPi(options.cwd, options.packageRoot);
+        results.push(exportPi(options.cwd, options.packageRoot));
+        writtenDirs.add(".pi/skills");
+        break;
     }
-  });
+  }
+
+  // Non-premium agents via the generic writer. We iterate the registry
+  // so every supported AgentId is handled; only the agents the user
+  // picked (via `additionalAgents`) actually write.
+  const additional = options.additionalAgents ?? [];
+  if (additional.length > 0) {
+    for (const id of additional) {
+      const agent = getAgentById(id as AgentId);
+      if (!agent) continue; // Unknown IDs are silently skipped.
+      if (writtenDirs.has(agent.skillsDir)) continue; // Already written.
+      const writes: ArtifactWrite[] = [];
+      exportSkillPackToDir(options.cwd, options.packageRoot, agent.skillsDir, writes);
+      writtenDirs.add(agent.skillsDir);
+      results.push({ target: id, writes });
+    }
+  }
+
+  return results;
 }
 
 export const AGENTIFY_MANAGED_MARKERS = {

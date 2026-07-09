@@ -23,7 +23,8 @@ is exactly one public command.
    validated codebase map ([ADR 0003](adr/0003-structured-output-only.md),
    [ADR 0009](adr/0009-machinery-shipped-intelligence-generated.md)).
 2. **A shipped skill pack** — the generic build chain under
-   `.agents/skills/` ([ADR 0002](adr/0002-skills-as-shipped-machinery.md)).
+   `packaged/skills/` ([ADR 0002](adr/0002-skills-as-shipped-machinery.md),
+   [ADR 0006](adr/0006-dual-skill-discovery.md) for the layout).
 3. **A GitHub runtime scaffold** — stamped into the target repo
    ([ADR 0007](adr/0007-pi-as-the-ci-coding-harness.md)).
 

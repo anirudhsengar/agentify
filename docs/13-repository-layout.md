@@ -9,6 +9,8 @@ agentify/
 │       ├── agentify-app.ts      Public app seam: attach / recover / bootstrap
 │       ├── run-agentify.ts      Bootstrap orchestration (brownfield + greenfield)
 │       ├── agentify-config.ts   Config + auth under ~/.agentify (0600)
+│       ├── agent-registry.ts    Coding-agent registry (~73 supported agents)
+│       ├── target-picker.ts     Interactive multi-select picker
 │       ├── provider-auth.ts     Provider list + env-key resolution
 │       ├── pi-sdk-runtime.ts    In-process Pi session (createAgentSession)
 │       ├── project-classifier.ts  brownfield / greenfield / ambiguous
@@ -35,8 +37,16 @@ agentify/
 │       ├── aiw/                 Internal async workflow runtime (library code)
 │       ├── webhook/             Internal trigger runtime (library code; ADR 0013)
 │       └── coms/                Internal agent IPC (library code)
-├── .agents/skills/             Shipped skill pack (single source of truth)
-├── .claude/skills/             Mirror of .agents/skills (symlinks; ADR 0006)
+├── packaged/skills/            Shipped skill pack (single source of truth).
+│                                Lives outside .agents/ or .claude/ at the
+│                                repo root by design — neither dotfolder
+│                                is present here — so the maintainer's
+│                                coding agent (regardless of harness) does
+│                                NOT auto-load every shipped skill on every
+│                                session (ADR 0006). The installer lays
+│                                down the dual `.agents/skills/` and
+│                                `.claude/skills/` layout inside each
+│                                target repo at install time.
 ├── scaffold/                   Stampable GitHub Actions runtime
 │   └── .github/                workflows, actions, scripts, agent-prompts
 ├── docs/                       This documentation tree + ADRs
@@ -56,7 +66,14 @@ agentify/
 
 ## Shipped vs generated
 
-Shipped machinery (same for every repo): `.agents/skills/`, `scaffold/`.
+Shipped machinery (same for every repo): `packaged/skills/` (the
+shipped skill pack), `scaffold/` (stampable CI runtime).
+The maintainer-side repo deliberately has no `.agents/` or `.claude/`
+directory at its root, so no coding harness auto-loads the shipped
+skill pack into the maintainer's development session. The dual-skill-
+discovery mirror (`.agents/skills/` for Codex/Pi + `.claude/skills/`
+for Claude Code) is generated into each target repo by the installer
+(`artifact-exporters.ts`).
 Generated intelligence (per repo, from the audit): `AGENTS.md`,
 `specs/README.md`, `ai_docs/README.md`, `.pi/agents/*.md`,
 `.pi/workflows/*.json`, expert directories, feedback-loop storage, and

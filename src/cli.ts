@@ -10,6 +10,7 @@ import {
   printSubcommandHelp,
   type SubcommandContext,
 } from "./core/cli-commands.ts";
+import { isKnownAgent } from "./core/agent-registry.ts";
 import type { AgentifyUi } from "./core/types.ts";
 
 class ConsoleUi implements AgentifyUi {
@@ -53,6 +54,51 @@ class ConsoleUi implements AgentifyUi {
         const byValue = choices.find((choice) => choice.value === answer);
         if (byValue) return byValue.value;
         output.write(`Enter 1-${choices.length}.\n`);
+      }
+    } finally {
+      rl.close();
+    }
+  }
+
+  async promptMultiSelect(
+    message: string,
+    choices: ReadonlyArray<{ label: string; value: string; hint?: string }>,
+  ): Promise<ReadonlyArray<string>> {
+    this.ensureInteractive(message);
+    const rl = readline.createInterface({ input, output });
+    try {
+      output.write(`${message}\n`);
+      choices.forEach((choice, index) => {
+        const hint = choice.hint ? `  → ${choice.hint}` : "";
+        output.write(`  ${index + 1}. ${choice.label}${hint}\n`);
+      });
+      output.write("(comma-separated numbers, 'all', or 'none')\n");
+      while (true) {
+        const answer = (await rl.question("> ")).trim().toLowerCase();
+        if (answer === "all") return choices.map((choice) => choice.value);
+        if (answer === "none") return [];
+        const parts = answer.split(",").map((part) => part.trim()).filter(Boolean);
+        if (parts.length === 0) {
+          output.write(`Enter 1-${choices.length} (comma-separated), 'all', or 'none'.\n`);
+          continue;
+        }
+        const indices = parts.map((part) => Number.parseInt(part, 10));
+        const allNumeric = indices.every(
+          (idx) => Number.isInteger(idx) && idx >= 1 && idx <= choices.length,
+        );
+        if (!allNumeric) {
+          output.write(`Enter 1-${choices.length} (comma-separated), 'all', or 'none'.\n`);
+          continue;
+        }
+        const seen = new Set<string>();
+        const result: string[] = [];
+        for (const idx of indices) {
+          const value = choices[idx - 1].value;
+          if (seen.has(value)) continue;
+          seen.add(value);
+          result.push(value);
+        }
+        return result;
       }
     } finally {
       rl.close();
@@ -120,9 +166,15 @@ Options:
   -v, --version              Print the version and exit.
   --mode <kind>              Skip project-kind classification for ambiguous
                              repos. <kind> is 'brownfield' or 'greenfield'.
+  --targets <csv>            Skip the agent-target picker. Comma-separated
+                             agent IDs (e.g. 'claude-code,codex,cursor').
+                             Skips the picker entirely for non-interactive
+                             use; persisted targets are NOT respected
+                             (ADR 0018).
 
-Run agentify in the current repository. Existing repos are audited and exported for
-Codex, Claude Code, and Pi. Empty/new repos start a local-first greenfield chat.
+Run agentify in the current repository. Existing repos are audited and exported to
+the coding agents you select — by default Claude Code, Codex, and Pi, prompted
+interactively. Empty/new repos start a local-first greenfield chat.
 
 agentify exposes one public runtime entrypoint: \`agentify\` with no positional
 arguments. Bootstrap, attach, and recovery all start there. After bootstrap, work
@@ -176,12 +228,44 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     argv.splice(modeIndex, 2);
   }
 
+  // --targets <csv>: comma-separated list of agent IDs. Skips the
+  // interactive picker. Validated against the agent registry — unknown
+  // IDs throw with a clear message naming the bad entries.
+  let targetsOverride: ReadonlyArray<string> | undefined;
+  const targetsIndex = argv.indexOf("--targets");
+  if (targetsIndex >= 0) {
+    const raw = argv[targetsIndex + 1];
+    if (raw === undefined) {
+      throw new Error("--targets requires a comma-separated list of agent IDs.");
+    }
+    const parsed = raw.split(",").map((part) => part.trim()).filter(Boolean);
+    if (parsed.length === 0) {
+      throw new Error("--targets must include at least one agent ID.");
+    }
+    const seen = new Set<string>();
+    const deduped: string[] = [];
+    for (const id of parsed) {
+      if (!isKnownAgent(id)) {
+        throw new Error(
+          `--targets includes unknown agent '${id}'. ` +
+            `Run \`agentify\` with no flags to see the supported list.`,
+        );
+      }
+      if (seen.has(id)) continue;
+      seen.add(id);
+      deduped.push(id);
+    }
+    targetsOverride = deduped;
+    argv.splice(targetsIndex, 2);
+  }
+
   await runAgentifyApp({
     args: argv,
     cwd: process.cwd(),
     ui,
     runtime: new PiSdkRuntime(),
     mode,
+    targetsOverride,
   });
 }
 

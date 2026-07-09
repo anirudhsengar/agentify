@@ -129,5 +129,5 @@ ambiguous repos. `agentify login --provider <name> --key <key>` and
 
 `prepublishOnly` runs `npm run typecheck && npm test`. The published
 tarball is curated by the `files` field in `package.json`
-(`bin`, `src`, `scaffold`, `.agents`, `.claude`, `skills-lock.json`,
+(`bin`, `src`, `scaffold`, `.agents`, `skills-lock.json`,
 `README.md`, `LICENSE`, `AGENTS.md`). Tests and docs are not published.

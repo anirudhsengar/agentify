@@ -8,7 +8,14 @@ import {
   hasProviderEnvironmentAuth,
   isAgentifyProvider,
 } from "./provider-auth.ts";
-import type { AgentifyConfig, AgentifyProvider, AgentifyUi, ModelRole, ModelSlot } from "./types.ts";
+import type {
+  AgentifyConfig,
+  AgentifyProvider,
+  AgentifyTarget,
+  AgentifyUi,
+  ModelRole,
+  ModelSlot,
+} from "./types.ts";
 
 export function defaultConfigDir(): string {
   return path.join(os.homedir(), ".agentify");
@@ -58,6 +65,25 @@ function readModelsByRole(
   return { primary, explorer, scoring };
 }
 
+/**
+ * Pure read of the optional `targets` field — only the three premium
+ * harness IDs are valid (`codex` / `claude` / `pi`). Unknown entries are
+ * silently dropped (forward-compat: if a hand-written config has stale
+ * values, we ignore them rather than crash). Empty arrays are preserved
+ * as `undefined` to match the type's optional semantics.
+ */
+function readTargets(raw: unknown): ReadonlyArray<AgentifyTarget> | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const valid: AgentifyTarget[] = [];
+  for (const entry of raw) {
+    if (entry === "codex" || entry === "claude" || entry === "pi") {
+      valid.push(entry);
+    }
+  }
+  if (valid.length === 0) return undefined;
+  return valid;
+}
+
 export function loadAgentifyConfig(configDir: string): AgentifyConfig {
   const raw = readJsonObject(configPath(configDir));
   const provider = typeof raw.provider === "string" && isAgentifyProvider(raw.provider)
@@ -70,6 +96,7 @@ export function loadAgentifyConfig(configDir: string): AgentifyConfig {
       ? raw.thinkingLevel as AgentifyConfig["thinkingLevel"]
       : undefined,
     modelsByRole: readModelsByRole(raw),
+    targets: readTargets(raw.targets),
   };
 }
 

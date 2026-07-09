@@ -11,8 +11,8 @@ not.
 
 ## Decision
 
-- **Shipped machinery**: the skill pack (`.agents/skills/`) and the CI
-  scaffold (`scaffold/`). Versioned with the package.
+- **Shipped machinery**: the skill pack (`packaged/skills/`) and the
+  CI scaffold (`scaffold/`). Versioned with the package.
 - **Generated intelligence**: `AGENTS.md`, `specs/README.md`,
   `ai_docs/README.md`, feature agents (`.pi/agents/<feature>.md`),
   experts, and conditional docs. Emitted by the audit from the

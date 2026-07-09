@@ -23,7 +23,6 @@ import {
 } from "../aiw/worker.ts";
 
 export interface DaemonOptions {
-  configDir?: string;
   cwd: string;
   host?: string;
   port?: number;
@@ -43,7 +42,7 @@ export interface RunningDaemon {
 }
 
 export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon> {
-  const configDir = options.configDir ?? defaultConfigDir();
+  const configDir = defaultConfigDir();
   fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
 
   const pidFile = path.join(configDir, "webhook.pid");

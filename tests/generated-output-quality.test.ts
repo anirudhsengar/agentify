@@ -611,7 +611,7 @@ function testGeneratedSkillsFeedbackDocsAndPitfallsAreOperational(): void {
         feature: { mandatory: ["npm test -- search", "npm run typecheck"], optional: [] },
       },
     },
-    grade3_evidence: {
+    customization_evidence: {
       skill_candidates: [
         {
           name: "reseed-search",
@@ -788,7 +788,7 @@ function testExpertSurfaceCarriesActionableDomainKnowledge(): void {
       project_type: "billing-service",
       domain_hypothesis: "A recurring billing service with high-stakes payment retries.",
     },
-    grade7_evidence: {
+    expert_evidence: {
       expert_domains: [
         {
           domain: "billing",
@@ -863,7 +863,7 @@ function testExpertPlanPromptForcesCitedRiskAwarePlanning(): void {
       project_type: "billing-service",
       domain_hypothesis: "A recurring billing service where planning must preserve retry and capture invariants.",
     },
-    grade7_evidence: {
+    expert_evidence: {
       expert_domains: [
         {
           domain: "billing",

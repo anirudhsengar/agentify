@@ -5,6 +5,11 @@ export type { AgentifyProvider } from "./provider-auth.ts";
 
 export type AgentifyTarget = "codex" | "claude" | "pi";
 
+/** Type guard: true iff `value` is one of the three premium harness targets. */
+export function isAgentifyTarget(value: string): value is AgentifyTarget {
+  return value === "codex" || value === "claude" || value === "pi";
+}
+
 export type ProjectKind = "brownfield" | "greenfield" | "ambiguous";
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -34,6 +39,13 @@ export interface AgentifyConfig {
    * user choice.
    */
   modelsByRole?: Partial<Record<ModelRole, ModelSlot>>;
+  /**
+   * Optional record of previously-saved premium target selections.
+   * Loaded for backward compatibility with anyone who hand-wrote a
+   * `targets` field, but the interactive picker does NOT write this
+   * field — every fresh run re-prompts the user (see ADR 0018).
+   */
+  targets?: ReadonlyArray<AgentifyTarget>;
 }
 
 export interface AgentifyUi {
@@ -44,6 +56,10 @@ export interface AgentifyUi {
     message: string,
     choices: ReadonlyArray<{ label: string; value: string }>,
   ): Promise<string>;
+  promptMultiSelect(
+    message: string,
+    choices: ReadonlyArray<{ label: string; value: string; hint?: string }>,
+  ): Promise<ReadonlyArray<string>>;
   promptSecret(message: string): Promise<string>;
 }
 
@@ -59,7 +75,16 @@ export interface RunAgentifyOptions {
   cwd: string;
   ui: AgentifyUi;
   runtime: AgentRuntime;
+  /** Premium harness targets with full exporters (Codex / Claude / Pi). */
   targets: ReadonlyArray<AgentifyTarget>;
+  /**
+   * Non-premium agents (Cursor / OpenCode / Windsurf / etc.) selected
+   * via the interactive picker. These get only the generic skill-pack
+   * writer — no feature-agent exports, no `CLAUDE.md`. Empty by
+   * default; the picker populates it when the user picks non-premium
+   * agents.
+   */
+  additionalAgents?: ReadonlyArray<string>;
   configOverride?: AgentifyConfig;
   args?: string;
   signal?: AbortSignal;
@@ -142,6 +167,13 @@ export interface ArtifactWrite {
 }
 
 export interface ArtifactExportResult {
-  target: AgentifyTarget;
+  /**
+   * The agent identifier this result is for. Premium exporters
+   * (`codex` / `claude` / `pi`) set this to the matching
+   * `AgentifyTarget`; the generic skill-pack writer sets it to the
+   * registry `AgentId` (e.g. `cursor`, `opencode`). Used only for
+   * metadata / status messages — never for dispatch.
+   */
+  target: AgentifyTarget | string;
   writes: ArtifactWrite[];
 }

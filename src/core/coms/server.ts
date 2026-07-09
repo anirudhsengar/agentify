@@ -27,7 +27,6 @@
 //   - 'error'  — internal error
 //
 // Source of truth:
-//   - docs/PLAN-class4.md § Class 4 G2
 //   - LESSONS/PI_MASTERY.md § 11.7
 //   - principles/08-multi-agent.md § "Pattern 3"
 //   - principles/15-anti-patterns.md § "Multi-Agent Anti-Patterns"

@@ -71,10 +71,13 @@ agentify
 ```
 
 On first run, the CLI asks for provider/auth configuration and stores it
-under `~/.agentify/`. The audit writes codebase-specific intelligence to
-the current repository, exports supported harness surfaces, installs the
-GitHub runtime scaffold, and reports GitHub readiness plus next-step
-setup guidance. Later runs attach to an initialized repo, report last
+under `~/.agentify/`. After auth, the CLI prompts you to pick which
+coding agent(s) you're targeting — Claude Code, Codex, Pi, and ~70 others
+in the registry (Cursor, OpenCode, Windsurf, GitHub Copilot, Cline,
+Continue, Roo Code, Kilo Code, …). The audit writes codebase-specific
+intelligence to the current repository, exports harness surfaces only
+to the selected targets, installs the GitHub runtime scaffold, and
+reports GitHub readiness plus next-step setup guidance. Later runs attach to an initialized repo, report last
 run status, installed surface counts (feature agents, workflows, experts,
 and repo skills), the latest log path, and recover incomplete setup when
 needed. User-owned files are reported as conflicts and left intact.
@@ -114,7 +117,7 @@ On a successful **brownfield** audit, agentify writes into your repo:
 | `.pi/prompts/`, `.pi/workflows/`, `.pi/extensions/`, `.pi/skills/` | Deterministically rendered prompt templates, orchestrator workflow specs that are summarized into GitHub implement prompts, expert directories summarized into implement/review prompts, extension candidates, and repo-specific skill candidates when warranted |
 | `app_review/`, `app_docs/`, `app_fix_reports/`, `.pi/conditional_docs.md` | Feedback-loop storage used by the shipped review, document, fix, and implementation skills |
 | `.pi/agentify/codebase_map.json`, `.pi/agentify/manifest.json` | The validated audit map and managed-file manifest |
-| `.agents/skills/`, `.claude/`, `.codex/`, `CLAUDE.md` | Harness exports |
+| `.agents/skills/`, `.claude/`, `.codex/`, `CLAUDE.md` | Harness exports — only to the targets you picked in the picker (or via `--targets`) |
 | `SETUP.md`, `.github/workflows/*`, `.github/scripts/*` | GitHub runtime scaffold |
 
 On a successful **greenfield** formation, agentify writes
@@ -144,9 +147,16 @@ gaps and rolls back generated surface writes.
 
 ```bash
 # Runtime entry — the only public command that runs the audit/attach loop.
-agentify [--mode brownfield|greenfield]
+agentify [--mode brownfield|greenfield] [--targets <agent-ids>]
 agentify --help
 agentify --version
+
+# Skip the interactive agent-target picker (ADR 0018). Comma-separated
+# agent IDs from the registry. Use `agentify` with no flags to see the
+# full list. Persisted targets are NOT respected — every fresh run
+# re-prompts unless `--targets` is passed.
+agentify --targets claude-code,codex
+agentify --targets claude-code,codex,cursor,opencode
 
 # Config-utility subcommands — manage ~/.agentify/{config,auth}.json only;
 # they never invoke the runtime.
@@ -218,10 +228,15 @@ context plus the orchestration-planner prompt; it does not expose the internal
 OrchestratorHost as a public command or hosted control plane. See
 [ADR 0015](docs/adr/0015-public-orchestration-plane.md).
 
-The shipped skill pack lives in `.agents/skills/` and is mirrored to
-`.claude/skills/` for harnesses that support skills. Those skills are
-generic machinery; the audit generates only codebase-specific
-intelligence.
+The shipped skill pack lives in `packaged/skills/` — outside
+`.agents/` or `.claude/` at the repo root by design. The installer
+copies it into each **target** repository at the harness's expected
+locations (`.agents/skills/` for Codex/Pi, `.claude/skills/` for
+Claude Code, plus `.codex/agents/`, `CLAUDE.md`, etc. as configured).
+Keeping the source out of dotfolders means the maintainer's coding
+agent — regardless of which harness they run — does not auto-load
+the shipped build chain on every session. Those skills are generic
+machinery; the audit generates only codebase-specific intelligence.
 
 ## Repository Layout
 
@@ -234,8 +249,11 @@ agentify/
 ├── src/core/orchestrator/          # internal control-plane runtime
 ├── src/core/aiw/                   # internal workflow runtime
 ├── src/core/webhook/               # internal trigger/runtime adapter
-├── .agents/skills/                 # shipped skill pack
-├── .claude/skills/                 # Claude Code mirror
+├── packaged/skills/                # shipped skill pack (single source of
+│                                  # truth; lives outside .agents/ or
+│                                  # .claude/ so no coding harness
+│                                  # auto-loads it on the maintainer's
+│                                  # dev session — see ADR 0006)
 ├── scaffold/                       # stampable CI runtime
 └── docs/                           # architecture docs and ADRs
 ```

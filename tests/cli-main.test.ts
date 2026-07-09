@@ -39,6 +39,10 @@ class TestUi implements AgentifyUi {
     throw new Error("promptSelect should not be called in this test");
   }
 
+  async promptMultiSelect(): Promise<ReadonlyArray<string>> {
+    throw new Error("promptMultiSelect should not be called in this test");
+  }
+
   async promptSecret(): Promise<string> {
     throw new Error("promptSecret should not be called in this test");
   }

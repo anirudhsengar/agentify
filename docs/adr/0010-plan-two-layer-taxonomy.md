@@ -20,5 +20,5 @@ Two distinct layers, two distinct commands:
 
 ## Consequences
 
-- The contract test asserts no `.agents/skills/plan` directory exists.
+- The contract test asserts no `packaged/skills/plan` directory exists.
 - `/spec` is a shipped skill; the audit does not regenerate it.

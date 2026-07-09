@@ -583,7 +583,11 @@ function readFinalAuditState(cwd: string): FinalAuditState {
   };
 }
 
-function buildBrownfieldUserPrompt(targets: ReadonlyArray<AgentifyTarget>): string {
+function buildBrownfieldUserPrompt(
+  targets: ReadonlyArray<AgentifyTarget>,
+  additionalAgents?: ReadonlyArray<string>,
+): string {
+  const allTargets = [...targets, ...(additionalAgents ?? [])];
   return [
     "Audit this existing codebase and bootstrap its agentic surface.",
     "Explore the codebase, fill the structured codebase map via write_map, and close every coverage area before emitting artifact_intents.",
@@ -591,7 +595,7 @@ function buildBrownfieldUserPrompt(targets: ReadonlyArray<AgentifyTarget>): stri
     "Do not write AGENTS.md, specs/README.md, ai_docs/README.md, .pi/agents, .pi/prompts, .pi/extensions, scaffold, or harness exports directly.",
     "Describe codebase-emergent intelligence in artifact_intents: agent guide sections, always-on docs, feature specialists, prompt templates, expert prompts, and extension candidates when warranted.",
     "Do not emit generic build-chain primitives; those ship as agentify skills and will be exported separately.",
-    `The standalone CLI will export the audited intelligence for these harness targets after the audit: ${targets.join(", ")}.`,
+    `The standalone CLI will export the audited intelligence for these harness targets after the audit: ${allTargets.join(", ")}.`,
     "Skip user-owned files. Honest sparseness beats padding.",
   ].join(" ");
 }
@@ -685,7 +689,7 @@ async function runBrownfieldAudit(
       configDir: defaultConfigDir(),
       config,
       systemPrompt: promptContent,
-      userPrompt: buildBrownfieldUserPrompt(options.targets),
+      userPrompt: buildBrownfieldUserPrompt(options.targets, options.additionalAgents),
       tools: BUILDER_TOOL_ALLOWLIST,
       repoJail: true,
       protectedPaths,
@@ -790,6 +794,7 @@ async function runBrownfieldAudit(
             cwd: stagingRoot,
             packageRoot: packageRoot(),
             targets: options.targets,
+            additionalAgents: options.additionalAgents,
           });
           for (const result of exportResults) {
             addWriteMetadata(stagingRoot, result.writes, `harness-export:${result.target}`, metadata);

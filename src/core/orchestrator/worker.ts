@@ -14,8 +14,6 @@
 // the defense hook (Layer E domain lock in `src/core/audit/defense-hook.ts`).
 //
 // Source of truth:
-//   - docs/PLAN-class4.md § Class 4 G4 (Multi-process orchestrator
-//     workers)
 //   - principles/08-multi-agent.md § "Domain Locking"
 //
 // The worker uses the ComsPeer (Stage 2) for inter-process

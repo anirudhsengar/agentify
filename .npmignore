@@ -1,6 +1,6 @@
 # Keep local exploration artifacts out of the published CLI package.
 agentify-explained.html
-.agents/skills/**/NOTES.md
+packaged/skills/**/NOTES.md
 
 # Preserve the important local/runtime exclusions from .gitignore.
 node_modules/

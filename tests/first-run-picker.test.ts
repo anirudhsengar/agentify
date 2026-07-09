@@ -43,6 +43,10 @@ class TestUi implements AgentifyUi {
     return this.selectAnswers.shift() as string;
   }
 
+  async promptMultiSelect(): Promise<ReadonlyArray<string>> {
+    throw new Error("promptMultiSelect should not be called in this test");
+  }
+
   async promptSecret(_message: string): Promise<string> {
     if (this.secretAnswers.length === 0) {
       throw new Error("promptSecret called with no answer queued");

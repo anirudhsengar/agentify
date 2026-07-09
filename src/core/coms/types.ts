@@ -1,7 +1,6 @@
 // coms/types.ts — canonical types for the Pi-to-Pi peer mesh.
 //
 // Source of truth:
-//   - docs/PLAN-class4.md § Class 4 G2 (Local peer mesh)
 //   - principles/08-multi-agent.md § "Pattern 3 — Pi-to-Pi Peer Mesh"
 //   - LESSONS/PI_MASTERY.md § 11 (the canonical 1598-line `coms.ts`)
 //   - principles/15-anti-patterns.md § "Multi-Agent Anti-Patterns"

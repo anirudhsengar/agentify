@@ -20,9 +20,10 @@ import { makeDefenseHook } from "./audit/defense-hook.ts";
 import { createWriteGreenfieldArtifactsTool } from "./greenfield-artifacts.ts";
 import { createSpawnExplorerTool } from "./audit/spawn-explorer-tool.ts";
 import { resolveModelOrThrow, selectModelForRole } from "./models/resolver.ts";
+import { shippedSkillsSourceDir } from "./shipped-paths.ts";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SHIPPED_SKILLS_DIR = path.join(PACKAGE_ROOT, ".agents", "skills");
+const SHIPPED_SKILLS_DIR = shippedSkillsSourceDir(PACKAGE_ROOT);
 
 type UsageLike = {
   cost?: { total?: number };

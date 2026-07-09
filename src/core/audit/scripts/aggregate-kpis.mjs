@@ -133,7 +133,7 @@ async function main() {
     console.log(`- ${t}: ${n} (${pct}%)`);
   }
 
-  // Class 3 orchestrator + AIW workflow surface (per PLAN-class2-grade2.md § 12.6).
+  // Class 3 orchestrator + AIW workflow surface.
   // Reads ~/.agentify/orchestrator/{events.jsonl, workflows/<id>/events.jsonl}
   // and ~/.agentify/aiw/<id>/aiw_state.json to roll up fleet stats.
   await aggregateOrchestratorKpis();

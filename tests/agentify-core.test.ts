@@ -40,6 +40,7 @@ class TestUi implements AgentifyUi {
   constructor(
     private readonly selectAnswers: string[] = [],
     private readonly secretAnswers: string[] = [],
+    private readonly multiSelectAnswers: ReadonlyArray<string>[] = [],
   ) {}
 
   status(message: string): void {
@@ -57,6 +58,12 @@ class TestUi implements AgentifyUi {
   async promptSelect(): Promise<string> {
     const next = this.selectAnswers.shift();
     if (!next) throw new Error("No promptSelect answer queued.");
+    return next;
+  }
+
+  async promptMultiSelect(): Promise<ReadonlyArray<string>> {
+    const next = this.multiSelectAnswers.shift();
+    if (!next) throw new Error("No promptMultiSelect answer queued.");
     return next;
   }
 
@@ -204,9 +211,9 @@ async function testAuthPromptAnd0600Write(): Promise<void> {
 async function testArtifactExporter(): Promise<void> {
   const packageRoot = tempDir("package");
   const cwd = tempDir("export");
-  fs.mkdirSync(path.join(packageRoot, ".agents", "skills", "demo"), { recursive: true });
+  fs.mkdirSync(path.join(packageRoot, "packaged", "skills", "demo"), { recursive: true });
   fs.writeFileSync(
-    path.join(packageRoot, ".agents", "skills", "demo", "SKILL.md"),
+    path.join(packageRoot, "packaged", "skills", "demo", "SKILL.md"),
     "---\nname: demo\ndescription: Demo skill\n---\n\nUse demo skill.\n",
   );
   fs.mkdirSync(path.join(cwd, ".pi", "agents"), { recursive: true });
@@ -224,6 +231,11 @@ async function testArtifactExporter(): Promise<void> {
   assert.ok(fs.existsSync(path.join(cwd, ".codex", "agents", "payments.toml")));
   assert.ok(fs.existsSync(path.join(cwd, ".claude", "agents", "payments.md")));
   assert.ok(fs.existsSync(path.join(cwd, "CLAUDE.md")));
+
+  // The dual-skill-discovery mirror at .claude/skills/ is generated
+  // into the target repo by the installer; the maintainer-side repo
+  // does not carry it (ADR 0006 amendment).
+  assert.ok(fs.existsSync(path.join(cwd, ".claude", "skills", "demo", "SKILL.md")));
 
   const exportedSkill = fs.readFileSync(
     path.join(cwd, ".agents", "skills", "demo", "SKILL.md"),

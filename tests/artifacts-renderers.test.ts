@@ -57,7 +57,7 @@ function makeIntentMap() {
         state_machine_notes: ["Use the default state contract."],
       },
     },
-    grade7_evidence: {
+    expert_evidence: {
       expert_domains: [
         {
           domain: "billing",
@@ -101,7 +101,7 @@ function makeIntentMap() {
         },
       ],
     },
-    grade3_evidence: {
+    customization_evidence: {
       custom_tool_candidates: [
         {
           name: "run-tests",

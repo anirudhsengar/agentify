@@ -50,7 +50,7 @@ export interface ManagementToolsOptions {
 
 /**
  * Return the canonical list of the 13 management tool names (G1 10 + G2 3 workflows + 1 stream).
- * Mirrors `principles/13-agentic-layer.md` orchestrator workflows + `docs/PLAN-class3-grade2.md`.
+ * Mirrors `principles/13-agentic-layer.md` orchestrator workflows.
  */
 export const MANAGEMENT_TOOL_NAMES = [
   // G1 (10)

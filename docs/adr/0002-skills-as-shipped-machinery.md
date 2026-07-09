@@ -16,9 +16,12 @@ non-deterministic copies of things we can ship once and get right.
 ## Decision
 
 The generic build chain ships as a **skill pack** under
-`.agents/skills/`. The audit never regenerates these; it emits only
-codebase-specific intelligence (see
-[0009](0009-machinery-shipped-intelligence-generated.md)).
+`packaged/skills/` (the maintainer-side source of truth; see
+[0006](0006-dual-skill-discovery.md) for the layout rationale). The
+audit never regenerates these; it emits only codebase-specific
+intelligence (see [0009](0009-machinery-shipped-intelligence-generated.md)).
+Target repos still receive the skill pack at `.agents/skills/` and
+`.claude/skills/` via the installer.
 
 Once a skill is edited by agentify (forked from an upstream source),
 it becomes agentify-owned and is removed from `skills-lock.json`; the

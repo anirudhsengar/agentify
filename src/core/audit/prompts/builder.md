@@ -173,8 +173,8 @@ each section and each feature is discovered, not templated.
 - **Key paths (facts, not variables).**
   The codebase map lives at `.pi/agentify/codebase_map.json`.
   Always use `write_map` to persist it — never write the JSON
-  directly. Grade-2 sub-agent prompts go in
-  `.pi/agentify/grade2/`. The custom explorer template is at
+  directly. Custom sub-agent prompts go in
+  `.pi/agentify/sub-agent-prompts/`. The custom explorer template is at
   `src/core/audit/prompts/explorers/_template.md`. The schema
   contract is `src/core/audit/schema.ts`. The 9 fixed-mode
   explorer prompts are in
@@ -575,8 +575,8 @@ files into the user's codebase:
    TypeScript build context they would be dead on
    arrival.) Note this in the completion summary.
 4. **No candidates** — if
-   `grade3_evidence.custom_tool_candidates` is `[]` AND
-   `grade3_evidence.skill_candidates` is `[]`, skip the
+   `customization_evidence.custom_tool_candidates` is `[]` AND
+   `customization_evidence.skill_candidates` is `[]`, skip the
    phase entirely. Note "no candidates" in the completion
    summary.
 

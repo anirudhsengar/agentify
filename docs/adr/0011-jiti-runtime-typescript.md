@@ -22,8 +22,12 @@ const { main } = await jiti.import("../src/cli.ts");
 `tsconfig.json` stays `noEmit: true`. `tsc --noEmit` is the type gate,
 run in `npm run typecheck` and gated before publish via
 `prepublishOnly`. The published tarball ships `bin/`, `src/`,
-`scaffold/`, `.agents/`, `.claude/`, and `skills-lock.json` (see the
-`files` field in `package.json`).
+`scaffold/`, `packaged/` (the skill pack — see ADR 0006 for why it
+lives here and not at `.agents/skills/`), and `skills-lock.json`
+(see the `files` field in `package.json`). The dual-skill-discovery
+mirror at `.agents/skills/` + `.claude/skills/` is generated into each
+target repository by the installer (`artifact-exporters.ts`), not
+committed here — see [ADR 0006](0006-dual-skill-discovery.md).
 
 ## Consequences
 

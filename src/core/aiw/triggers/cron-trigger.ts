@@ -8,12 +8,12 @@
 //   - Subprocess-style dispatch (we use the queue; same durability)
 //
 // For v1, the cron trigger is the simplest possible thing that
-// works: a function the CLI calls in a loop, with a list of
+// works: a function the daemon's trigger loop calls with a list of
 // schedule entries (workflow + prompt) to fire.
 //
 // Usage:
 //   const trigger = startCronTrigger({
-//     configDir, cwd,
+//     cwd,
 //     schedules: [{ id: "nightly-refresh", workflow: "plan_build", prompt: "/refresh-surface", everySeconds: 86400 }],
 //   });
 //   // ...later...
@@ -35,7 +35,6 @@ export interface CronSchedule {
 }
 
 export interface CronTriggerOptions {
-  configDir?: string;
   cwd: string;
   schedules: CronSchedule[];
   pollIntervalMs?: number;
@@ -56,7 +55,7 @@ export interface CronSweepResult {
 }
 
 export function startCronTrigger(options: CronTriggerOptions): RunningCronTrigger {
-  const configDir = options.configDir ?? defaultConfigDir();
+  const configDir = defaultConfigDir();
   const log = options.logger ?? ((m: string) => process.stderr.write(`[cron] ${m}\n`));
   const pollMs = options.pollIntervalMs ?? 60_000;
   const now = options.now ?? (() => Date.now());
