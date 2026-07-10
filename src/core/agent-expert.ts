@@ -374,13 +374,13 @@ export interface SelfImproveOptions {
   /** Logger callback. */
   log?: (msg: string) => void;
   /**
-   * Config dir for resolving the scoring slot. Required to use the
-   * scoring-slot model override; if absent, the syncer falls back to
+   * Config dir for resolving the lite slot. Required to use the
+   * lite-slot model override; if absent, the syncer falls back to
    * `pi -p`'s default model.
    */
   configDir?: string;
   /**
-   * Slot hint to pass through to the syncer. Defaults to "scoring".
+   * Slot hint to pass through to the syncer. Defaults to "lite".
    * Provider is `string` (not the strict AgentifyProvider union)
    * because the subprocess pass-through doesn't enforce the union.
    * See ADR 0017.
@@ -507,11 +507,11 @@ export interface QuestionOptions {
   /** Optional override for the answerer (e.g. for tests). */
   answerer?: QuestionAnswerer;
   /**
-   * Config dir for resolving the scoring slot. Required to use the
-   * scoring-slot model override.
+   * Config dir for resolving the lite slot. Required to use the
+   * lite-slot model override.
    */
   configDir?: string;
-  /** Slot hint to pass through to the answerer. Defaults to "scoring". */
+  /** Slot hint to pass through to the answerer. Defaults to "lite". */
   modelSlot?: { provider: string; model: string };
 }
 

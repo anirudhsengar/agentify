@@ -12,7 +12,7 @@ import type { AgentifyConfig, ModelRole, ModelSlot } from "../types.ts";
  */
 export type ResolutionSource =
   | "explicit-slot" // tier 1: config.modelsByRole[role]
-  | "inherited-primary" // tier 2: explorer/scoring inheriting primary
+  | "inherited-primary" // tier 2: explorer/lite inheriting primary
   | "legacy-fields" // tier 3: config.provider + config.model
   | "registry-default"; // tier 4: registry.getAvailable()[0]
 
@@ -91,7 +91,7 @@ export function selectModelForRole(
     // (by definition — that's the slot's job). Treat legacy fields as
     // an implicit primary for inheritance purposes. This makes
     // `models show --resolved` show "(inherits primary)" for explorer/
-    // scoring even when the user hasn't migrated to slot syntax yet.
+    // lite even when the user hasn't migrated to slot syntax yet.
     if (config.provider && config.model) {
       const inherited = tryResolve(registry, {
         provider: config.provider,

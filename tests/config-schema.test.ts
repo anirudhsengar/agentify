@@ -54,21 +54,21 @@ async function loaderRejectsMalformedModelsByRole(): Promise<void> {
   try {
     fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
     // Mix of valid and invalid slots: valid primary, invalid explorer
-    // (unknown provider, empty model), and a valid-but-unset scoring.
+    // (unknown provider, empty model), and a valid-but-unset lite.
     fs.writeFileSync(
       configPath(configDir),
       JSON.stringify({
         modelsByRole: {
           primary: { provider: "openai", model: "gpt-4o" },
           explorer: { provider: "not-a-real-provider", model: "x" },
-          scoring: { provider: "anthropic", model: "" }, // empty model → drop
+          lite: { provider: "anthropic", model: "" }, // empty model → drop
         },
       }),
     );
     const loaded = loadAgentifyConfig(configDir);
     assert.deepEqual(loaded.modelsByRole?.primary, { provider: "openai", model: "gpt-4o" });
     assert.equal(loaded.modelsByRole?.explorer, undefined);
-    assert.equal(loaded.modelsByRole?.scoring, undefined);
+    assert.equal(loaded.modelsByRole?.lite, undefined);
   } finally {
     fs.rmSync(configDir, { recursive: true, force: true });
   }

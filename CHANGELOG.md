@@ -8,6 +8,16 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Slot rename: `scoring` → `lite`**: the third ADR 0017 named
+  model slot was misleadingly named. `scoring` connoted a numerical
+  output, but the slot is consumed by AIW phases (plan, build,
+  review, fix) — generation and judgment, not scoring. Renamed
+  to `lite` to reflect what the slot actually distinguishes:
+  **quality tier**, not task type. `lite` is where you put a
+  cheaper/faster model for non-primary work. Existing configs
+  with `modelsByRole.scoring` are auto-migrated to
+  `modelsByRole.lite` on next read (transparent, idempotent,
+  no user action required).
 - **Provider-scoped audit state directory (ADR 0020)**: agentify
   now resolves its internal state dir from the user's selected
   coding agent at runtime. `claude-code` → `.claude/agentify/`,

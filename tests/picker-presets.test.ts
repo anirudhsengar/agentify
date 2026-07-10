@@ -19,7 +19,7 @@ async function maxQualityPutsStrongestInAllSlots(): Promise<void> {
   assert.ok(result);
   assert.deepEqual(result?.primary, { provider: "anthropic", model: "claude-opus-4-8" });
   assert.deepEqual(result?.explorer, { provider: "anthropic", model: "claude-opus-4-8" });
-  assert.deepEqual(result?.scoring, { provider: "anthropic", model: "claude-opus-4-8" });
+  assert.deepEqual(result?.lite, { provider: "anthropic", model: "claude-opus-4-8" });
 }
 
 async function balancedPutsMediumInExplorerAndScoring(): Promise<void> {
@@ -30,7 +30,7 @@ async function balancedPutsMediumInExplorerAndScoring(): Promise<void> {
   assert.ok(result);
   assert.deepEqual(result?.primary, { provider: "anthropic", model: "claude-opus-4-8" });
   assert.deepEqual(result?.explorer, { provider: "anthropic", model: "claude-sonnet-4-6" });
-  assert.deepEqual(result?.scoring, { provider: "anthropic", model: "claude-sonnet-4-6" });
+  assert.deepEqual(result?.lite, { provider: "anthropic", model: "claude-sonnet-4-6" });
 }
 
 async function costOptimizedPutsFastInExplorerAndScoring(): Promise<void> {
@@ -41,7 +41,7 @@ async function costOptimizedPutsFastInExplorerAndScoring(): Promise<void> {
   assert.ok(result);
   assert.deepEqual(result?.primary, { provider: "anthropic", model: "claude-sonnet-4-6" });
   assert.deepEqual(result?.explorer, { provider: "anthropic", model: "claude-haiku-4-5-20251001" });
-  assert.deepEqual(result?.scoring, { provider: "anthropic", model: "claude-haiku-4-5-20251001" });
+  assert.deepEqual(result?.lite, { provider: "anthropic", model: "claude-haiku-4-5-20251001" });
 }
 
 async function pickerPresetsHandleEmptyRegistryGracefully(): Promise<void> {
@@ -55,7 +55,7 @@ async function pickerPresetsCollapseForSingleModel(): Promise<void> {
   const maxQuality = pickTierPreset([only], "max-quality");
   assert.deepEqual(maxQuality?.primary, { provider: "anthropic", model: "claude-haiku-4-5-20251001" });
   assert.deepEqual(maxQuality?.explorer, { provider: "anthropic", model: "claude-haiku-4-5-20251001" });
-  assert.deepEqual(maxQuality?.scoring, { provider: "anthropic", model: "claude-haiku-4-5-20251001" });
+  assert.deepEqual(maxQuality?.lite, { provider: "anthropic", model: "claude-haiku-4-5-20251001" });
 
   const balanced = pickTierPreset([only], "balanced");
   assert.deepEqual(balanced?.primary, { provider: "anthropic", model: "claude-haiku-4-5-20251001" });

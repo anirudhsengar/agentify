@@ -1,8 +1,8 @@
-// tests/aiw/aiw-slot.test.ts — verify AIW phases consume the scoring slot.
+// tests/aiw/aiw-slot.test.ts — verify AIW phases consume the lite slot.
 //
 // Phase 3 (ADR 0017): every LLM-driven AIW phase (plan, build,
-// review, fix) passes `modelRole: "scoring"` to the runtime. The
-// resolver resolves scoring via the configured slot, falling back to
+// review, fix) passes `modelRole: "lite"` to the runtime. The
+// resolver resolves lite via the configured slot, falling back to
 // primary → legacy fields → registry default. This test stubs the
 // runtime to capture the modelRole value passed to each phase.
 
@@ -69,13 +69,13 @@ async function aiwAllPhasesUseScoringSlot(): Promise<void> {
       source: "test",
     });
 
-    // Every LLM-driven phase should pass `modelRole: "scoring"`.
+    // Every LLM-driven phase should pass `modelRole: "lite"`.
     assert.ok(runtime.calls.length >= 3, `expected at least 3 phase calls, got ${runtime.calls.length}`);
     for (const call of runtime.calls) {
       assert.equal(
         call.modelRole,
-        "scoring",
-        `phase '${call.phase}' must use scoring slot, got ${call.modelRole}`,
+        "lite",
+        `phase '${call.phase}' must use lite slot, got ${call.modelRole}`,
       );
     }
   } finally {
@@ -101,7 +101,7 @@ async function aiwReviewPhaseUsesScoringSlot(): Promise<void> {
 
     const review = runtime.calls.find((c) => c.phase === "review");
     assert.ok(review, "expected review phase to be called");
-    assert.equal(review?.modelRole, "scoring");
+    assert.equal(review?.modelRole, "lite");
   } finally {
     fs.rmSync(configDir, { recursive: true, force: true });
     fs.rmSync(cwd, { recursive: true, force: true });
@@ -126,9 +126,9 @@ async function aiwFixPhaseUsesScoringSlot(): Promise<void> {
     const fix = runtime.calls.find((c) => c.phase === "fix");
     // fix phase is conditional — it only runs when review finds blockers.
     // In our fixture review passes (no blockers), so fix may not run.
-    // We just assert that IF it ran, it used scoring.
+    // We just assert that IF it ran, it used lite.
     if (fix) {
-      assert.equal(fix.modelRole, "scoring");
+      assert.equal(fix.modelRole, "lite");
     }
   } finally {
     fs.rmSync(configDir, { recursive: true, force: true });
@@ -155,8 +155,8 @@ async function aiwBuildPhaseUsesScoringSlot(): Promise<void> {
     const build = runtime.calls.find((c) => c.phase === "build");
     assert.ok(plan);
     assert.ok(build);
-    assert.equal(plan?.modelRole, "scoring");
-    assert.equal(build?.modelRole, "scoring");
+    assert.equal(plan?.modelRole, "lite");
+    assert.equal(build?.modelRole, "lite");
   } finally {
     fs.rmSync(configDir, { recursive: true, force: true });
     fs.rmSync(cwd, { recursive: true, force: true });

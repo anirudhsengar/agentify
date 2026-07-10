@@ -695,7 +695,7 @@ async function modelsShowIncludesSlotsBlockUnderneathPinnedLines(): Promise<void
     assert.ok(text.includes("slots:"));
     assert.ok(text.includes("primary"));
     assert.ok(text.includes("explorer"));
-    assert.ok(text.includes("scoring"));
+    assert.ok(text.includes("lite"));
     assert.ok(text.includes("openai/gpt-4o"));
     assert.ok(text.includes("(unset — uses primary)"));
   });
@@ -717,9 +717,9 @@ async function modelsShowResolvedPrintsFinalResolvedModelsPerRole(): Promise<voi
     const text = out.text();
     assert.ok(text.includes("primary"));
     assert.ok(text.includes("explorer"));
-    assert.ok(text.includes("scoring"));
+    assert.ok(text.includes("lite"));
     assert.ok(text.includes("openai/gpt-4o"));
-    assert.ok(text.includes("inherits primary"), "explorer/scoring should annotate inheritance");
+    assert.ok(text.includes("inherits primary"), "secondary should annotate inheritance");
   });
 }
 

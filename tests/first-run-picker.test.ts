@@ -93,18 +93,18 @@ async function ensureAgentifyConfigPromptsForModelStrategyOnFirstRun(): Promise<
     // No auth, no config → picker fires after provider + secret capture.
     wipeAgentifyState(configDir);
     const ui = new TestUi({
-      // 1. provider, 2. strategy = split, 3. primary model, 4. explorer?, 5. scoring?
+      // 1. provider, 2. strategy = split, 3. primary model, 4. explorer?, 5. lite?
       selectAnswers: ["openai", "split", "openai/gpt-4o", "skip", "skip"],
       secretAnswers: ["sk-test"],
     });
     await ensureAgentifyConfig(configDir, ui);
-    // 5 select prompts fired (provider + strategy + primary + explorer + scoring).
+    // 5 select prompts fired (provider + strategy + primary + secondary).
     assert.equal(ui.selectCalls, 5, `expected 5 prompts, got ${ui.selectCalls}`);
     const config = loadAgentifyConfig(configDir);
     assert.equal(config.provider, "openai");
     assert.deepEqual(config.modelsByRole?.primary, { provider: "openai", model: "gpt-4o" });
     assert.equal(config.modelsByRole?.explorer, undefined);
-    assert.equal(config.modelsByRole?.scoring, undefined);
+    assert.equal(config.modelsByRole?.lite, undefined);
   });
 }
 
@@ -121,7 +121,7 @@ async function ensureAgentifyConfigSingleStrategySetsOnlyPrimary(): Promise<void
     assert.equal(config.provider, "openai");
     assert.deepEqual(config.modelsByRole?.primary, { provider: "openai", model: "gpt-4o" });
     assert.equal(config.modelsByRole?.explorer, undefined);
-    assert.equal(config.modelsByRole?.scoring, undefined);
+    assert.equal(config.modelsByRole?.lite, undefined);
     assert.equal(ui.selectCalls, 3, "single strategy: provider + strategy + primary = 3 prompts");
   });
 }
@@ -130,7 +130,7 @@ async function ensureAgentifyConfigSplitStrategyPromptsForEachSlotIndependently(
   await withTempHome(async (configDir) => {
     wipeAgentifyState(configDir);
     const ui = new TestUi({
-      // 1. provider, 2. strategy = split, 3. primary, 4. explorer skip, 5. scoring pick, 6. scoring model
+      // 1. provider, 2. strategy = split, 3. primary, 4. explorer skip, 5. lite pick, 6. lite model
       selectAnswers: ["openai", "split", "openai/gpt-4o-mini", "skip", "pick", "openai/gpt-4o-mini"],
       secretAnswers: ["sk-test"],
     });
@@ -138,7 +138,7 @@ async function ensureAgentifyConfigSplitStrategyPromptsForEachSlotIndependently(
     const config = loadAgentifyConfig(configDir);
     assert.deepEqual(config.modelsByRole?.primary, { provider: "openai", model: "gpt-4o-mini" });
     assert.equal(config.modelsByRole?.explorer, undefined);
-    assert.deepEqual(config.modelsByRole?.scoring, { provider: "openai", model: "gpt-4o-mini" });
+    assert.deepEqual(config.modelsByRole?.lite, { provider: "openai", model: "gpt-4o-mini" });
   });
 }
 

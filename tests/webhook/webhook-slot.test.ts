@@ -13,9 +13,9 @@ import {
 async function webhookTriggerSchemaAcceptsModelRole(): Promise<void> {
   const parsed = Value.Parse(PromptInvocationSchema, {
     template: "/implement",
-    model_role: "scoring",
+    model_role: "lite",
   });
-  assert.equal(parsed.model_role, "scoring");
+  assert.equal(parsed.model_role, "lite");
 }
 
 async function webhookTaskRecordSchemaAcceptsModelRole(): Promise<void> {
@@ -39,10 +39,10 @@ async function webhookTaskRecordSchemaAcceptsModelRole(): Promise<void> {
       tools: [],
       model: null,
       thinking_level: null,
-      model_role: "scoring",
+      model_role: "lite",
     },
   });
-  assert.equal(parsed.prompt.model_role, "scoring");
+  assert.equal(parsed.prompt.model_role, "lite");
 }
 
 async function webhookSchemaAcceptsModelRoleUnset(): Promise<void> {

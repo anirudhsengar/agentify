@@ -267,7 +267,7 @@ agentify logout [--provider <name> | --all] [--yes]
 agentify models list [--provider <name>]
 agentify models show [--resolved]
 agentify models set <provider>/<model>             # legacy: writes to provider/model
-agentify models set <slot> <provider>/<model>      # slot: primary|explorer|scoring
+agentify models set <slot> <provider>/<model>      # slot: primary|explorer|lite
 agentify models unset                                # legacy: clears provider/model
 agentify models unset <slot>                         # clears that slot
 ```
@@ -291,7 +291,7 @@ models to different parts of the audit (ADR 0017):
 | --- | --- |
 | `primary` | Brownfield/greenfield builder, orchestrator host, AIW phase, webhook task |
 | `explorer` | `spawn_explorer` sub-agents |
-| `scoring` | Reserved for future lightweight judgment-call surfaces |
+| `lite` | Reserved for future lightweight judgment-call surfaces |
 
 When a slot is unset, the resolver falls back to `primary` (or, if
 neither slot is set, to the legacy `provider`/`model` fields).
@@ -302,7 +302,7 @@ invariant in [ADR 0017](docs/adr/0017-named-model-slots.md).
 On first run, agentify prompts for a model strategy:
 "Use one model for everything" (sets `primary` only) or
 "Assign different models per role" (prompts for primary, then
-optionally explorer/scoring). The CLI lets you change this later.
+optionally explorer/lite). The CLI lets you change this later.
 
 ## Troubleshooting
 

@@ -86,6 +86,13 @@ function readTargets(raw: unknown): ReadonlyArray<AgentifyTarget> | undefined {
 
 export function loadAgentifyConfig(configDir: string): AgentifyConfig {
   const raw = readJsonObject(configPath(configDir));
+  // One-shot migration: pre-rename configs may have a `scoring` slot
+  // key. Rename it to `lite` and persist so subsequent reads see only
+  // the new key. Must happen BEFORE we build the in-memory config,
+  // otherwise `built.modelsByRole?.lite` would be undefined on the
+  // first read. Idempotent — when both are present, prefer `lite`
+  // and drop `scoring`. When neither is present, no-op.
+  const migrated = migrateScoringSlot(raw);
   const provider = typeof raw.provider === "string" && isAgentifyProvider(raw.provider)
     ? raw.provider
     : undefined;
@@ -98,11 +105,7 @@ export function loadAgentifyConfig(configDir: string): AgentifyConfig {
     modelsByRole: readModelsByRole(raw),
     targets: readTargets(raw.targets),
   };
-  // One-shot migration: pre-rename configs may have a `scoring` slot
-  // key. Rename it to `lite` and persist so subsequent reads see only
-  // the new key. Idempotent — when both are present, prefer `lite`
-  // and drop `scoring`. When neither is present, no-op.
-  if (migrateScoringSlot(raw)) {
+  if (migrated) {
     saveAgentifyConfig(configDir, built);
   }
   return built;

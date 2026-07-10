@@ -105,13 +105,13 @@ async function createAgentToolAcceptsModelRole(): Promise<void> {
     description: "test agent",
     tools: ["read"],
     model: "haiku",
-    modelRole: "scoring",
+    modelRole: "lite",
     domain: null,
     expertise: null,
     color: "white",
     system_prompt_inline: false,
   };
-  assert.equal(def.modelRole, "scoring");
+  assert.equal(def.modelRole, "lite");
 }
 
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
