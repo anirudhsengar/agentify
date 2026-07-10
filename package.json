@@ -37,6 +37,9 @@
   "engines": {
     "node": ">=22.19.0"
   },
+  "overrides": {
+    "@smithy/util-buffer-from": "4.4.7"
+  },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.79.3",
     "@earendil-works/pi-coding-agent": "^0.79.3",
