@@ -2,6 +2,8 @@
 name: to-prd
 description: Turn the current conversation into a PRD artifact — no interview, just synthesis of what you've already discussed.
 disable-model-invocation: true
+tier: core
+
 ---
 
 This skill takes the current conversation context and codebase understanding and produces a PRD. Do NOT interview the user — just synthesize what you already know.

@@ -2,6 +2,8 @@
 name: to-goals
 description: Break the current wide-discussion conversation into a Phase -> Goal breakdown via a second drilling round, and publish it as GOALS.md.
 disable-model-invocation: true
+tier: core
+
 ---
 
 # To Goals

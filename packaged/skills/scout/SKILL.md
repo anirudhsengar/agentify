@@ -2,6 +2,8 @@
 name: scout
 description: Read-only codebase recon — investigate and report without changing anything. Use to understand a module before changing it, gather evidence for a spec, or verify a claim about the code.
 disable-model-invocation: true
+tier: core
+
 ---
 
 # Scout

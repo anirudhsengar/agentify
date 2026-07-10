@@ -381,7 +381,7 @@ function nextActionsFor(checkpoint: GreenfieldCheckpoint): string[] {
     case "spec":
       return [
         "Run /implement on one selected spec.",
-        "After implementation, run /review or /plan-build-review-fix depending on risk.",
+        "After implementation, run /review or /plan-build depth:4 depending on risk.",
       ];
   }
 }
@@ -424,7 +424,7 @@ function localResumeFor(checkpoint: GreenfieldCheckpoint, formation: GreenfieldF
     case "issue_slices":
       return "Resume local formation by choosing one approved docs/issues/ slice and writing a build spec with /spec.";
     case "spec":
-      return "Resume by running /implement on one selected specs/ file, then /review or /plan-build-review-fix depending on risk.";
+      return "Resume by running /implement on one selected specs/ file, then /review or /plan-build depth:4 depending on risk.";
   }
 }
 

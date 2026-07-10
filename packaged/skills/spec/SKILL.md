@@ -2,6 +2,8 @@
 name: spec
 description: Write a build spec — a single implementable contract for one slice of work — to specs/<type>-<slug>.md using the project's Spec Format. Use when you have one well-scoped task ready to implement.
 disable-model-invocation: true
+tier: core
+
 ---
 
 # Spec

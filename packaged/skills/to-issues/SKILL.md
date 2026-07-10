@@ -2,6 +2,8 @@
 name: to-issues
 description: Break a plan, spec, or PRD into independently-grabbable tracer-bullet implementation slices.
 disable-model-invocation: true
+tier: core
+
 ---
 
 # To Issues

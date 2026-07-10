@@ -2,6 +2,8 @@
 name: scaffold-ci
 description: Stamp agentify's GitHub Actions runtime (the autonomous implement/review/fix loop + labeled-issue drilling) into the current repository. Use in a brownfield repo that has agentify installed but no CI runtime yet.
 disable-model-invocation: true
+tier: opt-in
+
 ---
 
 # Scaffold CI

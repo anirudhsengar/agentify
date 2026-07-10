@@ -2,6 +2,8 @@
 name: to-plan
 description: Interview the user about implementation ordering for the current PRD, then write a reviewable PLAN.md.
 disable-model-invocation: true
+tier: core
+
 ---
 
 # To Plan

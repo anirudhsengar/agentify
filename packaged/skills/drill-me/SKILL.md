@@ -3,6 +3,8 @@ name: drill-me
 description: Interview the user about the wide project idea, a Goal, or a Sub-goal -- the single entry point for every drilling stage in agentify's pipeline.
 argument-hint: "Optional: a Goal number, or a path to a Sub-goal heading. Omit for the wide project discussion."
 disable-model-invocation: true
+tier: core
+
 ---
 
 # Drill Me

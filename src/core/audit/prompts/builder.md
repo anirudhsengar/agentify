@@ -68,14 +68,13 @@ NOT** emit them — they already exist, repo-wide, and re-emitting
 them would shadow the canonical versions. The shipped skills are:
 
 > `/spec`, `/implement`, `/review`, `/test`, `/fix`, `/document`,
-> `/scout`, and the chains `/plan-build`, `/plan-build-review`,
-> `/plan-build-review-fix`, `/scout-then-plan` — plus `/drill-me`,
-> `/to-*`, `/tdd`, `/domain-modeling`, `/codebase-design`, etc.
+> `/scout`, and the chain `/plan-build` (with `depth:2|3|4`) plus
+> `/scout-then-plan` — plus `/drill-me`, `/to-*`, `/tdd`,
+> `/domain-modeling`, `/codebase-design`, etc.
 
 So you do **NOT** write `<stateDir>/agents/{scout,review,implement,test,
 fix,document}.md` or `<stateDir>/prompts/{plan,plan-build,
-plan-build-review,plan-build-review-fix,scout-then-plan}.md`. Those
-are shipped skills the user already has.
+scout-then-plan}.md`. Those are shipped skills the user already has.
 
 You **DO** emit the codebase-emergent intelligence those shipped
 skills *consume* as structured `artifact_intents` in the map:
@@ -1707,7 +1706,7 @@ Send the literal completion summary as your final
 assistant message. The exact string:
 
 ```
-agentify run complete. Audit done; AGENTS.md: ./AGENTS.md (N lines / 200 cap). Always-on context: 2 files (specs/README.md, ai_docs/README.md) + N feature agents (<stateDir>/agents/<feature>.md). Feedback-loop state: 3 directories with READMEs (app_review/, app_docs/, app_fix_reports/) + agentic_kpis.md + conditional_docs.md. Extensions: X (<stateDir>/extensions/<name>.ts); skills: Y (<stateDir>/skills/<name>/SKILL.md). Prompt templates: M change-type templates (<stateDir>/prompts/<type>.md) + P per-area templates. Expert prompts: R domains (<stateDir>/prompts/experts/<domain>/) with expertise.yaml + question.md + self-improve.md (+ optional plan.md/plan_build_improve.md). Domain model: <proposed CONTEXT.md terms + candidate ADRs, or "none proposed">. The build chain (/spec, /implement, /review, /test, /fix, /document, /scout, the /plan-build* chains) ships as skills in .agents/skills/ — already present, not emitted here. CRITICAL: add ".pi/prompts/experts" to the `prompts` array in .pi/settings.json (or ~/.pi/agent/settings.json) — Pi does not auto-discover sub-directories of prompts/. Next: restart Pi; then /<feature> <query> to invoke a specialist, /<type> <task> or /spec <task> to write a build spec, /implement <spec-path> to execute it, /plan-build* to run a chain, /test /review /fix /document for the loops, /experts:<domain>:<question|self-improve|plan|plan_build_improve> for an expert, or /refresh-surface after big changes.
+agentify run complete. Audit done; AGENTS.md: ./AGENTS.md (N lines / 200 cap). Always-on context: 2 files (specs/README.md, ai_docs/README.md) + N feature agents (<stateDir>/agents/<feature>.md). Feedback-loop state: 3 directories with READMEs (app_review/, app_docs/, app_fix_reports/) + agentic_kpis.md + conditional_docs.md. Extensions: X (<stateDir>/extensions/<name>.ts); skills: Y (<stateDir>/skills/<name>/SKILL.md). Prompt templates: M change-type templates (<stateDir>/prompts/<type>.md) + P per-area templates. Expert prompts: R domains (<stateDir>/prompts/experts/<domain>/) with expertise.yaml + question.md + self-improve.md (+ optional plan.md/plan_build_improve.md). Domain model: <proposed CONTEXT.md terms + candidate ADRs, or "none proposed">. The build chain (/spec, /implement, /review, /test, /fix, /document, /scout, the /plan-build* chains) ships as skills in .agents/skills/ — already present, not emitted here. CRITICAL: add ".pi/prompts/experts" to the `prompts` array in .pi/settings.json (or ~/.pi/agent/settings.json) — Pi does not auto-discover sub-directories of prompts/. Next: restart Pi; then /<feature> <query> to invoke a specialist, /<type> <task> or /spec <task> to write a build spec, /implement <spec-path> to execute it, /plan-build depth:2|3|4 to run a chain, /test /review /fix /document for the loops, /experts:<domain>:<question|self-improve|plan|plan_build_improve> for an expert, or /refresh-surface after big changes.
 ```
 
 `STOP`. Do not call any more tools.
@@ -1816,9 +1815,8 @@ agentify run FAILED. N areas uncovered (<area names>). No files written. Re-run 
   phase is best-effort but every phase runs.
 - **Emitting a shipped primitive** — never write
   `<stateDir>/agents/{scout,review,implement,test,fix,document}.md`
-  or `<stateDir>/prompts/{plan,plan-build,plan-build-review,
-  plan-build-review-fix,scout-then-plan}.md`. They are
-  **shipped skills** (Emission Contract); re-emitting them
+  or `<stateDir>/prompts/{plan,plan-build,scout-then-plan}.md`. They
+  are **shipped skills** (Emission Contract); re-emitting them
   shadows the canonical versions. Emit only the *context*
   those skills read (`AGENTS.md`, feature agents,
   `specs/README.md`, `conditional_docs.md`, experts).

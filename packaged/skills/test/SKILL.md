@@ -2,6 +2,8 @@
 name: test
 description: Run the validation surface (test / lint / typecheck / e2e) for a change type and report a structured TestResult, without modifying code. Use to verify a change before review.
 disable-model-invocation: true
+tier: core
+
 ---
 
 # Test

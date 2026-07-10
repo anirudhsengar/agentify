@@ -15,6 +15,7 @@ import { exportAgenticSurface } from "./artifact-exporters.ts";
 import { newRunId, persistRunArtifacts } from "./revert.ts";
 import { packageRoot } from "./pi-sdk-runtime.ts";
 import { ProjectClassifier } from "./project-classifier.ts";
+import { readPackagedSkillTiers, skillsForClassification } from "./skill-curation.ts";
 import { installScaffoldRuntime } from "./scaffold-installer.ts";
 import { formatGitHubReadiness, inspectGitHubReadiness } from "./github-readiness.ts";
 import { inspectAgentifyRepoState } from "./repo-status.ts";
@@ -346,6 +347,62 @@ function cleanupEmptyGeneratedDirs(cwd: string): void {
     } catch {
       // Directory was not empty or disappeared; both are fine.
     }
+  }
+}
+
+/**
+ * Diff the previous manifest's skill paths against the new shipped
+ * set, and delete any skill file that was previously installed but
+ * is no longer in the current tier. Only touches files that carry the
+ * `<!-- agentify:managed -->` marker — user-authored skill files in
+ * `.claude/skills/` are left alone.
+ *
+ * Skill dotfolders shipped to: see the three premium exporters in
+ * `artifact-exporters.ts`. The set below mirrors those literals.
+ */
+const SKILL_DIRS = [".agents/skills", ".claude/skills", ".pi/skills"] as const;
+
+function removeStaleSkills(
+  cwd: string,
+  previousManifest: ManagedManifest | null,
+  shippedSkills: ReadonlySet<string>,
+  log: (msg: string) => void,
+): void {
+  if (!previousManifest) return; // First run — nothing to remove.
+
+  const prevSkillPaths = new Set(
+    previousManifest.files
+      .filter((f) => f.kind === "skill")
+      .map((f) => f.path),
+  );
+  if (prevSkillPaths.size === 0) return;
+
+  // Compute what the new run wrote (skill SKILL.md files, since
+  // copyDirManaged only writes the skill directory's contents).
+  const newSkillPaths = new Set<string>();
+  for (const name of shippedSkills) {
+    for (const dir of SKILL_DIRS) {
+      newSkillPaths.add(`${dir}/${name}/SKILL.md`);
+    }
+  }
+
+  const stale: string[] = [];
+  for (const rel of prevSkillPaths) {
+    if (newSkillPaths.has(rel)) continue;
+    const abs = path.join(cwd, rel);
+    if (!fs.existsSync(abs)) continue;
+    // Only delete agentify-managed files. A user-owned file at the
+    // same path would not be in the previous manifest anyway, but
+    // belt-and-braces against manifest corruption.
+    const head = fs.readFileSync(abs, "utf-8").slice(0, 64);
+    if (!head.includes("<!-- agentify:managed -->")) continue;
+    fs.rmSync(abs, { force: true });
+    stale.push(rel);
+  }
+
+  if (stale.length > 0) {
+    log(`agentify: removed ${stale.length} stale skill(s) (dropped from tier since last run):`);
+    for (const rel of stale) log(`agentify:   - ${rel}`);
   }
 }
 
@@ -1078,11 +1135,21 @@ async function runBrownfieldAudit(
           const metadata = new Map<string, ManagedManifestFile>();
           writeRenderedArtifactsToStaging(stagingRoot, renderResult.artifacts, metadata);
           copyCanonicalMapToStaging(options.cwd, stagingRoot, stateDir, metadata);
+          // Skill curation: classify the project and decide which
+          // skills ship. The set is passed to the exporter so tier-
+          // excluded skills never reach the staging tree. After
+          // the apply, `removeStaleSkills` (below) deletes any
+          // previously-installed skills that dropped out of tier
+          // since the last run.
+          const classification = ProjectClassifier.classify(options.cwd);
+          const skillTiers = readPackagedSkillTiers(packageRoot());
+          const { shipped: shippedSkills } = skillsForClassification(classification, skillTiers);
           const exportResults = exportAgenticSurface({
             cwd: stagingRoot,
             packageRoot: packageRoot(),
             targets: options.targets,
             additionalAgents: options.additionalAgents,
+            allowedSkills: shippedSkills,
           });
           for (const result of exportResults) {
             addWriteMetadata(stagingRoot, result.writes, `harness-export:${result.target}`, metadata);
@@ -1095,10 +1162,13 @@ async function runBrownfieldAudit(
 
           // Persist the pre-run snapshot so `agentify revert` can
           // restore the user's originals. Uses the same runId
-          // that the manifest will carry.
+          // that the manifest will carry. The previous manifest is
+          // also read for the stale-skill removal step (see below).
           const runId = crypto.randomUUID();
+          const previousManifest = !options.dryRun
+            ? readManifestAt(options.cwd, stateDir)
+            : null;
           if (!options.dryRun) {
-            const previousManifest = readManifestAt(options.cwd, stateDir);
             persistRunArtifacts({
               cwd: options.cwd,
               stateDir,
@@ -1149,6 +1219,12 @@ async function runBrownfieldAudit(
           } else {
             const repoState = inspectAgentifyRepoState(options.cwd, defaultConfigDir());
             reportedStatus = repoState.status === "ready" ? "success" : "partial";
+            // Tier-down: delete any previously-installed skill that
+            // the new classifier / tier frontmatter no longer ships.
+            // Only runs after a successful apply, never on dry-run.
+            if (!options.dryRun) {
+              removeStaleSkills(options.cwd, previousManifest, shippedSkills, options.ui.info);
+            }
             if (options.dryRun && options.jsonOutput && applyResult.manifest) {
               // --plan --json: emit the would-be plan as JSON to
               // stdout (via ui.status which goes to stdout) and

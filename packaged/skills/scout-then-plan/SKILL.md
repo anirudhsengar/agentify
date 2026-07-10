@@ -2,6 +2,8 @@
 name: scout-then-plan
 description: Discover the task's relevant feature specialists, recon them in parallel, synthesize the findings, then write a build spec with that enriched context. Use for a task that spans or touches an unfamiliar feature.
 disable-model-invocation: true
+tier: opt-in
+
 ---
 
 # Scout-then-plan

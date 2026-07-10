@@ -2,6 +2,8 @@
 name: fix
 description: Given a review blocker or a failing test, write a minimal patch and implement it — fix only the blocker, no refactors or scope creep. Use to close out review findings.
 disable-model-invocation: true
+tier: core
+
 ---
 
 # Fix

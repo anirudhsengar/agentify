@@ -31,6 +31,15 @@ export interface ArtifactExporterOptions {
    * exporters.
    */
   additionalAgents?: ReadonlyArray<string>;
+  /**
+   * Skill names that may be written to the target repo. Names in
+   * `packaged/skills/` not in this set are skipped. When omitted,
+   * every packaged skill ships (the pre-curation behavior).
+   *
+   * Computed upstream by `skillsForClassification` from the project
+   * classifier + tier frontmatter. See `src/core/skill-curation.ts`.
+   */
+  allowedSkills?: ReadonlySet<string>;
 }
 
 interface AgentFile {
@@ -114,9 +123,11 @@ function exportSkills(
   packageRoot: string,
   destinationRoot: string,
   writes: ArtifactWrite[],
+  allowed?: ReadonlySet<string>,
 ): void {
   for (const sourceDir of listSkillDirs(packageRoot)) {
     const name = path.basename(sourceDir);
+    if (allowed && !allowed.has(name)) continue; // Tier-excluded: skip silently.
     copyDirManaged(sourceDir, path.join(destinationRoot, name), writes);
   }
 }
@@ -133,8 +144,9 @@ function exportSkillPackToDir(
   packageRoot: string,
   skillsDir: string,
   writes: ArtifactWrite[],
+  allowed?: ReadonlySet<string>,
 ): void {
-  exportSkills(packageRoot, path.join(cwd, skillsDir), writes);
+  exportSkills(packageRoot, path.join(cwd, skillsDir), writes, allowed);
 }
 
 function parseFrontmatter(content: string, fallbackName: string): AgentFile {
@@ -191,9 +203,9 @@ function asClaudeAgent(agent: AgentFile): string {
   ].join("\n");
 }
 
-function exportCodex(cwd: string, packageRoot: string): ArtifactExportResult {
+function exportCodex(cwd: string, packageRoot: string, allowed?: ReadonlySet<string>): ArtifactExportResult {
   const writes: ArtifactWrite[] = [];
-  exportSkills(packageRoot, path.join(cwd, ".agents", "skills"), writes);
+  exportSkills(packageRoot, path.join(cwd, ".agents", "skills"), writes, allowed);
   for (const agent of listFeatureAgents(cwd)) {
     writes.push(writeManagedFile(
       path.join(cwd, ".codex", "agents", `${agent.name}.toml`),
@@ -204,7 +216,7 @@ function exportCodex(cwd: string, packageRoot: string): ArtifactExportResult {
   return { target: "codex", writes };
 }
 
-function exportClaude(cwd: string, packageRoot: string): ArtifactExportResult {
+function exportClaude(cwd: string, packageRoot: string, allowed?: ReadonlySet<string>): ArtifactExportResult {
   const writes: ArtifactWrite[] = [];
   const agentsMd = path.join(cwd, "AGENTS.md");
   if (fs.existsSync(agentsMd)) {
@@ -232,7 +244,7 @@ function exportClaude(cwd: string, packageRoot: string): ArtifactExportResult {
       ));
     }
   }
-  exportSkills(packageRoot, path.join(cwd, ".claude", "skills"), writes);
+  exportSkills(packageRoot, path.join(cwd, ".claude", "skills"), writes, allowed);
   for (const agent of listFeatureAgents(cwd)) {
     writes.push(writeManagedFile(
       path.join(cwd, ".claude", "agents", `${agent.name}.md`),
@@ -243,7 +255,7 @@ function exportClaude(cwd: string, packageRoot: string): ArtifactExportResult {
   return { target: "claude", writes };
 }
 
-function exportPi(cwd: string, packageRoot: string): ArtifactExportResult {
+function exportPi(cwd: string, packageRoot: string, allowed?: ReadonlySet<string>): ArtifactExportResult {
   const writes: ArtifactWrite[] = [];
   // Pi's skillsDir per `AGENT_REGISTRY` (src/core/agent-registry.ts)
   // is `.pi/skills`. Earlier versions wrote to `.agents/skills`,
@@ -252,7 +264,7 @@ function exportPi(cwd: string, packageRoot: string): ArtifactExportResult {
   // `.pi/skills`; the dispatcher's `writtenDirs.add(".pi/skills")`
   // in `exportAgenticSurface` is then consistent with what's
   // actually on disk (ADR 0020, bug fix).
-  exportSkills(packageRoot, path.join(cwd, ".pi", "skills"), writes);
+  exportSkills(packageRoot, path.join(cwd, ".pi", "skills"), writes, allowed);
   return { target: "pi", writes };
 }
 
@@ -270,20 +282,21 @@ function exportPi(cwd: string, packageRoot: string): ArtifactExportResult {
 export function exportAgenticSurface(options: ArtifactExporterOptions): ArtifactExportResult[] {
   const results: ArtifactExportResult[] = [];
   const writtenDirs = new Set<string>();
+  const allowed = options.allowedSkills;
 
   // Premium exporters — each knows its own skillsDir.
   for (const target of options.targets) {
     switch (target) {
       case "codex":
-        results.push(exportCodex(options.cwd, options.packageRoot));
+        results.push(exportCodex(options.cwd, options.packageRoot, allowed));
         writtenDirs.add(".agents/skills");
         break;
       case "claude":
-        results.push(exportClaude(options.cwd, options.packageRoot));
+        results.push(exportClaude(options.cwd, options.packageRoot, allowed));
         writtenDirs.add(".claude/skills");
         break;
       case "pi":
-        results.push(exportPi(options.cwd, options.packageRoot));
+        results.push(exportPi(options.cwd, options.packageRoot, allowed));
         writtenDirs.add(".pi/skills");
         break;
     }
@@ -299,7 +312,7 @@ export function exportAgenticSurface(options: ArtifactExporterOptions): Artifact
       if (!agent) continue; // Unknown IDs are silently skipped.
       if (writtenDirs.has(agent.skillsDir)) continue; // Already written.
       const writes: ArtifactWrite[] = [];
-      exportSkillPackToDir(options.cwd, options.packageRoot, agent.skillsDir, writes);
+      exportSkillPackToDir(options.cwd, options.packageRoot, agent.skillsDir, writes, allowed);
       writtenDirs.add(agent.skillsDir);
       results.push({ target: id, writes });
     }

@@ -2,6 +2,8 @@
 name: refresh-surface
 description: Keep the agentic surface current after code changes — delta re-audit the touched feature areas and re-sync the experts. Use after a significant merge, or run it in CI on every merge to the default branch.
 disable-model-invocation: true
+tier: opt-in
+
 ---
 
 # Refresh surface

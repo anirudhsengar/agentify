@@ -166,6 +166,75 @@ required. User-facing files are applied from a staged bundle only after
 the audit closes every coverage dimension; a partial audit reports its
 gaps and rolls back generated surface writes.
 
+## Skill Catalog
+
+The shipped skill pack (`packaged/skills/`) has **25 skills** organized
+in two tiers. The installer picks what ships based on your project
+classification — no config file required.
+
+### Core (18, always shipped)
+
+Six skills are model-invoked (their descriptions sit in the agent's
+system prompt at every session). Twelve are user-invoked (typed by
+name, no context cost).
+
+| Skill | Invocation | Purpose |
+|-------|-----------|---------|
+| `codebase-design` | model | Vocabulary for designing deep modules |
+| `domain-modeling` | model | Domain language and ADR discipline |
+| `diagnosing-bugs` | model | Six-phase diagnosis loop for hard bugs |
+| `tdd` | model | Red-green-refactor discipline |
+| `review` | model | Two-axis (Standards + Spec) review |
+| `resolving-merge-conflicts` | model | Resolve an in-progress merge/rebase |
+| `drill-me` | user | Interview on a Goal or Sub-goal |
+| `to-goals` | user | Break a wide discussion into Goals |
+| `to-prd` | user | Synthesize a PRD from a conversation |
+| `to-plan` | user | Interview on implementation ordering |
+| `to-issues` | user | Slice a plan into tracer-bullet issues |
+| `scout` | user | Read-only codebase recon |
+| `spec` | user | Write one build spec |
+| `plan-build` | user | The `spec → implement` chain at `depth:2 \| depth:3 \| depth:4` |
+| `implement` | user | Execute a build spec test-first |
+| `fix` | user | Minimal patch for one blocker |
+| `test` | user | Run the validation surface |
+| `document` | user | Capture a completed slice as a feature doc |
+
+### Opt-in (7, classifier-driven)
+
+The project classifier inspects the repo at install time and adds
+opt-ins to the shipped set. Opt-ins only auto-install on **high**
+classification confidence — better to under-install than push skills
+that don't fit.
+
+| Skill | Auto-installed when | Purpose |
+|-------|---------------------|---------|
+| `prototype` | `greenfield` (high) | Throwaway prototype for design questions |
+| `scaffold-ci` | `brownfield` (high) | Stamp the AFK GitHub Actions runtime |
+| `refresh-surface` | `brownfield` (high) | Re-sync the agentic surface after merges |
+| `improve-codebase-architecture` | `brownfield` (high) | Scan for deepening opportunities |
+| `scout-then-plan` | `brownfield` (high) | Recon with feature specialists, then write a spec |
+
+#### Manual opt-in (never auto-installed)
+
+These two are *always* opt-in — the agentify README is the only place
+they're listed. Copy by hand from `node_modules/agentify/packaged/skills/<name>`
+(or your `agentify` checkout) into `.claude/skills/` (and any other
+dotfolder you target):
+
+| Skill | Purpose |
+|-------|---------|
+| `handoff` | Compact the current session into a handoff doc |
+| `writing-great-skills` | Reference for writing skills well (for skill authors) |
+
+### Tier drift
+
+If you upgrade agentify and a previously-installed skill drops out of
+the new tier (e.g. a `prototype` in a brownfield repo), the next
+`agentify` run removes it from `.claude/skills/`, `.agents/skills/`,
+and `.pi/skills/`. Only files carrying the `<!-- agentify:managed -->`
+marker are touched — your own skill files at those paths are left
+alone.
+
 ## After Bootstrap
 
 1. Review the generated diff, then commit and push to your default

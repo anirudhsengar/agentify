@@ -2,6 +2,8 @@
 name: implement
 description: Build one work item test-first at its agreed seams, run the validation surface, and report a structured result. Use to execute a build spec, a PRD, or a set of issues.
 disable-model-invocation: true
+tier: core
+
 ---
 
 # Implement

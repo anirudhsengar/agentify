@@ -2,6 +2,8 @@
 name: document
 description: Capture the institutional knowledge of a completed change so the next agent that touches the same area finds it — writes a feature doc, copies screenshots, and updates the conditional-docs index. Use after a slice is implemented and reviewed.
 disable-model-invocation: true
+tier: core
+
 ---
 
 # Document
