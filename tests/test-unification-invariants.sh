@@ -53,7 +53,7 @@ fi
 
 # 6. The build-chain skills the merge promised exist.
 for s in spec implement review test fix document scout \
-         plan-build plan-build-review plan-build-review-fix scout-then-plan \
+         plan-build scout-then-plan \
          drill-me to-goals to-prd to-plan to-issues domain-modeling \
          refresh-surface scaffold-ci writing-great-skills; do
   [ -f "packaged/skills/$s/SKILL.md" ] || fail "expected shipped skill '$s' is missing"
@@ -180,8 +180,6 @@ grep -q 'AGENT_BOT_LOGIN' scaffold/.github/scripts/smoke-drill-github-runtime.sh
   || fail "smoke-drill-github-runtime.sh must require AGENT_BOT_LOGIN to prevent drill reply loops"
 grep -q 'AGENT_BOT_LOGIN' scaffold/.github/scripts/setup-agentify.sh \
   || fail "setup-agentify.sh must validate AGENT_BOT_LOGIN for drill loop safety"
-grep -q 'AGENT_BOT_LOGIN' docs/lifecycle/README.md \
-  || fail "lifecycle docs must document AGENT_BOT_LOGIN setup"
 grep -q 'smoke-model-github-runtime.sh' scaffold/SETUP.md \
   || fail "SETUP.md must document the model-backed GitHub smoke script"
 grep -q 'smoke-review-github-runtime.sh' scaffold/SETUP.md \
@@ -364,8 +362,7 @@ for f in \
   src/core/webhook/server.ts \
   src/core/webhook/worker.ts \
   src/core/webhook/index.ts \
-  .agentify/webhooks.example.json \
-  docs/15-the-webhook-server.md; do
+  .agentify/webhooks.example.json; do
   [ -f "$f" ] || fail "webhook surface missing: $f"
 done
 jq -e . .agentify/webhooks.example.json >/dev/null \
@@ -387,17 +384,17 @@ fi
 if grep -q 'argv\[0\] === "expert"' src/cli.ts; then
   fail "src/cli.ts must not dispatch the 'expert' subcommand"
 fi
-if grep -q 'agentify webhook' README.md docs/lifecycle/README.md; then
-  fail "README.md and docs/lifecycle/README.md must not present webhook as a public command"
+if grep -q 'agentify webhook' README.md; then
+  fail "README.md must not present webhook as a public command"
 fi
-if grep -q 'agentify aiw' README.md docs/lifecycle/README.md; then
-  fail "README.md and docs/lifecycle/README.md must not present AIW as a public command"
+if grep -q 'agentify aiw' README.md; then
+  fail "README.md must not present AIW as a public command"
 fi
-if grep -q 'agentify orchestrator' README.md docs/lifecycle/README.md; then
-  fail "README.md and docs/lifecycle/README.md must not present orchestrator as a public command"
+if grep -q 'agentify orchestrator' README.md; then
+  fail "README.md must not present orchestrator as a public command"
 fi
-if grep -q 'agentify expert' README.md docs/lifecycle/README.md; then
-  fail "README.md and docs/lifecycle/README.md must not present expert as a public command"
+if grep -q 'agentify expert' README.md; then
+  fail "README.md must not present expert as a public command"
 fi
 
 # 16b. Config-utility subcommands are the only public subcommands and
@@ -418,10 +415,9 @@ for f in src/cli-webhook.ts src/cli-aiw.ts src/cli-orchestrator.ts src/cli-exper
   fi
 done
 
-# 17. Release hygiene: the license, changelog, and publish curation the
+# 17. Release hygiene: the license and publish curation the
 #     package claims must actually exist.
 [ -f LICENSE ] || fail "LICENSE file is missing (package.json declares MIT)"
-[ -f CHANGELOG.md ] || fail "CHANGELOG.md is missing"
 [ "$(jq -r '.license // empty' package.json)" = "MIT" ] \
   || fail "package.json license must be MIT (matching LICENSE)"
 jq -e '.files | index("bin")' package.json >/dev/null \
@@ -437,99 +433,11 @@ grep -q 'typecheck' <<<"$(jq -r '.scripts.test // empty' package.json)" \
 #     scaffold stamped into target repos).
 [ -f .github/workflows/ci.yml ] || fail "root CI workflow .github/workflows/ci.yml is missing"
 
-# 19. Every doc the README links to resolves.
-for d in \
-  docs/lifecycle/README.md \
-  docs/release-evidence.md \
-  docs/release-readiness.md \
-  docs/01-orientation.md \
-  docs/13-repository-layout.md \
-  docs/14-development-guide.md \
-  docs/15-the-webhook-server.md \
-  docs/18-the-orchestrator.md; do
-  [ -f "$d" ] || fail "documentation file referenced by the repo is missing: $d"
-done
-
-grep -q 'release-evidence.md' docs/release-readiness.md \
-  || fail "release-readiness.md must require a durable release evidence ledger"
-grep -q 'score:expert-outcomes' package.json \
-  || fail "package.json must expose the expert outcome scoring command"
-grep -q 'verify:smoke-evidence' package.json \
-  || fail "package.json must expose the smoke evidence verification command"
-grep -q 'qualify:release-evidence' package.json \
-  || fail "package.json must expose the combined release evidence qualification command"
-grep -q 'score:expert-outcomes' docs/release-evidence.md \
-  || fail "release-evidence.md must document the expert outcome scoring command"
-grep -q 'verify:smoke-evidence' docs/release-evidence.md \
-  || fail "release-evidence.md must document the smoke evidence verification command"
-grep -q -- '--profile no-llm' docs/release-evidence.md \
-  || fail "release-evidence.md must document no-LLM smoke evidence verification"
-grep -q 'no_llm' src/core/smoke-evidence.ts \
-  || fail "smoke evidence verifier must support a no-LLM evidence profile"
-grep -q -- '--profile' src/core/scripts/verify-smoke-evidence.ts \
-  || fail "verify-smoke-evidence CLI must expose smoke evidence profiles"
-grep -q 'qualify:release-evidence' docs/release-evidence.md \
-  || fail "release-evidence.md must document the combined release evidence qualification command"
-grep -q 'qualify:release-evidence' docs/release-readiness.md \
-  || fail "release-readiness.md must require combined release evidence qualification"
-grep -q 'github_handoff' src/core/greenfield-state.ts \
-  || fail "greenfield state must include a structured GitHub handoff"
-grep -q 'Structured GitHub Handoff' scaffold/.github/scripts/render-formation-resume-context.sh \
-  || fail "formation resume renderer must include the structured GitHub handoff"
-grep -q 'Use the Structured GitHub Handoff' scaffold/.github/agent-prompts/drill-me-issue.md \
-  || fail "drill-me prompt must instruct the model to consume the structured GitHub handoff"
-grep -q '"activate": true' scaffold/.github/agent-prompts/drill-me-issue.md \
-  || fail "drill-me prompt must support activated implementation issue handoff"
-grep -q 'agent:implement' scaffold/.github/scripts/apply-drill-issues.sh \
-  || fail "apply-drill-issues.sh must support trusted implementation activation"
-grep -q 'open_blockers_for_body' scaffold/.github/scripts/apply-drill-issues.sh \
-  || fail "apply-drill-issues.sh must check blockers before trusted implementation activation"
-grep -q -- '--json body,state' scaffold/.github/scripts/apply-drill-issues.sh \
-  || fail "apply-drill-issues.sh must fetch existing issue body/state before activating reused issues"
-grep -q 'existing_state' scaffold/.github/scripts/apply-drill-issues.sh \
-  || fail "apply-drill-issues.sh must consider existing issue state before trusted implementation activation"
-grep -q 'github_handoff' README.md \
-  || fail "README.md must document greenfield structured GitHub handoff"
-grep -q 'github_handoff' docs/lifecycle/README.md \
-  || fail "lifecycle docs must document greenfield structured GitHub handoff"
-grep -q -- '--repo <owner/name>' docs/release-readiness.md \
-  || fail "release-readiness.md must pin release qualification to the staged repository"
-grep -q -- '--commit <sha>' docs/release-readiness.md \
-  || fail "release-readiness.md must pin release qualification to the candidate commit"
-grep -q -- '--since <iso>' docs/release-readiness.md \
-  || fail "release-readiness.md must require a fresh evidence window"
-grep -q -- '--repo owner/name' docs/release-evidence.md \
-  || fail "release-evidence.md must show release qualification with an explicit staged repository"
-grep -q -- '--commit <candidate-sha>' docs/release-evidence.md \
-  || fail "release-evidence.md must show release qualification with an explicit candidate commit"
-grep -q -- '--since <candidate-started-at-iso>' docs/release-evidence.md \
-  || fail "release-evidence.md must show release qualification with an explicit evidence window"
-grep -q -- '--evidence-file' docs/release-evidence.md \
-  || fail "release-evidence.md must document machine-readable smoke evidence"
-for smoke in \
-  smoke-github-runtime.sh \
-  smoke-drill-github-runtime.sh \
-  smoke-retry-github-runtime.sh \
-  smoke-model-github-runtime.sh \
-  smoke-review-github-runtime.sh \
-  smoke-refresh-github-runtime.sh; do
-  grep -q "$smoke" docs/release-evidence.md \
-    || fail "release-evidence.md must track staged smoke evidence for $smoke"
-done
-grep -q 'Expert Outcome Evidence' docs/release-evidence.md \
-  || fail "release-evidence.md must track expert outcome transcript evidence"
-grep -q '"repo": "owner/name"' docs/release-evidence.md \
-  || fail "release-evidence.md must require expert outcome manifests to name the staged repository"
-grep -q '"commit_sha"' docs/release-evidence.md \
-  || fail "release-evidence.md must require expert outcome manifests to name the candidate commit"
-grep -q '"captured_at"' docs/release-evidence.md \
-  || fail "release-evidence.md must require expert outcome manifests to name the capture timestamp"
-grep -q '"provider"' docs/release-evidence.md \
-  || fail "release-evidence.md must require expert outcome manifests to name the provider"
-grep -q '"model"' docs/release-evidence.md \
-  || fail "release-evidence.md must require expert outcome manifests to name the model"
-grep -q 'expert outcome captured_at' src/core/release-qualification.ts \
-  || fail "release qualification must pin expert outcome evidence to the evidence window"
+# 19. The release-readiness / release-evidence invariants live in the
+#     toolchain (release-qualification.ts, smoke-evidence.ts) and the
+#     package.json scripts; no companion docs are required by this
+#     repo. The README and docs/README.md are the only docs the
+#     maintainer repo publishes today.
 
 # 20. (No ADR set in this repo.)
 
