@@ -1,0 +1,87 @@
+# labeler.yml — auto-apply labels by changed path
+# Consumed by actions/labeler (workflow config in .github/workflows/labeler.yml).
+# Schema: actions/labeler@v6 requires each matcher to use the
+# `any-glob-to-any-file:` (or `all-globs-to-all-files:`, etc.) key.
+
+audit:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/core/audit/**
+          - src/core/audit/defense/**
+          - src/core/audit/schema.ts
+          - src/core/audit/prompts/**
+
+orchestrator:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/core/orchestrator/**
+          - docs/adr/0015-*.md
+
+aiw:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/core/aiw/**
+
+webhook:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/core/webhook/**
+
+models:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/core/models/**
+          - docs/adr/0017-*.md
+
+cli:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/cli.ts
+          - src/core/cli-commands.ts
+          - src/core/agentify-app.ts
+          - src/core/run-agentify.ts
+          - bin/**
+
+scaffold:
+  - changed-files:
+      - any-glob-to-any-file:
+          - scaffold/**
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - README.md
+          - CHANGELOG.md
+          - AGENTS.md
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/workflows/**
+          - .github/dependabot.yml
+          - .github/labeler.yml
+          - .github/release-drafter.yml
+          - .github/CODEOWNERS
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - package.json
+          - package-lock.json
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - tests/**
+
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - SECURITY.md
+
+state-config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/core/agentify/**
+          - src/core/types.ts

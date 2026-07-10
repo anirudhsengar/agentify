@@ -1,0 +1,63 @@
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+version-resolver:
+  major:
+    labels: ["breaking-change"]
+  minor:
+    labels: ["enhancement", "feat", "feature"]
+  patch:
+    labels: ["bug", "fix", "docs", "chore", "dependencies", "ci", "refactor"]
+  default: patch
+categories:
+  - title: "Breaking changes"
+    labels:
+      - "breaking-change"
+    order: 100
+  - title: "New features"
+    labels:
+      - "enhancement"
+      - "feat"
+      - "feature"
+    order: 200
+  - title: "Bug fixes"
+    labels:
+      - "bug"
+      - "fix"
+    order: 300
+  - title: "Documentation"
+    labels:
+      - "documentation"
+      - "docs"
+    order: 400
+  - title: "Maintenance"
+    labels:
+      - "chore"
+      - "ci"
+      - "refactor"
+      - "dependencies"
+      - "performance"
+    order: 500
+  - title: "Security"
+    labels:
+      - "security"
+    order: 50
+change-template: "- $TITLE (#$NUMBER) @$AUTHOR"
+exclude-labels:
+  - "skip-changelog"
+template: |
+  ## Changes
+
+  $CHANGES
+
+  ## Contributors
+
+  $CONTRIBUTORS
+
+  ## Install / upgrade
+
+  ```bash
+  npm install -g agentify@$RESOLVED_VERSION
+  ```
+
+  Requires Node `>=22.19.0`. Full release notes and prior versions are at
+  https://github.com/anirudhsengar/agentify/releases.

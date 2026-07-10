@@ -25,7 +25,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   repos that already have a legacy `.pi/agentify/` directory are
   detected (read-only): the audit logs a one-line notice and
   continues writing there until the user moves the files
-  manually. See `docs/adr/0020-provider-scoped-state-dir.md`.
+  manually. See ADR 0020 (under `docs/adr/`).
 - `exportPi` skill-dir bug fix: Pi users now get their skill
   pack at `.pi/skills/` (Pi's actual `skillsDir`) rather than
   the previously incorrect `.agents/skills/` dispatch.
@@ -106,7 +106,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   the full test suite on push and pull request.
 - Code-enforced audit coverage gate: success and harness export now
   require the validated codebase map to have every dimension
-  `covered` ([ADR 0014](docs/adr/0014-coverage-gate-in-code.md)).
+  `covered` (ADR 0014 under `docs/adr/`).
 - Repository jail and expanded zero-access paths in the defense hook;
   the hook now also protects the agentify config dir and confines
   writes to the working directory.

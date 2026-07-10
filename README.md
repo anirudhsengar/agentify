@@ -1,5 +1,11 @@
 # agentify
 
+[![npm](https://img.shields.io/npm/v/agentify)](https://www.npmjs.com/package/agentify)
+[![license](https://img.shields.io/npm/l/agentify)](https://github.com/anirudhsengar/agentify/blob/main/LICENSE)
+[![node](https://img.shields.io/node/v/agentify)](https://github.com/anirudhsengar/agentify/blob/main/package.json)
+[![ci](https://img.shields.io/github/actions/workflow/status/anirudhsengar/agentify/ci.yml?branch=main)](https://github.com/anirudhsengar/agentify/actions/workflows/ci.yml)
+[![codeql](https://img.shields.io/github/actions/workflow/status/anirudhsengar/agentify/codeql.yml?branch=main&label=codeql)](https://github.com/anirudhsengar/agentify/actions/workflows/codeql.yml)
+
 **One terminal command for the full life of an agentic codebase.**
 
 `agentify` is a standalone CLI. You run it once inside a repository and
@@ -38,8 +44,7 @@ ambiguous repos:
 agentify --mode brownfield
 ```
 
-See [docs/lifecycle/README.md](docs/lifecycle/README.md) for the full
-walkthrough.
+See [docs/README.md](docs/README.md) for the documentation index.
 
 ## What It Does
 
@@ -278,9 +283,8 @@ config-utility subcommands exist to inspect and edit `~/.agentify/`
 without manually editing files. The `--mode` flag skips project-kind
 classification for ambiguous repos. Internal runtimes (`webhook`,
 `aiw`, `orchestrator`, `expert`) are library-only and never appear as
-subcommands. See [ADR 0008](docs/adr/0008-one-package-two-entry-modes.md)
-and [ADR 0017](docs/adr/0017-named-model-slots.md) for the slot
-design.
+subcommands. See ADR 0008 and ADR 0017 (under `docs/adr/`) for the
+entry-mode and slot design.
 
 ### Model slots
 
@@ -297,7 +301,7 @@ When a slot is unset, the resolver falls back to `primary` (or, if
 neither slot is set, to the legacy `provider`/`model` fields).
 **agentify never silently picks a "weaker" model** when you've
 explicitly configured one — see the "max quality is the floor"
-invariant in [ADR 0017](docs/adr/0017-named-model-slots.md).
+invariant in ADR 0017 (under `docs/adr/`).
 
 On first run, agentify prompts for a model strategy:
 "Use one model for everything" (sets `primary` only) or
@@ -328,7 +332,7 @@ Webhook, AIW, orchestrator, and expert modules may still exist
 internally. The public GitHub loop uses generated workflow/specialist/expert
 context plus the orchestration-planner prompt; it does not expose the internal
 OrchestratorHost as a public command or hosted control plane. See
-[ADR 0015](docs/adr/0015-public-orchestration-plane.md).
+ADR 0015 (under `docs/adr/`) for the public orchestration-plane boundary.
 
 The shipped skill pack lives in `packaged/skills/` — outside
 `.agents/` or `.claude/` at the repo root by design. The installer
@@ -370,13 +374,5 @@ bash tests/run.sh
 
 Useful docs:
 
-- [docs/lifecycle/README.md](docs/lifecycle/README.md) — the public
-  lifecycle: bootstrap, GitHub inbox, PR, refresh.
-- [docs/roadmap/10-10/README.md](docs/roadmap/10-10/README.md) —
-  agent-sized roadmap from the repository audit to a 10/10 product.
-- [docs/01-orientation.md](docs/01-orientation.md)
-- [docs/13-repository-layout.md](docs/13-repository-layout.md)
-- [docs/14-development-guide.md](docs/14-development-guide.md)
-- [docs/18-the-orchestrator.md](docs/18-the-orchestrator.md) — internal
-  architecture notes for the control plane.
-- [docs/adr/](docs/adr/)
+- [docs/README.md](docs/README.md) — the documentation index.
+- `docs/adr/` — Architecture Decision Records (0001–0020).
