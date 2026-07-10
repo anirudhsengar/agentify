@@ -232,7 +232,7 @@ export async function runPhase(args: RunPhaseArgs): Promise<RunPhaseResult> {
   const agentDir = ensurePhaseAgentDir(paths, phase);
 
   // Build session options. AIW phases consume the configured slot —
-  // defaults to "lite" (ADR 0017 / Phase 3) so the brownfield/
+  // defaults to "lite" (Phase 3) so the brownfield/
   // greenfield builder (which uses primary) stays on the strongest
   // model the user has configured, while AIW runs on a cheaper model.
   const runtimeInstance = runtime ?? new PiSdkRuntime();
@@ -711,8 +711,8 @@ function scheduleExpertSelfImprove(workingDir: string, logger: AiwLogger): void 
         const matched = mod.expertsTouchedBy(registry, [workingDir]);
         if (matched.length === 0) return;
         const todayIso = new Date().toISOString();
-        // Phase 3 (ADR 0017): resolve the lite slot for the LEARN
-        // run. Best-effort — falls back to the syncer's default if
+        // Phase 3: resolve the lite slot for the LEARN run.
+        // Best-effort — falls back to the syncer's default if
         // the slot can't be resolved (no auth, empty registry).
         let modelSlot: { provider: string; model: string } | undefined;
         let cfgDir = "";

@@ -1,4 +1,4 @@
-// tests/orchestrator/agent-manager-slot.test.ts — Phase 3 (ADR 0017)
+// tests/orchestrator/agent-manager-slot.test.ts — Phase 3
 //
 // Verify AgentManager.runAgent threads state.model/thinking_level/
 // model_role into the AgentRuntimeSessionOptions passed to the runtime.

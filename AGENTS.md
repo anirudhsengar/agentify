@@ -44,9 +44,9 @@ infer from the code: conventions, ownership boundaries, and gotchas.
   `src/core/run-agentify.ts`; system prompt is
   `src/core/audit/prompts/builder.md`. Tool allowlist: `read, grep, find,
   ls, bash, write, edit`, `write_map`, `write_map_delta`, `spawn_explorer`.
-- **No new runtime dependencies** without a documented ADR. Current
-  approved runtime dep: `typebox`. Peers: `@earendil-works/pi-coding-agent`,
-  `@earendil-works/pi-ai`.
+- **No new runtime dependencies** without explicit maintainer
+  approval. Current approved runtime dep: `typebox`. Peers:
+  `@earendil-works/pi-coding-agent`, `@earendil-works/pi-ai`.
 - **Structured output only** — the builder writes state through `write_map`
   against strict schemas. Never parse free-form LLM text.
 - **Generated `AGENTS.md` is hard-capped at 200 lines** and only written

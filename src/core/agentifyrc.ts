@@ -32,7 +32,7 @@ export const AGENTIFYRC_FILENAME = "agentifyrc.json";
  *
  *   1. `<cwd>/<stateDir>/agentifyrc.json` — provider-scoped,
  *      state-dir-aware. Travels with the state dir if the user
- *      moves between providers (ADR 0020).
+ *      moves between providers.
  *   2. `<cwd>/.agentifyrc` — project-root fallback, no extension.
  *   3. `~/.agentify/agentifyrc.json` — user-global fallback for
  *      users who want the same policy across every repo.

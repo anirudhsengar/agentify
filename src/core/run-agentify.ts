@@ -60,8 +60,8 @@ import {
   setAgentifySessionActive,
   setThinkingLevel,
 } from "./audit/state.ts";
-// spawn_explorer is constructed inside PiSdkRuntime.runSession (ADR 0017),
-// so the tool factory is imported only in pi-sdk-runtime.ts.
+// spawn_explorer is constructed inside PiSdkRuntime.runSession, so
+// the tool factory is imported only in pi-sdk-runtime.ts.
 import {
   DRAFT_TRANSPORT_DIR,
   loadCanonicalMapAt,
@@ -191,7 +191,7 @@ const INTERNAL_STATE_PATHS = [
 /**
  * Internal state paths (canonical map + managed manifest) under
  * the supplied state dir. Used by the state-dir-aware snapshot
- * path (ADR 0020).
+ * path.
  */
 function internalStatePathsFor(stateDir: string): readonly string[] {
   return [codebaseMapRelativePath(stateDir), manifestRelativePath(stateDir)];
@@ -208,7 +208,7 @@ function cleanupInternalScaffolding(cwd: string): void {
 /**
  * State-dir-aware cleanup of the entire audit state dir. Used by
  * the brownfield audit at the start of a run to ensure no stale
- * state from a previous provider choice is left behind (ADR 0020).
+ * state from a previous provider choice is left behind.
  */
 function cleanupInternalScaffoldingAt(cwd: string, stateDir: string): void {
   try {
@@ -220,8 +220,8 @@ function cleanupInternalScaffoldingAt(cwd: string, stateDir: string): void {
 
 // Remove only the transient draft/history transport, preserving the
 // canonical codebase_map.json. Run at the END of a run so the map
-// survives as a managed audit artifact (ADR 0014): AGENTS.md points to
-// it, and partial/aborted runs keep their progress for inspection.
+// survives as a managed audit artifact: AGENTS.md points to it,
+// and partial/aborted runs keep their progress for inspection.
 function cleanupTransientScaffolding(cwd: string): void {
   const transient = [
     path.join(cwd, DRAFT_TRANSPORT_DIR),
@@ -239,8 +239,7 @@ function cleanupTransientScaffolding(cwd: string): void {
 
 /**
  * State-dir-aware transient cleanup. Mirrors
- * `cleanupTransientScaffolding` but targets the resolved state dir
- * (ADR 0020).
+ * `cleanupTransientScaffolding` but targets the resolved state dir.
  */
 function cleanupTransientScaffoldingAt(cwd: string, stateDir: string): void {
   const transient = [
@@ -463,8 +462,8 @@ function restoreInternalStateSnapshot(cwd: string, snapshot: AuditArtifactSnapsh
 
 /**
  * State-dir-aware variant of `restoreInternalStateSnapshot`. Used
- * when the audit is wired to a provider-scoped state dir (ADR 0020).
- * The snapshot itself is built against the legacy constants for
+ * when the audit is wired to a provider-scoped state dir. The
+ * snapshot itself is built against the legacy constants for
  * backward compat — the function shape matches the legacy version
  * but operates on the supplied `stateDir`.
  */
@@ -939,12 +938,12 @@ async function runBrownfieldAudit(
   // Pin the legacy `write_map` / `write_map_delta` tools to the
   // resolved state dir so canonical map writes land at
   // `<stateDir>/codebase_map.json` rather than the historical
-  // `.pi/agentify/` location (ADR 0020).
+  // `.pi/agentify/` location.
   setMapSessionStateDir(stateDir);
   // Pin the artifact renderer session the same way so feature
   // agents / prompts / workflows / skills / extensions land under
   // the resolved state dir rather than the legacy
-  // `.pi/agentify/...` defaults (ADR 0020).
+  // `.pi/agentify/...` defaults.
   setRendererStateDir(stateDir);
   const internalStateSnapshot = collectInternalStateSnapshot(options.cwd);
   cleanupInternalScaffoldingAt(options.cwd, stateDir);
@@ -990,7 +989,7 @@ async function runBrownfieldAudit(
         writeMapDeltaTool,
         // spawn_explorer is created inside PiSdkRuntime.runSession so it
         // can use the same ModelRegistry + explorer slot the rest of
-        // the session uses. ADR 0017.
+        // the session uses.
       ],
       spawnExplorerAgentDir: defaultConfigDir(),
       spawnExplorerStateDir: stateDir,
@@ -1044,7 +1043,7 @@ async function runBrownfieldAudit(
         }
       : readFinalAuditState(options.cwd);
 
-    // Preserve the canonical codebase map (ADR 0014); remove only the
+    // Preserve the canonical codebase map; remove only the
     // transient draft/history/logs transport.
     cleanupTransientScaffoldingAt(options.cwd, stateDir);
     let reportedStatus = finalState.status;

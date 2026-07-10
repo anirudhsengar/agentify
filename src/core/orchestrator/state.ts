@@ -105,7 +105,7 @@ export const AgentStateSchema = Type.Object({
   }),
   /**
    * Named slot role for this sub-agent session. Defaults to
-   * "primary" when unset. See `ModelRole` and ADR 0017.
+   * "primary" when unset. See `ModelRole`.
    */
   model_role: Type.Union([Type.String(), Type.Null()], {
     description: "Slot role: 'primary' | 'explorer' | 'lite'. Null = inherit parent's role.",

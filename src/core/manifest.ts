@@ -9,8 +9,8 @@ import type { ManagedArtifactKind } from "./artifacts/renderers.ts";
 /**
  * Posix-style relative path of the canonical codebase map under the
  * supplied agentify state dir. The audit now derives its state dir
- * from the user's selected targets (ADR 0020), so this is a
- * function rather than a constant.
+ * from the user's selected targets, so this is a function rather
+ * than a constant.
  */
 export function codebaseMapRelativePath(stateDir: string): string {
   return path.join(stateDir, "codebase_map.json");
@@ -115,9 +115,9 @@ export interface ManagedManifest {
   mode: Exclude<AgentifyRepoMode, "unknown">;
   /**
    * Provider-scoped state directory (relative, no trailing slash)
-   * recorded at apply time. ADR 0020. New manifests always carry
-   * this; legacy manifests read without it (the read path falls
-   * back to `LEGACY_PI_STATE_RELATIVE_DIR` for backward compat).
+   * recorded at apply time. New manifests always carry this;
+   * legacy manifests read without it (the read path falls back to
+   * `LEGACY_PI_STATE_RELATIVE_DIR` for backward compat).
    */
   state_dir?: string;
   /**
@@ -198,8 +198,8 @@ export function kindForPath(relativePath: string): ManagedArtifactKind {
 }
 
 /**
- * Classify a managed file based on the active state dir (ADR 0020).
- * The state-dir prefix (`<stateDir>/prompts/experts`,
+ * Classify a managed file based on the active state dir. The
+ * state-dir prefix (`<stateDir>/prompts/experts`,
  * `<stateDir>/prompts`, `<stateDir>/workflows`,
  * `<stateDir>/extensions`, `<stateDir>` itself) replaces the
  * historical `.pi/` literal at the corresponding positions.
@@ -238,10 +238,9 @@ export function isRequiredManagedPath(relativePath: string, mode: Exclude<Agenti
  * Required-path check that honors the supplied state dir. Replaces
  * the literal `.pi/agentify/codebase_map.json` member of
  * `REQUIRED_BROWNFIELD_FILES` with the dynamic
- * `<stateDir>/codebase_map.json` path (ADR 0020). The brownfield
- * scaffold entries (`.github/*`, `SETUP.md`, `AGENTS.md`, …) are
- * still relative to the repo root and do not depend on the state
- * dir.
+ * `<stateDir>/codebase_map.json` path. The brownfield scaffold
+ * entries (`.github/*`, `SETUP.md`, `AGENTS.md`, …) are still
+ * relative to the repo root and do not depend on the state dir.
  */
 export function isRequiredManagedPathFor(
   relativePath: string,
@@ -303,9 +302,9 @@ function isManifest(value: unknown): value is ManagedManifest {
     && typeof value.agentify_version === "string"
     && typeof value.generated_at === "string"
     && (value.mode === "brownfield" || value.mode === "greenfield")
-    // state_dir is optional (ADR 0020). Absence means a legacy
-    // manifest written under .pi/agentify/ — accepted for
-    // backward compatibility; the read path falls back to
+    // state_dir is optional. Absence means a legacy manifest
+    // written under .pi/agentify/ — accepted for backward
+    // compatibility; the read path falls back to
     // LEGACY_PI_STATE_RELATIVE_DIR.
     && (value.state_dir === undefined || typeof value.state_dir === "string")
     // run_id is v2-only. Absent on v1 manifests (which are not
@@ -352,7 +351,7 @@ export function readManifestAt(cwd: string, stateDir: string): ManagedManifest |
  * Write the managed manifest at the legacy `.pi/agentify/manifest.json`
  * path. New audit code should call `writeManifestAt(cwd, manifest,
  * stateDir)` — that variant stamps the active state dir into the
- * manifest's `state_dir` field (ADR 0020).
+ * manifest's `state_dir` field.
  *
  * The schema_version is forced to `"2"` on write. Callers that
  * omit it (or set it to `"1"`) get a v2 manifest on disk; the

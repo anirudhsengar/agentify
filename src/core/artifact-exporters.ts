@@ -263,7 +263,7 @@ function exportPi(cwd: string, packageRoot: string, allowed?: ReadonlySet<string
   // per-harness location the registry documents. Writes now land at
   // `.pi/skills`; the dispatcher's `writtenDirs.add(".pi/skills")`
   // in `exportAgenticSurface` is then consistent with what's
-  // actually on disk (ADR 0020, bug fix).
+  // actually on disk (bug fix).
   exportSkills(packageRoot, path.join(cwd, ".pi", "skills"), writes, allowed);
   return { target: "pi", writes };
 }

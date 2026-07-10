@@ -1,8 +1,8 @@
 // tests/aiw/aiw-slot.test.ts — verify AIW phases consume the lite slot.
 //
-// Phase 3 (ADR 0017): every LLM-driven AIW phase (plan, build,
-// review, fix) passes `modelRole: "lite"` to the runtime. The
-// resolver resolves lite via the configured slot, falling back to
+// Phase 3: every LLM-driven AIW phase (plan, build, review, fix)
+// passes `modelRole: "lite"` to the runtime. The resolver
+// resolves lite via the configured slot, falling back to
 // primary → legacy fields → registry default. This test stubs the
 // runtime to capture the modelRole value passed to each phase.
 

@@ -14,10 +14,10 @@ perspective of someone running `agentify` in a real repo. -->
 ## Proposed solution
 
 <!-- Describe the change at the level of: which subcommand, flag, or
-artifact is added or modified. Reference the ADR (or new ADR) you'd write.
-If this changes `package.json` `files`, `bin`, the `files` allowlist, or
-runtime dependencies, call it out — agentify treats new runtime deps as
-ADR-gated (see AGENTS.md). -->
+artifact is added or modified. If this changes `package.json` `files`,
+`bin`, the `files` allowlist, or runtime dependencies, call it out —
+agentify treats new runtime deps as gated and requiring maintainer
+approval (see AGENTS.md). -->
 
 ## Alternatives considered
 
@@ -36,7 +36,7 @@ wins. -->
 - [ ] Harness export (`.claude/`, `.codex/`, `.pi/`, `.agents/` target dirs)
 - [ ] Scaffold shipped to target repos (`scaffold/`)
 - [ ] Public artifacts written to user repos (`AGENTS.md`, `specs/`, `ai_docs/`, feature agents, experts, workflows)
-- [ ] New runtime dependency (requires ADR)
+- [ ] New runtime dependency (requires maintainer approval)
 - [ ] Breaking change (semver major)
 
 ## Test plan
@@ -49,10 +49,10 @@ feature needs new fixture coverage, say which test file would grow. -->
 ## Documentation impact
 
 <!-- Which docs would change? `README.md`, `docs/lifecycle/`,
-`docs/adr/`, generated `AGENTS.md` in target repos, etc. -->
+generated `AGENTS.md` in target repos, etc. -->
 
 ## Checklist
 
 - [ ] I checked existing issues / discussions for prior art.
-- [ ] This proposal does not require an undocumented new runtime dep (or, if it does, an ADR is part of this PR).
-- [ ] I am willing to drive the implementation or shepherd an ADR if the maintainer agrees with the direction.
+- [ ] This proposal does not require an undocumented new runtime dep (or, if it does, the new dep is justified in this PR).
+- [ ] I am willing to drive the implementation if the maintainer agrees with the direction.

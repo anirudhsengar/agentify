@@ -45,8 +45,8 @@ const SHELL_SYNTAX = /[;&|<>`$]/;
 
 const REQUIRED_ALWAYS_ON_DOCS = new Set(["specs/README.md", "ai_docs/README.md"]);
 
-// Session-scoped state dir (ADR 0020). The audit resolves its state dir
-// at the top of every run; the renderer helpers consult this via the
+// Session-scoped state dir. The audit resolves its state dir at the
+// top of every run; the renderer helpers consult this via the
 // `stateDirFor` getter so the legacy literal doesn't need to be threaded
 // through every helper signature. Defaults to the historical
 // `.pi/agentify/` location so existing direct callers (tests) keep

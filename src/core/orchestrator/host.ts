@@ -157,8 +157,8 @@ export class OrchestratorHost {
     });
 
     // auto-improve: auto-LEARN scheduler. Fires on every
-    // agent_end with an expertise_path. Phase 3 (ADR 0017): resolve
-    // the lite slot model so the LEARN flow honors it.
+    // agent_end with an expertise_path. Phase 3: resolve the lite
+    // slot model so the LEARN flow honors it.
     let liteModel: import("@earendil-works/pi-ai").Model<import("@earendil-works/pi-ai").Api> | undefined;
     try {
       const authStorage = AuthStorage.create(authPath(opts.configDir));

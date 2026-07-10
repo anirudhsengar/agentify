@@ -77,7 +77,7 @@ export interface AutoImproveSchedulerOptions {
    * Optional pre-resolved lite slot model. When set, the LEARN
    * flow uses this model for its `pi -p` invocation (via the
    * `AGENTIFY_LEARN_MODEL` env var). Default: the syncer falls back
-   * to `pi -p`'s default model. ADR 0017.
+   * to `pi -p`'s default model.
    */
   liteModel?: Model<Api>;
 }

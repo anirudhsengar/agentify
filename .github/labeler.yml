@@ -15,7 +15,6 @@ orchestrator:
   - changed-files:
       - any-glob-to-any-file:
           - src/core/orchestrator/**
-          - docs/adr/0015-*.md
 
 aiw:
   - changed-files:
@@ -31,7 +30,6 @@ models:
   - changed-files:
       - any-glob-to-any-file:
           - src/core/models/**
-          - docs/adr/0017-*.md
 
 cli:
   - changed-files:

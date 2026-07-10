@@ -77,9 +77,9 @@ export const PromptInvocationSchema = Type.Object({
   })),
   thinking_level: Type.Optional(Type.String()),
   /**
-   * Named slot role hint (Phase 3 / ADR 0017). When set, the
-   * dispatched session consumes the configured slot rather than a
-   * literal model id. Falls back to "primary" when unset.
+   * Named slot role hint (Phase 3). When set, the dispatched
+   * session consumes the configured slot rather than a literal
+   * model id. Falls back to "primary" when unset.
    */
   model_role: Type.Optional(Type.String({
     description: "Slot role: 'primary' | 'explorer' | 'lite'. Takes precedence over `model` when set.",
@@ -211,7 +211,7 @@ export const WebhookTaskRecordSchema = Type.Object({
     tools: Type.Array(Type.String()),
     model: Type.Union([Type.String(), Type.Null()]),
     thinking_level: Type.Union([Type.String(), Type.Null()]),
-    /** Phase 3 (ADR 0017): slot role hint. */
+    /** Phase 3: slot role hint. */
     model_role: Type.Union([Type.String(), Type.Null()]),
   }),
   // Worker-side results (populated by the worker on completion).

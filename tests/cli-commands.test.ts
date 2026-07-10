@@ -518,7 +518,7 @@ async function dispatchReturnsTrueForKnownSubcommand(): Promise<void> {
 }
 
 // ===========================================================================
-// Phase 2 — slot-aware models set/unset + --resolved flag (ADR 0017)
+// Phase 2 — slot-aware models set/unset + --resolved flag
 // ===========================================================================
 
 async function modelsSetAssignsToPrimarySlot(): Promise<void> {
@@ -749,7 +749,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "modelsSetRejectsMalformedFormat", fn: modelsSetRejectsMalformedFormat },
   { name: "modelsUnsetClearsProviderModelPreservesThinking", fn: modelsUnsetClearsProviderModelPreservesThinking },
   { name: "dispatchReturnsTrueForKnownSubcommand", fn: dispatchReturnsTrueForKnownSubcommand },
-  // Phase 2 — slot-aware models set/unset (ADR 0017)
+  // Phase 2 — slot-aware models set/unset
   { name: "modelsSetAssignsToPrimarySlot", fn: modelsSetAssignsToPrimarySlot },
   { name: "modelsSetAssignsToExplorerSlot", fn: modelsSetAssignsToExplorerSlot },
   { name: "modelsSetExplorerAutoPopulatesPrimaryFromLegacy", fn: modelsSetExplorerAutoPopulatesPrimaryFromLegacy },

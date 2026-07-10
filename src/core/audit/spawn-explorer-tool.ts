@@ -106,7 +106,7 @@ const MODE_TO_FILE: Record<string, string> = {
 // sub-agent with the composed system prompt (inline or as a file).
 const CUSTOM_TEMPLATE_PATH = path.join(EXPLORERS_DIR, "_template.md");
 
-// Per-mode model selection (Phase 2.7). DELETED in Phase 2 (ADR 0017):
+// Per-mode model selection (Phase 2.7). DELETED in Phase 2:
 // sub-agents now run on the configured `explorer` slot model — every
 // mode resolves to the same Model. The `model` parameter still accepts
 // `"inherit" | "haiku" | "sonnet" | "opus"` literals for back-compat,
@@ -136,7 +136,7 @@ const ModelChoice = StringEnum(
  * Map the `model` literal to a concrete (provider, id) pair. The
  * resolver picks the model that has auth configured; if the literal
  * points at a model the user's auth doesn't cover, the resolver
- * throws a clear `NoAuthForProviderError`. Phase 2 / ADR 0017.
+ * throws a clear `NoAuthForProviderError`. Phase 2.
  */
 const LITERAL_TO_MODEL: Record<string, { provider: string; id: string }> = {
     haiku: { provider: "anthropic", id: "claude-haiku-4-5-20251001" },
@@ -238,7 +238,7 @@ let activeSpawnCount = 0;
  * @deprecated Default budget-recovery block used by tools created
  * without an explicit stateDir. References the legacy
  * `.pi/agentify/` paths. Use `buildBudgetRecovery(stateDir)` to
- * construct a tool bound to a provider-scoped state dir (ADR 0020).
+ * construct a tool bound to a provider-scoped state dir.
  */
 const BUDGET_RECOVERY: {
     can_continue: boolean;
@@ -471,7 +471,7 @@ export interface SpawnExplorerToolOptions {
      * destination for sub-agent logs and as the source of truth for
      * budget-recovery messages. Defaults to the legacy
      * `.pi/agentify/` path when omitted (backward compat for tests
-     * and direct callers that haven't migrated yet). See ADR 0020.
+     * and direct callers that haven't migrated yet).
      */
     stateDir?: string;
     /**
@@ -603,8 +603,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             }
         }
 
-        // Resolve the sub-agent's model (Phase 2 / ADR 0017). Default
-        // is the explorer slot (passed via `toolOptions.explorerModel`).
+        // Resolve the sub-agent's model (Phase 2). Default is the
+        // explorer slot (passed via `toolOptions.explorerModel`).
         // Explicit `model: haiku|sonnet|opus` literals are resolved
         // against the user's auth via `modelRegistry.find`; if the
         // literal points at a model the user can't actually call,

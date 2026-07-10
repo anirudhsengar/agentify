@@ -11,7 +11,7 @@ import {
 } from "./greenfield-artifacts.ts";
 
 /** Posix-style relative path of the greenfield state file under the
- *  supplied agentify state dir (ADR 0020). */
+ *  supplied agentify state dir. */
 export function greenfieldStateRelativePath(stateDir: string): string {
   return path.join(stateDir, "greenfield-state.json");
 }
@@ -597,11 +597,11 @@ export function readGreenfieldState(cwd: string): GreenfieldState | null {
 
 /**
  * Build the greenfield-state payload using a provider-scoped state
- * dir (ADR 0020). The github handoff body now references the
- * supplied `<stateDir>/greenfield-state.json` rather than the
- * legacy `.pi/agentify/` path. This is the function new audit code
- * should call; the legacy `buildGreenfieldState(cwd, params)` is
- * kept for backward compatibility.
+ * dir. The github handoff body now references the supplied
+ * `<stateDir>/greenfield-state.json` rather than the legacy
+ * `.pi/agentify/` path. This is the function new audit code should
+ * call; the legacy `buildGreenfieldState(cwd, params)` is kept for
+ * backward compatibility.
  */
 export function buildGreenfieldStateAt(
   cwd: string,

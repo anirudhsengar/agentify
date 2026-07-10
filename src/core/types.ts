@@ -15,11 +15,11 @@ export type ProjectKind = "brownfield" | "greenfield" | "ambiguous";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
 /**
- * Named model slot role. Phase 2+ (ADR 0017). `primary` is the default
- * resolver role; every existing `runSession` call site defaults to it.
- * `explorer` is consumed by `spawn_explorer` sub-agents. `lite` is
- * reserved for future lightweight judgment-call surfaces — a cheaper
- * model used for non-primary work.
+ * Named model slot role. `primary` is the default resolver role; every
+ * existing `runSession` call site defaults to it. `explorer` is
+ * consumed by `spawn_explorer` sub-agents. `lite` is reserved for
+ * future lightweight judgment-call surfaces — a cheaper model used
+ * for non-primary work.
  */
 export type ModelRole = "primary" | "explorer" | "lite";
 
@@ -44,7 +44,7 @@ export interface AgentifyConfig {
    * Optional record of previously-saved premium target selections.
    * Loaded for backward compatibility with anyone who hand-wrote a
    * `targets` field, but the interactive picker does NOT write this
-   * field — every fresh run re-prompts the user (see ADR 0018).
+   * field — every fresh run re-prompts the user.
    */
   targets?: ReadonlyArray<AgentifyTarget>;
 }
@@ -133,18 +133,17 @@ export interface AgentRuntimeSessionOptions {
   timeoutMs?: number;
   /**
    * Which named slot role this session is filling. Defaults to
-   * `"primary"` when unset. See `ModelRole` and ADR 0017.
+   * `"primary"` when unset. See `ModelRole`.
    */
   modelRole?: ModelRole;
   /**
    * When set, the runtime constructs a `spawn_explorer` tool bound to
    * the resolved `explorer` slot model and appends it to `customTools`.
-   * ADR 0017.
    */
   spawnExplorerAgentDir?: string;
   /**
-   * Audit state dir for the `spawn_explorer` tool (ADR 0020). When the
-   * builder audit is wired to a provider-scoped state dir
+   * Audit state dir for the `spawn_explorer` tool. When the builder
+   * audit is wired to a provider-scoped state dir
    * (`.claude/agentify/`, `.agents/agentify/`, `.pi/agentify/`), the
    * tool writes its sub-agent logs there and emits a budget-recovery
    * message that names the right path. Falls back to the legacy

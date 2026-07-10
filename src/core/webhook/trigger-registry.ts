@@ -175,8 +175,8 @@ export interface ResolvedPromptInvocation {
   model?: string;
   thinking_level?: string;
   /**
-   * Slot role hint (Phase 3 / ADR 0017). When set, the dispatched
-   * session consumes the configured slot. Takes precedence over
+   * Slot role hint (Phase 3). When set, the dispatched session
+   * consumes the configured slot. Takes precedence over
    * `model` when both are set.
    */
   model_role?: "primary" | "explorer" | "lite";

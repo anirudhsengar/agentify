@@ -239,7 +239,7 @@ async function testArtifactExporter(): Promise<void> {
 
   // The dual-skill-discovery mirror at .claude/skills/ is generated
   // into the target repo by the installer; the maintainer-side repo
-  // does not carry it (ADR 0006 amendment).
+  // does not carry it.
   assert.ok(fs.existsSync(path.join(cwd, ".claude", "skills", "demo", "SKILL.md")));
 
   const exportedSkill = fs.readFileSync(

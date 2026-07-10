@@ -1,6 +1,6 @@
 // Slot-aware model resolver. Replaces the inline `selectModel` helper
-// that previously lived in `pi-sdk-runtime.ts`. See ADR 0017 for the
-// design rationale and the "max quality is the floor" invariant.
+// that previously lived in `pi-sdk-runtime.ts`. The "max quality is
+// the floor" invariant is enforced here.
 
 import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
@@ -60,8 +60,8 @@ export class NoAuthForProviderError extends Error {
 
 /**
  * Resolve a `Model<Api>` for the given slot role. The four-tier
- * precedence is documented in ADR 0017. Tier-1 misses (slot set but
- * model unknown to the registry, or auth missing) throw — we never
+ * precedence is enforced below. Tier-1 misses (slot set but model
+ * unknown to the registry, or auth missing) throw — we never
  * silently downgrade when the user made an explicit choice.
  *
  * Returns `undefined` only when no tier produces a model (i.e., empty

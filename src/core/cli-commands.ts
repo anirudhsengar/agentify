@@ -1,7 +1,7 @@
 // Config-utility subcommands for the agentify CLI: `login`, `logout`,
 // and `models`. These commands operate only on
 // `~/.agentify/{config,auth}.json` and never invoke the audit runtime.
-// See ADR 0008 (amended 2026-07-09).
+// Amended 2026-07-09 to permit the config-utility subcommands.
 
 import * as path from "node:path";
 import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
@@ -293,7 +293,7 @@ export async function logoutCommand(
     if (existing.provider === provider) {
       updated = { ...updated, provider: undefined, model: undefined };
     }
-    // Phase 2 (ADR 0017): also clear any slot whose provider matches.
+    // Phase 2: also clear any slot whose provider matches.
     if (existing.modelsByRole) {
       const slots = { ...existing.modelsByRole };
       let changed = false;
@@ -536,7 +536,7 @@ function modelsSet(
       const existing = loadAgentifyConfig(ctx.configDir);
 
       // Slot inheritance: when setting a secondary slot without primary
-      // set, auto-populate primary from legacy fields (Phase 2 / ADR 0017).
+      // set, auto-populate primary from legacy fields (Phase 2).
       let primarySlot = existing.modelsByRole?.primary;
       if (!primarySlot && slot !== "primary") {
         if (existing.provider && existing.model) {

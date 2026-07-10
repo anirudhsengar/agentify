@@ -34,7 +34,7 @@ export interface AgentFrontmatter {
   model: ModelChoiceLiteral;
   /**
    * Named slot role for this sub-agent. Defaults to "primary"
-   * when unset. See `ModelRole` and ADR 0017.
+   * when unset. See `ModelRole`.
    */
   modelRole?: "primary" | "explorer" | "lite";
   domain: string[] | null;
@@ -216,8 +216,7 @@ export function loadAgentsFromDir(
  * Walk up from `cwd` looking for the nearest feature-agent
  * directory. The audit's active state dir is supplied so the
  * walker probes the resolved location first; legacy `.pi/agents/`
- * is checked last for backward compat with repos mid-migration
- * (ADR 0020).
+ * is checked last for backward compat with repos mid-migration.
  */
 export function findNearestProjectAgentsDir(
   cwd: string,

@@ -383,7 +383,6 @@ export interface SelfImproveOptions {
    * Slot hint to pass through to the syncer. Defaults to "lite".
    * Provider is `string` (not the strict AgentifyProvider union)
    * because the subprocess pass-through doesn't enforce the union.
-   * See ADR 0017.
    */
   modelSlot?: { provider: string; model: string };
 }
@@ -466,7 +465,7 @@ async function defaultSelfImproveSyncer(args: {
   // the LEARN loop deterministic on real Pi installations while
   // remaining testable via the `syncer` override.
   //
-  // Phase 3 (ADR 0017): if `modelSlot` is provided, set the env var
+  // Phase 3: if `modelSlot` is provided, set the env var
   // `AGENTIFY_LEARN_MODEL=<provider>/<id>` so downstream `pi -p`
   // implementations can pick the right model. (Some `pi` builds honor
   // this; others ignore it — the fallback is `pi -p`'s default.)
@@ -638,7 +637,7 @@ function toPosixRel(cwd: string, absolute: string): string {
  * each premium state dir in dispatch order
  * (`.claude/agentify` → `.agents/agentify` → `.pi/agentify` →
  * universal `.agents/agentify`) plus the legacy `.pi/` mapping
- * for backward compat (ADR 0020).
+ * for backward compat.
  */
 const KNOWN_STATE_DIRS = [
   ".claude/agentify",

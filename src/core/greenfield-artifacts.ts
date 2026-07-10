@@ -12,7 +12,7 @@ import { LEGACY_PI_STATE_RELATIVE_DIR } from "./state-dir.ts";
 import type { ManagedArtifactKind, RenderedArtifact } from "./artifacts/renderers.ts";
 
 /** Posix-style relative path of the greenfield formation file under
- *  the supplied agentify state dir (ADR 0020). */
+ *  the supplied agentify state dir. */
 export function greenfieldFormationRelativePath(stateDir: string): string {
   return path.join(stateDir, "greenfield-formation.json");
 }
@@ -614,9 +614,8 @@ export function readGreenfieldFormation(cwd: string): GreenfieldFormation | null
 
 /**
  * Write the greenfield formation payload at
- * `<stateDir>/greenfield-formation.json` (ADR 0020). New audit
- * code should call this when the audit is wired to a
- * provider-scoped state dir.
+ * `<stateDir>/greenfield-formation.json`. New audit code should
+ * call this when the audit is wired to a provider-scoped state dir.
  */
 export function writeGreenfieldFormationAt(
   cwd: string,
@@ -630,8 +629,8 @@ export function writeGreenfieldFormationAt(
 
 /**
  * Read the greenfield formation payload at
- * `<stateDir>/greenfield-formation.json` (ADR 0020). Returns null
- * when the file is missing or fails schema validation.
+ * `<stateDir>/greenfield-formation.json`. Returns null when the
+ * file is missing or fails schema validation.
  */
 export function readGreenfieldFormationAt(
   cwd: string,

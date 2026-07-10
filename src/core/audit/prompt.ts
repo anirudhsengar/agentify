@@ -2,9 +2,9 @@
 // The path is resolved relative to this module so source and npm
 // installs both work.
 //
-// State-dir templating (ADR 0020): the on-disk `builder.md` uses the
-// literal placeholder `<stateDir>` in every path reference (audit
-// state, feature-agent scratch, prompts, workflows, skills, etc.).
+// State-dir templating: the on-disk `builder.md` uses the literal
+// placeholder `<stateDir>` in every path reference (audit state,
+// feature-agent scratch, prompts, workflows, skills, etc.).
 // `loadBuilderPrompt(stateDir)` substitutes the resolved state dir
 // at call time so the LLM sees the actual destination rather than
 // the legacy `.pi/agentify/` literal.

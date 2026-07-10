@@ -47,8 +47,8 @@ export class PiSdkRuntime implements AgentRuntime {
       options.config,
       options.modelRole ?? "primary",
     );
-    // ADR 0017: when the caller asks for a spawn_explorer tool, build it
-    // here so it can use the same registry + the resolved explorer slot.
+    // When the caller asks for a spawn_explorer tool, build it here
+    // so it can use the same registry + the resolved explorer slot.
     // If explorer resolution throws (slot set but model missing or
     // unauthenticated), we degrade gracefully — the spawn_explorer tool
     // gets `selectedModel` (the parent's model) and the literal-mapping
@@ -67,10 +67,10 @@ export class PiSdkRuntime implements AgentRuntime {
       customTools.push(
         createSpawnExplorerTool({
           agentDir: options.spawnExplorerAgentDir,
-          // ADR 0020: thread the audit's resolved state dir into the
-          // tool so sub-agent logs land there and budget-recovery
-          // messages describe the right path. When unset, the tool
-          // defaults to the legacy `.pi/agentify/` location.
+          // Thread the audit's resolved state dir into the tool so
+          // sub-agent logs land there and budget-recovery messages
+          // describe the right path. When unset, the tool defaults
+          // to the legacy `.pi/agentify/` location.
           stateDir: options.spawnExplorerStateDir,
           explorerModel: explorerModelForSpawn,
           modelRegistry,

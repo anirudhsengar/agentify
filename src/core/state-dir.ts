@@ -3,11 +3,11 @@
 //
 // Historical note: agentify originated as a Pi extension called
 // "GreenField." Every internal path was therefore hardcoded under
-// `.pi/agentify/...`. When the packaging changed (ADR 0008,
-// accepted 2026-07-09) agentify became a standalone npm package —
-// but the `.pi/` prefix was kept. Per ADR 0020, this module is the
-// one and only place that decides the audit's state dir, derived
-// from the user's selected coding-agent targets.
+// `.pi/agentify/...`. When the packaging changed (2026-07-09)
+// agentify became a standalone npm package — but the `.pi/` prefix
+// was kept. This module is the one and only place that decides the
+// audit's state dir, derived from the user's selected coding-agent
+// targets.
 //
 // Why it is provider-scoped: the audit produces both internal
 // state (codebase_map, manifest, logs) and the canonical
@@ -53,8 +53,8 @@ export interface ResolvedStateDir {
 
 /**
  * Legacy `.pi/agentify` location. Hardcoded across the codebase
- * before ADR 0020. Detected at run time so existing repos keep
- * working until the user moves them by hand.
+ * before the state-dir module was introduced. Detected at run time
+ * so existing repos keep working until the user moves them by hand.
  */
 export const LEGACY_PI_STATE_RELATIVE_DIR = ".pi/agentify";
 

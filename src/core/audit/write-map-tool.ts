@@ -61,7 +61,7 @@ export const DRAFT_PATH = path.join(DRAFT_DIR, "draft.json");
 export const HISTORY_DIR = path.join(LEGACY_PI_STATE_RELATIVE_DIR, "history");
 
 // ----------------------------------------------------------------------------
-// Session state dir (ADR 0020).
+// Session state dir.
 //
 // The audit resolves its state dir from the user's selected provider at the
 // top of each run. The two `write_map` tools consult the per-session
@@ -74,7 +74,7 @@ let currentSessionStateDir = LEGACY_PI_STATE_RELATIVE_DIR;
 /**
  * Set the per-session state dir that the legacy `writeMapTool` and
  * `writeMapDeltaTool` use for write/read paths. Called by `run-agentify.ts`
- * at the start of each audit run (ADR 0020). Tests that bypass
+ * at the start of each audit run. Tests that bypass
  * `run-agentify.ts` (e.g. `tests/audit/coverage-gate.test.ts`) keep the
  * default legacy path.
  */
@@ -101,8 +101,8 @@ export const DRAFT_TRANSPORT_DIR = DRAFT_DIR;
  * Load and schema-validate the canonical codebase map. Returns the
  * validated map, or `null` when the map is absent, unreadable, not
  * JSON, or does not satisfy the schema. Used by the post-run success
- * gate (see ADR 0014) so success reflects the real map, not merely
- * the existence of output files.
+ * gate so success reflects the real map, not merely the existence
+ * of output files.
  *
  * @deprecated Probes the legacy `.pi/agentify/codebase_map.json`
  * path. Use `loadCanonicalMapAt(cwd, stateDir)` with the
@@ -130,7 +130,7 @@ export function loadCanonicalMap(cwd: string): CodebaseMap | null {
 /**
  * State-dir-aware variant of `loadCanonicalMap`. The post-run
  * success gate uses this when the audit is wired to a
- * provider-scoped state dir (ADR 0020).
+ * provider-scoped state dir.
  */
 export function loadCanonicalMapAt(cwd: string, stateDir: string): CodebaseMap | null {
     // Try the resolved state dir first, then fall back to the

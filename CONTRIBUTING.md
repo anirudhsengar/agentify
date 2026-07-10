@@ -29,11 +29,11 @@ agentify/
 │       ├── orchestrator/     # orchestrator state and prompts
 │       ├── aiw/              # AIW worker (plan, build, review, fix)
 │       ├── webhook/          # webhook server (signature, queue, worker)
-│       ├── models/           # named model slots (ADR 0017)
+│       ├── models/           # named model slots
 │       └── artifact-exporters/  # writes AGENTS.md, specs/, ai_docs/, harness exports
 ├── scaffold/                 # the GitHub runtime scaffold shipped into target repos
 ├── tests/                    # tsx unit suite + bash contract tests
-├── docs/                     # lifecycle, orientation, ADRs
+├── docs/                     # lifecycle, orientation
 └── package.json              # bin, files, engines.node>=22.19.0, prepublishOnly
 ```
 
@@ -88,13 +88,12 @@ These are non-obvious and worth reading before opening a PR:
   `src/core/audit/schema.ts`. Other modules import from it.
 - **Defense policy** lives under `src/core/audit/defense/`. Keep it
   centralized — do not scatter defense checks across call sites.
-- **Slot resolution (ADR 0017) is strict.** The named model slots fall
-  back to `primary` only when unset; explicit user choices are never
+- **Slot resolution is strict.** The named model slots fall back to
+  `primary` only when unset; explicit user choices are never
   silently overridden.
-- **No new runtime dependencies** without an ADR. The approved runtime
-  set is `typebox` plus peers `@earendil-works/pi-coding-agent` and
-  `@earendil-works/pi-ai`. New runtime deps require a `docs/adr/NNNN-*`
-  entry that motivates them.
+- **No new runtime dependencies** without explicit maintainer
+  approval. The approved runtime set is `typebox` plus peers
+  `@earendil-works/pi-coding-agent` and `@earendil-works/pi-ai`.
 - **Strict TypeScript.** No `any`; use `unknown` and type guards.
   `import type` for type-only imports. No default exports unless a
   framework requires it. Avoid classes unless they hold state across
@@ -107,7 +106,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 ```
 feat: tier the shipped skill pack, prune duplicates
 fix: ship harness exports to .pi/skills/ instead of .agents/skills/
-docs: ADR 0017 named model slots
+docs: named model slots
 refactor: thread modelRole through orchestrator sub-agents
 ci: pin Node 22.19.0 in CI workflow
 ```

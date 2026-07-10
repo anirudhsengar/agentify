@@ -1,7 +1,7 @@
 // A complete, schema-valid codebase map for tests. Fake runtimes write
 // this to .pi/agentify/codebase_map.json so the code-enforced coverage
-// gate (ADR 0014) sees a real, fully-covered map — mirroring what a
-// successful builder run produces. The module self-checks at import.
+// gate sees a real, fully-covered map — mirroring what a successful
+// builder run produces. The module self-checks at import.
 
 import { Value } from "typebox/value";
 import {

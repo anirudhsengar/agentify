@@ -311,7 +311,7 @@ function buildSessionOptions(
   userPrompt: string,
   configDir: string,
 ): AgentRuntimeSessionOptions {
-  // Phase 3 (ADR 0017): model_role takes precedence over model. When
+  // Phase 3: model_role takes precedence over model. When
   // model_role is set, the runtime consumes the configured slot via
   // the resolver; when unset, fall back to the literal model id (or
   // primary if neither is set).

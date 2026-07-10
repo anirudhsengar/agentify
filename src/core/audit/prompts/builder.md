@@ -52,7 +52,7 @@ after validation.
 | 4 Artifact Intents | AGENTS sections, docs, feature agents, prompts, experts |
 | 5 Renderer Handoff | Ensure names/paths are safe and grounded in the map |
 | 6 Feedback-Loop Intent | conditional docs and KPI intent metadata when warranted |
-| 7 Domain-Model Intent | Propose terms + candidate ADR intent when warranted |
+| 7 Domain-Model Intent | Propose terms + candidate durable decisions when warranted |
 | 8 Extensions and Skills | extension/skill candidate intents only |
 | 9 Per-Area Templates | change-type + per-area prompt intents |
 | 10 Expert Prompts | expert prompt intents |
@@ -524,7 +524,7 @@ exist; always overwrite `agentic_kpis.md` and `conditional_docs.md`
 ### Phase 7 — Domain-Model Seeding (propose, never commit)
 
 Give the codebase the durable intent layer a greenfield project gets
-from day 0 (ADR-0011). From what the audit found, **propose** — never
+from day 0. From what the audit found, **propose** — never
 auto-write — the domain model, for the user to confirm via
 `/domain-modeling`:
 
@@ -534,16 +534,17 @@ auto-write — the domain model, for the user to confirm via
    terms with 1-line definitions; flag any term the code uses
    ambiguously. `CONTEXT.md` is a glossary only — no implementation
    detail.
-2. **Candidate ADRs** — for the architectural decisions the code
-   embodies (client/server split, shared-state ownership, framework
-   choices, persistence model). Only propose one when the decision
-   is hard-to-reverse, surprising without context, and the result of
-   a real trade-off — the `/domain-modeling` threshold.
+2. **Candidate durable decisions** — for the architectural
+   decisions the code embodies (client/server split, shared-state
+   ownership, framework choices, persistence model). Only propose
+   one when the decision is hard-to-reverse, surprising without
+   context, and the result of a real trade-off — the
+   `/domain-modeling` threshold.
 
 Present these as a proposal in the completion summary. Write them to
-`CONTEXT.md` / `docs/adr/` **only if the user has confirmed in this
-session**. Honest empty is valid — propose only what the code really
-shows; do not invent terms or decisions.
+`CONTEXT.md` **only if the user has confirmed in this session**.
+Honest empty is valid — propose only what the code really shows; do
+not invent terms or decisions.
 
 ### Phase 8 — Extensions and Skills
 
@@ -1706,7 +1707,7 @@ Send the literal completion summary as your final
 assistant message. The exact string:
 
 ```
-agentify run complete. Audit done; AGENTS.md: ./AGENTS.md (N lines / 200 cap). Always-on context: 2 files (specs/README.md, ai_docs/README.md) + N feature agents (<stateDir>/agents/<feature>.md). Feedback-loop state: 3 directories with READMEs (app_review/, app_docs/, app_fix_reports/) + agentic_kpis.md + conditional_docs.md. Extensions: X (<stateDir>/extensions/<name>.ts); skills: Y (<stateDir>/skills/<name>/SKILL.md). Prompt templates: M change-type templates (<stateDir>/prompts/<type>.md) + P per-area templates. Expert prompts: R domains (<stateDir>/prompts/experts/<domain>/) with expertise.yaml + question.md + self-improve.md (+ optional plan.md/plan_build_improve.md). Domain model: <proposed CONTEXT.md terms + candidate ADRs, or "none proposed">. The build chain (/spec, /implement, /review, /test, /fix, /document, /scout, the /plan-build* chains) ships as skills in .agents/skills/ — already present, not emitted here. CRITICAL: add ".pi/prompts/experts" to the `prompts` array in .pi/settings.json (or ~/.pi/agent/settings.json) — Pi does not auto-discover sub-directories of prompts/. Next: restart Pi; then /<feature> <query> to invoke a specialist, /<type> <task> or /spec <task> to write a build spec, /implement <spec-path> to execute it, /plan-build depth:2|3|4 to run a chain, /test /review /fix /document for the loops, /experts:<domain>:<question|self-improve|plan|plan_build_improve> for an expert, or /refresh-surface after big changes.
+agentify run complete. Audit done; AGENTS.md: ./AGENTS.md (N lines / 200 cap). Always-on context: 2 files (specs/README.md, ai_docs/README.md) + N feature agents (<stateDir>/agents/<feature>.md). Feedback-loop state: 3 directories with READMEs (app_review/, app_docs/, app_fix_reports/) + agentic_kpis.md + conditional_docs.md. Extensions: X (<stateDir>/extensions/<name>.ts); skills: Y (<stateDir>/skills/<name>/SKILL.md). Prompt templates: M change-type templates (<stateDir>/prompts/<type>.md) + P per-area templates. Expert prompts: R domains (<stateDir>/prompts/experts/<domain>/) with expertise.yaml + question.md + self-improve.md (+ optional plan.md/plan_build_improve.md). Domain model: <proposed CONTEXT.md terms + candidate durable decisions, or "none proposed">. The build chain (/spec, /implement, /review, /test, /fix, /document, /scout, the /plan-build* chains) ships as skills in .agents/skills/ — already present, not emitted here. CRITICAL: add ".pi/prompts/experts" to the `prompts` array in .pi/settings.json (or ~/.pi/agent/settings.json) — Pi does not auto-discover sub-directories of prompts/. Next: restart Pi; then /<feature> <query> to invoke a specialist, /<type> <task> or /spec <task> to write a build spec, /implement <spec-path> to execute it, /plan-build depth:2|3|4 to run a chain, /test /review /fix /document for the loops, /experts:<domain>:<question|self-improve|plan|plan_build_improve> for an expert, or /refresh-surface after big changes.
 ```
 
 `STOP`. Do not call any more tools.

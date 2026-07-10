@@ -1408,7 +1408,7 @@ export function extractCoverageSummary(map: CodebaseMap): {
 }
 
 // ============================================================================
-// Coverage closure (the code-enforced gate — ADR 0014)
+// Coverage closure (the code-enforced gate)
 // ============================================================================
 //
 // The TypeBox schema validates shape, not substance: a dimension can
@@ -1417,7 +1417,7 @@ export function extractCoverageSummary(map: CodebaseMap): {
 // substance rules the builder prompt describes, so "covered" means the
 // same thing in code as it does in the prompt.
 
-/** Hard cap on generated AGENTS.md length (ADR 0009 / builder prompt). */
+/** Hard cap on generated AGENTS.md length (see builder prompt). */
 export const AGENTS_MD_MAX_LINES = 200;
 
 /** Minimum pitfalls the map must carry when D5 is claimed covered. */

@@ -76,7 +76,7 @@ export interface CreateAgentArgs {
   thinking_level?: string | null;
   /**
    * Named slot role for this sub-agent. Default: inherit parent's
-   * role (typically "primary"). See `ModelRole` and ADR 0017.
+   * role (typically "primary"). See `ModelRole`.
    */
   modelRole?: "primary" | "explorer" | "lite" | null;
   /** Initial user prompt. */
@@ -671,7 +671,7 @@ export class AgentManager {
 
     // Resolve the model alias for the runtime (the runtime expects
     // a provider/model pair; tests pass a fake that ignores it).
-    // Phase 3 (ADR 0017): overlay `state.model` (literal override),
+    // Phase 3: overlay `state.model` (literal override),
     // `state.thinking_level`, and `state.model_role` (slot hint) on
     // top of the parent's config so sub-agents honor the per-agent
     // model the orchestrator captured at create_agent time.

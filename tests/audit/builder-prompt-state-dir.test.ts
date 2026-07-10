@@ -1,6 +1,6 @@
 // tests/audit/builder-prompt-state-dir.test.ts
 //
-// Guards the ADR 0020 invariant: the source `builder.md` prompt
+// Guards the state-dir invariant: the source `builder.md` prompt
 // on disk must use the `<stateDir>` placeholder for every audit
 // path reference rather than hardcoding the legacy
 // `.pi/agentify/` literal. Production callers substitute the
@@ -36,14 +36,14 @@ async function testSourcePromptHasNoHardcodedAgentify(): Promise<void> {
   // Walk the prompt for hardcoded `.pi/agentify/...` paths that
   // would surface to the LLM verbatim. Allow `.pi/settings.json` and
   // `~/.pi/agent/settings.json` references (Pi-specific convention,
-  // not state-dir related — see ADR 0018 comment in builder.md).
+  // not state-dir related).
   const lines = raw.split("\n");
   for (const [i, line] of lines.entries()) {
     const withoutPiSettings = line.replace(/\.pi\/settings\.json/g, "").replace(/~\/\.pi\/agent\/settings\.json/g, "");
     if (withoutPiSettings.includes(".pi/agentify/")) {
       assert.fail(
         `builder.md:${i + 1} contains a hardcoded \\.pi/agentify/ path:\n  ${line}\n` +
-          "Use the <stateDir> placeholder instead (ADR 0020).",
+          "Use the <stateDir> placeholder instead.",
       );
     }
   }

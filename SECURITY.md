@@ -37,7 +37,8 @@ with the subject `[agentify security]` and:
 - a minimal reproduction (target repo shape, command line, env vars),
 - the relevant excerpt of `<stateDir>/agentify.log` with any API keys
   redacted (state dir is `~/.agentify/`, `~/.claude/agentify/`,
-  `~/.agents/agentify/`, or `~/.pi/agentify/` per ADR 0020).
+  `~/.agents/agentify/`, or `~/.pi/agentify/` — provider-scoped
+  based on the user's selected coding agent).
 
 You should receive an acknowledgement within **3 business days**.
 

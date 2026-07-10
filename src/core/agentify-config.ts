@@ -222,7 +222,7 @@ async function promptModelStrategy(
       ? modelChoices
       : [{ label: "(no models available — proceed anyway)", value: "" }];
 
-  // Phase 3 (ADR 0017): three tier presets + "Customize" advanced path.
+  // Phase 3: three tier presets + "Customize" advanced path.
   const strategy = await ui.promptSelect(
     "How would you like to assign models in agentify?",
     [
@@ -410,8 +410,8 @@ export async function ensureAgentifyConfig(
     });
   }
 
-  // First-run model strategy picker (Phase 2, ADR 0017). Only fires
-  // when nothing is configured: no slot config, no legacy fields.
+  // First-run model strategy picker (Phase 2). Only fires when
+  // nothing is configured: no slot config, no legacy fields.
   const hasSlotConfig =
     !!config.modelsByRole &&
     (!!config.modelsByRole.primary ||

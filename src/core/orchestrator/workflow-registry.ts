@@ -43,7 +43,7 @@ const PACKAGED_WORKFLOWS_DIR = path.join(HERE, "workflows");
  * Walk up from cwd looking for the nearest project workflow
  * directory. Probes the resolved state dir's `<stateDir>/workflows`
  * first, falling back to the legacy `.pi/agentify/workflows` for
- * backward compat (ADR 0020).
+ * backward compat.
  */
 function findNearestProjectWorkflowsDir(
   cwd: string,

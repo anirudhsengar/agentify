@@ -29,7 +29,8 @@ agentify --mode brownfield
 <!-- What actually happened. Paste the relevant console output, the last
 lines of `<stateDir>/agentify.log` (typically `~/.agentify/agentify.log`,
 `~/.claude/agentify/agentify.log`, or `~/.agents/agentify/agentify.log`
-per ADR 0020), and any stack traces. -->
+— provider-scoped based on the user's selected coding agent), and
+any stack traces. -->
 
 ## Environment
 

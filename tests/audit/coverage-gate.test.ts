@@ -1,6 +1,6 @@
-// Tests for the code-enforced coverage gate (ADR 0014): success and
-// export must depend on the validated codebase map, not on file
-// existence alone.
+// Tests for the code-enforced coverage gate: success and export
+// must depend on the validated codebase map, not on file existence
+// alone.
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";

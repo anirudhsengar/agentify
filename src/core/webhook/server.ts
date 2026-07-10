@@ -1,6 +1,6 @@
 // server.ts — the HTTP webhook server.
 //
-// Uses Node's built-in `http` module (zero new deps, per ADR-0013).
+// Uses Node's built-in `http` module (zero new deps).
 // On every verified request:
 //   1. Look up the trigger (method + path).
 //   2. Read the body up to trigger.max_body_bytes (default 1 MiB).

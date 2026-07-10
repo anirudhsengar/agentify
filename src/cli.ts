@@ -169,8 +169,7 @@ Options:
   --targets <csv>            Skip the agent-target picker. Comma-separated
                              agent IDs (e.g. 'claude-code,codex,cursor').
                              Skips the picker entirely for non-interactive
-                             use; persisted targets are NOT respected
-                             (ADR 0018).
+                             use; persisted targets are NOT respected.
 
 Run agentify in the current repository. Existing repos are audited and exported to
 the coding agents you select — by default Claude Code, Codex, and Pi, prompted

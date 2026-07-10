@@ -9,9 +9,9 @@
 // the top of the list with their full label, then universal agents,
 // then agent-specific agents in alphabetical order.
 //
-// Per design decision (see ADR 0018), the picker NEVER persists the
-// choice — fresh prompt every run. The `--targets <csv>` flag in the CLI
-// bypasses the picker entirely.
+// Per design decision, the picker NEVER persists the choice — fresh
+// prompt every run. The `--targets <csv>` flag in the CLI bypasses
+// the picker entirely.
 
 import { AGENT_REGISTRY, DEFAULT_AGENT_IDS, type AgentId } from "./agent-registry.ts";
 import type { AgentifyUi } from "./types.ts";

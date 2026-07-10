@@ -19,9 +19,10 @@ updates:
           - "typescript"
           - "@types/*"
           - "tsx"
-    # agentify treats new runtime deps as ADR-gated (see AGENTS.md).
-    # Let dependabot bump existing runtime deps, but require an ADR for
-    # any *new* dependency — surfaced in the PR template.
+    # agentify treats new runtime deps as gated (see AGENTS.md).
+    # Let dependabot bump existing runtime deps, but require explicit
+    # maintainer approval for any *new* dependency — surfaced in the
+    # PR template.
     labels:
       - "dependencies"
       - "needs-triage"

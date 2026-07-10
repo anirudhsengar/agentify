@@ -1,4 +1,4 @@
-// tests/webhook/webhook-slot.test.ts — Phase 3 (ADR 0017)
+// tests/webhook/webhook-slot.test.ts — Phase 3
 //
 // Verify webhook trigger schema accepts model_role and the worker
 // threads it through to AgentRuntimeSessionOptions.modelRole.

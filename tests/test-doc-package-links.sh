@@ -29,8 +29,8 @@ if grep -Eq '\]\(docs/' scaffold/SETUP.md; then
   fail "stamped SETUP.md must not link to target-local docs/ paths"
 fi
 
-grep -q 'https://github.com/agentify/agentify/blob/main/docs/adr/' scaffold/SETUP.md \
-  || fail "stamped SETUP.md should use public ADR URLs for source-repo docs"
+grep -q 'https://github.com/agentify/agentify/blob/main/docs/' scaffold/SETUP.md \
+  || fail "stamped SETUP.md should use public docs/ URLs for source-repo docs"
 
 if [ "$failures" -gt 0 ]; then
   echo "$failures doc/package link error(s)." >&2

@@ -14,19 +14,9 @@
 - [ ] Bug fix (non-breaking change that fixes an issue)
 - [ ] New feature (non-breaking change that adds capability)
 - [ ] Breaking change (fix or feature that would cause existing usage to fail)
-- [ ] Documentation / ADR only
+- [ ] Documentation only
 - [ ] Refactor (no behavior change)
 - [ ] CI / tooling
-
-## ADR
-
-<!-- If this PR introduces, amends, or supersedes an ADR, list it here.
-agentify requires an ADR for any new runtime dependency and for any
-change to the public CLI surface, the audit/coverage gate policy, or
-the slot resolution rules (ADR 0017). -->
-
-- [ ] ADR added or amended (`docs/adr/NNNN-*.md`)
-- [ ] No ADR required
 
 ## Test evidence
 

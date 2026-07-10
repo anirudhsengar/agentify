@@ -112,9 +112,9 @@ that initialized state instead of acting like a separate tool family.
 
 ## Where does agentify write?
 
-The audit's **state directory** is now provider-scoped (ADR 0020).
-The user picks their harness at runtime, and the audit writes its
-internal state under the matching dotdir:
+The audit's **state directory** is provider-scoped. The user picks
+their harness at runtime, and the audit writes its internal state
+under the matching dotdir:
 
 | User picks                       | State dir                |
 |----------------------------------|--------------------------|
@@ -186,7 +186,7 @@ name, no context cost).
 | Skill | Invocation | Purpose |
 |-------|-----------|---------|
 | `codebase-design` | model | Vocabulary for designing deep modules |
-| `domain-modeling` | model | Domain language and ADR discipline |
+| `domain-modeling` | model | Domain language discipline |
 | `diagnosing-bugs` | model | Six-phase diagnosis loop for hard bugs |
 | `tdd` | model | Red-green-refactor discipline |
 | `review` | model | Two-axis (Standards + Spec) review |
@@ -258,8 +258,8 @@ agentify [--mode brownfield|greenfield] [--targets <agent-ids>]
 agentify --help
 agentify --version
 
-# Skip the interactive agent-target picker (ADR 0018). Comma-separated
-# agent IDs from the registry. Use `agentify` with no flags to see the
+# Skip the interactive agent-target picker. Comma-separated agent
+# IDs from the registry. Use `agentify` with no flags to see the
 # full list. Persisted targets are NOT respected — every fresh run
 # re-prompts unless `--targets` is passed.
 agentify --targets claude-code,codex
@@ -283,13 +283,13 @@ config-utility subcommands exist to inspect and edit `~/.agentify/`
 without manually editing files. The `--mode` flag skips project-kind
 classification for ambiguous repos. Internal runtimes (`webhook`,
 `aiw`, `orchestrator`, `expert`) are library-only and never appear as
-subcommands. See ADR 0008 and ADR 0017 (under `docs/adr/`) for the
-entry-mode and slot design.
+subcommands. See the entry-mode and slot design notes in
+`docs/README.md`.
 
 ### Model slots
 
 agentify exposes three named model slots so you can assign different
-models to different parts of the audit (ADR 0017):
+models to different parts of the audit:
 
 | Slot | Default consumer |
 | --- | --- |
@@ -301,7 +301,7 @@ When a slot is unset, the resolver falls back to `primary` (or, if
 neither slot is set, to the legacy `provider`/`model` fields).
 **agentify never silently picks a "weaker" model** when you've
 explicitly configured one — see the "max quality is the floor"
-invariant in ADR 0017 (under `docs/adr/`).
+invariant in `docs/README.md`.
 
 On first run, agentify prompts for a model strategy:
 "Use one model for everything" (sets `primary` only) or
@@ -332,7 +332,8 @@ Webhook, AIW, orchestrator, and expert modules may still exist
 internally. The public GitHub loop uses generated workflow/specialist/expert
 context plus the orchestration-planner prompt; it does not expose the internal
 OrchestratorHost as a public command or hosted control plane. See
-ADR 0015 (under `docs/adr/`) for the public orchestration-plane boundary.
+the public orchestration-plane boundary as documented in
+`docs/README.md`.
 
 The shipped skill pack lives in `packaged/skills/` — outside
 `.agents/` or `.claude/` at the repo root by design. The installer
@@ -359,9 +360,9 @@ agentify/
 │                                  # truth; lives outside .agents/ or
 │                                  # .claude/ so no coding harness
 │                                  # auto-loads it on the maintainer's
-│                                  # dev session — see ADR 0006)
+│                                  # dev session)
 ├── scaffold/                       # stampable CI runtime
-└── docs/                           # architecture docs and ADRs
+└── docs/                           # architecture docs
 ```
 
 ## Development
@@ -375,4 +376,3 @@ bash tests/run.sh
 Useful docs:
 
 - [docs/README.md](docs/README.md) — the documentation index.
-- `docs/adr/` — Architecture Decision Records (0001–0020).
