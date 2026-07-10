@@ -1,0 +1,48 @@
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly scan on Mondays at 06:00 UTC.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["javascript-typescript"]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          # security-and-quality surfaces taint flow plus quality rules.
+          # agentify's audit defense hook is the surface most worth
+          # flagging; codeql's js/typescript ruleset covers path
+          # traversal, command injection, and unsafe regex.
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
+        # The analyze step uploads SARIF to the Security tab. Do not add
+        # a separate `upload-sarif` step — having both in the same job
+        # with the same category triggers:
+        #   "Aborting upload: only one run of the codeql/analyze or
+        #    codeql/upload-sarif actions is allowed per job per
+        #    tool/category."

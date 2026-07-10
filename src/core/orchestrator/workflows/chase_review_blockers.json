@@ -1,0 +1,33 @@
+{
+  "name": "chase_review_blockers",
+  "description": "Resume an existing AIW's fix phase. Use after a plan_build_review AIW finishes with success: false.",
+  "tags": ["sdlc", "fix", "loop", "retry"],
+  "inputs": {
+    "aiw_id": {
+      "type": "string",
+      "description": "Aiw id returned by an earlier run."
+    },
+    "max_attempts": {
+      "type": "number",
+      "default": 3,
+      "min": 1,
+      "max": 10
+    }
+  },
+  "parallelism": "sequential",
+  "max_runtime_minutes": 60,
+  "steps": [
+    {
+      "id": "fix_attempt",
+      "handler": "aiw",
+      "workflow_type": "plan_build_review_fix",
+      "prompt": "Address the blockers from the prior review: ${inputs.aiw_id}",
+      "resumption_of": "${inputs.aiw_id}",
+      "retry": {
+        "max_attempts": "${inputs.max_attempts}",
+        "on_result": "aiws[fix_attempt].verdict.success === false && last_result.attempts < inputs.max_attempts",
+        "backoff_ms": 1500
+      }
+    }
+  ]
+}

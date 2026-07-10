@@ -1,0 +1,187 @@
+name: Agent Update Branch
+
+on:
+  # See agent-review.yml for why pull_request_target rather than pull_request.
+  pull_request_target:
+    types: [labeled]
+
+jobs:
+  update-branch:
+    if: >-
+      github.event.label.name == 'agent:update-branch' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'agent/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency:
+      group: agent-mutate-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      BRANCH: ${{ github.event.pull_request.head.ref }}
+      BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Transition labels — remove trigger + blocked, add in-progress
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr edit "$PR_NUMBER" --remove-label "agent:update-branch" || true
+          gh pr edit "$PR_NUMBER" --remove-label "agent:approved" || true
+          gh pr edit "$PR_NUMBER" --remove-label "agent:blocked" || true
+          gh pr edit "$PR_NUMBER" --add-label "agent:in-progress"
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Checkout trusted runtime from the PR base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .agentify-runtime
+          persist-credentials: false
+
+      - name: Exclude trusted runtime checkout from PR commits
+        run: echo "/.agentify-runtime/" >> .git/info/exclude
+
+      - name: Ensure branch is checked out by name
+        run: |
+          git checkout "$BRANCH" 2>/dev/null || git checkout -B "$BRANCH"
+          git config user.name "pi-agent[bot]"
+          git config user.email "pi-agent[bot]@users.noreply.github.com"
+
+      - name: Capture PR context for a credential-free agent run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash .agentify-runtime/.github/scripts/capture-pr-context.sh \
+            "$PR_NUMBER" "$GH_REPO" "${RUNNER_TEMP}/pr-context"
+
+      - name: Fetch base ref and attempt merge
+        id: merge
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_REF"
+          pre_sha=$(git rev-parse HEAD)
+          base_sha=$(git rev-parse "origin/$BASE_REF")
+          merge_base=$(git merge-base HEAD "origin/$BASE_REF")
+
+          if [ "$merge_base" = "$base_sha" ]; then
+            echo "\`agent:update-branch\`: branch is already up to date with \`origin/${BASE_REF}\`. No merge needed." > "${RUNNER_TEMP}/comment.md"
+            echo "should_push=false" >> "$GITHUB_OUTPUT"
+            echo "needs_agent=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git merge "origin/$BASE_REF" --no-edit; then
+            echo "\`agent:update-branch\`: merged \`origin/${BASE_REF}\` (\`${base_sha:0:7}\`) into \`${BRANCH}\` cleanly — no conflicts." > "${RUNNER_TEMP}/comment.md"
+            echo "should_push=true" >> "$GITHUB_OUTPUT"
+            echo "needs_agent=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          conflicts=$(git diff --name-only --diff-filter=U)
+          if [ -z "$conflicts" ]; then
+            echo "git merge failed but no conflicts reported — aborting." > "${RUNNER_TEMP}/failure_reason.txt"
+            exit 1
+          fi
+          echo "Merge produced conflicts in:"
+          echo "$conflicts"
+          echo "pre_sha=$pre_sha" >> "$GITHUB_OUTPUT"
+          echo "needs_agent=true" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Pi
+        if: steps.merge.outputs.needs_agent == 'true'
+        uses: ./.agentify-runtime/.github/actions/setup-pi
+        with:
+          version: ${{ vars.PI_VERSION }}
+
+      - name: Render update-branch prompt
+        if: steps.merge.outputs.needs_agent == 'true'
+        env:
+          PR_CONTEXT_DIR: ${{ runner.temp }}/pr-context
+        run: envsubst < .agentify-runtime/.github/agent-prompts/update-branch.md > "${RUNNER_TEMP}/update-branch-prompt.md"
+
+      - name: Run Pi — resolve conflicts
+        if: steps.merge.outputs.needs_agent == 'true'
+        id: pi_resolve
+        uses: ./.agentify-runtime/.github/actions/run-pi
+        with:
+          prompt-file: ${{ runner.temp }}/update-branch-prompt.md
+          api-key: ${{ secrets.PI_API_KEY }}
+          provider: ${{ vars.PI_PROVIDER || 'anthropic' }}
+          model: ${{ vars.PI_MODEL }}
+          thinking: ${{ vars.PI_THINKING || 'high' }}
+
+      - name: Verify the agent actually finished the merge
+        if: steps.merge.outputs.needs_agent == 'true' && success()
+        id: verify_agent
+        env:
+          TRANSCRIPT: ${{ steps.pi_resolve.outputs.output-file }}
+        run: |
+          set -euo pipefail
+          post_sha=$(git rev-parse HEAD)
+          if [ "$post_sha" = "${{ steps.merge.outputs.pre_sha }}" ]; then
+            echo "Agent produced no commits — branch still at pre-merge HEAD." > "${RUNNER_TEMP}/failure_reason.txt"
+            exit 1
+          fi
+          unresolved=$(git diff --name-only --diff-filter=U)
+          if [ -n "$unresolved" ]; then
+            echo "Agent left unresolved conflicts in: $unresolved" > "${RUNNER_TEMP}/failure_reason.txt"
+            exit 1
+          fi
+          bash .agentify-runtime/.github/scripts/extract-update-branch-comment.sh \
+            "$TRANSCRIPT" "${RUNNER_TEMP}/comment.md"
+          echo "should_push=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push branch (abort cleanly if non-fast-forward)
+        if: success() && (steps.merge.outputs.should_push == 'true' || steps.verify_agent.outputs.should_push == 'true')
+        env:
+          AGENT_PAT: ${{ secrets.AGENT_PAT }}
+        run: |
+          bash .agentify-runtime/.github/scripts/push-updated-branch.sh \
+            "$BRANCH" "$BRANCH_HEAD_SHA" "${RUNNER_TEMP}/failure_reason.txt"
+
+      - name: Post PR comment
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f "${RUNNER_TEMP}/comment.md" ]; then
+            gh pr comment "$PR_NUMBER" --body-file "${RUNNER_TEMP}/comment.md"
+          fi
+
+      - name: Re-queue automated review after branch update
+        if: success() && (steps.merge.outputs.should_push == 'true' || steps.verify_agent.outputs.should_push == 'true')
+        env:
+          AGENT_PAT: ${{ secrets.AGENT_PAT }}
+        run: |
+          set -euo pipefail
+          : "${AGENT_PAT:?AGENT_PAT is required — see SETUP.md}"
+          GH_TOKEN="$AGENT_PAT" gh pr edit "$PR_NUMBER" --add-label "agent:review"
+
+      - name: Mark blocked on failure
+        if: failure()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash .agentify-runtime/.github/scripts/mark-pr-workflow-failure.sh \
+            "$PR_NUMBER" "agent:update-branch" "${RUNNER_TEMP}/failure_reason.txt" "$RUN_URL"
+
+      - name: Always remove in-progress label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr edit "$PR_NUMBER" --remove-label "agent:in-progress" || true

@@ -1,0 +1,20 @@
+# Keep local exploration artifacts out of the published CLI package.
+agentify-explained.html
+packaged/skills/**/NOTES.md
+
+# Preserve the important local/runtime exclusions from .gitignore.
+node_modules/
+.pnpm-store/
+.env
+.env.*
+*.pem
+*.key
+secrets/
+dist/
+build/
+*.tgz
+*.db
+*.sqlite
+*.sqlite3
+screenshots/
+videos/

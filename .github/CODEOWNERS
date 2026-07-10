@@ -1,0 +1,38 @@
+# CODEOWNERS — agentify
+# Each line is a file pattern followed by one or more owners.
+# Order matters: later patterns override earlier ones.
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything in the repo.
+/                   @anirudhsengar
+
+# Public release surface — CLI, package metadata, npm publish plumbing.
+/package.json       @anirudhsengar
+/package-lock.json  @anirudhsengar
+/bin/               @anirudhsengar
+/.github/           @anirudhsengar
+/CHANGELOG.md       @anirudhsengar
+/README.md          @anirudhsengar
+/LICENSE            @anirudhsengar
+
+# Audit runtime and policy.
+/src/core/audit/                @anirudhsengar
+/src/core/audit/defense/        @anirudhsengar
+/src/core/audit/schema.ts       @anirudhsengar
+/src/core/audit/prompts/        @anirudhsengar
+
+# Orchestrator and AIW (internal control plane).
+/src/core/orchestrator/         @anirudhsengar
+/src/core/aiw/                  @anirudhsengar
+
+# Webhook server.
+/src/core/webhook/              @anirudhsengar
+
+# Shipped scaffold (installed into target repos by `agentify`).
+/scaffold/                      @anirudhsengar
+
+# Architecture docs and ADRs.
+/docs/                          @anirudhsengar
+
+# Tests mirror source; require review when source moves.
+/tests/                         @anirudhsengar

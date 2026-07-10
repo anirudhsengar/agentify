@@ -1,0 +1,94 @@
+{
+  "triggers": [
+    {
+      "id": "github-issue-implement",
+      "description": "Run /implement when a GitHub issue is labeled agent:implement. The primary out-of-loop trigger.",
+      "path": "/webhooks/github/issue",
+      "method": "POST",
+      "signature_header": "X-Hub-Signature-256",
+      "signature_algorithm": "hmac-sha256",
+      "secret_env": "GITHUB_WEBHOOK_SECRET",
+      "match": {
+        "equals": {
+          "action": "labeled",
+          "label.name": "agent:implement"
+        },
+        "content_type": "application/json"
+      },
+      "rate_limit": { "requests": 30, "window_seconds": 60 },
+      "max_body_bytes": 1048576,
+      "prompt": {
+        "template": "/implement",
+        "args_from_payload": {
+          "issue_number": "issue.number",
+          "title": "issue.title",
+          "body": "issue.body",
+          "repo": "repository.full_name"
+        },
+        "tools": ["read", "grep", "find", "ls", "write", "edit", "bash"]
+      }
+    },
+    {
+      "id": "github-pr-review",
+      "description": "Run /review on every opened/updated GitHub PR.",
+      "path": "/webhooks/github/pull-request",
+      "method": "POST",
+      "signature_header": "X-Hub-Signature-256",
+      "signature_algorithm": "hmac-sha256",
+      "secret_env": "GITHUB_WEBHOOK_SECRET",
+      "match": {
+        "equals": {
+          "action": "opened"
+        }
+      },
+      "prompt": {
+        "template": "/review",
+        "args_from_payload": {
+          "pr_number": "pull_request.number",
+          "base": "pull_request.base.ref",
+          "head": "pull_request.head.ref"
+        },
+        "tools": ["read", "grep", "find", "ls", "bash"]
+      }
+    },
+    {
+      "id": "github-chore-afk",
+      "description": "Run plan_build_review_ship AFK on a PR labeled agent:afk-chore. Class 2 Grade 2 AFK; gate is checked via ~/.agentify/aiw/kpis.md before merge.",
+      "path": "/webhooks/github/chore",
+      "method": "POST",
+      "signature_header": "X-Hub-Signature-256",
+      "secret_env": "GITHUB_WEBHOOK_SECRET",
+      "match": {
+        "equals": {
+          "action": "labeled",
+          "label.name": "agent:afk-chore"
+        }
+      },
+      "prompt": {
+        "aiw_workflow": "plan_build_review_ship",
+        "args_from_payload": {
+          "branch": "pull_request.head.ref",
+          "pr_number": "pull_request.number",
+          "title": "pull_request.title"
+        },
+        "tools": ["read", "grep", "find", "ls", "bash"]
+      }
+    },
+    {
+      "id": "cron-nightly-refresh",
+      "description": "Daily /refresh-surface to keep the agentic surface current.",
+      "path": "/webhooks/cron/refresh",
+      "method": "POST",
+      "signature_header": "X-Hub-Signature-256",
+      "secret_env": "CRON_SHARED_SECRET",
+      "match": {
+        "equals": { "action": "nightly" }
+      },
+      "prompt": {
+        "template": "/refresh-surface",
+        "args_static": { "trigger": "cron" },
+        "tools": ["read", "grep", "find", "ls", "write", "edit", "bash"]
+      }
+    }
+  ]
+}

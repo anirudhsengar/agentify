@@ -1,0 +1,6 @@
+# Trusted-runtime checkout used by the privileged agent workflows (see the
+# agent-*.yml workflows and docs/adr/0007). Never committed.
+.agentify-runtime/
+
+# Scratch space for throwaway prototypes, handoff docs, and review reports.
+.scratch/

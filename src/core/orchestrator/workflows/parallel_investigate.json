@@ -1,0 +1,41 @@
+{
+  "name": "parallel_investigate",
+  "description": "Spawn N scout sub-agents in parallel (one per area), then synthesize the reports into one executive summary.",
+  "tags": ["scout", "parallel", "recon", "report"],
+  "inputs": {
+    "areas": {
+      "type": "string-list",
+      "description": "Areas to investigate (one sub-agent each)."
+    },
+    "synth_prompt": {
+      "type": "string",
+      "default": "Synthesize the following N scout reports into one executive summary with key findings and open questions."
+    },
+    "per_area_subagent_template": {
+      "type": "string",
+      "default": "scout-report-suggest"
+    }
+  },
+  "parallelism": "parallel_when_possible",
+  "max_runtime_minutes": 30,
+  "steps": [
+    {
+      "id": "investigate",
+      "description": "Fan out one sub-agent per area. Each runs in parallel.",
+      "handler": "subagent",
+      "subagent_template": "${inputs.per_area_subagent_template}",
+      "user_prompt": "Investigate the '${area}' surface of the codebase. Produce a one-page summary.",
+      "fanout": [
+        { "input": "areas" }
+      ]
+    },
+    {
+      "id": "synthesize",
+      "description": "Fuse all scout reports into one exec summary (depends on investigate having spawned).",
+      "handler": "subagent",
+      "subagent_template": "docs-scraper",
+      "user_prompt": "${inputs.synth_prompt}\n\nReports:\n${agents[investigate].result_text}",
+      "depends_on": ["investigate"]
+    }
+  ]
+}

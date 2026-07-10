@@ -1,0 +1,40 @@
+{
+  "name": "scout_then_build",
+  "description": "One scout sub-agent, then one plan_build AIW. Use when you want informed planning before implementation.",
+  "tags": ["scout", "feature", "sdlc"],
+  "inputs": {
+    "scout_focus": {
+      "type": "string",
+      "default": "the affected module(s) and their conventions"
+    },
+    "prompt": {
+      "type": "string",
+      "description": "What the plan_build AIW should implement."
+    },
+    "change_type": {
+      "type": "string",
+      "default": "feature",
+      "values": ["chore", "bug", "feature"]
+    }
+  },
+  "parallelism": "sequential",
+  "max_runtime_minutes": 60,
+  "steps": [
+    {
+      "id": "scout",
+      "description": "Read-only recon of the affected area.",
+      "handler": "subagent",
+      "subagent_template": "scout-report-suggest",
+      "user_prompt": "Scout ${inputs.scout_focus} for an upcoming plan_build. List the entry points, types, and any pitfalls."
+    },
+    {
+      "id": "build",
+      "description": "Plan + build AIW. The planner inherits the scout's report from your context.",
+      "handler": "aiw",
+      "workflow_type": "plan_build",
+      "prompt": "${inputs.prompt}\n\nScout summary:\n${agents[scout].result_text}",
+      "change_type": "${inputs.change_type}",
+      "depends_on": ["scout"]
+    }
+  ]
+}

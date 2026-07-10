@@ -1,0 +1,79 @@
+{
+  "name": "plan_build_review_fix_loop",
+  "description": "Run a plan → build → review → fix AIW chain in one go. After review, retries the fix phase up to N times when blockers remain. Pauses for orchestrator review if max attempts are exhausted.",
+  "tags": ["sdlc", "feature", "bug", "loop"],
+  "inputs": {
+    "prompt": {
+      "type": "string",
+      "description": "The user-supplied task to plan + build + review + fix."
+    },
+    "change_type": {
+      "type": "string",
+      "default": "feature",
+      "values": ["chore", "bug", "feature"]
+    },
+    "max_fix_attempts": {
+      "type": "number",
+      "default": 3,
+      "min": 1,
+      "max": 5
+    }
+  },
+  "parallelism": "sequential",
+  "max_runtime_minutes": 120,
+  "steps": [
+    {
+      "id": "implement",
+      "description": "Run the canonical 4-phase AIW (plan, build, review, fix).",
+      "handler": "aiw",
+      "workflow_type": "plan_build_review_fix",
+      "prompt": "${inputs.prompt}",
+      "change_type": "${inputs.change_type}",
+      "max_cost_usd": 5.0
+    },
+    {
+      "id": "chase_blockers",
+      "description": "If implement's review surfaced blockers, run up to max_fix_attempts more fix passes via the same AIW ID.",
+      "handler": "compose",
+      "when": "aiws[implement].verdict.success === false",
+      "steps": [
+        {
+          "id": "fix_attempt_1",
+          "handler": "aiw",
+          "workflow_type": "plan_build_review_fix",
+          "prompt": "Address the review blockers from ${aiws[implement].aiw_id}: ${aiws[implement].verdict.issues}",
+          "change_type": "${inputs.change_type}",
+          "resumption_of": "${aiws[implement].aiw_id}"
+        },
+        {
+          "id": "fix_attempt_2",
+          "handler": "branch",
+          "when": "aiws[fix_attempt_1].verdict.success === false AND attempt < ${inputs.max_fix_attempts}",
+          "steps": [
+            {
+              "id": "fix",
+              "handler": "aiw",
+              "workflow_type": "plan_build_review_fix",
+              "prompt": "More blockers: ${aiws[fix_attempt_1].verdict.issues}",
+              "change_type": "${inputs.change_type}"
+            }
+          ]
+        },
+        {
+          "id": "fix_attempt_3",
+          "handler": "branch",
+          "when": "aiws[fix_attempt_2].verdict.success === false AND attempt < ${inputs.max_fix_attempts}",
+          "steps": [
+            {
+              "id": "fix",
+              "handler": "aiw",
+              "workflow_type": "plan_build_review_fix",
+              "prompt": "Last attempt; address any remaining blockers: ${aiws[fix_attempt_2].verdict.issues}",
+              "change_type": "${inputs.change_type}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
