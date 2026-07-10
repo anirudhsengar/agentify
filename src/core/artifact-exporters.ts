@@ -40,6 +40,16 @@ export interface ArtifactExporterOptions {
    * classifier + tier frontmatter. See `src/core/skill-curation.ts`.
    */
   allowedSkills?: ReadonlySet<string>;
+  /**
+   * Set when the target repo already had an unmanaged AGENTS.md
+   * before this run started. The Claude exporter uses this to skip
+   * emitting a CLAUDE.md: deriving CLAUDE.md from a user-owned
+   * AGENTS.md would silently overwrite the user's intent (the
+   * apply step will also abort on the AGENTS.md required conflict
+   * and report it through the orchestrator). See
+   * `run-agentify.ts` `userOwnedAgentsMd` wiring.
+   */
+  userOwnedAgentsMd?: boolean;
 }
 
 interface AgentFile {
@@ -285,6 +295,7 @@ export function exportAgenticSurface(options: ArtifactExporterOptions): Artifact
   const allowed = options.allowedSkills;
 
   // Premium exporters — each knows its own skillsDir.
+  const userOwnedAgentsMd = options.userOwnedAgentsMd ?? false;
   for (const target of options.targets) {
     switch (target) {
       case "codex":
@@ -292,7 +303,18 @@ export function exportAgenticSurface(options: ArtifactExporterOptions): Artifact
         writtenDirs.add(".agents/skills");
         break;
       case "claude":
-        results.push(exportClaude(options.cwd, options.packageRoot, allowed));
+        // When the user already owns AGENTS.md, the apply step
+        // will abort on the required AGENTS.md conflict and the
+        // orchestrator surfaces that as a "required generated file
+        // conflict" error. Deriving a CLAUDE.md in that state would
+        // be contradictory, so the Claude exporter skips both
+        // CLAUDE.md and per-harness feature-agent files (which
+        // are also derived from AGENTS.md ownership).
+        if (userOwnedAgentsMd) {
+          results.push({ target: "claude", writes: [] });
+        } else {
+          results.push(exportClaude(options.cwd, options.packageRoot, allowed));
+        }
         writtenDirs.add(".claude/skills");
         break;
       case "pi":

@@ -11,7 +11,7 @@ import {
   type ApplyPolicy,
 } from "./apply-policy.ts";
 import { resolveApplyPolicy } from "./agentifyrc.ts";
-import { exportAgenticSurface } from "./artifact-exporters.ts";
+import { exportAgenticSurface, addMarkdownManagedMarker } from "./artifact-exporters.ts";
 import { newRunId, persistRunArtifacts } from "./revert.ts";
 import { packageRoot } from "./pi-sdk-runtime.ts";
 import { ProjectClassifier } from "./project-classifier.ts";
@@ -542,6 +542,88 @@ function collectStagedFiles(stagingRoot: string, stateDir: string): Array<{ rela
     .filter((file) => file.relativePath !== manifestRelPath);
 }
 
+/**
+ * Capture the brownfield session's feature-agent writes (`.pi/agents/*.md`)
+ * to a fresh temp dir. The runtime writes those files into `cwd` (the
+ * real target repo), but `exportAgenticSurface` reads from a separate
+ * `stagingRoot` and `.pi/agents/` is wiped by `rollbackGeneratedSurface`
+ * before the staging tree is built. Capturing here — before the rollback
+ * runs — gives the staging-build step a stable source to mirror from.
+ *
+ * Returns the temp dir path; the caller is responsible for the mirror
+ * (and may clean up the temp dir afterward).
+ */
+function captureSessionAgentFiles(cwd: string): string {
+  const snapshotDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-session-agents-"));
+  const sourceAgentsDir = path.join(cwd, ".pi", "agents");
+  if (!fs.existsSync(sourceAgentsDir)) return snapshotDir;
+  const targetAgentsDir = path.join(snapshotDir, ".pi", "agents");
+  fs.mkdirSync(targetAgentsDir, { recursive: true });
+  for (const entry of fs.readdirSync(sourceAgentsDir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    fs.copyFileSync(
+      path.join(sourceAgentsDir, entry.name),
+      path.join(targetAgentsDir, entry.name),
+    );
+  }
+  return snapshotDir;
+}
+
+/**
+ * Mirror a session-agent snapshot (from `captureSessionAgentFiles`)
+ * into the staging tree with the agentify managed marker prepended
+ * to each agent file. The exporters then read `.pi/agents/*.md` from
+ * `stagingRoot` and emit per-harness outputs (`.codex/agents/*.toml`,
+ * `.claude/agents/*.md`, etc.); the apply step later writes the
+ * marker-prefixed source back to the target repo as a managed file.
+ *
+ * Reserved harness files (scout/review/implement/test/fix/document)
+ * are skipped to match `listFeatureAgents` in `artifact-exporters.ts`,
+ * so the exporter doesn't see them and produce per-harness variants.
+ */
+function mirrorSessionOutputToStaging(
+  snapshotDir: string,
+  stagingRoot: string,
+): void {
+  const agentsDir = path.join(snapshotDir, ".pi", "agents");
+  if (!fs.existsSync(agentsDir)) return;
+  const targetAgentsDir = path.join(stagingRoot, ".pi", "agents");
+  fs.mkdirSync(targetAgentsDir, { recursive: true });
+  for (const entry of fs.readdirSync(agentsDir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    if (RESERVED_AGENT_NAMES.has(entry.name)) continue;
+    const raw = fs.readFileSync(path.join(agentsDir, entry.name), "utf-8");
+    fs.writeFileSync(
+      path.join(targetAgentsDir, entry.name),
+      addMarkdownManagedMarker(raw),
+      { mode: 0o644 },
+    );
+  }
+}
+
+function cleanupSessionAgentSnapshot(snapshotDir: string): void {
+  try {
+    fs.rmSync(snapshotDir, { recursive: true, force: true });
+  } catch {
+    // Best effort cleanup; a leaked temp dir is harmless.
+  }
+}
+
+/**
+ * Return a copy of `policy` with `requiredAction` forced to "abort".
+ * Used when the user already owns AGENTS.md before a brownfield
+ * run — the existing `alongside` default would silently save the
+ * agentify-managed version next to the user's file and continue
+ * applying everything else, which masks the conflict from the user
+ * and produces no error. Forcing abort makes the conflict visible
+ * via the existing "required generated file conflict" UI error and
+ * rolls back the internal state snapshot so a partial run doesn't
+ * leave the repo in a half-managed state.
+ */
+function withAbortOnRequired(policy: ApplyPolicy): ApplyPolicy {
+  return { ...policy, requiredAction: "abort" };
+}
+
 function addWriteMetadata(
   stagingRoot: string,
   writes: readonly ArtifactWrite[],
@@ -583,9 +665,20 @@ function isConflictingDestination(
   const destination = path.join(cwd, relativePath);
   if (!fs.existsSync(destination)) return false;
   const snapshotEntry = snapshot.get(relativePath);
+  // Pre-run unmanaged files (user-owned) are always conflicts:
+  // they were on disk before the run started and we must not
+  // overwrite them silently.
   if (snapshotEntry) return snapshotEntry.ownership === "unmanaged";
-  const content = fs.readFileSync(destination);
-  return !fileHasManagedMarker(relativePath, content);
+  // The destination exists but wasn't in the pre-run snapshot.
+  // Two cases reach here: (a) the runtime (or the mirror step
+  // for `.pi/agents/*.md`) wrote it during this run — agentify
+  // owns it, so overwriting with a managed version is correct;
+  // (b) the file is outside any generated-surface path and the
+  // snapshot enumeration missed it — irrelevant for the apply
+  // loop because only generated-surface paths are staged. Treat
+  // both as non-conflicts so the staged content lands at the
+  // canonical destination rather than alongside it.
+  return false;
 }
 
 /**
@@ -1046,6 +1139,24 @@ async function runBrownfieldAudit(
     // Preserve the canonical codebase map; remove only the
     // transient draft/history/logs transport.
     cleanupTransientScaffoldingAt(options.cwd, stateDir);
+    // Capture session-written feature agents BEFORE the rollback
+    // below wipes `.pi/agents/` (it's in GENERATED_SURFACE_PATHS
+    // and any file not in the pre-run snapshot gets removed). The
+    // harness exporters read from a separate `stagingRoot` built
+    // later in this function, so they need the runtime's agent
+    // files mirrored across. The temp dir is cleaned up after
+    // apply.
+    const sessionAgentsSnapshotDir = captureSessionAgentFiles(options.cwd);
+    // User-owned AGENTS.md: if the user already had an unmanaged
+    // AGENTS.md in the target repo before this run, agentify
+    // must not silently overwrite it. The renderer still emits a
+    // managed AGENTS.md into staging; the apply step needs to
+    // recognize the conflict and abort (which fires the existing
+    // "required generated file conflict" UI error), and the
+    // exporter needs to skip CLAUDE.md so we don't write a
+    // derived file that contradicts the user's own AGENTS.md.
+    const userOwnedAgentsMdEntry = artifactSnapshot.get("AGENTS.md");
+    const userOwnedAgentsMd = userOwnedAgentsMdEntry?.ownership === "unmanaged";
     let reportedStatus = finalState.status;
     if (finalState.status === "success") {
       const rollback = rollbackGeneratedSurface(options.cwd, artifactSnapshot);
@@ -1082,6 +1193,10 @@ async function runBrownfieldAudit(
           const metadata = new Map<string, ManagedManifestFile>();
           writeRenderedArtifactsToStaging(stagingRoot, renderResult.artifacts, metadata);
           copyCanonicalMapToStaging(options.cwd, stagingRoot, stateDir, metadata);
+          // Mirror the runtime's `.pi/agents/*.md` writes (captured
+          // before the rollback above wiped them from `options.cwd`)
+          // into the staging tree so the exporters can find them.
+          mirrorSessionOutputToStaging(sessionAgentsSnapshotDir, stagingRoot);
           // Skill curation: classify the project and decide which
           // skills ship. The set is passed to the exporter so tier-
           // excluded skills never reach the staging tree. After
@@ -1097,6 +1212,7 @@ async function runBrownfieldAudit(
             targets: options.targets,
             additionalAgents: options.additionalAgents,
             allowedSkills: shippedSkills,
+            userOwnedAgentsMd,
           });
           for (const result of exportResults) {
             addWriteMetadata(stagingRoot, result.writes, `harness-export:${result.target}`, metadata);
@@ -1128,10 +1244,13 @@ async function runBrownfieldAudit(
             metadata,
             agentifyVersion: loadAgentifyVersion(),
             mode: "brownfield",
-            policy: resolveApplyPolicy(options.cwd, stateDir),
+            policy: userOwnedAgentsMd
+              ? withAbortOnRequired(resolveApplyPolicy(options.cwd, stateDir))
+              : resolveApplyPolicy(options.cwd, stateDir),
             runId,
             stateDir,
           });
+          cleanupSessionAgentSnapshot(sessionAgentsSnapshotDir);
           const conflicts = applyResult.writes.filter((write) => write.action === "conflict");
           const scaffoldInstalled = applyResult.writes
             .filter((write) => write.action === "written")
