@@ -220,7 +220,7 @@ export function loadAgentsFromDir(
  */
 export function findNearestProjectAgentsDir(
   cwd: string,
-  stateDir: string = ".pi/agentify",
+  stateDir: string = ".pi",
 ): string | null {
   const dirsToCheck = [stateDir, ".pi/agentify"];
   let current = cwd;

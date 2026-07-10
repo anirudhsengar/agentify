@@ -47,7 +47,7 @@ const PACKAGED_WORKFLOWS_DIR = path.join(HERE, "workflows");
  */
 function findNearestProjectWorkflowsDir(
   cwd: string,
-  stateDir: string = ".pi/agentify",
+  stateDir: string = ".pi",
 ): string | null {
   const dirsToCheck = [stateDir, ".pi/agentify"];
   let current = cwd;

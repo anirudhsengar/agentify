@@ -79,7 +79,7 @@ export class ExpertRegistry {
 
   static fromCwd(
     cwd: string,
-    stateDir: string = ".pi/agentify",
+    stateDir: string = ".pi",
   ): ExpertRegistry {
     const expertsDir = path.join(cwd, stateDir, "prompts", "experts");
     if (!fs.existsSync(expertsDir)) return new ExpertRegistry([]);
@@ -643,6 +643,7 @@ const KNOWN_STATE_DIRS = [
   ".claude/agentify",
   ".agents/agentify",
   ".pi/agentify",
+  ".pi",
 ] as const;
 
 function repoRootForExpert(expert: ExpertDomain): string | null {

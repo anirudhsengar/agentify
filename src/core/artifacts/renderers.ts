@@ -48,10 +48,12 @@ const REQUIRED_ALWAYS_ON_DOCS = new Set(["specs/README.md", "ai_docs/README.md"]
 // Session-scoped state dir. The audit resolves its state dir at the
 // top of every run; the renderer helpers consult this via the
 // `stateDirFor` getter so the legacy literal doesn't need to be threaded
-// through every helper signature. Defaults to the historical
-// `.pi/agentify/` location so existing direct callers (tests) keep
-// the prior behavior.
-let currentRendererStateDir = ".pi/agentify";
+// through every helper signature. Defaults to `.pi` — the same root
+// that hosts `.pi/agents/`, `.pi/prompts/`, etc. — so direct callers
+// (tests) get the historical paths. Production runs override this via
+// `setRendererStateDir` once the orchestrator has resolved the canonical
+// state dir for the current target set.
+let currentRendererStateDir = ".pi";
 
 /** Set the per-session state dir used by the artifact renderers. */
 export function setRendererStateDir(stateDir: string): void {
@@ -1220,7 +1222,7 @@ export function renderBrownfieldArtifacts(
   const artifacts: RenderedArtifact[] = [];
   const errors: string[] = [];
   const intents = map.artifact_intents;
-  const stateDir = options?.stateDir ?? ".pi/agentify";
+  const stateDir = options?.stateDir ?? ".pi";
 
   const agentGuide = intents ? renderIntentAgentGuide(intents) : renderFallbackAgentGuide(map);
   if (countLines(agentGuide) > AGENTS_MD_MAX_LINES) {
