@@ -39,7 +39,7 @@ async function loaderRoundTripsModelsByRole(): Promise<void> {
       provider: "anthropic",
       model: "claude-haiku-4-5-20251001",
     });
-    assert.equal(loaded.modelsByRole?.scoring, undefined);
+    assert.equal(loaded.modelsByRole?.lite, undefined);
     // Re-save and re-load: equality holds.
     saveAgentifyConfig(configDir, loaded);
     const reloaded = loadAgentifyConfig(configDir);

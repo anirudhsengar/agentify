@@ -84,7 +84,7 @@ async function testStartAndCheck(): Promise<void> {
     const registry = SubagentRegistry.fromCwd(cfg, cfg);
     // Build a custom bridge: but the AiwRunner inside uses its own
     // runtime — for full control we'd need to inject; for the smoke
-    // test we just use a noWorktree + dryRun config. The runner
+    // test we just use a noWorktree config. The runner
     // uses PiSdkRuntime by default; we don't have a real provider
     // configured, so this will fail. Use a custom approach:
     // exercise only the validation path here, and exercise

@@ -21,6 +21,7 @@ import {
   startAiwWorker,
   type AiwWorkerLogger,
 } from "../aiw/worker.ts";
+import type { AgentRuntime } from "../types.ts";
 
 export interface DaemonOptions {
   cwd: string;
@@ -28,8 +29,8 @@ export interface DaemonOptions {
   port?: number;
   concurrency?: number;
   pollIntervalMs?: number;
-  /** For tests: skip the agent runtime. */
-  dryRun?: boolean;
+  /** Optional runtime override (used by tests to inject a fake). */
+  runtime?: AgentRuntime;
   logger?: WorkerLogger;
 }
 
@@ -69,7 +70,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     configDir,
     concurrency: options.concurrency,
     pollIntervalMs: options.pollIntervalMs,
-    dryRun: options.dryRun,
+    runtime: options.runtime,
     logger: options.logger,
   });
 
@@ -89,7 +90,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     cwd: options.cwd,
     concurrency: 1,
     pollIntervalMs: 500,
-    dryRun: options.dryRun,
+    runtime: options.runtime,
     logger: aiwWorkerLogger,
   });
 

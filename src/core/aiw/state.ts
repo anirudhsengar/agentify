@@ -159,9 +159,9 @@ export const AiwStateSchema = Type.Object({
   model: Type.Union([Type.String(), Type.Null()]),
   thinking_level: Type.Union([Type.String(), Type.Null()]),
   /**
-   * Named slot role for AIW phase sessions. Defaults to "scoring"
+   * Named slot role for AIW phase sessions. Defaults to "lite"
    * (see ADR 0017 / Phase 3) — every AIW phase (plan, build,
-   * review, fix) consumes the scoring slot so the brownfield/
+   * review, fix) consumes the lite slot so the brownfield/
    * greenfield builder (which uses primary) stays on the strongest
    * model the user has configured.
    */

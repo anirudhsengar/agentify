@@ -68,8 +68,6 @@ export interface RunArgs {
   workflowRunId?: string;
   source?: string;
   signal?: AbortSignal;
-  /** When true, persists the spec with inputs substituted; no LLM dispatch. */
-  dryRun?: boolean;
 }
 
 export interface WorkflowRunner {
@@ -136,19 +134,6 @@ export function startWorkflowRunner(opts: WorkflowRunnerOptions): WorkflowRunner
       },
     });
     appendWorkflowRunExecutionLog(paths, `started: workflow=${started.workflow_name}, run=${run.workflow_run_id}`);
-
-    // If dry-run, stop here.
-    if (args.dryRun) {
-      const completed: WorkflowRunState = {
-        ...started,
-        status: "completed",
-        ended_at: new Date().toISOString(),
-        steps: {},
-      };
-      writeWorkflowRunState(paths, completed);
-      appendWorkflowRunEvent(paths, { kind: "workflow_dry_run_completed", fields: {} });
-      return completed;
-    }
 
     // Spawn the actual execution loop detached.
     const executionPromise = (async (): Promise<WorkflowRunState> => {

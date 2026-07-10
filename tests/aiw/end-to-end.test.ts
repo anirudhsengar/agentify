@@ -8,11 +8,11 @@
 // The primary scenario exercises the GitHub PR-labeled-AFK-chore
 // trigger (`github-chore-afk` in `.agentify/webhooks.example.json`)
 // driving the `plan_build_review_ship` workflow end-to-end. We
-// run the daemon with `--dryRun` so the per-phase agent invocations
-// are short-circuited; the workflow still walks plan → build →
-// review → fix → ship end-to-end on disk and the ship phase is
-// gate-denied (no kpis streak), so the workflow terminates as
-// `completed`.
+// inject a FakeRuntime so the per-phase agent invocations are
+// short-circuited without a real LLM; the workflow still walks
+// plan → build → review → fix → ship end-to-end on disk and the
+// ship phase is gate-denied (no kpis streak), so the workflow
+// terminates as `completed`.
 
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
@@ -26,6 +26,20 @@ import { aiwPaths } from "../../src/core/aiw/paths.ts";
 import { aiwStatePaths } from "../../src/core/aiw/index.ts";
 import type { Trigger } from "../../src/core/webhook/state.ts";
 import type { AiwPaths } from "../../src/core/aiw/paths.ts";
+import type {
+  AgentRuntime,
+  AgentRuntimeResult,
+  AgentRuntimeSessionOptions,
+} from "../../src/core/types.ts";
+
+class FakeRuntime implements AgentRuntime {
+  async runSession(_options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    return { turns: 1, costUsd: 0.001, aborted: false };
+  }
+  async runGreenfield(): Promise<AgentRuntimeResult> {
+    throw new Error("not used");
+  }
+}
 
 function tempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `agentify-${prefix}-`));
@@ -117,7 +131,7 @@ async function testEndToEnd(): Promise<void> {
   const daemon = await startDaemon({
     cwd: projectDir,
     port: 0,
-    dryRun: true, // dry-run so the per-phase LLM calls are skipped
+    runtime: new FakeRuntime(),
     logger: { info: () => {}, warn: () => {}, error: () => {} },
   });
 
@@ -171,9 +185,9 @@ async function testEndToEnd(): Promise<void> {
     assert.equal(finalState.workflow, "plan_build_review_ship");
     assert.equal(finalState.status, "completed");
     // The 5-phase workflow: plan, build, review, fix, ship.
-    // Fix is skipped because no review file was produced
-    // (readReviewResult returns null in dry-run). Ship is skipped
-    // because the AFK gate denies (no kpis streak).
+    // Fix is skipped because the fake runtime doesn't write a review
+    // file (readReviewResult returns null). Ship is skipped because
+    // the AFK gate denies (no kpis streak).
     assert.equal(finalState.phases.length, 5);
     assert.equal(finalState.phases[0]!.phase, "plan");
     assert.equal(finalState.phases[1]!.phase, "build");
@@ -224,7 +238,7 @@ async function testSinglePromptTriggerStillWorks(): Promise<void> {
   const daemon = await startDaemon({
     cwd: projectDir,
     port: 0,
-    dryRun: true, // dry-run so no LLM is required
+    runtime: new FakeRuntime(),
     logger: { info: () => {}, warn: () => {}, error: () => {} },
   });
 

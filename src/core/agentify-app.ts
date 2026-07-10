@@ -29,18 +29,6 @@ export interface RunAgentifyAppOptions
    * (non-premium subset). Used by the `--targets` CLI flag.
    */
   targetsOverride?: ReadonlyArray<string>;
-  /**
-   * Dry-run mode (`--plan`). The full audit runs (the LLM is called
-   * so the plan reflects what the real run would do), but the apply
-   * step never writes to the repo. Output is the would-be plan.
-   * Combined with `jsonOutput`, emits structured JSON to stdout.
-   */
-  dryRun?: boolean;
-  /**
-   * When true, plan output is emitted as JSON to stdout instead of
-   * the human-readable ui.info lines. Only meaningful with `dryRun`.
-   */
-  jsonOutput?: boolean;
 }
 
 function reportGitHubReadiness(options: RunAgentifyAppOptions): void {
@@ -150,7 +138,5 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
     mode: options.mode,
     configOverride: options.configOverride,
     githubReadinessOverride: options.githubReadinessOverride,
-    dryRun: options.dryRun,
-    jsonOutput: options.jsonOutput,
   });
 }

@@ -43,8 +43,8 @@ async function spawnExplorerUsesExplorerSlotNotParentModel(): Promise<void> {
   try {
     const parentModel = stubModel("openai", "gpt-4o");
     const explorerModel = stubModel("anthropic", "claude-haiku-4-5-20251001");
-    const scoringModel = stubModel("openai", "gpt-4o-mini");
-    const registry = stubRegistry([parentModel, explorerModel, scoringModel]);
+    const liteModel = stubModel("openai", "gpt-4o-mini");
+    const registry = stubRegistry([parentModel, explorerModel, liteModel]);
     const config: AgentifyConfig = {
       provider: "openai",
       model: "gpt-4o",
@@ -52,7 +52,7 @@ async function spawnExplorerUsesExplorerSlotNotParentModel(): Promise<void> {
       modelsByRole: {
         primary: { provider: "openai", model: "gpt-4o" },
         explorer: { provider: "anthropic", model: "claude-haiku-4-5-20251001" },
-        scoring: { provider: "openai", model: "gpt-4o-mini" },
+        lite: { provider: "openai", model: "gpt-4o-mini" },
       },
     };
 

@@ -17,10 +17,11 @@ export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhi
 /**
  * Named model slot role. Phase 2+ (ADR 0017). `primary` is the default
  * resolver role; every existing `runSession` call site defaults to it.
- * `explorer` is consumed by `spawn_explorer` sub-agents. `scoring` is
- * reserved for future lightweight judgment-call surfaces.
+ * `explorer` is consumed by `spawn_explorer` sub-agents. `lite` is
+ * reserved for future lightweight judgment-call surfaces — a cheaper
+ * model used for non-primary work.
  */
-export type ModelRole = "primary" | "explorer" | "scoring";
+export type ModelRole = "primary" | "explorer" | "lite";
 
 export interface ModelSlot {
   provider: AgentifyProvider;
@@ -94,17 +95,6 @@ export interface RunAgentifyOptions {
    */
   mode?: "brownfield" | "greenfield";
   githubReadinessOverride?: GitHubReadiness;
-  /**
-   * Dry-run mode (`--plan`). The full audit runs (the LLM is called
-   * so the plan reflects what the real run would do), but the apply
-   * step never writes to the repo. Output is the would-be plan.
-   */
-  dryRun?: boolean;
-  /**
-   * When true, plan output is emitted as JSON to stdout instead of
-   * the human-readable ui.info lines. Only meaningful with `dryRun`.
-   */
-  jsonOutput?: boolean;
 }
 
 export interface AgentRuntimeSessionOptions {

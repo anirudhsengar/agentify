@@ -43,7 +43,7 @@ import {
   type SelfImproveSyncer,
 } from "../agent-expert.ts";
 import type { Model, Api } from "@earendil-works/pi-ai";
-// Model is used as the type for scoringModel in AutoImproveSchedulerOptions.
+// Model is used as the type for liteModel in AutoImproveSchedulerOptions.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _ModelRef = Model<Api>;
 import {
@@ -74,12 +74,12 @@ export interface AutoImproveSchedulerOptions {
   /** Override the orchestrator's execution log writer (used in tests). */
   log?: (msg: string) => void;
   /**
-   * Optional pre-resolved scoring slot model. When set, the LEARN
+   * Optional pre-resolved lite slot model. When set, the LEARN
    * flow uses this model for its `pi -p` invocation (via the
    * `AGENTIFY_LEARN_MODEL` env var). Default: the syncer falls back
    * to `pi -p`'s default model. ADR 0017.
    */
-  scoringModel?: Model<Api>;
+  liteModel?: Model<Api>;
 }
 
 export interface AutoImproveResult {
@@ -277,8 +277,8 @@ export class AutoImproveScheduler {
     const release = await acquireLock(lockPath);
     try {
       this.log(`self-improve (auto): ${expert.domain} (agent=${state.agent_id})`);
-      const modelSlot = this.opts.scoringModel
-        ? { provider: this.opts.scoringModel.provider, model: this.opts.scoringModel.id }
+      const modelSlot = this.opts.liteModel
+        ? { provider: this.opts.liteModel.provider, model: this.opts.liteModel.id }
         : undefined;
       const result = await runSelfImprove(expert, this.opts.cwd, {
         syncer: this.opts.syncer,

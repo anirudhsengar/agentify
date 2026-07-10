@@ -60,7 +60,7 @@ async function aiwAllPhasesUseScoringSlot(): Promise<void> {
   try {
     buildAiwFixture(cwd);
     const runtime = makeCapturingRuntime();
-    const runner = startAiwRunner({ configDir, cwd, runtime, dryRun: false, updateKpis: false });
+    const runner = startAiwRunner({ configDir, cwd, runtime, updateKpis: false });
 
     await runner.run({
       workflow: "plan_build_review_fix",
@@ -90,7 +90,7 @@ async function aiwReviewPhaseUsesScoringSlot(): Promise<void> {
   try {
     buildAiwFixture(cwd);
     const runtime = makeCapturingRuntime();
-    const runner = startAiwRunner({ configDir, cwd, runtime, dryRun: false, updateKpis: false });
+    const runner = startAiwRunner({ configDir, cwd, runtime, updateKpis: false });
 
     await runner.run({
       workflow: "plan_build_review",
@@ -114,7 +114,7 @@ async function aiwFixPhaseUsesScoringSlot(): Promise<void> {
   try {
     buildAiwFixture(cwd);
     const runtime = makeCapturingRuntime();
-    const runner = startAiwRunner({ configDir, cwd, runtime, dryRun: false, updateKpis: false });
+    const runner = startAiwRunner({ configDir, cwd, runtime, updateKpis: false });
 
     await runner.run({
       workflow: "plan_build_review_fix",
@@ -142,7 +142,7 @@ async function aiwBuildPhaseUsesScoringSlot(): Promise<void> {
   try {
     buildAiwFixture(cwd);
     const runtime = makeCapturingRuntime();
-    const runner = startAiwRunner({ configDir, cwd, runtime, dryRun: false, updateKpis: false });
+    const runner = startAiwRunner({ configDir, cwd, runtime, updateKpis: false });
 
     await runner.run({
       workflow: "plan_build",

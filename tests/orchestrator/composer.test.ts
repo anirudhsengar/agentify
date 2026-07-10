@@ -92,20 +92,6 @@ async function testSmokeSpecCompletes(): Promise<void> {
   }
 }
 
-async function testDryRunDoesNotDispatch(): Promise<void> {
-  const h = setup();
-  try {
-    const before = h.runtime.calls.length;
-    const state = await h.runner.run({ spec: defaultSmokeSpec(), source: "test", dryRun: true });
-    const terminal = await waitForTerminal(h, state.workflow_run_id);
-    assert.equal(terminal.status, "completed");
-    assert.equal(h.runtime.calls.length, before);  // No new runtime call.
-  } finally {
-    await h.manager.shutdown();
-    h.cleanup();
-  }
-}
-
 async function testSkipsWhenFalseByDefault(): Promise<void> {
   const h = setup();
   try {
@@ -303,7 +289,6 @@ async function testTailAndSummary(): Promise<void> {
 
 async function testMain(): Promise<void> {
   await testSmokeSpecCompletes();
-  await testDryRunDoesNotDispatch();
   await testSkipsWhenFalseByDefault();
   await testParallelStepsRun();
   await testSerialDependsOnRespected();

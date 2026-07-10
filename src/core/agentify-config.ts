@@ -60,9 +60,9 @@ function readModelsByRole(
   const obj = slotRaw as Record<string, unknown>;
   const primary = readSlot(obj.primary);
   const explorer = readSlot(obj.explorer);
-  const scoring = readSlot(obj.scoring);
-  if (!primary && !explorer && !scoring) return undefined;
-  return { primary, explorer, scoring };
+  const lite = readSlot(obj.lite);
+  if (!primary && !explorer && !lite) return undefined;
+  return { primary, explorer, lite };
 }
 
 /**
@@ -89,7 +89,7 @@ export function loadAgentifyConfig(configDir: string): AgentifyConfig {
   const provider = typeof raw.provider === "string" && isAgentifyProvider(raw.provider)
     ? raw.provider
     : undefined;
-  return {
+  const built: AgentifyConfig = {
     provider,
     model: typeof raw.model === "string" ? raw.model : undefined,
     thinkingLevel: typeof raw.thinkingLevel === "string"
@@ -98,6 +98,35 @@ export function loadAgentifyConfig(configDir: string): AgentifyConfig {
     modelsByRole: readModelsByRole(raw),
     targets: readTargets(raw.targets),
   };
+  // One-shot migration: pre-rename configs may have a `scoring` slot
+  // key. Rename it to `lite` and persist so subsequent reads see only
+  // the new key. Idempotent — when both are present, prefer `lite`
+  // and drop `scoring`. When neither is present, no-op.
+  if (migrateScoringSlot(raw)) {
+    saveAgentifyConfig(configDir, built);
+  }
+  return built;
+}
+
+/**
+ * Inspect `raw.modelsByRole` for the legacy `scoring` key. If found,
+ * rename it to `lite` in-place (the in-memory object is fresh from
+ * `readJsonObject`). Returns true iff a rewrite happened, so the
+ * caller can persist.
+ */
+function migrateScoringSlot(raw: Record<string, unknown>): boolean {
+  const slotRaw = raw.modelsByRole;
+  if (!slotRaw || typeof slotRaw !== "object" || Array.isArray(slotRaw)) {
+    return false;
+  }
+  const obj = slotRaw as Record<string, unknown>;
+  if (obj.scoring === undefined) return false;
+  if (obj.lite === undefined) {
+    obj.lite = obj.scoring;
+  }
+  // Either way, the legacy key must not survive a migration pass.
+  delete obj.scoring;
+  return true;
 }
 
 function writeJson0600(filePath: string, value: unknown): void {
@@ -152,7 +181,7 @@ function credentialPrompt(label: string, env: readonly string[]): string {
   return `${label} API key (${env.join(" or ")})`;
 }
 
-const SLOT_NAMES: ReadonlySet<ModelRole> = new Set(["primary", "explorer", "scoring"]);
+const SLOT_NAMES: ReadonlySet<ModelRole> = new Set(["primary", "explorer", "lite"]);
 
 /** True iff `value` is a valid `ModelRole` literal. */
 export function isModelRole(value: string): value is ModelRole {
@@ -161,7 +190,7 @@ export function isModelRole(value: string): value is ModelRole {
 
 /**
  * First-run interactive picker: prompt the user to assign models to
- * the `primary` slot (and optionally `explorer`/`scoring`). Returns
+ * the `primary` slot (and optionally the secondary slots). Returns
  * the synthesized `AgentifyConfig.modelsByRole` block — `undefined`
  * when the user declined or the registry has nothing to offer.
  */
@@ -195,8 +224,8 @@ async function promptModelStrategy(
     "How would you like to assign models in agentify?",
     [
       { label: "Max quality — strongest model for every slot", value: "max-quality" },
-      { label: "Balanced — strongest for primary, medium for explorer/scoring", value: "balanced" },
-      { label: "Cost optimized — medium primary, fast explorer/scoring", value: "cost-optimized" },
+      { label: "Balanced — strongest for primary, medium for the secondary slots", value: "balanced" },
+      { label: "Cost optimized — medium primary, fast for the secondary slots", value: "cost-optimized" },
       { label: "Customize each slot (advanced)", value: "split" },
     ],
   );
@@ -218,7 +247,7 @@ async function promptModelStrategy(
     return primary ? { primary } : undefined;
   }
 
-  // Split / Customize path: prompt primary (required), then optionally explorer + scoring.
+  // Split / Customize path: prompt primary (required), then optionally explorer + lite.
   const primaryChoice = await ui.promptSelect("Primary model (required):", choices);
   const primary = parseSlotChoice(primaryChoice);
   if (!primary) return undefined;
@@ -233,20 +262,20 @@ async function promptModelStrategy(
     explorer = parseSlotChoice(choice);
   }
 
-  let scoring: ModelSlot | undefined;
-  const wantScoring = await ui.promptSelect("Configure a separate scoring model?", [
+  let lite: ModelSlot | undefined;
+  const wantLite = await ui.promptSelect("Configure a separate lite model?", [
     { label: "Skip — use primary", value: "skip" },
     { label: "Pick a model", value: "pick" },
   ]);
-  if (wantScoring === "pick") {
-    const choice = await ui.promptSelect("Scoring model:", choices);
-    scoring = parseSlotChoice(choice);
+  if (wantLite === "pick") {
+    const choice = await ui.promptSelect("Lite model:", choices);
+    lite = parseSlotChoice(choice);
   }
 
   return {
     primary,
     explorer,
-    scoring,
+    lite,
   };
 }
 
@@ -256,10 +285,10 @@ async function promptModelStrategy(
  * Models are ranked by `reasoning ? 1 : 0` then `contextWindow`
  * descending, then bucketed by index:
  *   tier 0 (strongest) — primary slot in max-quality/balanced;
- *                       explorer+scoring in cost-optimized
+ *                       secondary slots in cost-optimized
  *   tier 1 (medium)    — primary in cost-optimized;
- *                       explorer+scoring in balanced
- *   tier 2 (fast)      — explorer+scoring in cost-optimized
+ *                       secondary slots in balanced
+ *   tier 2 (fast)      — secondary slots in cost-optimized
  *
  * Edge cases:
  *   - One model only → all slots get that model.
@@ -286,22 +315,22 @@ export function pickTierPreset(
     return {
       primary: { provider: strongest.provider, model: strongest.id },
       explorer: { provider: strongest.provider, model: strongest.id },
-      scoring: { provider: strongest.provider, model: strongest.id },
+      lite: { provider: strongest.provider, model: strongest.id },
     };
   }
-  // Balanced: strongest primary, medium explorer/scoring.
+  // Balanced: strongest primary, medium secondary slots.
   if (preset === "balanced") {
     return {
       primary: { provider: strongest.provider, model: strongest.id },
       explorer: { provider: medium.provider, model: medium.id },
-      scoring: { provider: medium.provider, model: medium.id },
+      lite: { provider: medium.provider, model: medium.id },
     };
   }
-  // Cost optimized: medium primary, fast explorer/scoring.
+  // Cost optimized: medium primary, fast secondary slots.
   return {
     primary: { provider: medium.provider, model: medium.id },
     explorer: { provider: fast.provider, model: fast.id },
-    scoring: { provider: fast.provider, model: fast.id },
+    lite: { provider: fast.provider, model: fast.id },
   };
 }
 
@@ -384,7 +413,7 @@ export async function ensureAgentifyConfig(
     !!config.modelsByRole &&
     (!!config.modelsByRole.primary ||
       !!config.modelsByRole.explorer ||
-      !!config.modelsByRole.scoring);
+      !!config.modelsByRole.lite);
   const hasLegacyConfig = !!config.provider && !!config.model;
 
   let modelsByRole: AgentifyConfig["modelsByRole"];

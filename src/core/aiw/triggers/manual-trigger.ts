@@ -16,10 +16,9 @@ export interface ManualTriggerOptions {
   prompt: string;
   model?: string | null;
   thinkingLevel?: string | null;
-  modelRole?: "primary" | "explorer" | "scoring" | null;
+  modelRole?: "primary" | "explorer" | "lite" | null;
   aiwId?: string;
   noWorktree?: boolean;
-  dryRun?: boolean;
   changeType?: ChangeType;
   force?: boolean;
   runtime?: import("../../../core/types.ts").AgentRuntime;
@@ -35,7 +34,6 @@ export async function runManualTrigger(options: ManualTriggerOptions): Promise<v
     cwd: options.cwd,
     runtime: options.runtime ?? new PiSdkRuntime(),
     noWorktree: options.noWorktree,
-    dryRun: options.dryRun,
     logger: (paths) => ({
       info: (m, f) => log(`[info] ${m}${f ? " " + JSON.stringify(f) : ""}`),
       warn: (m, f) => log(`[warn] ${m}${f ? " " + JSON.stringify(f) : ""}`),

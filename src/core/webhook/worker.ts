@@ -51,8 +51,6 @@ export interface WorkerOptions {
   concurrency?: number;
   /** Logger; defaults to stderr JSON lines. */
   logger?: WorkerLogger;
-  /** For tests: don't actually run prompts. */
-  dryRun?: boolean;
   /** Stop flag for tests. */
   shouldStop?: () => boolean;
   /** Called for each task lifecycle event; for tests. */
@@ -87,7 +85,6 @@ export function startWorker(options: WorkerOptions): RunningWorker {
   const runtime = options.runtime ?? new PiSdkRuntime();
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const concurrency = options.concurrency ?? DEFAULT_CONCURRENCY;
-  const dryRun = options.dryRun ?? false;
   const shouldStop = options.shouldStop ?? (() => false);
 
   // Crash recovery on first tick.
@@ -118,7 +115,6 @@ export function startWorker(options: WorkerOptions): RunningWorker {
           log,
           runtime,
           concurrency,
-          dryRun,
           inflightRef,
           onTaskEvent: options.onTaskEvent,
           tickStartedAt: Date.now(),
@@ -160,7 +156,6 @@ export function startWorker(options: WorkerOptions): RunningWorker {
         log,
         runtime,
         concurrency,
-        dryRun,
         inflightRef,
         onTaskEvent: options.onTaskEvent,
         tickStartedAt: Date.now(),
@@ -175,14 +170,13 @@ interface TickContext {
   log: WorkerLogger;
   runtime: AgentRuntime;
   concurrency: number;
-  dryRun: boolean;
   inflightRef: { current: number };
   onTaskEvent?: (event: WorkerTaskEvent) => void;
   tickStartedAt: number;
 }
 
 async function tickOnceInternal(ctx: TickContext): Promise<void> {
-  const { paths, log, runtime, concurrency, dryRun, inflightRef, onTaskEvent } = ctx;
+  const { paths, log, runtime, concurrency, inflightRef, onTaskEvent } = ctx;
 
   const state = rebuildQueue(paths);
   recoverStaleClaims(paths, state, process.pid);
@@ -221,7 +215,6 @@ async function tickOnceInternal(ctx: TickContext): Promise<void> {
       log,
       runtime,
       configDir: ctx.options.configDir,
-      dryRun,
       onTaskEvent,
       onDone: () => {
         inflightRef.current -= 1;
@@ -237,7 +230,6 @@ interface RunTaskArgs {
   log: WorkerLogger;
   runtime: AgentRuntime;
   configDir: string;
-  dryRun: boolean;
   onTaskEvent?: (event: WorkerTaskEvent) => void;
   onDone: () => void;
 }
@@ -247,7 +239,7 @@ function isAiwOwned(record: { prompt: { template: string }; trigger_id: string }
 }
 
 async function runTask(args: RunTaskArgs): Promise<void> {
-  const { record, handle, paths, log, runtime, configDir, dryRun, onTaskEvent, onDone } = args;
+  const { record, handle, paths, log, runtime, configDir, onTaskEvent, onDone } = args;
   let endedStatus: typeof TaskStatus[keyof typeof TaskStatus] = TaskStatus.Error;
   let errorMessage: string | null = null;
   let costUsd: number | null = null;
@@ -268,20 +260,15 @@ async function runTask(args: RunTaskArgs): Promise<void> {
       template: running.prompt.template,
     });
 
-    if (dryRun) {
-      endedStatus = TaskStatus.Done;
-      log.info("worker dry-run completed", { task_id: record.task_id });
+    const userPrompt = composeUserPrompt(running);
+    const result = await runtime.runSession(buildSessionOptions(running, userPrompt, configDir));
+    turns = result.turns;
+    costUsd = result.costUsd;
+    if (result.aborted) {
+      endedStatus = TaskStatus.Aborted;
+      errorMessage = "aborted";
     } else {
-      const userPrompt = composeUserPrompt(running);
-      const result = await runtime.runSession(buildSessionOptions(running, userPrompt, configDir));
-      turns = result.turns;
-      costUsd = result.costUsd;
-      if (result.aborted) {
-        endedStatus = TaskStatus.Aborted;
-        errorMessage = "aborted";
-      } else {
-        endedStatus = TaskStatus.Done;
-      }
+      endedStatus = TaskStatus.Done;
     }
 
     log.info("worker finished task", {
@@ -345,9 +332,9 @@ function buildSessionOptions(
   };
 }
 
-function normalizeModelRole(value: string | null): "primary" | "explorer" | "scoring" | undefined {
+function normalizeModelRole(value: string | null): "primary" | "explorer" | "lite" | undefined {
   if (!value) return undefined;
-  if (value === "primary" || value === "explorer" || value === "scoring") {
+  if (value === "primary" || value === "explorer" || value === "lite") {
     return value;
   }
   return undefined;

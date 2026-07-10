@@ -121,7 +121,6 @@ async function testPlanBuild(): Promise<void> {
     state,
     runtime,
     logger: nullAiwLogger(),
-    dryRun: false,
   });
   assert.equal(finalState.status, "completed");
   assert.equal(finalState.phases.length, 2);
@@ -148,7 +147,6 @@ async function testPlanBuildReviewPasses(): Promise<void> {
     state,
     runtime,
     logger: nullAiwLogger(),
-    dryRun: false,
   });
   assert.equal(finalState.status, "completed");
   assert.equal(finalState.phases.length, 3);
@@ -169,7 +167,6 @@ async function testPlanBuildReviewFixSkipsFixOnPass(): Promise<void> {
     state,
     runtime,
     logger: nullAiwLogger(),
-    dryRun: false,
   });
   assert.equal(finalState.status, "completed");
   assert.equal(finalState.phases.length, 4);
@@ -213,7 +210,6 @@ async function testPlanBuildReviewFixRunsFixOnBlock(): Promise<void> {
     state,
     runtime,
     logger: nullAiwLogger(),
-    dryRun: false,
   });
   assert.equal(finalState.status, "completed");
   // All 4 phases ran
@@ -237,7 +233,6 @@ async function testPhaseErrorFailsWorkflow(): Promise<void> {
     state,
     runtime,
     logger: nullAiwLogger(),
-    dryRun: false,
   });
   assert.equal(finalState.status, "failed");
   assert.equal(finalState.error_step, "build");
@@ -254,7 +249,6 @@ async function testStatePersistedAtEachStep(): Promise<void> {
     state,
     runtime,
     logger: nullAiwLogger(),
-    dryRun: false,
   });
   // After completion, the state.json should reflect the final state.
   const final = readAiwState(paths);
@@ -278,7 +272,6 @@ async function testEachPhaseGetsFreshSession(): Promise<void> {
     state,
     runtime,
     logger: nullAiwLogger(),
-    dryRun: false,
   });
   // Each call must have its own session (different cwd / prompt /
   // systemPrompt). Verify the system prompts are different.
@@ -338,7 +331,6 @@ async function testPlanBuildReviewShipSkipsWhenGateDenies(): Promise<void> {
     state,
     runtime,
     logger: nullAiwLogger(),
-    dryRun: false,
     shipExec,
   });
 
@@ -374,7 +366,6 @@ async function testPlanBuildReviewShipRunsShipWhenGateEarned(): Promise<void> {
     state,
     runtime,
     logger: nullAiwLogger(),
-    dryRun: false,
     shipExec,
   });
 
@@ -405,7 +396,6 @@ async function testPlanBuildReviewShipForceOverride(): Promise<void> {
     state,
     runtime,
     logger: nullAiwLogger(),
-    dryRun: false,
     shipExec: makeShipExec(),
   });
   assert.equal(withoutForce.phases[4]!.status, "skipped");
@@ -417,7 +407,6 @@ async function testPlanBuildReviewShipForceOverride(): Promise<void> {
     state,
     runtime,
     logger: nullAiwLogger(),
-    dryRun: false,
     shipExec,
     forceShip: true,
   });

@@ -58,8 +58,6 @@ export interface AiwRunnerOptions {
   /** Logger; defaults to stderr JSON lines + per-AIW log file. */
   logger?: (paths: AiwPaths) => AiwLogger;
   /** For tests; default false. */
-  dryRun?: boolean;
-  /** For tests; default false. */
   updateKpis?: boolean;
 }
 
@@ -74,7 +72,7 @@ export interface AiwRunner {
     workingDir?: string;
     model?: string | null;
     thinkingLevel?: string | null;
-    modelRole?: "primary" | "explorer" | "scoring" | null;
+    modelRole?: "primary" | "explorer" | "lite" | null;
     source?: string;
     signal?: AbortSignal;
     aiwId?: string;
@@ -133,7 +131,6 @@ export function startAiwRunner(options: AiwRunnerOptions): AiwRunner {
           runtime: options.runtime,
           signal,
           logger,
-          dryRun: options.dryRun,
           forceShip: args.force === true,
         });
         if (options.updateKpis !== false) {
@@ -172,7 +169,6 @@ export function startAiwRunner(options: AiwRunnerOptions): AiwRunner {
           runtime: options.runtime,
           signal: ac.signal,
           logger,
-          dryRun: options.dryRun,
           forceShip: opts?.force === true,
         });
       } finally {

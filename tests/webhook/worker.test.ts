@@ -231,30 +231,6 @@ async function testConcurrency2(): Promise<void> {
   }
 }
 
-async function testDryRun(): Promise<void> {
-  const configDir = tempDir("worker-dry");
-  const runtime = new FakeRuntime();
-  const worker = startWorker({
-    configDir,
-    runtime,
-    pollIntervalMs: 25,
-    dryRun: true,
-    logger: silentLogger(),
-  });
-  try {
-    const paths = queuePaths(configDir);
-    ensureQueueDirs(paths);
-    const r1 = makeRecord("9".repeat(16));
-    appendRecord(paths, r1);
-    await waitFor(() => rebuildQueue(paths).terminal.length === 1);
-    assert.equal(runtime.calls.length, 0); // runtime never called in dry run
-    const final = rebuildQueue(paths).byId.get(r1.task_id);
-    assert.equal(final?.status, TaskStatus.Done);
-  } finally {
-    await worker.stop();
-  }
-}
-
 function silentLogger() {
   const noop = (): void => undefined;
   return { info: noop, warn: noop, error: noop };
@@ -264,6 +240,5 @@ await testSuccessfulRun();
 await testFailureRun();
 await testAbortRun();
 await testConcurrency2();
-await testDryRun();
 
 console.log("webhook worker tests passed.");

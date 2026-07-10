@@ -29,11 +29,6 @@ const RunWorkflowParams = Type.Object({
       description: "Override the spec's max_runtime_minutes for this run.",
     }),
   ),
-  dry_run: Type.Optional(
-    Type.Boolean({
-      description: "If true, validate + persist the spec but do not dispatch any sub-agents or AIWs.",
-    }),
-  ),
 });
 
 export function runWorkflowTool(
@@ -51,7 +46,6 @@ export function runWorkflowTool(
       inputs?: Record<string, string | number | boolean | string[]>;
       workflow_run_id?: string;
       max_runtime_minutes?: number;
-      dry_run?: boolean;
     }) => {
       const spec = registry.get(params.workflow);
       if (!spec) {
@@ -82,7 +76,6 @@ export function runWorkflowTool(
           inputs: params.inputs,
           workflowRunId: params.workflow_run_id,
           source: "orchestrator:tool",
-          dryRun: params.dry_run,
         });
         return {
           content: [{
@@ -93,7 +86,6 @@ export function runWorkflowTool(
               status: state.status,
               started_at: state.started_at,
               message: `Workflow '${state.workflow_name}' (${state.workflow_run_id}) status: ${state.status}`,
-              note: params.dry_run ? "dry_run=true: spec persisted, no sub-agents dispatched" : undefined,
             }, null, 2),
           }],
           details: { workflow_run_id: state.workflow_run_id, status: state.status } as never,

@@ -179,7 +179,7 @@ export interface ResolvedPromptInvocation {
    * session consumes the configured slot. Takes precedence over
    * `model` when both are set.
    */
-  model_role?: "primary" | "explorer" | "scoring";
+  model_role?: "primary" | "explorer" | "lite";
 }
 
 export function resolvePromptInvocation(
@@ -214,8 +214,8 @@ export function resolvePromptInvocation(
 
 function normalizeModelRole(
   value: string | undefined,
-): "primary" | "explorer" | "scoring" | undefined {
-  if (value === "primary" || value === "explorer" || value === "scoring") return value;
+): "primary" | "explorer" | "lite" | undefined {
+  if (value === "primary" || value === "explorer" || value === "lite") return value;
   return undefined;
 }
 

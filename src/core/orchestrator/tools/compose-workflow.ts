@@ -26,7 +26,6 @@ const ComposeWorkflowParams = Type.Object({
         "If set, persist the spec to <project>/.pi/workflows/<save_as>.json before running, so future calls can use run_workflow by name.",
     }),
   ),
-  dry_run: Type.Optional(Type.Boolean()),
 });
 
 export function composeWorkflowTool(
@@ -45,7 +44,6 @@ export function composeWorkflowTool(
       inputs?: Record<string, string | number | boolean | string[]>;
       workflow_run_id?: string;
       save_as?: string;
-      dry_run?: boolean;
     }) => {
       const validation = validateWorkflowSpec(params.spec);
       if (!validation.ok) {
@@ -83,7 +81,6 @@ export function composeWorkflowTool(
           inputs: params.inputs,
           workflowRunId: params.workflow_run_id,
           source: "orchestrator:tool",
-          dryRun: params.dry_run,
         });
         return {
           content: [{
@@ -95,7 +92,6 @@ export function composeWorkflowTool(
               started_at: state.started_at,
               persisted_at: persistedAt,
               message: `Composed workflow '${state.workflow_name}' (${state.workflow_run_id}) status: ${state.status}`,
-              note: params.dry_run ? "dry_run=true" : undefined,
             }, null, 2),
           }],
           details: { workflow_run_id: state.workflow_run_id, status: state.status, persisted_at: persistedAt } as never,

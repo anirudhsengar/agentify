@@ -158,21 +158,21 @@ export class OrchestratorHost {
 
     // auto-improve: auto-LEARN scheduler. Fires on every
     // agent_end with an expertise_path. Phase 3 (ADR 0017): resolve
-    // the scoring slot model so the LEARN flow honors it.
-    let scoringModel: import("@earendil-works/pi-ai").Model<import("@earendil-works/pi-ai").Api> | undefined;
+    // the lite slot model so the LEARN flow honors it.
+    let liteModel: import("@earendil-works/pi-ai").Model<import("@earendil-works/pi-ai").Api> | undefined;
     try {
       const authStorage = AuthStorage.create(authPath(opts.configDir));
       const modelRegistry = ModelRegistry.create(authStorage);
       const config = loadAgentifyConfig(opts.configDir);
-      const resolved = selectModelForRole(modelRegistry, config, "scoring");
-      if (resolved) scoringModel = resolved.model;
+      const resolved = selectModelForRole(modelRegistry, config, "lite");
+      if (resolved) liteModel = resolved.model;
     } catch {
       // Best effort.
     }
     this.autoImprove = new AutoImproveScheduler({
       configDir: opts.configDir,
       cwd: opts.cwd,
-      scoringModel,
+      liteModel,
     });
   }
 

@@ -652,38 +652,6 @@ function formatApplyReport(
   return lines;
 }
 
-/**
- * Build the JSON shape for `--plan --json` output. Returns an
- * object with counts and the would-be file actions, ready for
- * `JSON.stringify`. The manifest is the dry-run manifest produced
- * by `applyStagedBundle` — fully formed, just not written to disk.
- */
-function planToJson(
-  applyResult: { writes: ArtifactWrite[]; manifest: ManagedManifest | null },
-  cwd: string,
-): unknown {
-  const writes = applyResult.writes.map((w) => {
-    const rel = toRel(cwd, w.path);
-    return {
-      path: rel,
-      action: w.action,
-      reason: w.reason ?? null,
-      alongside_path: w.alongsidePath ?? null,
-    };
-  });
-  return {
-    dry_run: true,
-    summary: {
-      created: writes.filter((w) => w.action === "written").length,
-      kept_user: writes.filter((w) => w.action === "skipped").length,
-      saved_alongside: writes.filter((w) => w.action === "alongside").length,
-      conflicts: writes.filter((w) => w.action === "conflict").length,
-    },
-    manifest: applyResult.manifest,
-    writes,
-  };
-}
-
 function applyStagedBundle(params: {
   cwd: string;
   stagingRoot: string;
@@ -694,7 +662,6 @@ function applyStagedBundle(params: {
   policy: ApplyPolicy;
   runId: string;
   stateDir: string;
-  dryRun?: boolean;
 }): { writes: ArtifactWrite[]; requiredConflictCount: number; manifest: ManagedManifest | null } {
   const stagedFiles = collectStagedFiles(params.stagingRoot, params.stateDir);
   const writes: ArtifactWrite[] = [];
@@ -712,10 +679,8 @@ function applyStagedBundle(params: {
       const destination = path.join(params.cwd, file.relativePath);
       const existing = fs.existsSync(destination) ? fs.readFileSync(destination) : null;
       const writeAction = existing && Buffer.compare(existing, file.content) === 0 ? "skipped" : "written";
-      if (!params.dryRun) {
-        fs.mkdirSync(path.dirname(destination), { recursive: true });
-        fs.writeFileSync(destination, file.content, { mode: 0o644 });
-      }
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.writeFileSync(destination, file.content, { mode: 0o644 });
       writes.push({ path: destination, action: writeAction });
       manifestFiles.push(baseEntry);
       continue;
@@ -758,10 +723,8 @@ function applyStagedBundle(params: {
     const alongsideDest = path.join(params.cwd, alongsideRel);
     const userContent = fs.readFileSync(path.join(params.cwd, file.relativePath));
     const preservedSha = sha256(userContent);
-    if (!params.dryRun) {
-      fs.mkdirSync(path.dirname(alongsideDest), { recursive: true });
-      fs.writeFileSync(alongsideDest, file.content, { mode: 0o644 });
-    }
+    fs.mkdirSync(path.dirname(alongsideDest), { recursive: true });
+    fs.writeFileSync(alongsideDest, file.content, { mode: 0o644 });
     writes.push({
       path: path.join(params.cwd, file.relativePath),
       action: "alongside",
@@ -778,21 +741,6 @@ function applyStagedBundle(params: {
 
   if (requiredConflictCount > 0) {
     return { writes, requiredConflictCount, manifest: null };
-  }
-
-  // Dry-run (`--plan`): report the would-be plan but do not write
-  // anything to the repo. The manifest is computed but not written.
-  // The staging dir is still cleaned up by the caller.
-  if (params.dryRun) {
-    const dryManifest: ManagedManifest = {
-      schema_version: "2",
-      agentify_version: params.agentifyVersion,
-      generated_at: new Date().toISOString(),
-      mode: params.mode,
-      run_id: params.runId,
-      files: manifestFiles.sort((a, b) => a.path.localeCompare(b.path)),
-    };
-    return { writes, requiredConflictCount, manifest: dryManifest };
   }
 
   const manifest: ManagedManifest = {
@@ -1165,18 +1113,14 @@ async function runBrownfieldAudit(
           // that the manifest will carry. The previous manifest is
           // also read for the stale-skill removal step (see below).
           const runId = crypto.randomUUID();
-          const previousManifest = !options.dryRun
-            ? readManifestAt(options.cwd, stateDir)
-            : null;
-          if (!options.dryRun) {
-            persistRunArtifacts({
-              cwd: options.cwd,
-              stateDir,
-              runId,
-              snapshot: artifactSnapshot as unknown as Record<string, { content: Buffer; mode: number; ownership: "managed" | "unmanaged" }>,
-              previousManifest,
-            });
-          }
+          const previousManifest = readManifestAt(options.cwd, stateDir);
+          persistRunArtifacts({
+            cwd: options.cwd,
+            stateDir,
+            runId,
+            snapshot: artifactSnapshot as unknown as Record<string, { content: Buffer; mode: number; ownership: "managed" | "unmanaged" }>,
+            previousManifest,
+          });
 
           const applyResult = applyStagedBundle({
             cwd: options.cwd,
@@ -1188,7 +1132,6 @@ async function runBrownfieldAudit(
             policy: resolveApplyPolicy(options.cwd, stateDir),
             runId,
             stateDir,
-            dryRun: options.dryRun,
           });
           const conflicts = applyResult.writes.filter((write) => write.action === "conflict");
           const scaffoldInstalled = applyResult.writes
@@ -1221,44 +1164,24 @@ async function runBrownfieldAudit(
             reportedStatus = repoState.status === "ready" ? "success" : "partial";
             // Tier-down: delete any previously-installed skill that
             // the new classifier / tier frontmatter no longer ships.
-            // Only runs after a successful apply, never on dry-run.
-            if (!options.dryRun) {
-              removeStaleSkills(options.cwd, previousManifest, shippedSkills, options.ui.info);
-            }
-            if (options.dryRun && options.jsonOutput && applyResult.manifest) {
-              // --plan --json: emit the would-be plan as JSON to
-              // stdout (via ui.status which goes to stdout) and
-              // skip the human-readable report. The manifest is
-              // dry-run (not written to disk) but is fully formed.
-              process.stdout.write(
-                JSON.stringify(planToJson(applyResult, options.cwd), null, 2) + "\n",
-              );
-            } else {
-              options.ui.info(
-                `agentify: audit complete. ${repoState.featureAgentCount} feature agent(s), ` +
-                  `${exportResults.length} harness export(s), ${scaffoldInstalled} scaffold file(s) installed, ` +
-                  `${conflicts.length} optional conflict(s).`,
-              );
-              for (const line of formatApplyReport(applyResult.writes, options.cwd)) {
-                options.ui.info(line);
-              }
+            removeStaleSkills(options.cwd, previousManifest, shippedSkills, options.ui.info);
+            options.ui.info(
+              `agentify: audit complete. ${repoState.featureAgentCount} feature agent(s), ` +
+                `${exportResults.length} harness export(s), ${scaffoldInstalled} scaffold file(s) installed, ` +
+                `${conflicts.length} optional conflict(s).`,
+            );
+            for (const line of formatApplyReport(applyResult.writes, options.cwd)) {
+              options.ui.info(line);
             }
             reportGitHubReadiness(options);
-            if (options.dryRun) {
-              // Dry-run: skip project state write so the next run
-              // doesn't see a stale "last run" record for a run
-              // that never actually wrote anything.
-              options.ui.info("agentify: dry-run complete; no files written, no project state recorded.");
-            } else {
-              persistProjectState(options, {
-                projectKind: "brownfield",
-                runStatus: reportedStatus,
-                repoMode: "brownfield",
-                repoStatus: repoState.status,
-                featureAgentCount: repoState.featureAgentCount,
-                latestLogPath: log.logPath,
-              });
-            }
+            persistProjectState(options, {
+              projectKind: "brownfield",
+              runStatus: reportedStatus,
+              repoMode: "brownfield",
+              repoStatus: repoState.status,
+              featureAgentCount: repoState.featureAgentCount,
+              latestLogPath: log.logPath,
+            });
           }
         } finally {
           fs.rmSync(stagingRoot, { recursive: true, force: true });
@@ -1384,16 +1307,14 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
             addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata);
             // Persist the pre-run snapshot for `agentify revert`.
             const runId = crypto.randomUUID();
-            if (!options.dryRun) {
-              const previousManifest = readManifestAt(options.cwd, stateDir);
-              persistRunArtifacts({
-                cwd: options.cwd,
-                stateDir,
-                runId,
-                snapshot: artifactSnapshot as unknown as Record<string, { content: Buffer; mode: number; ownership: "managed" | "unmanaged" }>,
-                previousManifest,
-              });
-            }
+            const previousManifest = readManifestAt(options.cwd, stateDir);
+            persistRunArtifacts({
+              cwd: options.cwd,
+              stateDir,
+              runId,
+              snapshot: artifactSnapshot as unknown as Record<string, { content: Buffer; mode: number; ownership: "managed" | "unmanaged" }>,
+              previousManifest,
+            });
             const applyResult = applyStagedBundle({
               cwd: options.cwd,
               stagingRoot,
@@ -1404,7 +1325,6 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
               policy: resolveApplyPolicy(options.cwd, stateDir),
               runId,
               stateDir,
-              dryRun: options.dryRun,
             });
             const conflicts = applyResult.writes.filter((write) => write.action === "conflict");
             scaffoldInstalled = applyResult.writes
@@ -1415,15 +1335,9 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
               })
               .length;
             scaffoldConflicts = conflicts.length;
-            if (options.dryRun && options.jsonOutput && applyResult.manifest) {
-              process.stdout.write(
-                JSON.stringify(planToJson(applyResult, options.cwd), null, 2) + "\n",
-              );
-            } else {
-              for (const line of formatApplyReport(applyResult.writes, options.cwd)) {
+            for (const line of formatApplyReport(applyResult.writes, options.cwd)) {
                 options.ui.info(line);
               }
-            }
             if (applyResult.requiredConflictCount > 0) {
               options.ui.error(
                 "agentify: required greenfield generated file conflict(s) blocked apply; no bundle files were written.",
@@ -1479,12 +1393,7 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
       `${result.costUsd === null ? "" : `, $${result.costUsd.toFixed(4)}`}` +
       `${scaffoldSummary}.`,
   );
-  if (options.dryRun) {
-    // Dry-run: skip project state write so the next run doesn't
-    // see a stale "last run" record for a run that never actually
-    // wrote anything.
-    options.ui.info("agentify: dry-run complete; no files written, no project state recorded.");
-  } else if (!result.aborted && artifactsValid) {
+  if (!result.aborted && artifactsValid) {
     reportGitHubReadiness(options);
     // Derive repoStatus from the actual filesystem signals so the
     // persisted state agrees with what the next run's detection sees

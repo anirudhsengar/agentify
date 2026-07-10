@@ -96,8 +96,6 @@ export function summarizeEvent(event: {
       const cost = typeof f["cost_usd"] === "number" ? (f["cost_usd"] as number) : 0;
       return `${kind === "workflow_completed" ? "OK" : "FAIL"} ($${cost.toFixed(4)})`;
     }
-    case "workflow_dry_run_completed":
-      return `dry-run OK`;
     case "workflow_validation_failed": {
       const errs = (f["errors"] as string[] | undefined) ?? [];
       return `validation failed: ${errs.slice(0, 2).join("; ")}${errs.length > 2 ? "..." : ""}`;

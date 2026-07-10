@@ -82,7 +82,7 @@ export const PromptInvocationSchema = Type.Object({
    * literal model id. Falls back to "primary" when unset.
    */
   model_role: Type.Optional(Type.String({
-    description: "Slot role: 'primary' | 'explorer' | 'scoring'. Takes precedence over `model` when set.",
+    description: "Slot role: 'primary' | 'explorer' | 'lite'. Takes precedence over `model` when set.",
   })),
   // If set, the trigger fires a multi-phase AI Developer Workflow
   // instead of a single prompt. Mutually exclusive with `template`

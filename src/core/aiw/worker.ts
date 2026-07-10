@@ -51,8 +51,6 @@ export interface AiwWorkerOptions {
   concurrency?: number;
   /** Logger; defaults to stderr JSON lines. */
   logger?: AiwWorkerLogger;
-  /** For tests: skip the agent runtime. */
-  dryRun?: boolean;
   /** Stop flag for tests. */
   shouldStop?: () => boolean;
   /** Override the runner factory (for tests). */
@@ -86,7 +84,6 @@ export function startAiwWorker(options: AiwWorkerOptions): RunningAiwWorker {
   const log = options.logger ?? consoleAiwWorkerLogger();
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const concurrency = options.concurrency ?? DEFAULT_CONCURRENCY;
-  const dryRun = options.dryRun ?? false;
   const shouldStop = options.shouldStop ?? (() => false);
 
   const runner: AiwRunner = options.runnerFactory
@@ -95,7 +92,6 @@ export function startAiwWorker(options: AiwWorkerOptions): RunningAiwWorker {
         configDir: options.configDir,
         cwd: options.cwd,
         runtime: options.runtime,
-        dryRun,
       });
 
   // Crash recovery on first tick.
@@ -122,7 +118,6 @@ export function startAiwWorker(options: AiwWorkerOptions): RunningAiwWorker {
           log,
           runner,
           concurrency,
-          dryRun,
           inflightRef,
           onTaskEvent: options.onTaskEvent,
         });
@@ -160,7 +155,6 @@ export function startAiwWorker(options: AiwWorkerOptions): RunningAiwWorker {
         log,
         runner,
         concurrency,
-        dryRun,
         inflightRef,
         onTaskEvent: options.onTaskEvent,
       });
@@ -178,7 +172,6 @@ interface TickContext {
   log: AiwWorkerLogger;
   runner: AiwRunner;
   concurrency: number;
-  dryRun: boolean;
   inflightRef: { current: number };
   onTaskEvent?: (event: AiwWorkerEvent) => void;
 }

@@ -106,10 +106,9 @@ async function testEndToEnd(): Promise<void> {
 
   let daemon: Awaited<ReturnType<typeof startDaemon>> | null = null;
   try {
-    // Use the worker.startWorker in dryRun? No — we want to test the
-    // dispatch path. Use a custom runtime via the daemon's worker option.
-    // The startDaemon function doesn't expose runtime override today;
-    // work around by using the lower-level startServer + startWorker.
+    // Use the dispatch path with a custom runtime. We construct the
+    // server + worker directly (rather than startDaemon) so we can pass
+    // a fake runtime without touching the daemon's real runtime.
     const { startServer } = await import("../../src/core/webhook/server.ts");
     const { startWorker } = await import("../../src/core/webhook/worker.ts");
     const server = await startServer({

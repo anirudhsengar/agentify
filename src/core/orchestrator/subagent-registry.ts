@@ -36,7 +36,7 @@ export interface AgentFrontmatter {
    * Named slot role for this sub-agent. Defaults to "primary"
    * when unset. See `ModelRole` and ADR 0017.
    */
-  modelRole?: "primary" | "explorer" | "scoring";
+  modelRole?: "primary" | "explorer" | "lite";
   domain: string[] | null;
   expertise: string | null;
   color: string;

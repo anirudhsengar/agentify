@@ -108,7 +108,7 @@ export const AgentStateSchema = Type.Object({
    * "primary" when unset. See `ModelRole` and ADR 0017.
    */
   model_role: Type.Union([Type.String(), Type.Null()], {
-    description: "Slot role: 'primary' | 'explorer' | 'scoring'. Null = inherit parent's role.",
+    description: "Slot role: 'primary' | 'explorer' | 'lite'. Null = inherit parent's role.",
   }),
   started_at: Type.String({ description: "ISO 8601." }),
   ended_at: Type.Union([Type.String(), Type.Null()]),
@@ -192,7 +192,7 @@ export interface MakeQueuedAgentParams {
   tools: string[];
   model?: string | null;
   thinkingLevel?: string | null;
-  modelRole?: "primary" | "explorer" | "scoring" | null;
+  modelRole?: "primary" | "explorer" | "lite" | null;
   parentSessionId: string;
   subagentTemplate?: string | null;
   expertisePath?: string | null;

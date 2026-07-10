@@ -78,7 +78,7 @@ export interface CreateAgentArgs {
    * Named slot role for this sub-agent. Default: inherit parent's
    * role (typically "primary"). See `ModelRole` and ADR 0017.
    */
-  modelRole?: "primary" | "explorer" | "scoring" | null;
+  modelRole?: "primary" | "explorer" | "lite" | null;
   /** Initial user prompt. */
   user_prompt: string;
   /** Tool allowlist. Default: from template; if neither, ['read']. */
@@ -112,7 +112,7 @@ function normalizeThinking(value: string): import("../types.ts").ThinkingLevel |
 }
 
 function normalizeModelRole(value: string | null): import("../types.ts").ModelRole | undefined {
-  if (value === "primary" || value === "explorer" || value === "scoring") {
+  if (value === "primary" || value === "explorer" || value === "lite") {
     return value;
   }
   return undefined;

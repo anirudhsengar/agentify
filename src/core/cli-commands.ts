@@ -297,7 +297,7 @@ export async function logoutCommand(
     if (existing.modelsByRole) {
       const slots = { ...existing.modelsByRole };
       let changed = false;
-      for (const role of ["primary", "explorer", "scoring"] as const) {
+      for (const role of ["primary", "explorer", "lite"] as const) {
         const slot = slots[role];
         if (slot && slot.provider === provider) {
           slots[role] = undefined;
@@ -308,9 +308,9 @@ export async function logoutCommand(
         const filtered: typeof updated.modelsByRole = {
           primary: slots.primary,
           explorer: slots.explorer,
-          scoring: slots.scoring,
+          lite: slots.lite,
         };
-        const allUnset = !filtered.primary && !filtered.explorer && !filtered.scoring;
+        const allUnset = !filtered.primary && !filtered.explorer && !filtered.lite;
         updated = {
           ...updated,
           modelsByRole: allUnset ? undefined : filtered,
@@ -455,7 +455,7 @@ function modelsShow(ctx: SubcommandContext, resolved: boolean): Promise<number> 
 
   if (resolved) {
     // Final resolved model per role.
-    const roles: ReadonlyArray<ModelRole> = ["primary", "explorer", "scoring"];
+    const roles: ReadonlyArray<ModelRole> = ["primary", "explorer", "lite"];
     const sources = new Map<ModelRole, string>();
     for (const role of roles) {
       try {
@@ -481,7 +481,7 @@ function modelsShow(ctx: SubcommandContext, resolved: boolean): Promise<number> 
   // Default: append a `slots:` block under the pinned three lines.
   ctx.out.write(`available models: ${registry.getAvailable().length}\n\n`);
   ctx.out.write("slots:\n");
-  const slots: ReadonlyArray<ModelRole> = ["primary", "explorer", "scoring"];
+  const slots: ReadonlyArray<ModelRole> = ["primary", "explorer", "lite"];
   for (const role of slots) {
     const slot = config.modelsByRole?.[role];
     if (slot) {
@@ -501,7 +501,7 @@ function modelsSet(
     ctx.err.write(
       "agentify: models set: usage: agentify models set <provider>/<model>\n" +
         "                              agentify models set <slot> <provider>/<model>   " +
-        "(slot: primary|explorer|scoring)\n",
+        "(slot: primary|explorer|lite)\n",
     );
     return Promise.resolve(1);
   }
@@ -535,7 +535,7 @@ function modelsSet(
       }
       const existing = loadAgentifyConfig(ctx.configDir);
 
-      // Slot inheritance: when setting explorer/scoring without primary
+      // Slot inheritance: when setting a secondary slot without primary
       // set, auto-populate primary from legacy fields (Phase 2 / ADR 0017).
       let primarySlot = existing.modelsByRole?.primary;
       if (!primarySlot && slot !== "primary") {
@@ -554,7 +554,7 @@ function modelsSet(
       const updatedModelsByRole: Record<ModelRole, { provider: AgentifyProvider; model: string } | undefined> = {
         primary: slot === "primary" ? { provider, model: modelId } : primarySlot,
         explorer: slot === "explorer" ? { provider, model: modelId } : existing.modelsByRole?.explorer,
-        scoring: slot === "scoring" ? { provider, model: modelId } : existing.modelsByRole?.scoring,
+        lite: slot === "lite" ? { provider, model: modelId } : existing.modelsByRole?.lite,
       };
       saveAgentifyConfig(ctx.configDir, {
         ...existing,
@@ -565,7 +565,7 @@ function modelsSet(
     }
     // First arg looks like a slot but isn't valid.
     ctx.err.write(
-      `agentify: models set: '${maybeSlot}' is not a valid slot. Valid slots: primary, explorer, scoring.\n`,
+      `agentify: models set: '${maybeSlot}' is not a valid slot. Valid slots: primary, explorer, lite.\n`,
     );
     return Promise.resolve(1);
   }
@@ -611,7 +611,7 @@ function modelsSet(
 }
 
 function isModelRole(value: string): value is ModelRole {
-  return value === "primary" || value === "explorer" || value === "scoring";
+  return value === "primary" || value === "explorer" || value === "lite";
 }
 
 interface ParsedProviderModel {
@@ -665,7 +665,7 @@ function modelsUnset(ctx: SubcommandContext, positional: ReadonlyArray<string>):
   const slotName = positional[0];
   if (!isModelRole(slotName)) {
     ctx.err.write(
-      `agentify: models unset: '${slotName}' is not a valid slot. Valid slots: primary, explorer, scoring.\n`,
+      `agentify: models unset: '${slotName}' is not a valid slot. Valid slots: primary, explorer, lite.\n`,
     );
     return Promise.resolve(1);
   }
@@ -677,7 +677,7 @@ function modelsUnset(ctx: SubcommandContext, positional: ReadonlyArray<string>):
   const updatedModelsByRole: Record<ModelRole, { provider: AgentifyProvider; model: string } | undefined> = {
     primary: slot === "primary" ? undefined : existing.modelsByRole.primary,
     explorer: slot === "explorer" ? undefined : existing.modelsByRole.explorer,
-    scoring: slot === "scoring" ? undefined : existing.modelsByRole.scoring,
+    lite: slot === "lite" ? undefined : existing.modelsByRole.lite,
   };
   saveAgentifyConfig(ctx.configDir, {
     ...existing,
@@ -687,7 +687,7 @@ function modelsUnset(ctx: SubcommandContext, positional: ReadonlyArray<string>):
   return Promise.resolve(0);
 }
 
-const REVERT_FLAGS = new Set(["to", "keep-alongside", "json"]);
+const REVERT_FLAGS = new Set(["to", "keep-alongside"]);
 const REVERT_TAKES_VALUE = new Set(["to"]);
 
 /**
@@ -723,27 +723,23 @@ export async function revertCommand(
     includeAlongside,
     ui: ctx.ui,
   });
-  if (parsed.flags.json === true) {
-    ctx.out.write(JSON.stringify(result, null, 2) + "\n");
-  } else {
-    ctx.out.write(`agentify: revert complete\n`);
+  ctx.out.write(`agentify: revert complete\n`);
+  ctx.out.write(
+    `  alongside removed: ${result.alongsideRemoved.length}\n`,
+  );
+  ctx.out.write(`  user files restored: ${result.userRestored.length}\n`);
+  ctx.out.write(
+    `  agentify-created files removed: ${result.createdRemoved.length}\n`,
+  );
+  if (result.kept.length > 0) {
     ctx.out.write(
-      `  alongside removed: ${result.alongsideRemoved.length}\n`,
+      `  alongside files kept (--keep-alongside): ${result.kept.length}\n`,
     );
-    ctx.out.write(`  user files restored: ${result.userRestored.length}\n`);
-    ctx.out.write(
-      `  agentify-created files removed: ${result.createdRemoved.length}\n`,
-    );
-    if (result.kept.length > 0) {
-      ctx.out.write(
-        `  alongside files kept (--keep-alongside): ${result.kept.length}\n`,
-      );
-    }
-    if (result.errors.length > 0) {
-      ctx.out.write(`  errors: ${result.errors.length}\n`);
-      for (const err of result.errors.slice(0, 8)) {
-        ctx.out.write(`    ${err}\n`);
-      }
+  }
+  if (result.errors.length > 0) {
+    ctx.out.write(`  errors: ${result.errors.length}\n`);
+    for (const err of result.errors.slice(0, 8)) {
+      ctx.out.write(`    ${err}\n`);
     }
   }
   return result.errors.length > 0 ? 1 : 0;
@@ -892,11 +888,11 @@ export function printSubcommandHelp(out: NodeJS.WritableStream): void {
   out.write(`    Clear provider and model from config.json (preserves\n`);
   out.write(`    thinkingLevel).\n`);
   out.write(`\nOperational subcommands (mutate the repo):\n`);
-  out.write(`  agentify revert [--to <run-id>] [--keep-alongside] [--json]\n`);
+  out.write(`  agentify revert [--to <run-id>] [--keep-alongside]\n`);
   out.write(`    Undo the most recent agentify run. Removes *.agentify.*\n`);
   out.write(`    alongside files, restores user files from the snapshot,\n`);
   out.write(`    and deletes files agentify created from scratch. Single-\n`);
   out.write(`    shot, not a history. --keep-alongside preserves the\n`);
-  out.write(`    alongside files. --json emits structured output.\n`);
+  out.write(`    alongside files.\n`);
 }
 

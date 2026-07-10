@@ -151,7 +151,6 @@ export interface RunPhaseArgs {
   runtime?: AgentRuntime;
   signal?: AbortSignal;
   logger: AiwLogger;
-  dryRun?: boolean;
 }
 
 export interface RunPhaseResult {
@@ -186,7 +185,6 @@ export async function runPhase(args: RunPhaseArgs): Promise<RunPhaseResult> {
     runtime,
     signal,
     logger,
-    dryRun,
   } = args;
   const configDir = paths.aiwRoot.replace(/\/aiw(\/[^/]+)?$/, "");
 
@@ -233,26 +231,8 @@ export async function runPhase(args: RunPhaseArgs): Promise<RunPhaseResult> {
   // Ensure per-phase agent dir exists.
   const agentDir = ensurePhaseAgentDir(paths, phase);
 
-  // Dry-run path: don't actually invoke the agent.
-  if (dryRun) {
-    logger.info(`phase ${phase} dry-run`, { aiw_id: state.aiw_id });
-    const finishedState = finishPhase(startedState, phase, {
-      costUsd: 0,
-      turns: 0,
-    });
-    writeAiwState(paths, finishedState);
-    logPhaseEndHook(paths, finishedState, phase, { status: "done", costUsd: 0, turns: 0 });
-    return {
-      status: "done",
-      costUsd: 0,
-      turns: 0,
-      aborted: false,
-      artifacts: { planPath: null, reviewPath: null, fixPath: null, implementResultPath: null },
-    };
-  }
-
   // Build session options. AIW phases consume the configured slot —
-  // defaults to "scoring" (ADR 0017 / Phase 3) so the brownfield/
+  // defaults to "lite" (ADR 0017 / Phase 3) so the brownfield/
   // greenfield builder (which uses primary) stays on the strongest
   // model the user has configured, while AIW runs on a cheaper model.
   const runtimeInstance = runtime ?? new PiSdkRuntime();
@@ -263,7 +243,7 @@ export async function runPhase(args: RunPhaseArgs): Promise<RunPhaseResult> {
       model: state.model ?? undefined,
       thinkingLevel: normalizeThinkingLevel(state.thinking_level),
     },
-    modelRole: normalizeModelRole(state.model_role) ?? "scoring",
+    modelRole: normalizeModelRole(state.model_role) ?? "lite",
     systemPrompt: PHASE_SYSTEM_PROMPT[phase],
     userPrompt,
     tools: [...phaseTools],
@@ -513,9 +493,9 @@ function normalizeThinkingLevel(value: string | null): "off" | "minimal" | "low"
   return undefined;
 }
 
-function normalizeModelRole(value: string | null): "primary" | "explorer" | "scoring" | undefined {
+function normalizeModelRole(value: string | null): "primary" | "explorer" | "lite" | undefined {
   if (!value) return undefined;
-  if (value === "primary" || value === "explorer" || value === "scoring") {
+  if (value === "primary" || value === "explorer" || value === "lite") {
     return value;
   }
   return undefined;
@@ -548,7 +528,6 @@ export interface RunWorkflowArgs {
   runtime?: AgentRuntime;
   signal?: AbortSignal;
   logger: import("./logging.ts").AiwLogger;
-  dryRun?: boolean;
   /** For testing: skip the fix phase even if review says blocker. */
   forceNoFix?: boolean;
   /** For testing: ship even if the AFK gate denies. */
@@ -562,7 +541,7 @@ export interface RunWorkflowArgs {
  * which phases run. Returns the (possibly updated) `AiwState`.
  */
 export async function runWorkflow(args: RunWorkflowArgs): Promise<AiwState> {
-  let { paths, state, runtime, signal, logger, dryRun } = args;
+  let { paths, state, runtime, signal, logger } = args;
   const configDir = paths.aiwRoot.replace(/\/aiw(\/[^/]+)?$/, "");
 
   // Mark workflow as running.
@@ -668,7 +647,6 @@ export async function runWorkflow(args: RunWorkflowArgs): Promise<AiwState> {
       runtime,
       signal,
       logger,
-      dryRun,
     });
 
     if (result.status === "error") {
@@ -733,7 +711,7 @@ function scheduleExpertSelfImprove(workingDir: string, logger: AiwLogger): void 
         const matched = mod.expertsTouchedBy(registry, [workingDir]);
         if (matched.length === 0) return;
         const todayIso = new Date().toISOString();
-        // Phase 3 (ADR 0017): resolve the scoring slot for the LEARN
+        // Phase 3 (ADR 0017): resolve the lite slot for the LEARN
         // run. Best-effort — falls back to the syncer's default if
         // the slot can't be resolved (no auth, empty registry).
         let modelSlot: { provider: string; model: string } | undefined;
@@ -746,7 +724,7 @@ function scheduleExpertSelfImprove(workingDir: string, logger: AiwLogger): void 
           const authStorage = AuthStorage.create(authPath(cfgDir));
           const registry2 = ModelRegistry.create(authStorage);
           const config = loadAgentifyConfig(cfgDir);
-          const resolved = selectModelForRole(registry2, config, "scoring");
+          const resolved = selectModelForRole(registry2, config, "lite");
           if (resolved) {
             modelSlot = { provider: resolved.model.provider, model: resolved.model.id };
           }
