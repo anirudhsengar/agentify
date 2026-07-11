@@ -1,7 +1,9 @@
 import type { AgentSessionEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { AgentifyProvider } from "./provider-auth.ts";
+import type { AgentExecutionPolicy } from "./security/execution-policy.ts";
 
 export type { AgentifyProvider } from "./provider-auth.ts";
+export type { AgentExecutionPolicy } from "./security/execution-policy.ts";
 
 export type AgentifyTarget = "codex" | "claude" | "pi";
 
@@ -104,26 +106,27 @@ export interface AgentRuntimeSessionOptions {
   systemPrompt: string;
   userPrompt: string;
   tools: string[];
+  /**
+   * Required capability boundary. Runtime implementations must validate the
+   * requested built-in tools and install filesystem/command guards from this
+   * policy before the model receives a prompt.
+   */
+  executionPolicy: AgentExecutionPolicy;
   customTools?: ToolDefinition[];
   additionalSkillPaths?: string[];
   signal?: AbortSignal;
   onEvent?: (event: AgentSessionEvent) => void;
   /**
-   * Class 4 G4: domain globs the sub-agent is allowed to write.
-   * null = no constraint (default). When set, the defense hook blocks
-   * `write` / `edit` / `write_file` / `multi_edit` calls whose
-   * target path is outside the globs.
+   * Domain globs further narrow write access for orchestrated sub-agents.
+   * They never widen the roots granted by `executionPolicy`.
    */
   agentDomain?: string[] | null;
   /**
-   * When true, the defense hook confines `write`/`edit` to the working
-   * directory (repository jail). Set for the builder and greenfield
-   * sessions.
+   * @deprecated Compatibility field. Use executionPolicy writable roots.
    */
   repoJail?: boolean;
   /**
-   * Absolute paths of pre-existing user-owned files the session must
-   * not overwrite (from the pre-run ownership snapshot).
+   * @deprecated Compatibility field. Use executionPolicy protectedPaths.
    */
   protectedPaths?: readonly string[];
   /**

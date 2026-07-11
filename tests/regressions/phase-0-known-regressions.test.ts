@@ -1,19 +1,12 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
-import { makeDefenseHook } from "../../src/core/audit/defense-hook.ts";
-import { setAgentifySessionActive } from "../../src/core/audit/state.ts";
 import {
   expectKnownRegression,
   regressionStillPresent,
 } from "../helpers/known-regression.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
-
-function tempDir(prefix: string): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
 
 function readSource(relativePath: string): string {
   return fs.readFileSync(path.join(repoRoot, relativePath), "utf-8");
@@ -25,45 +18,6 @@ function sourceSection(source: string, startMarker: string, endMarker: string): 
   const end = source.indexOf(endMarker, start + startMarker.length);
   assert.notEqual(end, -1, `missing source marker: ${endMarker}`);
   return source.slice(start, end);
-}
-
-function defenseEvent(
-  command: string,
-  cwd: string,
-): never {
-  return {
-    toolName: "bash",
-    input: { command },
-    cwd,
-    activeTools: ["read", "write", "edit", "bash"],
-  } as never;
-}
-
-async function assertBashCommandBlocked(command: string): Promise<void> {
-  const cwd = tempDir("agentify-phase0-defense-");
-  setAgentifySessionActive(null, true);
-  try {
-    const hook = makeDefenseHook({ repoJail: true });
-    const result = await hook(defenseEvent(command, cwd));
-    if (!result?.block) {
-      regressionStillPresent(`bash command remains allowed: ${command}`);
-    }
-  } finally {
-    setAgentifySessionActive(null, false);
-    fs.rmSync(cwd, { recursive: true, force: true });
-  }
-}
-
-function assertWebhookWorkerHasExplicitSandbox(): void {
-  const source = readSource("src/core/webhook/worker.ts");
-  const sessionBuilder = sourceSection(
-    source,
-    "function buildSessionOptions(",
-    "function normalizeModelRole(",
-  );
-  if (!/\b(repoJail|executionPolicy|securityPolicy|capabilityPolicy)\b/.test(sessionBuilder)) {
-    regressionStillPresent("webhook session options do not carry an explicit sandbox policy");
-  }
 }
 
 function assertProviderScopedStateSnapshot(providerDir: string): void {
@@ -132,22 +86,6 @@ function assertManualReleaseCannotPublish(): void {
 }
 
 const regressions: Array<{ name: string; invariant: () => void | Promise<void> }> = [
-  {
-    name: "bash cannot read the Agentify credential store",
-    invariant: () => assertBashCommandBlocked("cat ~/.agentify/auth.json"),
-  },
-  {
-    name: "bash cannot write outside the repository",
-    invariant: () => assertBashCommandBlocked("cp package.json /tmp/agentify-phase0-outside.txt"),
-  },
-  {
-    name: "bash cannot modify ordinary repository source files",
-    invariant: () => assertBashCommandBlocked("rm package.json"),
-  },
-  {
-    name: "webhook worker sessions always receive an explicit sandbox",
-    invariant: assertWebhookWorkerHasExplicitSandbox,
-  },
   {
     name: "failed Claude-scoped audits can restore .claude/agentify state",
     invariant: () => assertProviderScopedStateSnapshot(".claude/agentify"),

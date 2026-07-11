@@ -58,6 +58,10 @@ import {
   type WorkflowName,
 } from "./state.ts";
 import { readAiwState, writeAiwState } from "./paths.ts";
+import {
+  createReadOnlyExecutionPolicy,
+  createRepositoryWriteExecutionPolicy,
+} from "../security/execution-policy.ts";
 
 // ---------------------------------------------------------------------------
 // Phase skill + tools map
@@ -83,7 +87,7 @@ export const PHASE_SKILL: Record<PhaseNameT, string> = {
 export const PHASE_TOOLS: Record<PhaseNameT, ReadonlyArray<string>> = {
   plan: ["read", "grep", "find", "ls", "bash", "write"],
   build: ["read", "grep", "find", "ls", "bash", "write", "edit"],
-  review: ["read", "grep", "find", "ls", "bash"],
+  review: ["read", "grep", "find", "ls"],
   fix: ["read", "grep", "find", "ls", "bash", "write", "edit"],
   // Ship needs bash for `git push` and `gh pr create/merge`. The
   // defense hook (BLACKLIST in src/core/audit/defense/blacklist.ts) blocks
@@ -247,6 +251,17 @@ export async function runPhase(args: RunPhaseArgs): Promise<RunPhaseResult> {
     systemPrompt: PHASE_SYSTEM_PROMPT[phase],
     userPrompt,
     tools: [...phaseTools],
+    executionPolicy: phase === "review"
+      ? createReadOnlyExecutionPolicy({
+          cwd: phaseCwd,
+          mode: "review-readonly",
+          tools: phaseTools,
+        })
+      : createRepositoryWriteExecutionPolicy({
+          cwd: phaseCwd,
+          tools: phaseTools,
+          allowDevelopmentCommands: phaseTools.includes("bash"),
+        }),
     additionalSkillPaths: [shippedSkillsDir()],
     signal,
     onEvent: (event: AgentSessionEvent) => {

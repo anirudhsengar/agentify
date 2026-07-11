@@ -54,6 +54,10 @@ import { Type } from "typebox";
 import { LEGACY_PI_STATE_RELATIVE_DIR } from "../state-dir.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
+import {
+    createReadOnlyExecutionPolicy,
+    READ_ONLY_TOOLS,
+} from "../security/execution-policy.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXPLORERS_DIR = path.join(HERE, "prompts", "explorers");
@@ -120,9 +124,9 @@ const MODE_STEP_DEFAULTS: Record<string, { reads: number; bash: number; steps: n
     conventions: { reads: 7, bash: 0, steps: 10 },
     operational: { reads: 10, bash: 0, steps: 15 },
     security: { reads: 10, bash: 0, steps: 15 },
-    pitfalls: { reads: 5, bash: 2, steps: 10 },
-    validation: { reads: 10, bash: 2, steps: 15 },
-    gap_filler: { reads: 8, bash: 2, steps: 12 },
+    pitfalls: { reads: 5, bash: 0, steps: 10 },
+    validation: { reads: 10, bash: 0, steps: 15 },
+    gap_filler: { reads: 8, bash: 0, steps: 12 },
     // Phase 2.10 — custom sub-agents: builder specifies per-call.
     custom: { reads: 8, bash: 0, steps: 12 },
 };
@@ -149,10 +153,7 @@ const SpawnExplorerParams = Type.Object({
     target_path: Type.String({
         description:
             "Directory to explore. Absolute path or cwd-relative path. " +
-            "The sub-agent will only read files within this directory. " +
-            "If the resolved path is outside ctx.cwd, the call is rejected " +
-            "unless `allow_external_paths: true` is also passed (logged as a " +
-            "security event).",
+            "The resolved path must remain inside ctx.cwd; external paths are always rejected.",
     }),
     focus: Type.Optional(
         Type.String({
@@ -173,8 +174,7 @@ const SpawnExplorerParams = Type.Object({
     allow_external_paths: Type.Optional(
         Type.Boolean({
             description:
-                "If true, allow target_path to resolve outside ctx.cwd. " +
-                "Default false (domain-locked). When set, the external access is logged.",
+                "Deprecated compatibility field. External paths are always rejected, even when true.",
         }),
     ),
     max_reads: Type.Optional(
@@ -184,7 +184,7 @@ const SpawnExplorerParams = Type.Object({
     ),
     max_bash_invocations: Type.Optional(
         Type.Number({
-            description: "Override the per-mode default bash invocation cap.",
+            description: "Deprecated compatibility field. Explorer sessions never receive bash; the effective cap is always zero.",
         }),
     ),
     max_total_steps: Type.Optional(
@@ -223,11 +223,7 @@ const SpawnExplorerParams = Type.Object({
     tools: Type.Optional(
         Type.Array(Type.String(), {
             description:
-                "Override the tool list for the sub-agent. Defaults are " +
-                "mode-specific (most fixed modes are read-only; pitfalls, " +
-                "validation, and gap_filler get `bash`). For `custom` " +
-                "mode, the default is `[\"read\", \"grep\", \"find\", \"ls\"]`. " +
-                "If you need `bash` for a custom sub-agent, include it here.",
+                "Optional read-only tool subset. Allowed values are read, grep, find, and ls; shell and mutation tools are rejected.",
         }),
     ),
 });
@@ -561,8 +557,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         (maxTotalCostUsd === null ? "" : `, plus max $${maxTotalCostUsd.toFixed(2)} provider-reported sub-agent cost`) +
         ". Dispatch as many as the topic decomposition needs within those bounds. " +
         "Default mode: topography. Reports exceeding 32 KB are truncated; the full report is " +
-        "persisted to the log dir. target_path is domain-locked to ctx.cwd unless " +
-        "allow_external_paths is true (logged). Use the `model` parameter to override the per-mode " +
+        "persisted to the log dir. target_path is permanently domain-locked to ctx.cwd. " +
+        "Use the `model` parameter to override the per-mode " +
         "model default (haiku/sonnet/opus). Use `summary` for a one-line focus hint passed as " +
         "additional context.",
     parameters: SpawnExplorerParams,
@@ -573,7 +569,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         // Validate target_path domain-lock (Phase 2.6).
         const resolvedTarget = resolveTargetPath(params.target_path, ctx.cwd);
         const insideCwd = isPathInside(resolvedTarget, ctx.cwd);
-        if (!insideCwd && !params.allow_external_paths) {
+        if (!insideCwd) {
             return {
                 content: [
                     {
@@ -581,26 +577,12 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                         text:
                             `Error: defense domain-lock: target_path '${params.target_path}' resolves to ` +
                             `'${resolvedTarget}', which is outside ctx.cwd '${ctx.cwd}'. ` +
-                            `If you really need to read outside ctx.cwd, set allow_external_paths: true ` +
-                            `(this is logged as a security event).`,
+                            `Explorer sessions are permanently confined to the repository.`,
                     },
                 ],
                 isError: true,
                 details: undefined as unknown as Record<string, unknown>,
             };
-        }
-
-        // Log external path access (Phase 2.6).
-        if (params.allow_external_paths) {
-            try {
-                // Best-effort: log to the agentify log if available.
-                // The actual write happens via ctx.log if exposed; we
-                // emit a no-op here that the defense hook handler can pick
-                // up. The audit trail is in the JSONL log via the
-                // subagent_spawned event's details.
-            } catch {
-                // ignore
-            }
         }
 
         // Resolve the sub-agent's model (Phase 2). Default is the
@@ -653,7 +635,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         }
 
         // Resolve step caps (Phase 4.6).
-        const stepDefaults = MODE_STEP_DEFAULTS[mode] ?? { reads: 10, bash: 2, steps: 15 };
+        const stepDefaults = MODE_STEP_DEFAULTS[mode] ?? { reads: 10, bash: 0, steps: 15 };
         const maxReads = params.max_reads ?? stepDefaults.reads;
         const maxBash = params.max_bash_invocations ?? stepDefaults.bash;
         const maxSteps = params.max_total_steps ?? stepDefaults.steps;
@@ -740,6 +722,20 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         let session: ExplorerSubSession | undefined;
 
         try {
+            const toolsForMode: ReadonlyArray<string> = params.tools ?? READ_ONLY_TOOLS;
+            const readOnlySet = new Set<string>(READ_ONLY_TOOLS);
+            const unsupportedTools = toolsForMode.filter((tool) => !readOnlySet.has(tool));
+            if (unsupportedTools.length > 0) {
+                throw new Error(
+                    `explorer sessions are read-only; unsupported tools: ${unsupportedTools.join(", ")}`,
+                );
+            }
+            const executionPolicy = createReadOnlyExecutionPolicy({
+                cwd: ctx.cwd,
+                mode: "audit-readonly",
+                tools: toolsForMode,
+            });
+
             // Build a clean resource loader for the sub-agent:
             // - no project context files (AGENTS.md, CLAUDE.md)
             // - no project extensions (the defense hook, etc. would
@@ -757,35 +753,16 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 noPromptTemplates: true,
                 noThemes: true,
                 systemPrompt: subagentSystemPrompt,
-                // Explorer sub-agents read (and, for some modes, run
-                // bash against) untrusted repository content. Attach the
-                // same defense hook the parent session uses: bash
-                // blacklist, zero-access paths, credential-store block,
-                // and a repository jail on writes. Without this the
-                // sub-agent would run bash with no blacklist at all.
+                // Explorer sub-agents are read-only and use the same explicit
+                // repository-root policy as the parent audit.
                 extensionFactories: [
                     (pi) => {
-                        pi.on("tool_call", makeDefenseHook({ repoJail: true }));
+                        pi.on("tool_call", makeDefenseHook({ executionPolicy }));
                     },
                 ],
             });
             await resourceLoader.reload();
 
-            // Tool selection. The pitfalls, validation, and gap_filler
-            // fixed modes need bash (for git log, test runs, etc.).
-            // For custom mode, the builder specifies the tool list
-            // explicitly via the `tools` parameter; if not provided,
-            // default to read-only.
-            const defaultToolsForMode: ReadonlyArray<string> = (() => {
-                if (mode === "pitfalls" || mode === "validation" || mode === "gap_filler") {
-                    return ["read", "grep", "find", "ls", "bash"];
-                }
-                if (mode === "custom") {
-                    return ["read", "grep", "find", "ls"];
-                }
-                return ["read", "grep", "find", "ls"];
-            })();
-            const toolsForMode: ReadonlyArray<string> = params.tools ?? defaultToolsForMode;
 
             // Mirror the parent's thinking level so sub-agents do their
             // structured analysis with the same reasoning budget as the
