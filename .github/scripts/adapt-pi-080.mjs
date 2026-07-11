@@ -44,6 +44,7 @@ replaceOnce(
 
   const previousOpenAi = process.env["OPENAI_API_KEY"];
   const previousAwsProfile = process.env["AWS_PROFILE"];
+  const previousAwsBearer = process.env["AWS_BEARER_TOKEN_BEDROCK"];
   try {
     process.env["OPENAI_API_KEY"] = "sk-test-env";
     assert.equal(hasProviderEnvironmentAuth("openai"), true);
@@ -62,13 +63,15 @@ replaceOnce(
     else process.env["OPENAI_API_KEY"] = previousOpenAi;
     if (previousAwsProfile === undefined) delete process.env["AWS_PROFILE"];
     else process.env["AWS_PROFILE"] = previousAwsProfile;
+    if (previousAwsBearer === undefined) delete process.env["AWS_BEARER_TOKEN_BEDROCK"];
+    else process.env["AWS_BEARER_TOKEN_BEDROCK"] = previousAwsBearer;
   }
 }`,
 );
 replaceOnce(
-  "provider test registry",
-  `{ name: "providerListMatchesPi", fn: testProviderListMatchesPi },`,
-  `{ name: "providerMetadataAndEnvironmentAuth", fn: testProviderMetadataAndEnvironmentAuth },`,
+  "provider test invocation",
+  `await testProviderListMatchesPi();`,
+  `await testProviderMetadataAndEnvironmentAuth();`,
 );
 
 fs.writeFileSync(file, source);
