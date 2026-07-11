@@ -53,7 +53,18 @@ async function testReadOnlyFilesystemAndShellBoundary(): Promise<void> {
     const policy = createReadOnlyExecutionPolicy({ cwd, mode: "audit-readonly" });
     const hook = makeDefenseHook({ executionPolicy: policy });
     assert.equal(await hook(event("read", { path: path.join(cwd, "README.md") }, cwd)), undefined);
-    assert.ok((await hook(event("read", { path: path.join(outside, "secret.txt") }, cwd)))?.block);
+
+    const outsidePath = path.join(outside, "secret.txt");
+    for (const [toolName, input] of [
+      ["read", { path: outsidePath }],
+      ["grep", { path: outside, pattern: "secret" }],
+      ["find", { path: outside, pattern: "*.txt" }],
+      ["ls", { path: outside }],
+    ] as const) {
+      const result = await hook(event(toolName, input, cwd));
+      assert.ok(result?.block, `${toolName} must not read outside the repository`);
+    }
+
     assert.ok((await hook(event("write", { path: path.join(cwd, "src.ts"), content: "x" }, cwd)))?.block);
     assert.ok((await hook(event("bash", { command: "npm test" }, cwd)))?.block);
   } finally {
