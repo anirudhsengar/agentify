@@ -69,8 +69,8 @@ export const PromptInvocationSchema = Type.Object({
   })),
   tools: Type.Optional(Type.Array(Type.String(), {
     description:
-      "Tool allowlist override. Default is read-only (no bash). Set " +
-      "explicitly when the prompt needs write/edit or bash.",
+      "Optional read-only tool subset. Webhook-dispatched sessions reject " +
+      "shell and mutation tools before runtime dispatch.",
   })),
   model: Type.Optional(Type.String({
     description: "Literal model id (e.g. 'anthropic/claude-opus-4-8'). If both `model` and `model_role` are set, `model` wins.",
@@ -137,6 +137,12 @@ export const TriggerSchema = Type.Object({
   // Reject requests whose timestamp is older than this many seconds
   // (only enforced when timestamp_header is set). Default 300.
   timestamp_max_age_seconds: Type.Optional(Type.Number({ minimum: 1 })),
+  // Optional provider delivery ID header. When present, it is preferred over
+  // the signature digest as the replay-cache identity.
+  delivery_id_header: Type.Optional(Type.String()),
+  // TTL for accepted delivery identities. Defaults to the timestamp max age,
+  // then to 300 seconds.
+  replay_window_seconds: Type.Optional(Type.Number({ minimum: 1 })),
   match: Type.Optional(MatchClauseSchema),
   prompt: PromptInvocationSchema,
   // Per-trigger in-memory rate limit (token bucket).
