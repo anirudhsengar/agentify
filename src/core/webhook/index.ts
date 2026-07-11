@@ -1,14 +1,11 @@
-// index.ts — the webhook daemon: HTTP server + background worker.
-//
-// One process owns:
-//   - the HTTP listener (server.ts)
-//   - the persistent JSONL queue (queue.ts)
-//   - the long-lived worker loop (worker.ts)
-//
-// This module is the composition root for `agentify webhook start`.
-//
-// The daemon writes its pid to a file so `agentify webhook stop` can
-// signal it. SIGINT and SIGTERM both trigger graceful shutdown.
+/**
+ * @experimental Internal webhook daemon composition root.
+ *
+ * This module is not a public CLI command or package export and carries no
+ * semantic-version compatibility guarantee. Repository tests and internal code
+ * may import it directly; package consumers must use the supported `agentify`
+ * executable. See `docs/experimental-surfaces.md`.
+ */
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -29,7 +26,7 @@ export interface DaemonOptions {
   port?: number;
   concurrency?: number;
   pollIntervalMs?: number;
-  /** Optional runtime override (used by tests to inject a fake). */
+  /** Optional runtime override used by internal tests. */
   runtime?: AgentRuntime;
   logger?: WorkerLogger;
 }
@@ -47,7 +44,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
 
   const pidFile = path.join(configDir, "webhook.pid");
-  // Refuse to start if another daemon is already running.
   if (fs.existsSync(pidFile)) {
     const existing = parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10);
     if (Number.isFinite(existing) && isProcessAlive(existing) && existing !== process.pid) {
@@ -65,7 +61,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     logger: options.logger,
   });
 
-  const paths = queuePaths(configDir);
   const worker = startWorker({
     configDir,
     concurrency: options.concurrency,
@@ -74,15 +69,11 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     logger: options.logger,
   });
 
-  // the AIW runtime: the AIW worker shares the webhook queue. It
-  // picks up tasks whose trigger id starts with `aiw-` (see
-  // aiw/worker.ts `isAiwTask`). Same config dir, same queue, two
-  // specialized consumers.
   const aiwWorkerLogger: AiwWorkerLogger | undefined = options.logger
     ? {
-        info: (m, f) => options.logger!.info(`[aiw] ${m}`, f),
-        warn: (m, f) => options.logger!.warn(`[aiw] ${m}`, f),
-        error: (m, f) => options.logger!.error(`[aiw] ${m}`, f),
+        info: (message, fields) => options.logger!.info(`[aiw] ${message}`, fields),
+        warn: (message, fields) => options.logger!.warn(`[aiw] ${message}`, fields),
+        error: (message, fields) => options.logger!.error(`[aiw] ${message}`, fields),
       }
     : undefined;
   const aiwWorker = startAiwWorker({
@@ -102,18 +93,19 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     await aiwWorker.stop();
     await server.close();
     try {
-      if (fs.existsSync(pidFile) &&
-          parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10) === process.pid) {
+      if (
+        fs.existsSync(pidFile) &&
+        parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10) === process.pid
+      ) {
         fs.unlinkSync(pidFile);
       }
     } catch {
-      // Best effort.
+      // Best-effort cleanup after all workers have stopped.
     }
   };
 
-  // Graceful shutdown on signals.
-  const onSignal = (sig: string): void => {
-    options.logger?.info(`received ${sig}, shutting down`, {});
+  const onSignal = (signal: string): void => {
+    options.logger?.info(`received ${signal}, shutting down`, {});
     void stop();
   };
   process.once("SIGINT", () => onSignal("SIGINT"));
@@ -137,7 +129,7 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
-// Re-export public surface for the CLI module.
+// Internal experimental exports used by repository modules and tests only.
 export { startServer } from "./server.ts";
 export { startWorker, type WorkerOptions } from "./worker.ts";
 export { loadRegistry, findTrigger } from "./trigger-registry.ts";
@@ -146,6 +138,4 @@ export type { Trigger, WebhookTaskRecord } from "./state.ts";
 export { TaskStatus } from "./state.ts";
 export { signBody, verifySignature, verifySignatureWithHeaders } from "./signature.ts";
 export { defaultConfigDir };
-
-// Expose os for the CLI module's defaults.
 export { os };
