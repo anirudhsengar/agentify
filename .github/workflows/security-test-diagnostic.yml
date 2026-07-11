@@ -1,0 +1,33 @@
+name: security-test-diagnostic
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    if: github.event.pull_request.head.ref == 'agent/security-execution-policy'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Run tests with concise failure output
+        shell: bash
+        run: |
+          set +e
+          npm test > test-output.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "--- failing test tail ---"
+            tail -n 160 test-output.log
+            exit "$status"
+          fi
+          echo "All tests passed."
