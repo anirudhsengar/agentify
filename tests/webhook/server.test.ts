@@ -213,7 +213,8 @@ async function testUnsignedRejected(): Promise<void> {
     });
     assert.equal(res.status, 401);
     const body = JSON.parse(res.body);
-    assert.match(body.reason, /missing/);
+    assert.equal(body.error, "unauthorized");
+    assert.ok(!("reason" in body));
   } finally {
     if (prev === undefined) delete process.env["TEST_SECRET"];
     else process.env["TEST_SECRET"] = prev;

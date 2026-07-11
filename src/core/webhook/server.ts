@@ -45,6 +45,20 @@ import {
   dispatchAiwTask,
   triggerRoutesToAiw,
 } from "./aiw-dispatch.ts";
+import {
+  allowFixedWindowRequest,
+  bearerToken,
+  constantTimeTokenEquals,
+  createFixedWindowLimiter,
+  createReplayCache,
+  isLoopbackHost,
+  isReplay,
+  recordReplayKey,
+  replayCacheKey,
+  type FixedWindowLimiter,
+  type FixedWindowRateLimit,
+  type ReplayCache,
+} from "./http-security.ts";
 
 export interface ServerOptions {
   configDir: string;
@@ -53,8 +67,15 @@ export interface ServerOptions {
   port?: number;
   /** Override the loader (used by tests). */
   loadRegistryFn?: (cwd: string) => ReturnType<typeof loadRegistry>;
-  /** Rate limiter instance. */
+  /** Authenticated per-trigger rate limiter instance. */
   rateLimiter?: { buckets: Map<string, { tokens: number; lastRefill: number }> };
+  /** Coarse unauthenticated per-address limit. Set false to disable. */
+  preAuthRateLimit?: FixedWindowRateLimit | false;
+  preAuthLimiter?: FixedWindowLimiter;
+  replayCache?: ReplayCache;
+  /** Enable POST /__reload__. Requires loopback host and adminToken. */
+  enableReloadEndpoint?: boolean;
+  adminToken?: string;
   /** Logging hook. */
   logger?: ServerLogger;
 }
@@ -76,11 +97,24 @@ export interface RunningServer {
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8787;
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024; // 1 MiB
+const DEFAULT_PRE_AUTH_RATE_LIMIT: FixedWindowRateLimit = {
+  requests: 120,
+  windowSeconds: 60,
+};
 
 export async function startServer(options: ServerOptions): Promise<RunningServer> {
   const host = options.host ?? DEFAULT_HOST;
   const port = options.port ?? DEFAULT_PORT;
   const log = options.logger ?? consoleLogger();
+  const enableReloadEndpoint = options.enableReloadEndpoint ?? false;
+  if (enableReloadEndpoint) {
+    if (!isLoopbackHost(host)) {
+      throw new Error("webhook reload endpoint can only be enabled on a loopback host");
+    }
+    if (!options.adminToken) {
+      throw new Error("webhook reload endpoint requires adminToken");
+    }
+  }
 
   const paths = queuePaths(options.configDir);
   ensureQueueDirs(paths);
@@ -95,12 +129,22 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   });
 
   const rateLimiter = options.rateLimiter ?? { buckets: new Map() };
+  const preAuthRateLimit = options.preAuthRateLimit === false
+    ? null
+    : options.preAuthRateLimit ?? DEFAULT_PRE_AUTH_RATE_LIMIT;
+  const preAuthLimiter = options.preAuthLimiter ?? createFixedWindowLimiter();
+  const replayCache = options.replayCache ?? createReplayCache();
 
   const server = http.createServer((req, res) => {
     handle(req, res, {
       paths,
       registry,
       rateLimiter,
+      preAuthRateLimit,
+      preAuthLimiter,
+      replayCache,
+      enableReloadEndpoint,
+      adminToken: options.adminToken ?? null,
       log,
       reload: () => {
         registry = (options.loadRegistryFn ?? loadRegistry)(options.cwd);
@@ -162,6 +206,11 @@ interface HandlerContext {
   paths: QueuePaths;
   registry: ReturnType<typeof loadRegistry>;
   rateLimiter: { buckets: Map<string, { tokens: number; lastRefill: number }> };
+  preAuthRateLimit: FixedWindowRateLimit | null;
+  preAuthLimiter: FixedWindowLimiter;
+  replayCache: ReplayCache;
+  enableReloadEndpoint: boolean;
+  adminToken: string | null;
   log: ServerLogger;
   reload: () => void;
 }
@@ -187,8 +236,23 @@ async function handle(
     return;
   }
 
-  // Reload (only when explicitly enabled; documented as a developer aid)
+  // Reload is unavailable unless explicitly enabled on loopback with an
+  // administrator token. Disabled management routes are indistinguishable
+  // from unknown routes.
   if (method === "POST" && pathOnly === "/__reload__") {
+    if (!ctx.enableReloadEndpoint || ctx.adminToken === null) {
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "not_found" }));
+      return;
+    }
+    if (!constantTimeTokenEquals(bearerToken(req.headers), ctx.adminToken)) {
+      ctx.log.warn("webhook reload authentication rejected", {
+        remote_addr: req.socket.remoteAddress ?? null,
+      });
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "unauthorized" }));
+      return;
+    }
     ctx.reload();
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ ok: true, triggers: ctx.registry.triggers.length }));
@@ -205,9 +269,22 @@ async function handle(
       res.end(JSON.stringify({ error: "not_found", task_id: taskId }));
       return;
     }
-    const body = fs.readFileSync(stateFile, "utf-8");
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(body);
+    try {
+      const record = JSON.parse(fs.readFileSync(stateFile, "utf-8")) as Partial<WebhookTaskRecord>;
+      const publicStatus = {
+        task_id: typeof record.task_id === "string" ? record.task_id : taskId,
+        status: typeof record.status === "string" ? record.status : "unknown",
+        received_at: record.received_at ?? null,
+        claimed_at: record.claimed_at ?? null,
+        started_at: record.started_at ?? null,
+        ended_at: record.ended_at ?? null,
+      };
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(publicStatus));
+    } catch {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid_task_state", task_id: taskId }));
+    }
     return;
   }
 
@@ -219,12 +296,16 @@ async function handle(
     return;
   }
 
-  // Rate limit (per trigger)
-  if (!checkRateLimit(ctx.rateLimiter, trigger)) {
-    ctx.log.warn("webhook rate limited", { trigger_id: trigger.id });
-    res.writeHead(429, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: "rate_limited" }));
-    return;
+  // Coarse unauthenticated limiter. This bucket is keyed by remote address
+  // and is separate from the authenticated per-trigger quota.
+  if (ctx.preAuthRateLimit) {
+    const remoteKey = req.socket.remoteAddress ?? "unknown";
+    if (!allowFixedWindowRequest(ctx.preAuthLimiter, remoteKey, ctx.preAuthRateLimit)) {
+      ctx.log.warn("webhook pre-auth rate limited", { remote_addr: remoteKey });
+      res.writeHead(429, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "pre_auth_rate_limited" }));
+      return;
+    }
   }
 
   // Read body up to max_body_bytes
@@ -250,9 +331,30 @@ async function handle(
       reason: sigResult.reason,
     });
     res.writeHead(401, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: "unauthorized", reason: sigResult.reason }));
+    res.end(JSON.stringify({ error: "unauthorized" }));
     return;
   }
+
+  const acceptedReplayKey = replayCacheKey(trigger, req.headers);
+  if (isReplay(ctx.replayCache, acceptedReplayKey)) {
+    ctx.log.warn("webhook replay rejected", { trigger_id: trigger.id });
+    res.writeHead(409, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "replay_detected" }));
+    return;
+  }
+
+  // Only authenticated, non-replayed requests consume the trigger bucket.
+  if (!checkRateLimit(ctx.rateLimiter, trigger)) {
+    ctx.log.warn("webhook rate limited", { trigger_id: trigger.id });
+    res.writeHead(429, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "rate_limited" }));
+    return;
+  }
+  recordReplayKey(
+    ctx.replayCache,
+    acceptedReplayKey,
+    trigger.replay_window_seconds ?? trigger.timestamp_max_age_seconds ?? 300,
+  );
 
   // Parse payload (best effort)
   const contentType = (req.headers["content-type"] ?? "")
