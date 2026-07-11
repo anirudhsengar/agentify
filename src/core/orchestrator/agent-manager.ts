@@ -59,6 +59,10 @@ import type { SubagentRegistry } from "./subagent-registry.ts";
 import type { AgentDefinition } from "./subagent-registry.ts";
 import { writeCostRecord, readCostRecord, orchestratorPaths } from "./paths.ts";
 import type { OrchestratorPaths } from "./paths.ts";
+import {
+  createReadOnlyExecutionPolicy,
+  createRepositoryWriteExecutionPolicy,
+} from "../security/execution-policy.ts";
 
 // ---------------------------------------------------------------------------
 // Public types (returned by tools to the orchestrator LLM)
@@ -685,6 +689,21 @@ export class AgentManager {
     };
     const modelRole = normalizeModelRole(state.model_role);
 
+    const hasWriteTools = state.tools.some((tool) =>
+      tool === "write" || tool === "edit" || tool === "write_file" || tool === "multi_edit"
+    );
+    const executionPolicy = hasWriteTools || state.tools.includes("bash")
+      ? createRepositoryWriteExecutionPolicy({
+          cwd: sessionCwd,
+          tools: state.tools,
+          allowDevelopmentCommands: state.tools.includes("bash"),
+        })
+      : createReadOnlyExecutionPolicy({
+          cwd: sessionCwd,
+          mode: "review-readonly",
+          tools: state.tools,
+        });
+
     const result = await this.opts.runtime.runSession({
       cwd: sessionCwd,
       configDir: this.opts.configDir,
@@ -693,6 +712,7 @@ export class AgentManager {
       systemPrompt: state.system_prompt,
       userPrompt,
       tools: state.tools,
+      executionPolicy,
       signal: managed.ac.signal,
       onEvent: (event) => this.handleAgentEvent(managed, event),
       agentDomain: state.domain,

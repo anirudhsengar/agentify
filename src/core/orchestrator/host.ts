@@ -47,6 +47,7 @@ import {
 import { WorkflowRegistry } from "./workflow-registry.ts";
 import { startWorkflowRunner } from "./workflow-runner.ts";
 import { AutoImproveScheduler } from "./auto-improve.ts";
+import { createOrchestratorExecutionPolicy } from "../security/execution-policy.ts";
 
 export interface OrchestratorHostOptions {
   configDir: string;
@@ -255,6 +256,7 @@ export class OrchestratorHost {
       systemPrompt,
       userPrompt,
       tools: [], // cardinal rule: no Pi built-ins.
+      executionPolicy: createOrchestratorExecutionPolicy(this.cwd),
       customTools: this.tools,
       signal: this.orchestratorAc.signal,
       onEvent: (e) => this.handleOrchestratorEvent(e),

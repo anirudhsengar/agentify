@@ -78,6 +78,7 @@ import {
   readGreenfieldFormationAt,
   renderGreenfieldArtifacts,
 } from "./greenfield-artifacts.ts";
+import { createReadOnlyExecutionPolicy } from "./security/execution-policy.ts";
 
 const AGENTS_MD_PATH = "AGENTS.md";
 const BUILDER_TOOL_ALLOWLIST = [
@@ -85,9 +86,6 @@ const BUILDER_TOOL_ALLOWLIST = [
   "grep",
   "find",
   "ls",
-  "bash",
-  "write",
-  "edit",
   "write_map",
   "write_map_delta",
   "spawn_explorer",
@@ -1119,8 +1117,14 @@ async function runBrownfieldAudit(
       systemPrompt: promptContent,
       userPrompt: buildBrownfieldUserPrompt(options.targets, options.additionalAgents),
       tools: BUILDER_TOOL_ALLOWLIST,
-      repoJail: true,
-      protectedPaths,
+      executionPolicy: createReadOnlyExecutionPolicy({
+        cwd: options.cwd,
+        mode: "audit-readonly",
+        tools: BUILDER_TOOL_ALLOWLIST.filter((tool) =>
+          tool === "read" || tool === "grep" || tool === "find" || tool === "ls"
+        ),
+        protectedPaths,
+      }),
       customTools: [
         writeMapTool,
         writeMapDeltaTool,

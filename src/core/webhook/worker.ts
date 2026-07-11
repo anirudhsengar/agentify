@@ -42,6 +42,10 @@ import type {
   AgentRuntimeSessionOptions,
   AgentifyConfig,
 } from "../types.ts";
+import {
+  createReadOnlyExecutionPolicy,
+  READ_ONLY_TOOLS,
+} from "../security/execution-policy.ts";
 
 export interface WorkerOptions {
   configDir: string;
@@ -320,6 +324,16 @@ function buildSessionOptions(
     model: record.prompt.model ?? undefined,
     thinkingLevel: normalizeThinkingLevel(record.prompt.thinking_level),
   };
+  const tools = record.prompt.tools.length > 0
+    ? [...record.prompt.tools]
+    : [...READ_ONLY_TOOLS];
+  const readOnlySet = new Set<string>(READ_ONLY_TOOLS);
+  const unsafeTools = tools.filter((tool) => !readOnlySet.has(tool));
+  if (unsafeTools.length > 0) {
+    throw new Error(
+      `webhook trigger requested unsafe tools: ${unsafeTools.join(", ")}; externally-triggered sessions are read-only`,
+    );
+  }
   return {
     cwd: record.prompt.cwd,
     configDir,
@@ -327,7 +341,12 @@ function buildSessionOptions(
     ...(modelRole ? { modelRole } : {}),
     systemPrompt: composeSystemPrompt(record),
     userPrompt,
-    tools: record.prompt.tools,
+    tools,
+    executionPolicy: createReadOnlyExecutionPolicy({
+      cwd: record.prompt.cwd,
+      mode: "review-readonly",
+      tools,
+    }),
     additionalSkillPaths: [shippedSkillsDir()],
   };
 }
