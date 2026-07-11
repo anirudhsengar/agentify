@@ -108,12 +108,20 @@ export function createOrchestratorExecutionPolicy(cwd: string): AgentExecutionPo
   });
 }
 
+/**
+ * Validate the requested tool names at the final runtime boundary.
+ * Trusted custom tools are supplied separately and never widen built-in access.
+ */
 export function assertRequestedToolsAllowed(
   requestedTools: readonly string[],
   policy: AgentExecutionPolicy,
+  trustedCustomToolNames: readonly string[] = [],
 ): void {
   const allowed = new Set(policy.allowedTools);
-  const denied = requestedTools.filter((tool) => !allowed.has(tool));
+  const trustedCustom = new Set(trustedCustomToolNames);
+  const denied = requestedTools.filter(
+    (tool) => !allowed.has(tool) && !trustedCustom.has(tool),
+  );
   if (denied.length > 0) {
     throw new Error(
       `execution policy '${policy.mode}' does not allow tools: ${denied.join(", ")}`,
