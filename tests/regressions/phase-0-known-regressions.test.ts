@@ -165,10 +165,12 @@ function jobHasTagOnlyGuard(workflow: string, jobName: string, endMarker?: strin
 
 function assertManualReleaseCannotPublish(): void {
   const workflow = readSource(".github/workflows/release-publish.yml");
-  const unguardedJobs = [
+  const jobs: ReadonlyArray<readonly [string, string?]> = [
     ["publish-npm", "\n  github-release:"],
-    ["github-release", undefined],
-  ].filter(([jobName, endMarker]) => !jobHasTagOnlyGuard(workflow, jobName!, endMarker))
+    ["github-release"],
+  ];
+  const unguardedJobs = jobs
+    .filter(([jobName, endMarker]) => !jobHasTagOnlyGuard(workflow, jobName, endMarker))
     .map(([jobName]) => jobName);
   if (unguardedJobs.length > 0) {
     regressionStillPresent(`manual dispatch can reach unguarded jobs: ${unguardedJobs.join(", ")}`);
