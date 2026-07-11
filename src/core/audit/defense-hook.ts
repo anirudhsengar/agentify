@@ -55,8 +55,16 @@ function isInside(child: string, parent: string): boolean {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-function isInsideAny(target: string, roots: readonly string[]): boolean {
-  return roots.some((root) => isInside(target, realResolve(path.resolve(root))));
+function isWithinPolicyRoots(
+  absolute: string,
+  real: string,
+  roots: readonly string[],
+): boolean {
+  return roots.some((root) => {
+    const lexicalRoot = path.resolve(root);
+    const realRoot = realResolve(lexicalRoot);
+    return isInside(absolute, lexicalRoot) && isInside(real, realRoot);
+  });
 }
 
 function resolveScriptPath(token: string, cwd: string): string {
@@ -212,7 +220,7 @@ export function makeDefenseHook(
           const roots = WRITE_TOOLS.has(event.toolName)
             ? policy.writableRoots
             : policy.readableRoots;
-          if (!isInsideAny(real, roots) && !isInsideAny(absolute, roots)) {
+          if (!isWithinPolicyRoots(absolute, real, roots)) {
             return {
               block: true,
               reason: `execution policy '${policy.mode}' denies ${event.toolName} on '${pathValue}'`,
