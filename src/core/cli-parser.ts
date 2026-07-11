@@ -57,10 +57,10 @@ function parseTargets(raw: string): readonly AgentId[] {
 
 function normalizeParseError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
-  if (/option '--mode' argument missing/i.test(message)) {
+  if (/option '--mode(?:\s+<[^>]+>)?' argument missing/i.test(message)) {
     return new Error("--mode requires a value.");
   }
-  if (/option '--targets' argument missing/i.test(message)) {
+  if (/option '--targets(?:\s+<[^>]+>)?' argument missing/i.test(message)) {
     return new Error("--targets requires a comma-separated list of agent IDs.");
   }
   return new Error(message.replace(/^TypeError \[ERR_PARSE_ARGS_[^\]]+\]:\s*/, ""));
