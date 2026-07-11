@@ -5,7 +5,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { makeDefenseHook } from "../../src/core/audit/defense-hook.ts";
 import { setAgentifySessionActive } from "../../src/core/audit/state.ts";
-import { expectKnownRegression } from "../helpers/known-regression.ts";
+import {
+  expectKnownRegression,
+  regressionStillPresent,
+} from "../helpers/known-regression.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 
@@ -63,8 +66,11 @@ function assertTopLevelOptionsAreRecognized(args: readonly string[]): void {
   const result = runCli(args);
   const errorCode = (result.error as NodeJS.ErrnoException | undefined)?.code;
   assert.notEqual(errorCode, "ETIMEDOUT", `CLI timed out for ${args.join(" ")}`);
+  assert.equal(result.error, undefined, `CLI process failed to start for ${args.join(" ")}`);
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-  assert.doesNotMatch(output, /unknown subcommand '--(?:mode|targets)'/);
+  if (/unknown subcommand '--(?:mode|targets)'/.test(output)) {
+    regressionStillPresent(`top-level options are dispatched as subcommands: ${args.join(" ")}`);
+  }
 }
 
 function defenseEvent(
@@ -85,7 +91,9 @@ async function assertBashCommandBlocked(command: string): Promise<void> {
   try {
     const hook = makeDefenseHook({ repoJail: true });
     const result = await hook(defenseEvent(command, cwd));
-    assert.ok(result?.block, `expected bash command to be blocked: ${command}`);
+    if (!result?.block) {
+      regressionStillPresent(`bash command remains allowed: ${command}`);
+    }
   } finally {
     setAgentifySessionActive(null, false);
     fs.rmSync(cwd, { recursive: true, force: true });
@@ -99,11 +107,9 @@ function assertWebhookWorkerHasExplicitSandbox(): void {
     "function buildSessionOptions(",
     "function normalizeModelRole(",
   );
-  assert.match(
-    sessionBuilder,
-    /\b(repoJail|executionPolicy|securityPolicy|capabilityPolicy)\b/,
-    "webhook session options must carry an explicit sandbox policy",
-  );
+  if (!/\b(repoJail|executionPolicy|securityPolicy|capabilityPolicy)\b/.test(sessionBuilder)) {
+    regressionStillPresent("webhook session options do not carry an explicit sandbox policy");
+  }
 }
 
 function assertProviderScopedStateSnapshot(providerDir: string): void {
@@ -112,11 +118,9 @@ function assertProviderScopedStateSnapshot(providerDir: string): void {
     /const internalStateSnapshot\s*=\s*([^;]+);/s,
   );
   assert.ok(snapshotAssignment, "brownfield audit must capture internal state before cleanup");
-  assert.match(
-    snapshotAssignment[1] ?? "",
-    /stateDir/,
-    `${providerDir} state must be snapshotted through the resolved provider directory`,
-  );
+  if (!/stateDir/.test(snapshotAssignment[1] ?? "")) {
+    regressionStillPresent(`${providerDir} is deleted without a provider-scoped state snapshot`);
+  }
 }
 
 function assertSignaturePrecedesAuthenticatedRateLimit(): void {
@@ -130,10 +134,9 @@ function assertSignaturePrecedesAuthenticatedRateLimit(): void {
   const rateLimitIndex = handlerPrefix.indexOf("checkRateLimit(");
   assert.ok(signatureIndex >= 0, "signature verification call must exist");
   assert.ok(rateLimitIndex >= 0, "authenticated rate-limit call must exist");
-  assert.ok(
-    signatureIndex < rateLimitIndex,
-    "invalid signatures must not consume the authenticated trigger bucket",
-  );
+  if (signatureIndex >= rateLimitIndex) {
+    regressionStillPresent("invalid signatures consume the authenticated trigger bucket");
+  }
 }
 
 function assertReloadEndpointDisabledByDefault(): void {
@@ -142,11 +145,14 @@ function assertReloadEndpointDisabledByDefault(): void {
 
   const options = sourceSection(source, "export interface ServerOptions", "export interface ServerLogger");
   const reloadRoute = sourceSection(source, "// Reload", "// Task status lookups");
-  assert.match(options, /enableReloadEndpoint|reloadEndpointEnabled/);
-  assert.match(reloadRoute, /enableReloadEndpoint|reloadEndpointEnabled/);
+  const hasEnableOption = /enableReloadEndpoint|reloadEndpointEnabled/.test(options);
+  const routeChecksOption = /enableReloadEndpoint|reloadEndpointEnabled/.test(reloadRoute);
+  if (!hasEnableOption || !routeChecksOption) {
+    regressionStillPresent("POST /__reload__ is exposed without explicit enablement");
+  }
 }
 
-function assertJobIsTagOnly(workflow: string, jobName: string, endMarker?: string): void {
+function jobHasTagOnlyGuard(workflow: string, jobName: string, endMarker?: string): boolean {
   const startMarker = `\n  ${jobName}:`;
   const start = workflow.indexOf(startMarker);
   assert.notEqual(start, -1, `missing release job: ${jobName}`);
@@ -154,14 +160,19 @@ function assertJobIsTagOnly(workflow: string, jobName: string, endMarker?: strin
   assert.ok(end > start, `could not isolate release job: ${jobName}`);
   const block = workflow.slice(start, end);
   const jobIf = block.match(/\n    if:\s*([^\n]+)/)?.[1] ?? "";
-  assert.match(jobIf, /github\.event_name/);
-  assert.match(jobIf, /refs\/tags\/v/);
+  return /github\.event_name/.test(jobIf) && /refs\/tags\/v/.test(jobIf);
 }
 
 function assertManualReleaseCannotPublish(): void {
   const workflow = readSource(".github/workflows/release-publish.yml");
-  assertJobIsTagOnly(workflow, "publish-npm", "\n  github-release:");
-  assertJobIsTagOnly(workflow, "github-release");
+  const unguardedJobs = [
+    ["publish-npm", "\n  github-release:"],
+    ["github-release", undefined],
+  ].filter(([jobName, endMarker]) => !jobHasTagOnlyGuard(workflow, jobName!, endMarker))
+    .map(([jobName]) => jobName);
+  if (unguardedJobs.length > 0) {
+    regressionStillPresent(`manual dispatch can reach unguarded jobs: ${unguardedJobs.join(", ")}`);
+  }
 }
 
 const regressions: Array<{ name: string; invariant: () => void | Promise<void> }> = [
