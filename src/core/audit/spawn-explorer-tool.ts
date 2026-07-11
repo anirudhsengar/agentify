@@ -585,19 +585,6 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             };
         }
 
-        // Log external path access (Phase 2.6).
-        if (params.allow_external_paths) {
-            try {
-                // Best-effort: log to the agentify log if available.
-                // The actual write happens via ctx.log if exposed; we
-                // emit a no-op here that the defense hook handler can pick
-                // up. The audit trail is in the JSONL log via the
-                // subagent_spawned event's details.
-            } catch {
-                // ignore
-            }
-        }
-
         // Resolve the sub-agent's model (Phase 2). Default is the
         // explorer slot (passed via `toolOptions.explorerModel`).
         // Explicit `model: haiku|sonnet|opus` literals are resolved
