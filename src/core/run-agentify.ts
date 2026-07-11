@@ -1068,33 +1068,15 @@ async function runBrownfieldAudit(
   const stateDir = stateDirResolved.relativeDir;
   const sourceStateDir = toRel(options.cwd, stateDirResolved.absoluteDir);
   const previousManifest = readManifestAt(options.cwd, sourceStateDir);
-  const stateTransaction = beginStateTransaction({
-    cwd: options.cwd,
-    sourceRelativeDir: sourceStateDir,
-    destinationRelativeDir: stateDir,
-  });
-  let commitState = false;
   if (stateDirResolved.legacy) {
     options.ui.info(
       `agentify: detected legacy state at ${LEGACY_PI_STATE_RELATIVE_DIR}/; future runs will use ${stateDir}`,
     );
   }
-  // Pin the legacy `write_map` / `write_map_delta` tools to the
-  // resolved state dir so canonical map writes land at
-  // `<stateDir>/codebase_map.json` rather than the historical
-  // `.pi/agentify/` location.
+  // Pin structured writers and deterministic renderers before moving state.
+  // These setters are process-local and do not mutate the repository.
   setMapSessionStateDir(stateDir);
-  // Pin the artifact renderer session the same way so feature
-  // agents / prompts / workflows / skills / extensions land under
-  // the resolved state dir rather than the legacy
-  // `.pi/agentify/...` defaults.
   setRendererStateDir(stateDir);
-  const artifactSnapshot = collectAuditArtifactSnapshot(options.cwd);
-  // Absolute paths of pre-existing user-owned artifacts the builder
-  // must not overwrite mid-session (B4 / defense repo protection).
-  const protectedPaths = [...artifactSnapshot.entries()]
-    .filter(([, entry]) => entry.ownership === "unmanaged")
-    .map(([rel]) => path.resolve(options.cwd, rel));
   const promptContent = loadBuilderPrompt(stateDir);
   const promptSha = crypto.createHash("sha256").update(promptContent).digest("hex");
   const log = new AgentifyLog({ cwd: options.cwd, configDir: defaultConfigDir() });
@@ -1102,21 +1084,36 @@ async function runBrownfieldAudit(
   const sessionId = getOrCreateSessionId();
   setThinkingLevel(config.thinkingLevel ?? "high");
 
-  log.runStart({
+  const stateTransaction = beginStateTransaction({
     cwd: options.cwd,
-    args: options.args ?? "",
-    model: config.model ?? "auto",
-    thinking_level: config.thinkingLevel ?? "high",
-    agentify_version: loadAgentifyVersion(),
-    sdk_version: PI_SDK_VERSION,
-    system_prompt_sha256: promptSha,
-    system_prompt_path: "src/core/audit/prompts/builder.md",
-    tool_allowlist: BUILDER_TOOL_ALLOWLIST,
+    sourceRelativeDir: sourceStateDir,
+    destinationRelativeDir: stateDir,
   });
-
-  options.ui.status("agentify: auditing existing codebase");
-  setAgentifySessionActive(sessionId, true);
+  let commitState = false;
+  let artifactSnapshotForRollback: AuditArtifactSnapshot | null = null;
   try {
+    const artifactSnapshot = collectAuditArtifactSnapshot(options.cwd);
+    artifactSnapshotForRollback = artifactSnapshot;
+    // Absolute paths of pre-existing user-owned artifacts the builder
+    // must not overwrite mid-session (B4 / defense repo protection).
+    const protectedPaths = [...artifactSnapshot.entries()]
+      .filter(([, entry]) => entry.ownership === "unmanaged")
+      .map(([rel]) => path.resolve(options.cwd, rel));
+
+    log.runStart({
+      cwd: options.cwd,
+      args: options.args ?? "",
+      model: config.model ?? "auto",
+      thinking_level: config.thinkingLevel ?? "high",
+      agentify_version: loadAgentifyVersion(),
+      sdk_version: PI_SDK_VERSION,
+      system_prompt_sha256: promptSha,
+      system_prompt_path: "src/core/audit/prompts/builder.md",
+      tool_allowlist: BUILDER_TOOL_ALLOWLIST,
+    });
+
+    options.ui.status("agentify: auditing existing codebase");
+    setAgentifySessionActive(sessionId, true);
     const runtimeResult = await options.runtime.runSession({
       cwd: options.cwd,
       configDir: defaultConfigDir(),
@@ -1408,7 +1405,9 @@ async function runBrownfieldAudit(
     else stateTransaction.rollback();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    rollbackGeneratedSurface(options.cwd, artifactSnapshot);
+    if (artifactSnapshotForRollback) {
+      rollbackGeneratedSurface(options.cwd, artifactSnapshotForRollback);
+    }
     stateTransaction.rollback();
     log.runEnd({ exit_code: -1, status: "error", error_message: message });
     options.ui.error(`agentify: ${message}`);

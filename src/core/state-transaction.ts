@@ -13,7 +13,7 @@ interface StateTransactionJournal {
   source_relative_dir: string;
   destination_relative_dir: string;
   had_existing_state: boolean;
-  phase: "prepared" | "backup_created" | "destination_ready";
+  phase: "prepared" | "backup_created" | "destination_ready" | "committed";
 }
 
 export interface BeginStateTransactionOptions {
@@ -109,7 +109,10 @@ function readJournal(filePath: string): StateTransactionJournal {
     typeof value.source_relative_dir !== "string" ||
     typeof value.destination_relative_dir !== "string" ||
     typeof value.had_existing_state !== "boolean" ||
-    (value.phase !== "prepared" && value.phase !== "backup_created" && value.phase !== "destination_ready")
+    (value.phase !== "prepared" &&
+      value.phase !== "backup_created" &&
+      value.phase !== "destination_ready" &&
+      value.phase !== "committed")
   ) {
     throw new Error(`invalid Agentify state transaction journal: ${filePath}`);
   }
@@ -137,6 +140,14 @@ function restoreJournal(cwd: string, journal: StateTransactionJournal): void {
   const source = resolveRelative(cwd, sourceRelativeDir);
   const destination = resolveRelative(cwd, destinationRelativeDir);
   const backup = backupPath(cwd, journal.run_id);
+
+  if (journal.phase === "committed") {
+    // The durable commit marker is the commit point. Cleanup may have been
+    // interrupted, but the destination is authoritative and must survive.
+    fs.rmSync(backup, { recursive: true, force: true });
+    removeTransactionDirectory(cwd, journal.run_id);
+    return;
+  }
 
   if (fs.existsSync(backup)) {
     fs.rmSync(destination, { recursive: true, force: true });
@@ -266,9 +277,16 @@ export function beginStateTransaction(
           `cannot commit Agentify state transaction ${runId}: destination disappeared`,
         );
       }
-      fs.rmSync(backup, { recursive: true, force: true });
-      removeTransactionDirectory(cwd, runId);
+      journal = { ...journal, phase: "committed" };
+      writeJsonAtomic(journalPath(cwd, runId), journal);
       active = false;
+      try {
+        fs.rmSync(backup, { recursive: true, force: true });
+        removeTransactionDirectory(cwd, runId);
+      } catch {
+        // The committed journal is durable. Recovery will finish cleanup on
+        // the next run without rolling back the authoritative destination.
+      }
     },
     rollback(): void {
       if (!active) return;
