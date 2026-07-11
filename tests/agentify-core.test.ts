@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { getProviders } from "@earendil-works/pi-ai";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import {
   authPath,
@@ -21,7 +20,12 @@ import { readGreenfieldStateAt } from "../src/core/greenfield-state.ts";
 import { readManifest, readManifestAt } from "../src/core/manifest.ts";
 import { resolveCanonicalStateDir } from "../src/core/state-dir.ts";
 import { readProjectState } from "../src/core/project-state.ts";
-import { AGENTIFY_PROVIDERS, PROVIDER_ENV_KEYS } from "../src/core/provider-auth.ts";
+import {
+  AGENTIFY_PROVIDERS,
+  PROVIDER_ENV_KEYS,
+  getProviderEnvValue,
+  hasProviderEnvironmentAuth,
+} from "../src/core/provider-auth.ts";
 import { runAgentify } from "../src/core/run-agentify.ts";
 import { makeValidCodebaseMap } from "./fixtures/codebase-map.ts";
 import { makeGreenfieldFormation } from "./fixtures/greenfield-formation.ts";
@@ -192,10 +196,42 @@ async function testProjectClassifier(): Promise<void> {
   assert.equal(ProjectClassifier.classify(ambiguous).kind, "ambiguous");
 }
 
-async function testProviderListMatchesPi(): Promise<void> {
-  const agentifyProviders = AGENTIFY_PROVIDERS.map((provider) => provider.value).sort();
-  const piProviders = getProviders().sort();
-  assert.deepEqual(agentifyProviders, piProviders);
+async function testProviderMetadataAndEnvironmentAuth(): Promise<void> {
+  const values = AGENTIFY_PROVIDERS.map((provider) => provider.value);
+  assert.equal(new Set(values).size, values.length, "provider IDs must be unique");
+  assert.ok(values.includes("openai"));
+  assert.ok(values.includes("anthropic"));
+  assert.ok(values.includes("amazon-bedrock"));
+  for (const provider of AGENTIFY_PROVIDERS) {
+    assert.ok(provider.label.trim().length > 0, `missing provider label: ${provider.value}`);
+    assert.ok(provider.value.trim().length > 0);
+    assert.equal(new Set(provider.env).size, provider.env.length);
+  }
+
+  const previousOpenAi = process.env["OPENAI_API_KEY"];
+  const previousAwsProfile = process.env["AWS_PROFILE"];
+  const previousAwsBearer = process.env["AWS_BEARER_TOKEN_BEDROCK"];
+  try {
+    process.env["OPENAI_API_KEY"] = "sk-test-env";
+    assert.equal(hasProviderEnvironmentAuth("openai"), true);
+    assert.equal(getProviderEnvValue("openai"), "sk-test-env");
+
+    delete process.env["AWS_BEARER_TOKEN_BEDROCK"];
+    process.env["AWS_PROFILE"] = "agentify-test-profile";
+    assert.equal(hasProviderEnvironmentAuth("amazon-bedrock"), true);
+    assert.equal(
+      getProviderEnvValue("amazon-bedrock"),
+      undefined,
+      "ambient AWS credentials must not be forwarded as an API key",
+    );
+  } finally {
+    if (previousOpenAi === undefined) delete process.env["OPENAI_API_KEY"];
+    else process.env["OPENAI_API_KEY"] = previousOpenAi;
+    if (previousAwsProfile === undefined) delete process.env["AWS_PROFILE"];
+    else process.env["AWS_PROFILE"] = previousAwsProfile;
+    if (previousAwsBearer === undefined) delete process.env["AWS_BEARER_TOKEN_BEDROCK"];
+    else process.env["AWS_BEARER_TOKEN_BEDROCK"] = previousAwsBearer;
+  }
 }
 
 async function testAuthPromptAnd0600Write(): Promise<void> {
@@ -393,7 +429,7 @@ async function testInvalidGreenfieldArtifactsRemainPartial(): Promise<void> {
 }
 
 await testProjectClassifier();
-await testProviderListMatchesPi();
+await testProviderMetadataAndEnvironmentAuth();
 await testAuthPromptAnd0600Write();
 await testArtifactExporter();
 await testBrownfieldRunWithFakeRuntime();

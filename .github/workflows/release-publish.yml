@@ -5,79 +5,87 @@ on:
     tags:
       - "v*.*.*"
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Dry run (npm pack, do not publish)"
-        required: false
-        default: "false"
 
 permissions:
-  contents: write
-  id-token: write   # for npm provenance
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build & verify
+  verify:
+    name: Verify release artifact
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.19.0"
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Unit tests
-        run: npm run test:unit
-      - name: Contract tests
-        run: bash tests/run.sh
-      - name: Dry-run pack
-        run: npm pack --dry-run
+      - name: Verify tag matches package version
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: node .github/scripts/verify-release-tag.mjs "${GITHUB_REF_NAME}"
+      - name: Typecheck and tests
+        run: npm test
+      - name: Install packed CLI and smoke test
+        run: npm run test:package
+      - name: Build release tarball
+        run: npm pack --ignore-scripts
+      - name: Upload verified tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package-${{ github.ref_name }}
+          path: agentify-*.tgz
+          if-no-files-found: error
+          retention-days: 7
 
   publish-npm:
-    name: Publish to npm
-    needs: build
+    name: Publish verified tarball to npm
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: verify
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     environment:
       name: npm
       url: https://www.npmjs.com/package/agentify
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.19.0"
           registry-url: "https://registry.npmjs.org"
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Typecheck + tests (prepublishOnly)
-        run: npm run prepublishOnly
-      - name: Publish
-        if: github.event_name == 'push'
-        run: npm publish --provenance --access public
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package-${{ github.ref_name }}
+          path: release-artifact
+      - name: Publish exact verified artifact
+        run: npm publish release-artifact/agentify-*.tgz --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   github-release:
-    name: GitHub release
+    name: Publish GitHub release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: publish-npm
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v7
-      - name: Download release-drafter artifacts
-        uses: release-drafter/release-drafter@v7
+      - uses: actions/download-artifact@v4
         with:
-          config-name: release-drafter.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish GitHub release
+          name: npm-package-${{ github.ref_name }}
+          path: release-artifact
+      - name: Publish release with verified artifact
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
-          generate_release_notes: false
+          generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
+          files: release-artifact/agentify-*.tgz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
