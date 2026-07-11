@@ -18,7 +18,7 @@ import { extractPathFromInputForTool } from "./defense/paths.ts";
 import { isAgentifySessionActive } from "./state.ts";
 
 const WRITE_TOOLS = new Set(["write", "edit", "write_file", "multi_edit"]);
-const PATH_SENSITIVE_TOOLS = new Set(["read", ...WRITE_TOOLS]);
+const PATH_SENSITIVE_TOOLS = new Set(["read", "grep", "find", "ls", ...WRITE_TOOLS]);
 const ESCALATION_TOOL = "escalate_to_orchestrator";
 const AGENTIFY_HOME = path.resolve(os.homedir(), ".agentify");
 const SCRIPT_CONTENT_SCAN_BYTES = 64 * 1024;
