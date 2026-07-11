@@ -4,91 +4,122 @@ agentify is a Node CLI that reads a target repository, calls an LLM
 provider, and writes harness-shaped artifacts (`.claude/`, `.codex/`,
 `.pi/`, `.agents/`) plus architecture docs (`AGENTS.md`, `specs/`,
 `ai_docs/`) into that repo. It also ships a `scaffold/` directory that
-`agentify` stamps into target repos on bootstrap. The defense hook
-(`src/core/audit/defense/`) constrains the explorer sub-agent's file
-access at runtime. Any bug in those surfaces can let agentify write
-outside its intended boundaries, so we treat security reports with
-priority.
+`agentify` stamps into target repos on bootstrap. Any bug in these
+surfaces can allow unintended repository mutation or credential access,
+so security reports receive priority.
 
 ## Supported versions
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.1.x   | Yes (active dev)   |
-| < 0.1.0 | No (pre-release)   |
+| Version | Supported        |
+| ------- | ---------------- |
+| 0.1.x   | Yes (active dev) |
+| < 0.1.0 | No (pre-release) |
 
-Until 1.0.0 the API and CLI surface are subject to change without
-following strict semver. Security fixes may ship in a 0.0.x patch.
+Until 1.0.0 the API and CLI surface are subject to change without strict
+semver. Security fixes may ship in a patch release.
+
+## Runtime security model
+
+Every model-backed runtime session must receive an explicit
+`AgentExecutionPolicy`. The policy is the primary capability boundary and
+defines:
+
+- the SDK built-in tools the session may receive;
+- repository roots the session may read;
+- repository roots the session may write;
+- paths that remain protected even inside a writable root;
+- whether shell execution is denied or permitted for a development phase;
+- the session's network posture.
+
+`PiSdkRuntime` validates the requested built-in tool list before creating
+the model session. Trusted custom tools are registered separately and do
+not widen access to SDK built-ins. The defense hook then enforces policy
+roots after symlink resolution and applies orchestrator domain locks as an
+additional narrowing constraint.
+
+### Read-only sessions
+
+Brownfield builders, explorer sub-agents, review phases, and ordinary
+webhook-dispatched sessions are read-only:
+
+- built-ins are limited to `read`, `grep`, `find`, and `ls`;
+- shell execution is denied;
+- structured writes are denied;
+- reads resolving outside the repository are denied;
+- `~/.agentify/auth.json` and other zero-access paths remain inaccessible.
+
+The audit can still write validated structured state through trusted custom
+tools such as `write_map`; those tools are implemented by Agentify code and
+are not general filesystem capabilities.
+
+### Write-capable sessions
+
+Greenfield implementation and explicitly designated build/fix phases may
+receive a repository-write policy. Writes remain confined to the declared
+roots, protected files remain immutable, and orchestrated sub-agent domain
+globs can only narrow access. Shell-enabled development sessions still pass
+through the command blacklist and script-content scanner as defense in
+depth.
+
+The blacklist is not the primary sandbox. A missing or inactive global
+audit-session flag must never disable a supplied execution policy.
 
 ## Reporting a vulnerability
 
-**Please do not file a public issue for security bugs.**
+**Do not file a public issue for security bugs.**
 
 Use GitHub's private vulnerability reporting:
 
 > https://github.com/anirudhsengar/agentify/security/advisories/new
 
-If you cannot use the GHSA flow, email `anirudhsengar@gmail.com`
-with the subject `[agentify security]` and:
+If the GHSA flow is unavailable, email `anirudhsengar@gmail.com` with the
+subject `[agentify security]` and include:
 
-- a description of the vulnerability and its impact,
+- a description of the vulnerability and its impact;
 - the affected version (`agentify --version`) and Node version
-  (`node --version`),
-- a minimal reproduction (target repo shape, command line, env vars),
-- the relevant excerpt of `<stateDir>/agentify.log` with any API keys
-  redacted (state dir is `~/.agentify/`, `~/.claude/agentify/`,
-  `~/.agents/agentify/`, or `~/.pi/agentify/` — provider-scoped
-  based on the user's selected coding agent).
+  (`node --version`);
+- a minimal reproduction with the target repository shape and command;
+- relevant log excerpts with secrets redacted.
 
 You should receive an acknowledgement within **3 business days**.
 
 ## What to expect
 
-- **Triage** within 7 days of acknowledgement.
-- A fix or mitigation timeline will be discussed in the GHSA thread.
-  Critical issues (arbitrary file write outside the target repo,
-  command injection, credential disclosure) are worked on as the top
-  priority.
-- A coordinated disclosure date is agreed before any public advisory.
-  We aim for a CVE via GHSA where the report warrants one.
+- Triage within 7 days of acknowledgement.
+- A fix or mitigation timeline discussed in the private advisory.
+- Critical issues such as arbitrary writes outside the repository,
+  command injection, or credential disclosure handled as top priority.
+- A coordinated disclosure date before any public advisory.
 
-## Scope of in-scope issues
+## In-scope issues
 
-- **Defense hook bypass** (path traversal, repo-jail escape, write
-  outside the target working directory).
-- **Sandbox / coverage gate** subversion that lets the audit declare a
-  repo "covered" without validating it.
-- **Webhook server** signature verification, queue poisoning,
-  unauthenticated trigger activation, or SSRF in webhook fetchers.
-- **Prompt injection** that causes the builder or orchestrator to write
-  outside the strict TypeBox schemas, or to exfiltrate `auth.json`
-  contents from `~/.agentify/`.
-- **Credential handling**: weak file permissions on `~/.agentify/auth.json`,
-  accidental logging of API keys, env-var leakage in error paths.
-- **Supply chain**: malicious or compromised versions of
-  `@earendil-works/pi-coding-agent` or `@earendil-works/pi-ai`.
+- Execution-policy bypass, including path traversal, symlink escape,
+  forbidden tool admission, or shell access in a read-only session.
+- Defense-hook bypass or a global-state path that disables an explicit
+  execution policy.
+- Webhook signature, queue, sandbox, replay, or management-endpoint issues.
+- Prompt injection that crosses deterministic schema, filesystem, command,
+  or credential boundaries.
+- Credential permissions, accidental secret logging, or environment leakage.
+- Supply-chain compromise affecting Agentify's runtime dependencies.
 
 ## Out of scope
 
-- Issues in the upstream `@earendil-works/pi-coding-agent` /
-  `@earendil-works/pi-ai` runtime that do not have an agentify-specific
-  reproducer. Please report those upstream and link us.
-- Findings that depend on a user pasting attacker-controlled text into
-  a prompt without sandboxing — the defense hook is best-effort by
-  design.
-- Rate-limit or quota issues against third-party LLM providers.
+- Upstream runtime issues without an Agentify-specific reproducer. Report
+  those upstream and link the advisory.
+- Social-engineering reports that do not cross a documented technical
+  boundary.
+- Third-party model-provider rate limits or account quotas.
 
 ## Hardening notes for users
 
-- Run `agentify` from the repo root you intend to modify. It does not
-  prompt before writing harness-shaped files into that repo.
-- Keep `~/.agentify/auth.json` mode `0600`. The `agentify login` path
-  enforces this; do not move the file into a shared location.
-- Pin agentify in CI: `npm ci` against an exact version, and prefer
-  `npx -y agentify@<version>` over `latest` for reproducible runs.
-- Pin your LLM provider SDKs on the same lockfile.
+- Run `agentify` from the repository root you intend to process.
+- Keep `~/.agentify/auth.json` mode `0600`; the login path enforces this.
+- Pin Agentify and its provider SDKs in CI for reproducible execution.
+- Treat write-capable automation as privileged and keep its configured
+  repository roots and domain globs narrow.
 
 ## Recognition
 
-We follow a `with-credit` policy. Reporters are credited in the
-advisory unless they ask to remain anonymous.
+We follow a `with-credit` policy. Reporters are credited in the advisory
+unless they ask to remain anonymous.
