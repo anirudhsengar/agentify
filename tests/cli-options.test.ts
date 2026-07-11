@@ -25,7 +25,10 @@ function sanitizedEnv(home: string): NodeJS.ProcessEnv {
   return env;
 }
 
-function assertBinaryRecognizesOptions(args: readonly string[]): void {
+function assertBinaryRecognizesOptions(
+  args: readonly string[],
+  expectedValidationError: RegExp,
+): void {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-cli-options-cwd-"));
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-cli-options-home-"));
   try {
@@ -40,8 +43,10 @@ function assertBinaryRecognizesOptions(args: readonly string[]): void {
       },
     );
     assert.equal(result.error, undefined, `binary failed to start: ${result.error?.message ?? "unknown"}`);
+    assert.notEqual(result.status, 0, "the validation fixture must stop before runtime setup");
     const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
     assert.doesNotMatch(output, /unknown subcommand '--(?:mode|targets)'/);
+    assert.match(output, expectedValidationError);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
     fs.rmSync(home, { recursive: true, force: true });
@@ -94,9 +99,14 @@ async function testRejectsInvalidInput(): Promise<void> {
 }
 
 async function testPublishedBinaryRecognizesDocumentedOptions(): Promise<void> {
-  assertBinaryRecognizesOptions(["--mode", "brownfield"]);
-  assertBinaryRecognizesOptions(["--targets", "codex"]);
-  assertBinaryRecognizesOptions(["--mode", "brownfield", "--targets", "codex"]);
+  assertBinaryRecognizesOptions(
+    ["--mode", "brownfield", "--targets", "not-an-agent"],
+    /--targets includes unknown agent 'not-an-agent'/,
+  );
+  assertBinaryRecognizesOptions(
+    ["--targets", "codex", "--mode", "bogus"],
+    /--mode must be 'brownfield' or 'greenfield'/,
+  );
 }
 
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
