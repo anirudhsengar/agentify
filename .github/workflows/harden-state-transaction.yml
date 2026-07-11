@@ -20,9 +20,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+      - run: npm ci
       - run: node .github/scripts/harden-state-transaction.mjs
       - run: npx tsc --noEmit
       - run: npx tsx tests/core/state-transaction.test.ts
+      - run: npx tsx tests/core/state-transaction-commit-recovery.test.ts
       - name: Commit hardened transaction boundaries
         run: |
           git config user.name github-actions[bot]
