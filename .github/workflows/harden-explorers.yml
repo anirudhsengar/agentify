@@ -1,0 +1,31 @@
+name: harden-explorers
+
+on:
+  push:
+    branches:
+      - agent/security-execution-policy
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/security-execution-policy
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node .github/scripts/harden-explorers.mjs
+      - name: Commit explorer hardening
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/core/audit/spawn-explorer-tool.ts
+          git diff --cached --check
+          git commit -m "feat(security): make explorer sessions strictly read-only"
+          git push origin HEAD:agent/security-execution-policy
