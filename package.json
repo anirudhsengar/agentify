@@ -40,15 +40,15 @@
     "@smithy/util-buffer-from": "4.4.7"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^0.79.3",
-    "@earendil-works/pi-coding-agent": "^0.79.3",
+    "@earendil-works/pi-ai": "^0.80.6",
+    "@earendil-works/pi-coding-agent": "^0.80.6",
     "jiti": "^2.7.0",
     "typebox": "^1.1.38"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
     "@types/node": "^22.0.0",
-    "tsx": "^4.20.0"
+    "tsx": "^4.20.0",
+    "typescript": "^5.6.0"
   },
   "scripts": {
     "test:unit": "node tests/scripts/run-test-files.mjs --exclude tests/generation-pipeline.test.ts",
