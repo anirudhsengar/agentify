@@ -24,31 +24,18 @@ jobs:
       - run: npm ci
       - name: Upgrade paired Pi runtime packages
         run: npm install @earendil-works/pi-ai@latest @earendil-works/pi-coding-agent@latest --save
-      - name: Record resolved versions
-        run: npm ls @earendil-works/pi-ai @earendil-works/pi-coding-agent --json > pi-versions.json
+      - name: Adapt Agentify to Pi 0.80 provider API
+        run: node .github/scripts/adapt-pi-080.mjs
       - name: Verify production dependency security
         run: npm audit --omit=dev --audit-level=high
-      - name: Capture TypeScript compatibility
-        id: typecheck
-        continue-on-error: true
-        run: npm run typecheck > pi-typecheck.log 2>&1
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: pi-upgrade-diagnostics
-          path: |
-            pi-versions.json
-            pi-typecheck.log
-          retention-days: 1
-      - name: Stop on API incompatibility
-        if: steps.typecheck.outcome == 'failure'
-        run: exit 1
+      - run: npm run typecheck
       - run: npm run test:all
-      - name: Commit dependency upgrade
+      - run: npm run test:package
+      - name: Commit secure dependency upgrade
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add package.json package-lock.json
+          git add package.json package-lock.json src/core/provider-auth.ts tests/agentify-core.test.ts
           git diff --cached --check
           git commit -m "fix(deps): upgrade Pi runtime past security advisories"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
