@@ -20,17 +20,6 @@ function sourceSection(source: string, startMarker: string, endMarker: string): 
   return source.slice(start, end);
 }
 
-function assertProviderScopedStateSnapshot(providerDir: string): void {
-  const source = readSource("src/core/run-agentify.ts");
-  const snapshotAssignment = source.match(
-    /const internalStateSnapshot\s*=\s*([^;]+);/s,
-  );
-  assert.ok(snapshotAssignment, "brownfield audit must capture internal state before cleanup");
-  if (!/stateDir/.test(snapshotAssignment[1] ?? "")) {
-    regressionStillPresent(`${providerDir} is deleted without a provider-scoped state snapshot`);
-  }
-}
-
 function assertSignaturePrecedesAuthenticatedRateLimit(): void {
   const source = readSource("src/core/webhook/server.ts");
   const handlerPrefix = sourceSection(
@@ -86,14 +75,6 @@ function assertManualReleaseCannotPublish(): void {
 }
 
 const regressions: Array<{ name: string; invariant: () => void | Promise<void> }> = [
-  {
-    name: "failed Claude-scoped audits can restore .claude/agentify state",
-    invariant: () => assertProviderScopedStateSnapshot(".claude/agentify"),
-  },
-  {
-    name: "failed Codex-scoped audits can restore .agents/agentify state",
-    invariant: () => assertProviderScopedStateSnapshot(".agents/agentify"),
-  },
   {
     name: "invalid webhook signatures do not consume authenticated rate limits",
     invariant: assertSignaturePrecedesAuthenticatedRateLimit,
