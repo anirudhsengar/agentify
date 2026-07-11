@@ -1,0 +1,32 @@
+name: apply-state-transaction
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.ref == 'agent/phase-5-state-transactions' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node .github/scripts/apply-state-transaction.mjs
+      - run: npx tsx tests/core/state-transaction.test.ts
+      - name: Commit state transaction integration
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/core/run-agentify.ts
+          git diff --cached --check
+          git commit -m "feat(state): integrate transactional audit state"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
