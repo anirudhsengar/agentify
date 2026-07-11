@@ -6,6 +6,8 @@ import * as path from "node:path";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const testsRoot = path.join(repoRoot, "tests");
+const testFilePattern = /\.test\.(?:ts|mts|cts|js|mjs|cjs)$/;
+const typeScriptTestPattern = /\.test\.(?:ts|mts|cts)$/;
 
 function normalizeRepoPath(value) {
   return path.relative(repoRoot, path.resolve(repoRoot, value)).split(path.sep).join("/");
@@ -42,7 +44,7 @@ function discoverTestFiles(root) {
       const absolute = path.join(directory, entry.name);
       if (entry.isDirectory()) {
         visit(absolute);
-      } else if (entry.isFile() && entry.name.endsWith(".test.ts")) {
+      } else if (entry.isFile() && testFilePattern.test(entry.name)) {
         discovered.push(normalizeRepoPath(absolute));
       }
     }
@@ -51,17 +53,27 @@ function discoverTestFiles(root) {
   return discovered.sort((left, right) => left.localeCompare(right));
 }
 
+function commandFor(testPath) {
+  if (typeScriptTestPattern.test(testPath)) {
+    return {
+      command: process.platform === "win32" ? "tsx.cmd" : "tsx",
+      args: [testPath],
+    };
+  }
+  return { command: process.execPath, args: [testPath] };
+}
+
 function main() {
   const { excluded } = parseArgs(process.argv.slice(2));
   const tests = discoverTestFiles(testsRoot).filter((testPath) => !excluded.has(testPath));
-  if (tests.length === 0) throw new Error("no TypeScript test files were discovered");
+  if (tests.length === 0) throw new Error("no test files were discovered");
 
-  const tsxCommand = process.platform === "win32" ? "tsx.cmd" : "tsx";
-  console.log(`Discovered ${tests.length} TypeScript test files.`);
+  console.log(`Discovered ${tests.length} test files.`);
 
   for (const testPath of tests) {
     console.log(`\n==> ${testPath}`);
-    const result = spawnSync(tsxCommand, [testPath], {
+    const invocation = commandFor(testPath);
+    const result = spawnSync(invocation.command, invocation.args, {
       cwd: repoRoot,
       env: process.env,
       stdio: "inherit",
@@ -70,7 +82,7 @@ function main() {
     if (result.status !== 0) process.exit(result.status ?? 1);
   }
 
-  console.log(`\nAll ${tests.length} discovered TypeScript test files passed.`);
+  console.log(`\nAll ${tests.length} discovered test files passed.`);
 }
 
 try {
