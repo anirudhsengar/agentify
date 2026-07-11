@@ -10,7 +10,7 @@ import {
   printSubcommandHelp,
   type SubcommandContext,
 } from "./core/cli-commands.ts";
-import { isKnownAgent } from "./core/agent-registry.ts";
+import { parseCliArgs } from "./core/cli-parser.ts";
 import type { AgentifyUi } from "./core/types.ts";
 
 class ConsoleUi implements AgentifyUi {
@@ -183,88 +183,36 @@ through GitHub issues, comments, and PRs (see docs/lifecycle/README.md).
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
-  if (argv.includes("--help") || argv.includes("-h")) {
+  const command = parseCliArgs(argv);
+  if (command.kind === "help") {
     printHelp();
     return;
   }
-  if (argv.includes("--version") || argv.includes("-v")) {
+  if (command.kind === "version") {
     output.write(`${readPackageVersion()}\n`);
     return;
   }
 
-  // Subcommand dispatch runs BEFORE --mode parsing so that flags belonging
-  // to a subcommand (e.g. `models list --provider x`) are not consumed by
-  // the top-level parser.
   const ui = new ConsoleUi();
-  const subcommandCtx: SubcommandContext = {
-    cwd: process.cwd(),
-    configDir: defaultConfigDir(),
-    ui,
-    out: output,
-    err: errOutput,
-  };
-  if (argv.length > 0) {
-    const head = argv[0];
-    if (head === "login" || head === "logout" || head === "models" || head === "revert") {
-      await dispatchSubcommand(argv, subcommandCtx);
-      return;
-    }
-    throw new Error(
-      `unknown subcommand '${head}'. Known subcommands: login, logout, models, revert. Run \`agentify --help\` for usage.`,
-    );
-  }
-
-  let mode: "brownfield" | "greenfield" | undefined;
-  const modeIndex = argv.indexOf("--mode");
-  if (modeIndex >= 0) {
-    const value = argv[modeIndex + 1];
-    if (value !== "brownfield" && value !== "greenfield") {
-      throw new Error(
-        `--mode must be 'brownfield' or 'greenfield' (got '${value}').`,
-      );
-    }
-    mode = value;
-    argv.splice(modeIndex, 2);
-  }
-
-  // --targets <csv>: comma-separated list of agent IDs. Skips the
-  // interactive picker. Validated against the agent registry — unknown
-  // IDs throw with a clear message naming the bad entries.
-  let targetsOverride: ReadonlyArray<string> | undefined;
-  const targetsIndex = argv.indexOf("--targets");
-  if (targetsIndex >= 0) {
-    const raw = argv[targetsIndex + 1];
-    if (raw === undefined) {
-      throw new Error("--targets requires a comma-separated list of agent IDs.");
-    }
-    const parsed = raw.split(",").map((part) => part.trim()).filter(Boolean);
-    if (parsed.length === 0) {
-      throw new Error("--targets must include at least one agent ID.");
-    }
-    const seen = new Set<string>();
-    const deduped: string[] = [];
-    for (const id of parsed) {
-      if (!isKnownAgent(id)) {
-        throw new Error(
-          `--targets includes unknown agent '${id}'. ` +
-            `Run \`agentify\` with no flags to see the supported list.`,
-        );
-      }
-      if (seen.has(id)) continue;
-      seen.add(id);
-      deduped.push(id);
-    }
-    targetsOverride = deduped;
-    argv.splice(targetsIndex, 2);
+  if (command.kind === "subcommand") {
+    const subcommandCtx: SubcommandContext = {
+      cwd: process.cwd(),
+      configDir: defaultConfigDir(),
+      ui,
+      out: output,
+      err: errOutput,
+    };
+    await dispatchSubcommand(command.argv, subcommandCtx);
+    return;
   }
 
   await runAgentifyApp({
-    args: argv,
+    args: [],
     cwd: process.cwd(),
     ui,
     runtime: new PiSdkRuntime(),
-    mode,
-    targetsOverride,
+    mode: command.mode,
+    targetsOverride: command.targetsOverride,
   });
 }
 

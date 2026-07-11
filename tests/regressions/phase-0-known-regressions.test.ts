@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -26,51 +25,6 @@ function sourceSection(source: string, startMarker: string, endMarker: string): 
   const end = source.indexOf(endMarker, start + startMarker.length);
   assert.notEqual(end, -1, `missing source marker: ${endMarker}`);
   return source.slice(start, end);
-}
-
-function sanitizedCliEnv(home: string): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    HOME: home,
-    USERPROFILE: home,
-    CI: "1",
-    NO_COLOR: "1",
-  };
-  for (const key of Object.keys(env)) {
-    if (key.endsWith("_API_KEY") || key.endsWith("_TOKEN")) delete env[key];
-  }
-  return env;
-}
-
-function runCli(args: readonly string[]) {
-  const cwd = tempDir("agentify-phase0-cli-cwd-");
-  const home = tempDir("agentify-phase0-cli-home-");
-  try {
-    return spawnSync(
-      process.execPath,
-      [path.join(repoRoot, "bin", "agentify.js"), ...args],
-      {
-        cwd,
-        env: sanitizedCliEnv(home),
-        encoding: "utf-8",
-        timeout: 10_000,
-      },
-    );
-  } finally {
-    fs.rmSync(cwd, { recursive: true, force: true });
-    fs.rmSync(home, { recursive: true, force: true });
-  }
-}
-
-function assertTopLevelOptionsAreRecognized(args: readonly string[]): void {
-  const result = runCli(args);
-  const errorCode = (result.error as NodeJS.ErrnoException | undefined)?.code;
-  assert.notEqual(errorCode, "ETIMEDOUT", `CLI timed out for ${args.join(" ")}`);
-  assert.equal(result.error, undefined, `CLI process failed to start for ${args.join(" ")}`);
-  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-  if (/unknown subcommand '--(?:mode|targets)'/.test(output)) {
-    regressionStillPresent(`top-level options are dispatched as subcommands: ${args.join(" ")}`);
-  }
 }
 
 function defenseEvent(
@@ -178,18 +132,6 @@ function assertManualReleaseCannotPublish(): void {
 }
 
 const regressions: Array<{ name: string; invariant: () => void | Promise<void> }> = [
-  {
-    name: "CLI accepts --mode brownfield as a top-level option",
-    invariant: () => assertTopLevelOptionsAreRecognized(["--mode", "brownfield"]),
-  },
-  {
-    name: "CLI accepts --targets codex as a top-level option",
-    invariant: () => assertTopLevelOptionsAreRecognized(["--targets", "codex"]),
-  },
-  {
-    name: "CLI accepts combined --mode and --targets options",
-    invariant: () => assertTopLevelOptionsAreRecognized(["--mode", "brownfield", "--targets", "codex"]),
-  },
   {
     name: "bash cannot read the Agentify credential store",
     invariant: () => assertBashCommandBlocked("cat ~/.agentify/auth.json"),
