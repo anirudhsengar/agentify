@@ -1,52 +1,36 @@
-// Path-parameter name coverage (Phase 2.5).
-// Per-tool list of parameter names that carry a filesystem path.
-// The defense hook uses this to extract the path from tool input,
-// regardless of which name the LLM happened to use.
+// Filesystem path parameters accepted by each built-in tool.
+// The defense hook uses this table to apply root and zero-access checks
+// regardless of which supported alias the runtime emits.
+
+const READ_PATH_NAMES = [
+  "path",
+  "filePath",
+  "file_path",
+  "target",
+  "filepath",
+  "filename",
+  "file",
+] as const;
 
 export const PATH_PARAM_NAMES: Record<string, ReadonlyArray<string>> = {
-  read: ["path", "filePath", "file_path", "target", "filepath", "filename", "file"],
+  read: READ_PATH_NAMES,
+  grep: ["path", "directory", "dir", "cwd", "root"],
+  find: ["path", "directory", "dir", "cwd", "root"],
+  ls: ["path", "directory", "dir", "cwd", "root"],
   write: [
-    "path",
-    "filePath",
-    "file_path",
-    "target",
-    "filepath",
-    "filename",
-    "file",
+    ...READ_PATH_NAMES,
     "outputPath",
     "output_path",
     "destination",
   ],
-  edit: [
-    "path",
-    "filePath",
-    "file_path",
-    "target",
-    "filepath",
-    "filename",
-    "file",
-  ],
+  edit: READ_PATH_NAMES,
   write_file: [
-    "path",
-    "filePath",
-    "file_path",
-    "target",
-    "filepath",
-    "filename",
-    "file",
+    ...READ_PATH_NAMES,
     "outputPath",
     "output_path",
     "destination",
   ],
-  multi_edit: [
-    "path",
-    "filePath",
-    "file_path",
-    "target",
-    "filepath",
-    "filename",
-    "file",
-  ],
+  multi_edit: READ_PATH_NAMES,
 };
 
 /** Return the first path-bearing string from `input`, or empty. */
@@ -55,11 +39,11 @@ export function extractPathFromInputForTool(
   input: unknown,
 ): string {
   if (!input || typeof input !== "object") return "";
-  const i = input as Record<string, unknown>;
+  const values = input as Record<string, unknown>;
   const names = PATH_PARAM_NAMES[toolName] ?? ["path"];
   for (const name of names) {
-    const v = i[name];
-    if (typeof v === "string" && v.length > 0) return v;
+    const value = values[name];
+    if (typeof value === "string" && value.length > 0) return value;
   }
   return "";
 }
