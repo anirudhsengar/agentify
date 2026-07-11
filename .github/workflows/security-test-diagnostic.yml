@@ -19,15 +19,25 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - name: Run tests with concise failure output
+      - name: Run tests and capture failure tail
+        id: tests
+        continue-on-error: true
         shell: bash
         run: |
-          set +e
           npm test > test-output.log 2>&1
-          status=$?
-          if [ "$status" -ne 0 ]; then
-            echo "--- failing test tail ---"
-            tail -n 160 test-output.log
-            exit "$status"
-          fi
-          echo "All tests passed."
+      - name: Prepare diagnostic artifact
+        if: always()
+        shell: bash
+        run: |
+          tail -n 300 test-output.log > failure-tail.log
+      - name: Upload diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-test-failure-tail
+          path: failure-tail.log
+          if-no-files-found: error
+          retention-days: 1
+      - name: Fail when tests failed
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
