@@ -79,6 +79,7 @@ import {
   renderGreenfieldArtifacts,
 } from "./greenfield-artifacts.ts";
 import { createReadOnlyExecutionPolicy } from "./security/execution-policy.ts";
+import { beginStateTransaction } from "./state-transaction.ts";
 
 const AGENTS_MD_PATH = "AGENTS.md";
 const BUILDER_TOOL_ALLOWLIST = [
@@ -930,7 +931,7 @@ function extractWriteMapResult(result: WriteMapResult | undefined): {
 // Decide audit success from the validated structured state, not from
 // user-facing files. Renderers own AGENTS.md and always-on docs after
 // the map closes, so the builder can complete without writing them.
-function readFinalAuditState(cwd: string): FinalAuditState {
+function readFinalAuditState(cwd: string, stateDir: string): FinalAuditState {
   const agentsMdPath = path.join(cwd, AGENTS_MD_PATH);
   const agentsMdExists = fs.existsSync(agentsMdPath);
   let alwaysOnWritten = 0;
@@ -950,11 +951,11 @@ function readFinalAuditState(cwd: string): FinalAuditState {
 
   const total = COVERAGE_DIMENSIONS.length;
   const gapReasons: string[] = [];
-  const map = loadCanonicalMapAt(cwd, LEGACY_PI_STATE_RELATIVE_DIR);
+  const map = loadCanonicalMapAt(cwd, stateDir);
 
   if (!map) {
     gapReasons.push(
-      `no valid codebase map at ${LEGACY_PI_STATE_RELATIVE_DIR}/codebase_map.json (write_map was never completed or failed schema validation)`,
+      `no valid codebase map at ${stateDir}/codebase_map.json (write_map was never completed or failed schema validation)`,
     );
   }
 
@@ -1065,29 +1066,17 @@ async function runBrownfieldAudit(
     options.cwd, options.targets, options.additionalAgents,
   );
   const stateDir = stateDirResolved.relativeDir;
+  const sourceStateDir = toRel(options.cwd, stateDirResolved.absoluteDir);
+  const previousManifest = readManifestAt(options.cwd, sourceStateDir);
   if (stateDirResolved.legacy) {
     options.ui.info(
       `agentify: detected legacy state at ${LEGACY_PI_STATE_RELATIVE_DIR}/; future runs will use ${stateDir}`,
     );
   }
-  // Pin the legacy `write_map` / `write_map_delta` tools to the
-  // resolved state dir so canonical map writes land at
-  // `<stateDir>/codebase_map.json` rather than the historical
-  // `.pi/agentify/` location.
+  // Pin structured writers and deterministic renderers before moving state.
+  // These setters are process-local and do not mutate the repository.
   setMapSessionStateDir(stateDir);
-  // Pin the artifact renderer session the same way so feature
-  // agents / prompts / workflows / skills / extensions land under
-  // the resolved state dir rather than the legacy
-  // `.pi/agentify/...` defaults.
   setRendererStateDir(stateDir);
-  const internalStateSnapshot = collectInternalStateSnapshot(options.cwd);
-  cleanupInternalScaffoldingAt(options.cwd, stateDir);
-  const artifactSnapshot = collectAuditArtifactSnapshot(options.cwd);
-  // Absolute paths of pre-existing user-owned artifacts the builder
-  // must not overwrite mid-session (B4 / defense repo protection).
-  const protectedPaths = [...artifactSnapshot.entries()]
-    .filter(([, entry]) => entry.ownership === "unmanaged")
-    .map(([rel]) => path.resolve(options.cwd, rel));
   const promptContent = loadBuilderPrompt(stateDir);
   const promptSha = crypto.createHash("sha256").update(promptContent).digest("hex");
   const log = new AgentifyLog({ cwd: options.cwd, configDir: defaultConfigDir() });
@@ -1095,21 +1084,36 @@ async function runBrownfieldAudit(
   const sessionId = getOrCreateSessionId();
   setThinkingLevel(config.thinkingLevel ?? "high");
 
-  log.runStart({
+  const stateTransaction = beginStateTransaction({
     cwd: options.cwd,
-    args: options.args ?? "",
-    model: config.model ?? "auto",
-    thinking_level: config.thinkingLevel ?? "high",
-    agentify_version: loadAgentifyVersion(),
-    sdk_version: PI_SDK_VERSION,
-    system_prompt_sha256: promptSha,
-    system_prompt_path: "src/core/audit/prompts/builder.md",
-    tool_allowlist: BUILDER_TOOL_ALLOWLIST,
+    sourceRelativeDir: sourceStateDir,
+    destinationRelativeDir: stateDir,
   });
-
-  options.ui.status("agentify: auditing existing codebase");
-  setAgentifySessionActive(sessionId, true);
+  let commitState = false;
+  let artifactSnapshotForRollback: AuditArtifactSnapshot | null = null;
   try {
+    const artifactSnapshot = collectAuditArtifactSnapshot(options.cwd);
+    artifactSnapshotForRollback = artifactSnapshot;
+    // Absolute paths of pre-existing user-owned artifacts the builder
+    // must not overwrite mid-session (B4 / defense repo protection).
+    const protectedPaths = [...artifactSnapshot.entries()]
+      .filter(([, entry]) => entry.ownership === "unmanaged")
+      .map(([rel]) => path.resolve(options.cwd, rel));
+
+    log.runStart({
+      cwd: options.cwd,
+      args: options.args ?? "",
+      model: config.model ?? "auto",
+      thinking_level: config.thinkingLevel ?? "high",
+      agentify_version: loadAgentifyVersion(),
+      sdk_version: PI_SDK_VERSION,
+      system_prompt_sha256: promptSha,
+      system_prompt_path: "src/core/audit/prompts/builder.md",
+      tool_allowlist: BUILDER_TOOL_ALLOWLIST,
+    });
+
+    options.ui.status("agentify: auditing existing codebase");
+    setAgentifySessionActive(sessionId, true);
     const runtimeResult = await options.runtime.runSession({
       cwd: options.cwd,
       configDir: defaultConfigDir(),
@@ -1182,7 +1186,7 @@ async function runBrownfieldAudit(
           featureAgentsWritten: 0,
           gapReasons: ["run was aborted"],
         }
-      : readFinalAuditState(options.cwd);
+      : readFinalAuditState(options.cwd, stateDir);
 
     // Preserve the canonical codebase map; remove only the
     // transient draft/history/logs transport.
@@ -1221,7 +1225,7 @@ async function runBrownfieldAudit(
 
       if (renderResult.errors.length > 0) {
         reportedStatus = "partial";
-        restoreInternalStateSnapshotAt(options.cwd, internalStateSnapshot, stateDir);
+        stateTransaction.rollback();
         options.ui.error("agentify: audit artifacts failed deterministic rendering; no bundle was applied.");
         for (const reason of renderResult.errors.slice(0, 8)) {
           options.ui.error(`agentify:   - ${reason}`);
@@ -1276,7 +1280,6 @@ async function runBrownfieldAudit(
           // that the manifest will carry. The previous manifest is
           // also read for the stale-skill removal step (see below).
           const runId = crypto.randomUUID();
-          const previousManifest = readManifestAt(options.cwd, stateDir);
           persistRunArtifacts({
             cwd: options.cwd,
             stateDir,
@@ -1310,7 +1313,7 @@ async function runBrownfieldAudit(
 
           if (applyResult.requiredConflictCount > 0) {
             reportedStatus = "partial";
-            restoreInternalStateSnapshotAt(options.cwd, internalStateSnapshot, stateDir);
+            stateTransaction.rollback();
             options.ui.error(
               `agentify: required generated file conflict(s) blocked apply; no bundle files were written.`,
             );
@@ -1348,6 +1351,7 @@ async function runBrownfieldAudit(
               featureAgentCount: repoState.featureAgentCount,
               latestLogPath: log.logPath,
             });
+            commitState = true;
           }
         } finally {
           fs.rmSync(stagingRoot, { recursive: true, force: true });
@@ -1356,7 +1360,7 @@ async function runBrownfieldAudit(
       }
     } else {
       const rollback = rollbackGeneratedSurface(options.cwd, artifactSnapshot);
-      restoreInternalStateSnapshotAt(options.cwd, internalStateSnapshot, stateDir);
+      stateTransaction.rollback();
       options.ui.error(
         `agentify: audit did not complete (${finalState.covered}/${finalState.total} dimensions closed); ` +
           "no harness export was run.",
@@ -1397,10 +1401,14 @@ async function runBrownfieldAudit(
         : null,
     });
     options.ui.info(`agentify: log written to ${log.logPath}`);
+    if (commitState) stateTransaction.commit();
+    else stateTransaction.rollback();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    rollbackGeneratedSurface(options.cwd, artifactSnapshot);
-    restoreInternalStateSnapshotAt(options.cwd, internalStateSnapshot, stateDir);
+    if (artifactSnapshotForRollback) {
+      rollbackGeneratedSurface(options.cwd, artifactSnapshotForRollback);
+    }
+    stateTransaction.rollback();
     log.runEnd({ exit_code: -1, status: "error", error_message: message });
     options.ui.error(`agentify: ${message}`);
     throw err;
