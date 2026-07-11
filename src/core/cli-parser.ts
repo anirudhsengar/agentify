@@ -87,20 +87,21 @@ export function parseCliArgs(argv: readonly string[]): ParsedCliCommand {
 
   assertNoDuplicateSingletonOptions(argv);
 
-  let parsed: ReturnType<typeof parseArgs>;
-  try {
-    parsed = parseArgs({
-      args: [...argv],
-      strict: true,
-      allowPositionals: true,
-      options: {
-        mode: { type: "string" },
-        targets: { type: "string" },
-      },
-    });
-  } catch (error) {
-    throw normalizeParseError(error);
-  }
+  const parsed = (() => {
+    try {
+      return parseArgs({
+        args: [...argv],
+        strict: true,
+        allowPositionals: true,
+        options: {
+          mode: { type: "string" },
+          targets: { type: "string" },
+        },
+      });
+    } catch (error) {
+      throw normalizeParseError(error);
+    }
+  })();
 
   if (parsed.positionals.length > 0) {
     const unknown = parsed.positionals[0];
