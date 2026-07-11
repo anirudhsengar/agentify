@@ -24,9 +24,25 @@ jobs:
       - run: npm ci
       - name: Upgrade paired Pi runtime packages
         run: npm install @earendil-works/pi-ai@latest @earendil-works/pi-coding-agent@latest --save
+      - name: Record resolved versions
+        run: npm ls @earendil-works/pi-ai @earendil-works/pi-coding-agent --json > pi-versions.json
       - name: Verify production dependency security
         run: npm audit --omit=dev --audit-level=high
-      - run: npm run typecheck
+      - name: Capture TypeScript compatibility
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck > pi-typecheck.log 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pi-upgrade-diagnostics
+          path: |
+            pi-versions.json
+            pi-typecheck.log
+          retention-days: 1
+      - name: Stop on API incompatibility
+        if: steps.typecheck.outcome == 'failure'
+        run: exit 1
       - run: npm run test:all
       - name: Commit dependency upgrade
         run: |
