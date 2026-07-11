@@ -1,14 +1,13 @@
-// tests/webhook/worker.test.ts — worker dispatch + defense hook integration.
+// tests/webhook/worker.test.ts — worker dispatch + execution-policy integration.
 //
 // Covers:
 //   - tickOnce picks up pending tasks and dispatches them
-//   - fake runtime receives the expected userPrompt + tools
+//   - fake runtime receives the expected userPrompt + read-only tools
+//   - unsafe externally-requested tools are rejected before runtime dispatch
 //   - terminal record is written with success status
 //   - failure path writes an error record
 //   - abort path writes an aborted record
-//   - defense hook is wired (defense-in-depth via makeDefenseHook)
-//   - concurrency=1 serializes two tasks
-//   - concurrency=2 parallelizes two tasks
+//   - concurrency=2 parallelizes tasks
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
@@ -48,7 +47,7 @@ class FakeRuntime implements AgentRuntime {
 
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     this.calls.push(options);
-    if (this.opts.holdMs) await new Promise((r) => setTimeout(r, this.opts.holdMs));
+    if (this.opts.holdMs) await new Promise((resolve) => setTimeout(resolve, this.opts.holdMs));
     if (this.opts.failWith) throw this.opts.failWith;
     return {
       turns: this.opts.turns ?? 1,
@@ -73,23 +72,23 @@ function tempHttp(): WebhookTaskRecord["http"] {
   };
 }
 
-function tempPrompt(): WebhookTaskRecord["prompt"] {
+function tempPrompt(tools: string[] = ["read"]): WebhookTaskRecord["prompt"] {
   return {
     template: "/implement",
     args: { body: "hi" },
     cwd: "/tmp",
-    tools: ["read", "write"],
+    tools,
     model: null,
     thinking_level: null,
     model_role: null,
   };
 }
 
-function makeRecord(taskId: string): WebhookTaskRecord {
+function makeRecord(taskId: string, tools?: string[]): WebhookTaskRecord {
   return makeQueuedRecord({
     triggerId: "t1",
     http: tempHttp(),
-    prompt: tempPrompt(),
+    prompt: tempPrompt(tools),
     taskId,
   });
 }
@@ -102,7 +101,7 @@ async function waitFor(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (check()) return;
-    await new Promise((r) => setTimeout(r, intervalMs));
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   throw new Error(`timeout waiting for condition after ${timeoutMs}ms`);
 }
@@ -119,24 +118,49 @@ async function testSuccessfulRun(): Promise<void> {
   try {
     const paths = queuePaths(configDir);
     ensureQueueDirs(paths);
-    const r1 = makeRecord("a".repeat(16));
-    appendRecord(paths, r1);
+    const record = makeRecord("a".repeat(16));
+    appendRecord(paths, record);
 
-    await waitFor(() => {
-      const s = rebuildQueue(paths);
-      return s.terminal.length === 1;
-    });
-    const final = rebuildQueue(paths).byId.get(r1.task_id);
+    await waitFor(() => rebuildQueue(paths).terminal.length === 1);
+    const final = rebuildQueue(paths).byId.get(record.task_id);
     assert.equal(final?.status, TaskStatus.Done);
     assert.equal(final?.result?.turns, 1);
     assert.equal(runtime.calls.length, 1);
-    // The system prompt should mention webhook-dispatch mode
     assert.match(runtime.calls[0]!.systemPrompt, /webhook-dispatch mode/);
-    // User prompt should contain the args
     assert.match(runtime.calls[0]!.userPrompt, /body="hi"/);
-    assert.deepEqual(runtime.calls[0]!.tools, ["read", "write"]);
+    assert.deepEqual(runtime.calls[0]!.tools, ["read"]);
+    assert.equal(runtime.calls[0]!.executionPolicy.mode, "review-readonly");
+    assert.deepEqual(runtime.calls[0]!.executionPolicy.writableRoots, []);
+    assert.equal(runtime.calls[0]!.executionPolicy.commandPolicy, "deny");
   } finally {
     await worker.stop();
+    fs.rmSync(configDir, { recursive: true, force: true });
+  }
+}
+
+async function testUnsafeToolsRejectedBeforeRuntime(): Promise<void> {
+  const configDir = tempDir("worker-unsafe");
+  const runtime = new FakeRuntime();
+  const worker = startWorker({
+    configDir,
+    runtime,
+    pollIntervalMs: 25,
+    logger: silentLogger(),
+  });
+  try {
+    const paths = queuePaths(configDir);
+    ensureQueueDirs(paths);
+    const record = makeRecord("d".repeat(16), ["read", "write", "bash"]);
+    appendRecord(paths, record);
+
+    await waitFor(() => rebuildQueue(paths).terminal.length === 1);
+    const final = rebuildQueue(paths).byId.get(record.task_id);
+    assert.equal(final?.status, TaskStatus.Error);
+    assert.match(final?.result?.error_message ?? "", /unsafe tools: write, bash/);
+    assert.equal(runtime.calls.length, 0, "unsafe tools must be rejected before runtime dispatch");
+  } finally {
+    await worker.stop();
+    fs.rmSync(configDir, { recursive: true, force: true });
   }
 }
 
@@ -152,15 +176,16 @@ async function testFailureRun(): Promise<void> {
   try {
     const paths = queuePaths(configDir);
     ensureQueueDirs(paths);
-    const r1 = makeRecord("b".repeat(16));
-    appendRecord(paths, r1);
+    const record = makeRecord("b".repeat(16));
+    appendRecord(paths, record);
 
     await waitFor(() => rebuildQueue(paths).terminal.length === 1);
-    const final = rebuildQueue(paths).byId.get(r1.task_id);
+    const final = rebuildQueue(paths).byId.get(record.task_id);
     assert.equal(final?.status, TaskStatus.Error);
     assert.match(final?.result?.error_message ?? "", /boom/);
   } finally {
     await worker.stop();
+    fs.rmSync(configDir, { recursive: true, force: true });
   }
 }
 
@@ -176,15 +201,16 @@ async function testAbortRun(): Promise<void> {
   try {
     const paths = queuePaths(configDir);
     ensureQueueDirs(paths);
-    const r1 = makeRecord("c".repeat(16));
-    appendRecord(paths, r1);
+    const record = makeRecord("c".repeat(16));
+    appendRecord(paths, record);
 
     await waitFor(() => rebuildQueue(paths).terminal.length === 1);
-    const final = rebuildQueue(paths).byId.get(r1.task_id);
+    const final = rebuildQueue(paths).byId.get(record.task_id);
     assert.equal(final?.status, TaskStatus.Aborted);
     assert.equal(final?.result?.error_message, "aborted");
   } finally {
     await worker.stop();
+    fs.rmSync(configDir, { recursive: true, force: true });
   }
 }
 
@@ -196,7 +222,7 @@ async function testConcurrency2(): Promise<void> {
     async runSession(): Promise<AgentRuntimeResult> {
       activeCalls += 1;
       maxConcurrent = Math.max(maxConcurrent, activeCalls);
-      await new Promise((r) => setTimeout(r, 80));
+      await new Promise((resolve) => setTimeout(resolve, 80));
       activeCalls -= 1;
       return { turns: 1, costUsd: 0.01, aborted: false };
     }
@@ -211,7 +237,7 @@ async function testConcurrency2(): Promise<void> {
     concurrency: 2,
     pollIntervalMs: 25,
     logger: silentLogger(),
-    onTaskEvent: (e) => events.push(e),
+    onTaskEvent: (event) => events.push(event),
   });
   try {
     const paths = queuePaths(configDir);
@@ -222,12 +248,11 @@ async function testConcurrency2(): Promise<void> {
 
     await waitFor(() => rebuildQueue(paths).terminal.length === 3, 8_000);
     assert.equal(maxConcurrent, 2);
-    const started = events.filter((e) => e.kind === "started").length;
-    const ended = events.filter((e) => e.kind === "ended").length;
-    assert.equal(started, 3);
-    assert.equal(ended, 3);
+    assert.equal(events.filter((event) => event.kind === "started").length, 3);
+    assert.equal(events.filter((event) => event.kind === "ended").length, 3);
   } finally {
     await worker.stop();
+    fs.rmSync(configDir, { recursive: true, force: true });
   }
 }
 
@@ -237,6 +262,7 @@ function silentLogger() {
 }
 
 await testSuccessfulRun();
+await testUnsafeToolsRejectedBeforeRuntime();
 await testFailureRun();
 await testAbortRun();
 await testConcurrency2();
