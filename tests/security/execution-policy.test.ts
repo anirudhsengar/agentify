@@ -34,6 +34,13 @@ async function testReadOnlyToolAdmission(): Promise<void> {
       () => createReadOnlyExecutionPolicy({ cwd, tools: ["read", "write"] }),
       /cannot grant: write/,
     );
+    assert.throws(
+      () => assertRequestedToolsAllowed(["read", "write_map"], policy),
+      /does not allow tools: write_map/,
+    );
+    assert.doesNotThrow(() =>
+      assertRequestedToolsAllowed(["read", "write_map"], policy, ["write_map"]),
+    );
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
