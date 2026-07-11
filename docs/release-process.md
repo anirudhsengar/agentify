@@ -79,10 +79,15 @@ Pull requests and main-branch pushes run separate jobs for:
 
 - TypeScript typechecking at the minimum supported Node version;
 - the full executable test suite on Node 22.19 and Node 24;
-- production dependency audit;
+- high-severity production dependency auditing with `npm audit`;
 - installation and execution of the packed npm artifact;
-- CodeQL;
-- dependency review for high-severity additions and denied copyleft licenses.
+- CodeQL.
+
+GitHub's dependency-review action is intentionally not a required check in this
+repository because the repository integration fails before producing a review,
+even when configured in warn-only mode. A permanently broken check would provide
+no security signal. Dependency changes remain covered by the lockfile, production
+`npm audit`, CodeQL, and normal pull-request review.
 
 The CI test job calls `npm run test:all`, which intentionally excludes duplicate
 typechecking. `npm test` remains the local all-in-one command.
