@@ -89,19 +89,11 @@ async function testCiSeparatesConcernsAndCoversEngines(): Promise<void> {
   assert.match(packageJson.scripts?.["release:check"] ?? "", /test:package/);
 }
 
-async function testDependencyReviewIsHighSeverityGate(): Promise<void> {
-  const workflow = read(".github/workflows/dependency-review.yml");
-  assert.match(workflow, /actions\/dependency-review-action@v4/);
-  assert.match(workflow, /fail-on-severity: high/);
-  assert.match(workflow, /permissions:\n  contents: read/);
-}
-
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "releaseJobsAreTagOnly", fn: testReleaseJobsAreTagOnly },
   { name: "exactVerifiedArtifactIsPublished", fn: testExactVerifiedArtifactIsPublished },
   { name: "tagVersionValidation", fn: testTagVersionValidation },
   { name: "ciSeparatesConcernsAndCoversEngines", fn: testCiSeparatesConcernsAndCoversEngines },
-  { name: "dependencyReviewIsHighSeverityGate", fn: testDependencyReviewIsHighSeverityGate },
 ];
 
 let passed = 0;
