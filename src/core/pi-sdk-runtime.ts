@@ -40,8 +40,6 @@ type MessageEndEventLike = {
 
 export class PiSdkRuntime implements AgentRuntime {
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
-    assertRequestedToolsAllowed(options.tools, options.executionPolicy);
-
     const authStorage = AuthStorage.create(authPath(options.configDir));
     if (options.config.provider) {
       const envKey = getProviderEnvValue(options.config.provider);
@@ -75,6 +73,12 @@ export class PiSdkRuntime implements AgentRuntime {
         }),
       );
     }
+
+    assertRequestedToolsAllowed(
+      options.tools,
+      options.executionPolicy,
+      customTools.map((tool) => tool.name),
+    );
 
     const resourceLoader = new DefaultResourceLoader({
       cwd: options.cwd,
