@@ -1,0 +1,36 @@
+name: state-typecheck-diagnostic
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    if: github.event.pull_request.head.ref == 'agent/phase-5-state-transactions'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: node .github/scripts/harden-state-transaction.mjs
+      - name: Capture compiler output
+        id: typecheck
+        continue-on-error: true
+        run: npx tsc --noEmit > state-typecheck.log 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: state-typecheck-output
+          path: state-typecheck.log
+          retention-days: 1
+      - if: steps.typecheck.outcome == 'failure'
+        run: exit 1
