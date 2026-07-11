@@ -13,6 +13,7 @@ in this folder.
 | Changelog | `CHANGELOG.md` (repo root) |
 | Security policy | `SECURITY.md` (repo root) |
 | Contributing guide | `CONTRIBUTING.md` (repo root) |
+| Generation architecture and trust boundary | `docs/architecture.md` |
 
 ## Code, not prose
 

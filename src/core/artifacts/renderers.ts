@@ -1,10 +1,13 @@
 import { AGENTIFY_MANAGED_MARKERS, addMarkdownManagedMarker } from "../artifact-exporters.ts";
 import {
   AGENTS_MD_MAX_LINES,
+  CodebaseMapSchema,
+  assessCoverageClosure,
   type ArtifactIntents,
   type CodebaseMap,
   type FeatureAgentIntent,
 } from "../audit/schema.ts";
+import { Value } from "typebox/value";
 import { validateWorkflowSpec, type WorkflowSpec } from "../orchestrator/workflow-spec.ts";
 
 type ExpertDomainIntent = NonNullable<CodebaseMap["expert_evidence"]>["expert_domains"][number];
@@ -36,6 +39,34 @@ export interface RenderedArtifact {
 export interface RenderArtifactsResult {
   artifacts: RenderedArtifact[];
   errors: string[];
+}
+
+export interface StructuredRenderError {
+  path: string;
+  message: string;
+}
+
+export type ValidatedRenderResult = RenderArtifactsResult & {
+  validationErrors: StructuredRenderError[];
+};
+
+/** Deterministic trust boundary used before any repository-facing apply. */
+export function renderValidatedBrownfieldArtifacts(input: unknown): ValidatedRenderResult {
+  const schemaErrors = Value.Errors(CodebaseMapSchema, input).map((error) => {
+    const detail = error as unknown as { path?: string; instancePath?: string; message: string };
+    return { path: detail.path ?? detail.instancePath ?? "(root)", message: detail.message };
+  });
+  if (schemaErrors.length > 0) return { artifacts: [], errors: schemaErrors.map((e) => `${e.path}: ${e.message}`), validationErrors: schemaErrors };
+
+  const map = input as CodebaseMap;
+  const closure = assessCoverageClosure(map);
+  const coverageErrors = closure.unresolved.map((dimension) => ({
+    path: `/coverage/${dimension}`,
+    message: closure.reasons[dimension] ?? "coverage is incomplete",
+  }));
+  if (coverageErrors.length > 0) return { artifacts: [], errors: coverageErrors.map((e) => `${e.path}: ${e.message}`), validationErrors: coverageErrors };
+
+  return { ...renderBrownfieldArtifacts(map), validationErrors: [] };
 }
 
 const KEBAB_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

@@ -21,7 +21,7 @@ import { formatGitHubReadiness, inspectGitHubReadiness } from "./github-readines
 import { inspectAgentifyRepoState } from "./repo-status.ts";
 import { writeProjectState } from "./project-state.ts";
 import {
-  renderBrownfieldArtifacts,
+  renderValidatedBrownfieldArtifacts,
   setRendererStateDir,
   type RenderedArtifact,
 } from "./artifacts/renderers.ts";
@@ -134,7 +134,7 @@ type AuditSnapshotEntry = {
   mode: number;
 };
 
-type AuditArtifactSnapshot = Map<string, AuditSnapshotEntry>;
+export type AuditArtifactSnapshot = Map<string, AuditSnapshotEntry>;
 
 const ALWAYS_ON_ARTIFACTS = [
   "specs/README.md",
@@ -309,7 +309,7 @@ function fileHasManagedMarker(relativePath: string, content: Buffer): boolean {
   return content.toString("utf-8").includes(marker);
 }
 
-function collectAuditArtifactSnapshot(cwd: string): AuditArtifactSnapshot {
+export function collectAuditArtifactSnapshot(cwd: string): AuditArtifactSnapshot {
   const snapshot: AuditArtifactSnapshot = new Map();
   for (const filePath of listGeneratedSurfaceFiles(cwd)) {
     if (!fs.existsSync(filePath)) continue;
@@ -493,7 +493,7 @@ function makeStagingRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "agentify-staging-"));
 }
 
-function writeRenderedArtifactsToStaging(
+export function writeRenderedArtifactsToStaging(
   stagingRoot: string,
   artifacts: readonly RenderedArtifact[],
   metadata: Map<string, ManagedManifestFile>,
@@ -663,7 +663,12 @@ function isConflictingDestination(
   snapshot: AuditArtifactSnapshot,
 ): boolean {
   const destination = path.join(cwd, relativePath);
-  if (!fs.existsSync(destination)) return false;
+  if (hasSymlinkAncestor(cwd, relativePath)) return true;
+  const destinationStat = fs.lstatSync(destination, { throwIfNoEntry: false });
+  if (!destinationStat) return false;
+  // Never follow a repository symlink while deciding ownership. Treat it as
+  // user-owned so staged writes cannot escape the repository root.
+  if (destinationStat.isSymbolicLink()) return true;
   const snapshotEntry = snapshot.get(relativePath);
   // Pre-run unmanaged files (user-owned) are always conflicts:
   // they were on disk before the run started and we must not
@@ -678,6 +683,18 @@ function isConflictingDestination(
   // loop because only generated-surface paths are staged. Treat
   // both as non-conflicts so the staged content lands at the
   // canonical destination rather than alongside it.
+  return false;
+}
+
+function hasSymlinkAncestor(cwd: string, relativePath: string): boolean {
+  const parts = relativePath.split("/").slice(0, -1);
+  let current = cwd;
+  for (const part of parts) {
+    current = path.join(current, part);
+    const stat = fs.lstatSync(current, { throwIfNoEntry: false });
+    if (!stat) return false;
+    if (stat.isSymbolicLink()) return true;
+  }
   return false;
 }
 
@@ -744,7 +761,7 @@ function formatApplyReport(
   return lines;
 }
 
-function applyStagedBundle(params: {
+export function applyStagedBundle(params: {
   cwd: string;
   stagingRoot: string;
   snapshot: AuditArtifactSnapshot;
@@ -759,6 +776,24 @@ function applyStagedBundle(params: {
   const writes: ArtifactWrite[] = [];
   const manifestFiles: ManagedManifestFile[] = [];
   let requiredConflictCount = 0;
+
+  // Required aborts are a bundle-level preflight. Discover them before
+  // writing any non-conflicting file so a rejected generation is atomic.
+  for (const file of stagedFiles) {
+    const entry = params.metadata.get(file.relativePath)
+      ?? manifestFileFromContent({ relativePath: file.relativePath, content: file.content });
+    if (entry.required
+      && isConflictingDestination(params.cwd, file.relativePath, params.snapshot)
+      && resolveActionForPath(params.policy, file.relativePath, true) === "abort") {
+      requiredConflictCount += 1;
+      writes.push({
+        path: path.join(params.cwd, file.relativePath),
+        action: "conflict",
+        reason: "required file conflict; set requiredAction to \"alongside\" in .agentifyrc to save alongside",
+      });
+    }
+  }
+  if (requiredConflictCount > 0) return { writes, requiredConflictCount, manifest: null };
 
   for (const file of stagedFiles) {
     const baseEntry = params.metadata.get(file.relativePath)
@@ -782,7 +817,6 @@ function applyStagedBundle(params: {
     const action = resolveActionForPath(params.policy, file.relativePath, isRequired);
 
     if (action === "abort") {
-      if (isRequired) requiredConflictCount += 1;
       writes.push({
         path: path.join(params.cwd, file.relativePath),
         action: "conflict",
@@ -813,6 +847,15 @@ function applyStagedBundle(params: {
     // file untouched, and record both paths in the manifest.
     const alongsideRel = alongsidePathFor(file.relativePath);
     const alongsideDest = path.join(params.cwd, alongsideRel);
+    if (hasSymlinkAncestor(params.cwd, alongsideRel)
+      || fs.lstatSync(alongsideDest, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      writes.push({
+        path: path.join(params.cwd, file.relativePath),
+        action: "conflict",
+        reason: "alongside destination is a symbolic link",
+      });
+      continue;
+    }
     const userContent = fs.readFileSync(path.join(params.cwd, file.relativePath));
     const preservedSha = sha256(userContent);
     fs.mkdirSync(path.dirname(alongsideDest), { recursive: true });
@@ -835,13 +878,14 @@ function applyStagedBundle(params: {
     return { writes, requiredConflictCount, manifest: null };
   }
 
+  const sortedFiles = manifestFiles.sort((a, b) => a.path.localeCompare(b.path));
   const manifest: ManagedManifest = {
     schema_version: "2",
     agentify_version: params.agentifyVersion,
     generated_at: new Date().toISOString(),
     mode: params.mode,
     run_id: params.runId,
-    files: manifestFiles.sort((a, b) => a.path.localeCompare(b.path)),
+    files: sortedFiles,
   };
   writeManifestAt(params.cwd, manifest, params.stateDir);
   writes.push({ path: path.join(params.cwd, manifestRelativePath(params.stateDir)), action: "written" });
@@ -1168,7 +1212,7 @@ async function runBrownfieldAudit(
 
       const map = loadCanonicalMapAt(options.cwd, stateDir);
       const renderResult = map
-        ? renderBrownfieldArtifacts(map)
+        ? renderValidatedBrownfieldArtifacts(map)
         : { artifacts: [], errors: ["validated codebase map disappeared before rendering"] };
 
       if (renderResult.errors.length > 0) {

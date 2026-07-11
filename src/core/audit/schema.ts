@@ -1237,7 +1237,7 @@ export type FeatureAgentIntent = Static<typeof FeatureAgentIntentSchema>;
 // ============================================================================
 
 export const CodebaseMapSchema = Type.Object({
-    schema_version: Type.Optional(Type.String({
+    schema_version: Type.Optional(Type.Literal("1", {
         description: 'Set by the write_map tool. Always "1" for now.',
     })),
     generated_at: Type.Optional(Type.String({
@@ -1298,7 +1298,7 @@ export type CodebaseMap = Static<typeof CodebaseMapSchema>;
  * canonical schema; only the "required-ness" is relaxed.
  */
 export const PartialCodebaseMapSchema = Type.Object({
-    schema_version: Type.Optional(Type.String()),
+    schema_version: Type.Optional(Type.Literal("1")),
     generated_at: Type.Optional(Type.String()),
     meta: Type.Optional(MetaSchema),
     skeleton: Type.Optional(SkeletonSchema),
