@@ -21,6 +21,10 @@ import { createWriteGreenfieldArtifactsTool } from "./greenfield-artifacts.ts";
 import { createSpawnExplorerTool } from "./audit/spawn-explorer-tool.ts";
 import { resolveModelOrThrow, selectModelForRole } from "./models/resolver.ts";
 import { shippedSkillsSourceDir } from "./shipped-paths.ts";
+import {
+  assertRequestedToolsAllowed,
+  createRepositoryWriteExecutionPolicy,
+} from "./security/execution-policy.ts";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SHIPPED_SKILLS_DIR = shippedSkillsSourceDir(PACKAGE_ROOT);
@@ -36,6 +40,8 @@ type MessageEndEventLike = {
 
 export class PiSdkRuntime implements AgentRuntime {
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    assertRequestedToolsAllowed(options.tools, options.executionPolicy);
+
     const authStorage = AuthStorage.create(authPath(options.configDir));
     if (options.config.provider) {
       const envKey = getProviderEnvValue(options.config.provider);
@@ -47,12 +53,7 @@ export class PiSdkRuntime implements AgentRuntime {
       options.config,
       options.modelRole ?? "primary",
     );
-    // When the caller asks for a spawn_explorer tool, build it here
-    // so it can use the same registry + the resolved explorer slot.
-    // If explorer resolution throws (slot set but model missing or
-    // unauthenticated), we degrade gracefully — the spawn_explorer tool
-    // gets `selectedModel` (the parent's model) and the literal-mapping
-    // path will produce a clear error if invoked.
+
     let explorerModelForSpawn: typeof selectedModel = selectedModel;
     if (options.spawnExplorerAgentDir) {
       const explorerResolved = selectModelForRole(
@@ -62,21 +63,19 @@ export class PiSdkRuntime implements AgentRuntime {
       );
       if (explorerResolved) explorerModelForSpawn = explorerResolved.model;
     }
+
     const customTools = [...(options.customTools ?? [])];
     if (options.spawnExplorerAgentDir && explorerModelForSpawn) {
       customTools.push(
         createSpawnExplorerTool({
           agentDir: options.spawnExplorerAgentDir,
-          // Thread the audit's resolved state dir into the tool so
-          // sub-agent logs land there and budget-recovery messages
-          // describe the right path. When unset, the tool defaults
-          // to the legacy `.pi/agentify/` location.
           stateDir: options.spawnExplorerStateDir,
           explorerModel: explorerModelForSpawn,
           modelRegistry,
         }),
       );
     }
+
     const resourceLoader = new DefaultResourceLoader({
       cwd: options.cwd,
       agentDir: options.configDir,
@@ -91,6 +90,7 @@ export class PiSdkRuntime implements AgentRuntime {
       extensionFactories: [
         (pi) => {
           pi.on("tool_call", makeDefenseHook({
+            executionPolicy: options.executionPolicy,
             agentDomain: options.agentDomain ?? null,
             repoJail: options.repoJail ?? false,
             protectedPaths: options.protectedPaths,
@@ -193,18 +193,23 @@ export class PiSdkRuntime implements AgentRuntime {
       "Never include PRDs, plans, issues, or specs beyond the declared `stop_at`; agentify will reject the payload and the repo will remain partial.",
       "Write local implementation code only after the user explicitly approves implementation. Commit only after successful validation and review; never push.",
     ].join("\n");
+    const tools = ["read", "grep", "find", "ls", "bash", "write", "edit"];
     return this.runSession({
       cwd: options.cwd,
       configDir: options.configDir,
       config: options.config,
       systemPrompt,
       userPrompt: "This is a greenfield repository. Start by asking what we are building, then run the full local-first agentify loop.",
-      tools: ["read", "grep", "find", "ls", "bash", "write", "edit"],
+      tools,
+      executionPolicy: createRepositoryWriteExecutionPolicy({
+        cwd: options.cwd,
+        tools,
+        allowDevelopmentCommands: true,
+      }),
       signal: options.signal,
       onEvent: options.onEvent,
       customTools: [createWriteGreenfieldArtifactsTool()],
       additionalSkillPaths: [SHIPPED_SKILLS_DIR],
-      repoJail: true,
     });
   }
 }
