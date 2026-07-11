@@ -1,0 +1,32 @@
+name: fix-policy-root-check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.ref == 'agent/security-execution-policy' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node .github/scripts/fix-policy-root-check.mjs
+      - run: npx tsx tests/security/execution-policy.test.ts
+      - name: Commit root containment fix
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/core/audit/defense-hook.ts
+          git diff --cached --check
+          git commit -m "fix(security): require lexical and resolved root containment"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
