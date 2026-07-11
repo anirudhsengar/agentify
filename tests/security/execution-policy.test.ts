@@ -116,6 +116,24 @@ async function testSymlinkCannotEscapeReadableRoot(): Promise<void> {
   }
 }
 
+async function testSymlinkRepositoryRootRemainsUsable(): Promise<void> {
+  const parent = tempDir("agentify-policy-root-link-");
+  const realRoot = path.join(parent, "real-repo");
+  const linkedRoot = path.join(parent, "linked-repo");
+  fs.mkdirSync(realRoot);
+  fs.writeFileSync(path.join(realRoot, "README.md"), "ok\n");
+  fs.symlinkSync(realRoot, linkedRoot, "dir");
+  try {
+    const hook = makeDefenseHook({
+      executionPolicy: createReadOnlyExecutionPolicy({ cwd: linkedRoot }),
+    });
+    const result = await hook(event("read", { path: path.join(linkedRoot, "README.md") }, linkedRoot));
+    assert.equal(result, undefined, "a repository root that is itself a symlink must remain usable");
+  } finally {
+    fs.rmSync(parent, { recursive: true, force: true });
+  }
+}
+
 async function testLegacyShellEscapeCasesBlocked(): Promise<void> {
   const cwd = tempDir("agentify-policy-legacy-");
   try {
@@ -138,6 +156,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "readOnlyFilesystemAndShellBoundary", fn: testReadOnlyFilesystemAndShellBoundary },
   { name: "writePolicyConfinesAndProtects", fn: testWritePolicyConfinesAndProtects },
   { name: "symlinkCannotEscapeReadableRoot", fn: testSymlinkCannotEscapeReadableRoot },
+  { name: "symlinkRepositoryRootRemainsUsable", fn: testSymlinkRepositoryRootRemainsUsable },
   { name: "legacyShellEscapeCasesBlocked", fn: testLegacyShellEscapeCasesBlocked },
 ];
 
