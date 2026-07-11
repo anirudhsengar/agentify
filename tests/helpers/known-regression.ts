@@ -1,17 +1,22 @@
 export type RegressionInvariant = () => void | Promise<void>;
 
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
+export class KnownRegressionObserved extends Error {
+  override readonly name = "KnownRegressionObserved";
+}
+
+/** Mark the precise point where a confirmed defect is still observable. */
+export function regressionStillPresent(message: string): never {
+  throw new KnownRegressionObserved(message);
 }
 
 /**
  * Records a confirmed defect without making the default suite red.
  *
- * The invariant must describe the desired fixed behavior. While the defect is
- * present it throws and is reported as an expected failure. Once the invariant
- * passes, this helper deliberately fails so the fixing pull request must promote
- * the case to a normal regression test instead of silently retaining an xfail.
+ * The invariant must describe the desired fixed behavior and call
+ * `regressionStillPresent` only when that specific defect is observed. Other
+ * exceptions are treated as real test failures. Once the invariant passes,
+ * this helper deliberately fails so the fixing pull request must promote the
+ * case to a normal regression test instead of silently retaining an xfail.
  */
 export async function expectKnownRegression(
   name: string,
@@ -20,7 +25,8 @@ export async function expectKnownRegression(
   try {
     await invariant();
   } catch (error) {
-    console.log(`  xfail ${name}: ${errorMessage(error)}`);
+    if (!(error instanceof KnownRegressionObserved)) throw error;
+    console.log(`  xfail ${name}: ${error.message}`);
     return;
   }
 
