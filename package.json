@@ -52,9 +52,10 @@
   },
   "scripts": {
     "test:unit": "node tests/scripts/run-test-files.mjs --exclude tests/generation-pipeline.test.ts",
-    "test": "npm run typecheck && npm run test:generation-pipeline && npm run test:unit && bash tests/run.sh",
+    "test:all": "npm run test:generation-pipeline && npm run test:unit && bash tests/run.sh",
+    "test": "npm run typecheck && npm run test:all",
     "test:generation-pipeline": "tsx tests/generation-pipeline.test.ts",
-    "test:regressions": "tsx tests/regressions/phase-0-known-regressions.test.ts",
+    "test:package": "node tests/package/installed-cli-smoke.mjs",
     "test:fixtures": "npm run test:unit",
     "test:generated-output": "tsx tests/artifacts-renderers.test.ts && tsx tests/generated-output-quality.test.ts && tsx tests/core/expert-outcome.test.ts && tsx tests/core/smoke-evidence.test.ts && tsx tests/core/release-qualification.test.ts",
     "test:scaffold-e2e": "bash scaffold/tests/run.sh",
@@ -62,9 +63,9 @@
     "score:expert-outcomes": "tsx src/core/scripts/score-expert-outcomes.ts",
     "verify:smoke-evidence": "tsx src/core/scripts/verify-smoke-evidence.ts",
     "qualify:release-evidence": "tsx src/core/scripts/qualify-release-evidence.ts",
-    "release:check": "npm run typecheck && npm test && npm pack --dry-run",
+    "release:check": "npm run typecheck && npm run test:all && npm run test:package",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run typecheck && npm test",
+    "prepublishOnly": "npm run typecheck && npm run test:all && npm run test:package",
     "inspect-log": "node src/core/audit/scripts/inspect-log.mjs"
   }
 }
