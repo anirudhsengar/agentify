@@ -54,6 +54,10 @@ import { Type } from "typebox";
 import { LEGACY_PI_STATE_RELATIVE_DIR } from "../state-dir.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
+import {
+    createReadOnlyExecutionPolicy,
+    READ_ONLY_TOOLS,
+} from "../security/execution-policy.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXPLORERS_DIR = path.join(HERE, "prompts", "explorers");
@@ -120,9 +124,9 @@ const MODE_STEP_DEFAULTS: Record<string, { reads: number; bash: number; steps: n
     conventions: { reads: 7, bash: 0, steps: 10 },
     operational: { reads: 10, bash: 0, steps: 15 },
     security: { reads: 10, bash: 0, steps: 15 },
-    pitfalls: { reads: 5, bash: 2, steps: 10 },
-    validation: { reads: 10, bash: 2, steps: 15 },
-    gap_filler: { reads: 8, bash: 2, steps: 12 },
+    pitfalls: { reads: 5, bash: 0, steps: 10 },
+    validation: { reads: 10, bash: 0, steps: 15 },
+    gap_filler: { reads: 8, bash: 0, steps: 12 },
     // Phase 2.10 — custom sub-agents: builder specifies per-call.
     custom: { reads: 8, bash: 0, steps: 12 },
 };
@@ -573,7 +577,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         // Validate target_path domain-lock (Phase 2.6).
         const resolvedTarget = resolveTargetPath(params.target_path, ctx.cwd);
         const insideCwd = isPathInside(resolvedTarget, ctx.cwd);
-        if (!insideCwd && !params.allow_external_paths) {
+        if (!insideCwd) {
             return {
                 content: [
                     {
@@ -653,7 +657,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         }
 
         // Resolve step caps (Phase 4.6).
-        const stepDefaults = MODE_STEP_DEFAULTS[mode] ?? { reads: 10, bash: 2, steps: 15 };
+        const stepDefaults = MODE_STEP_DEFAULTS[mode] ?? { reads: 10, bash: 0, steps: 15 };
         const maxReads = params.max_reads ?? stepDefaults.reads;
         const maxBash = params.max_bash_invocations ?? stepDefaults.bash;
         const maxSteps = params.max_total_steps ?? stepDefaults.steps;
@@ -740,6 +744,20 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         let session: ExplorerSubSession | undefined;
 
         try {
+            const toolsForMode: ReadonlyArray<string> = params.tools ?? READ_ONLY_TOOLS;
+            const readOnlySet = new Set<string>(READ_ONLY_TOOLS);
+            const unsupportedTools = toolsForMode.filter((tool) => !readOnlySet.has(tool));
+            if (unsupportedTools.length > 0) {
+                throw new Error(
+                    `explorer sessions are read-only; unsupported tools: ${unsupportedTools.join(", ")}`,
+                );
+            }
+            const executionPolicy = createReadOnlyExecutionPolicy({
+                cwd: ctx.cwd,
+                mode: "audit-readonly",
+                tools: toolsForMode,
+            });
+
             // Build a clean resource loader for the sub-agent:
             // - no project context files (AGENTS.md, CLAUDE.md)
             // - no project extensions (the defense hook, etc. would
@@ -765,27 +783,12 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 // sub-agent would run bash with no blacklist at all.
                 extensionFactories: [
                     (pi) => {
-                        pi.on("tool_call", makeDefenseHook({ repoJail: true }));
+                        pi.on("tool_call", makeDefenseHook({ executionPolicy }));
                     },
                 ],
             });
             await resourceLoader.reload();
 
-            // Tool selection. The pitfalls, validation, and gap_filler
-            // fixed modes need bash (for git log, test runs, etc.).
-            // For custom mode, the builder specifies the tool list
-            // explicitly via the `tools` parameter; if not provided,
-            // default to read-only.
-            const defaultToolsForMode: ReadonlyArray<string> = (() => {
-                if (mode === "pitfalls" || mode === "validation" || mode === "gap_filler") {
-                    return ["read", "grep", "find", "ls", "bash"];
-                }
-                if (mode === "custom") {
-                    return ["read", "grep", "find", "ls"];
-                }
-                return ["read", "grep", "find", "ls"];
-            })();
-            const toolsForMode: ReadonlyArray<string> = params.tools ?? defaultToolsForMode;
 
             // Mirror the parent's thinking level so sub-agents do their
             // structured analysis with the same reasoning budget as the
