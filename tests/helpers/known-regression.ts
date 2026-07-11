@@ -1,7 +1,10 @@
 export type RegressionInvariant = () => void | Promise<void>;
 
 export class KnownRegressionObserved extends Error {
-  override readonly name = "KnownRegressionObserved";
+  constructor(message: string) {
+    super(message);
+    this.name = "KnownRegressionObserved";
+  }
 }
 
 /** Mark the precise point where a confirmed defect is still observable. */
