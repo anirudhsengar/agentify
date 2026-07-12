@@ -23,7 +23,19 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Apply product boundary
-        run: node .github/scripts/apply-product-boundary.mjs
+        id: apply
+        continue-on-error: true
+        run: node .github/scripts/apply-product-boundary.mjs > product-boundary.log 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: product-boundary-diagnostics
+          path: product-boundary.log
+          if-no-files-found: error
+          retention-days: 1
+      - name: Stop on patch failure
+        if: steps.apply.outcome == 'failure'
+        run: exit 1
       - name: Validate focused boundary
         run: |
           npm run typecheck
