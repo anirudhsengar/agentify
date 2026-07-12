@@ -1,0 +1,45 @@
+name: Refactor 26 Apply
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
+      - reopened
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'refactor/26-explicit-state-contexts' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/26-explicit-state-contexts
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - name: Apply explicit state contexts
+        run: node scripts/apply-refactor-26.mjs
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Run focused state-context tests
+        run: |
+          npx tsx tests/core/state-directory-legacy-characterization.test.ts
+          npx tsx tests/core/state-directory-isolation.test.ts
+          npx tsx tests/core/state-context-production-ownership.test.ts
+          npm run test:generation-pipeline
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/core/audit/write-map-tool.ts src/core/artifacts/renderers.ts src/core/runs/brownfield-run.ts tests/core/state-directory-isolation.test.ts tests/core/state-context-production-ownership.test.ts
+          git diff --cached --check
+          git commit -m "refactor: isolate state directories per run"
+          git push origin HEAD:refactor/26-explicit-state-contexts
