@@ -54,10 +54,9 @@ jobs:
       - run: npm ci
       - run: npm audit --omit=dev --audit-level=high
 
-  package-smoke:
-    name: Modernization parity and packed package smoke
-    if: ${{ always() }}
-    needs: [typecheck, tests]
+  modernization-validation:
+    name: Modernization validation floor
+    needs: [typecheck, tests, dependency-audit]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,42 +65,7 @@ jobs:
           node-version: "22.19.0"
           cache: npm
       - run: npm ci
-      - run: npm run build
-      - name: CLI parity
-        run: npm run test:parity:cli
-      - name: Generated render inventory
-        if: ${{ always() }}
-        env:
-          AGENTIFY_PARITY_CASE: render
-        run: npm run test:parity:generated
-      - name: User-owned and alongside apply
-        if: ${{ always() }}
-        env:
-          AGENTIFY_PARITY_CASE: apply-user
-        run: npm run test:parity:generated
-      - name: Repeated deterministic apply
-        if: ${{ always() }}
-        env:
-          AGENTIFY_PARITY_CASE: apply-repeat
-        run: npm run test:parity:generated
-      - name: Managed canonical update
-        if: ${{ always() }}
-        env:
-          AGENTIFY_PARITY_CASE: apply-managed
-        run: npm run test:parity:generated
-      - name: Generated required-conflict atomicity
-        if: ${{ always() }}
-        env:
-          AGENTIFY_PARITY_CASE: conflict
-        run: npm run test:parity:generated
-      - name: Generated symlink protection
-        if: ${{ always() }}
-        env:
-          AGENTIFY_PARITY_CASE: symlink
-        run: npm run test:parity:generated
-      - name: State-directory parity
-        if: ${{ always() }}
-        run: npm run test:parity:state
-      - name: Packed package smoke
-        if: ${{ always() }}
-        run: npm run test:package
+      - run: npm run test:parity
+      - run: npm run test:maintenance
+      - run: npm run test:generated-output
+      - run: npm run test:security-redteam
