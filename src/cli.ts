@@ -1,8 +1,7 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
 import * as readline from "node:readline/promises";
 import { stdin as input, stdout as output, stderr as errOutput } from "node:process";
-import { PiSdkRuntime, packageRoot } from "./core/pi-sdk-runtime.ts";
+import { PiSdkRuntime } from "./core/pi-sdk-runtime.ts";
+import { readPackageVersion } from "./core/package-version.ts";
 import { runAgentifyApp } from "./core/agentify-app.ts";
 import { defaultConfigDir } from "./core/agentify-config.ts";
 import {
@@ -141,16 +140,6 @@ class ConsoleUi implements AgentifyUi {
       };
       stdin.on("data", onData);
     });
-  }
-}
-
-function readPackageVersion(): string {
-  try {
-    const raw = fs.readFileSync(path.join(packageRoot(), "package.json"), "utf-8");
-    const parsed = JSON.parse(raw) as { version?: string };
-    return parsed.version ?? "unknown";
-  } catch {
-    return "unknown";
   }
 }
 
