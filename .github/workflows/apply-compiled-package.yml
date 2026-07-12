@@ -31,7 +31,18 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Full test suite
-        run: npm run test:all
+        id: suite
+        continue-on-error: true
+        run: npm run test:all > compiled-package-test.log 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compiled-package-test-log
+          path: compiled-package-test.log
+          retention-days: 1
+      - name: Stop on suite failure
+        if: steps.suite.outcome == 'failure'
+        run: exit 1
       - name: Build compiled distribution
         run: npm run build
       - name: Installed package smoke
