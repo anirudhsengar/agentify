@@ -8,10 +8,7 @@ import { resolveApplyPolicy } from "../agentifyrc.ts";
 import { exportAgenticSurface } from "../artifact-exporters.ts";
 import { isFeatureAgentFilename } from "../artifacts/agent-file-conventions.ts";
 import { normalizeArtifactPath } from "../artifacts/generated-surface.ts";
-import {
-  renderValidatedBrownfieldArtifacts,
-  setRendererStateDir,
-} from "../artifacts/renderers.ts";
+import { renderValidatedBrownfieldArtifacts } from "../artifacts/renderers.ts";
 import { readPackageVersion } from "../package-version.ts";
 import { persistRunArtifacts } from "../revert.ts";
 import { packageRoot } from "../pi-sdk-runtime.ts";
@@ -42,10 +39,8 @@ import {
   setThinkingLevel,
 } from "../audit/state.ts";
 import {
+  createWriteMapTools,
   loadCanonicalMapAt,
-  setMapSessionStateDir,
-  writeMapDeltaTool,
-  writeMapTool,
 } from "../audit/write-map-tool.ts";
 import { createReadOnlyExecutionPolicy } from "../security/execution-policy.ts";
 import { beginStateTransaction } from "../state-transaction.ts";
@@ -341,10 +336,9 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
       `agentify: detected legacy state at ${LEGACY_PI_STATE_RELATIVE_DIR}/; future runs will use ${stateDir}`,
     );
   }
-  // Pin structured writers and deterministic renderers before moving state.
-  // These setters are process-local and do not mutate the repository.
-  setMapSessionStateDir(stateDir);
-  setRendererStateDir(stateDir);
+  // Capture the resolved state directory in run-owned tools and rendering context.
+  // Deprecated mutable adapters remain available only for direct legacy callers.
+  const mapTools = createWriteMapTools({ stateDir });
   const promptContent = loadBuilderPrompt(stateDir);
   const promptSha = crypto.createHash("sha256").update(promptContent).digest("hex");
   const log = new AgentifyLog({ cwd: options.cwd, configDir: defaultConfigDir() });
@@ -398,8 +392,8 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
         protectedPaths,
       }),
       customTools: [
-        writeMapTool,
-        writeMapDeltaTool,
+        mapTools.writeMapTool,
+        mapTools.writeMapDeltaTool,
         // spawn_explorer is created inside PiSdkRuntime.runSession so it
         // can use the same ModelRegistry + explorer slot the rest of
         // the session uses.
@@ -488,7 +482,7 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
 
       const map = loadCanonicalMapAt(options.cwd, stateDir);
       const renderResult = map
-        ? renderValidatedBrownfieldArtifacts(map)
+        ? renderValidatedBrownfieldArtifacts(map, { stateDir })
         : { artifacts: [], errors: ["validated codebase map disappeared before rendering"] };
 
       if (renderResult.errors.length > 0) {
