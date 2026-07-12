@@ -110,6 +110,22 @@ and manifest assembly; `apply-report.ts` owns deterministic report text; and
 `run-agentify.ts` coordinates these modules and retains compatibility re-exports
 for the previously imported generation helpers.
 
+## Run orchestration ownership
+
+`run-agentify.ts` remains the stable coordinator for configuration resolution,
+project classification, ambiguous-mode selection, and delegation. Shared typed
+inputs and the generated-surface snapshot contract live in
+`src/core/runs/run-context.ts`.
+
+Brownfield and greenfield remain explicit state machines rather than a generic
+workflow framework. `brownfield-run.ts` owns the audit transaction, logging,
+model session, rendering, staging, apply, rollback, and commit sequence.
+`greenfield-run.ts` owns formation execution, deterministic rendering,
+substance validation, staging, apply, and greenfield-state persistence.
+`project-state-reporter.ts` owns GitHub readiness output and project-state JSON
+writes shared by both modes. Their meaningful lifecycle differences remain
+visible in the two functions.
+
 ## Webhook boundary
 
 Webhook intake verifies body size and HMAC before consuming authenticated

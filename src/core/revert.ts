@@ -2,6 +2,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AgentifyUi } from "./types.ts";
+import type { AuditArtifactSnapshot } from "./generation/artifact-snapshot.ts";
 import {
   readManifestAt,
   writeManifestAt,
@@ -224,7 +225,7 @@ export function persistRunArtifacts(params: {
   cwd: string;
   stateDir: string;
   runId: string;
-  snapshot: Record<string, { content: Buffer; mode: number; ownership: "managed" | "unmanaged" }>;
+  snapshot: AuditArtifactSnapshot | Record<string, { content: Buffer; mode: number; ownership: "managed" | "unmanaged" }>;
   previousManifest: ManagedManifest | null;
 }): void {
   const runDir = path.join(params.cwd, params.stateDir, "runs", params.runId);
@@ -232,7 +233,10 @@ export function persistRunArtifacts(params: {
 
   const snapshotPath = path.join(runDir, "snapshot.json");
   const encoded: Record<string, { content: string; mode: number }> = {};
-  for (const [rel, entry] of Object.entries(params.snapshot)) {
+  const snapshotEntries = params.snapshot instanceof Map
+    ? params.snapshot.entries()
+    : Object.entries(params.snapshot);
+  for (const [rel, entry] of snapshotEntries) {
     encoded[rel] = { content: entry.content.toString("base64"), mode: entry.mode };
   }
   fs.writeFileSync(
