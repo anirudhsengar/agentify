@@ -33,7 +33,7 @@ jobs:
       - name: Install packed CLI and smoke test
         run: npm run test:package
       - name: Build release tarball
-        run: npm pack --ignore-scripts
+        run: npm run build && npm pack --ignore-scripts
       - name: Upload verified tarball
         uses: actions/upload-artifact@v4
         with:
