@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- A dependency compatibility matrix with official migration evidence, isolated lockfile impact, explicit #32/#33 gates, and six separately owned upgrade groups.
 - Evidence-based lifecycle decisions for webhook, AIW, orchestrator, communications, and Agent Expert, with communications relocation split into a dedicated follow-up issue.
 - An audited runtime-reachability inventory and maintenance guard for standalone scripts.
 - Modernization behavior and runtime-reachability contracts with a reusable CLI, generated-bundle, state-directory, and installed-package parity gate.
