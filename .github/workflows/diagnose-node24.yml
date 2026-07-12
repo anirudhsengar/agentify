@@ -1,0 +1,41 @@
+name: diagnose-node24
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    if: github.event.pull_request.head.ref == 'agent/phase-9-compiled-package'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Capture full suite
+        id: tests
+        continue-on-error: true
+        run: |
+          npm run test:all > node24-test.log 2>&1
+          status=$?
+          printf '%s\n' "$status" > node24-status.txt
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: node24-test-diagnostics
+          path: |
+            node24-test.log
+            node24-status.txt
+          if-no-files-found: error
+          retention-days: 1
+      - name: Fail on test failure
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
