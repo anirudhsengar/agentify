@@ -40,26 +40,7 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - name: Run test:all and capture diagnostics
-        id: test_all
-        shell: bash
-        run: |
-          set +e
-          npm run test:all > test-all.log 2>&1
-          status=$?
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
-      - uses: actions/upload-artifact@v4
-        if: steps.test_all.outputs.status != '0'
-        with:
-          name: issue28-test-all-${{ matrix.node }}
-          path: test-all.log
-      - name: Preserve test conclusion
-        if: steps.test_all.outputs.status != '0'
-        shell: bash
-        run: |
-          cat test-all.log
-          exit 1
+      - run: npm run test:all
 
   dependency-audit:
     name: Production dependency audit
