@@ -173,16 +173,8 @@ const GENERATED_SURFACE_PATHS = [
   "app_fix_reports",
 ] as const;
 
-// State-dir-aware paths. The audit resolves the active state dir
-// once at the top of `runBrownfieldAudit` / `runGreenfield` and
-// threads `stateDirRelative` through every writer. For cleanup
-// we still use the legacy `.pi/agentify/` path because that's
-// where the current code writes; the provider-scoped state dir
-// migration will be wired in Step 5 when snapshot persistence
-// lives under the resolved dir.
-
-
-
+// Provider-scoped state is resolved once at run entry and threaded through
+// structured writers, renderers, cleanup, persistence, and transactions.
 
 // Remove only the transient draft/history transport, preserving the
 // canonical codebase_map.json. Run at the END of a run so the map
