@@ -8,6 +8,7 @@ import * as path from "node:path";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const nodeCommand = process.execPath;
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -17,6 +18,10 @@ function run(command, args, options = {}) {
     timeout: options.timeout ?? 180_000,
   });
   if (result.error) throw result.error;
+  if (options.expectFailure === true) {
+    assert.notEqual(result.status, 0, `${command} ${args.join(" ")} unexpectedly succeeded`);
+    return result;
+  }
   assert.equal(
     result.status,
     0,
@@ -31,20 +36,29 @@ const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-package-home-")
 let tarballPath = null;
 
 try {
+  run(npmCommand, ["run", "build"]);
   const packed = run(npmCommand, ["pack", "--json", "--ignore-scripts"]);
   const packResult = JSON.parse(packed.stdout);
   assert.ok(Array.isArray(packResult) && packResult.length === 1, "npm pack must return one artifact");
-  const filename = packResult[0]?.filename;
+  const artifact = packResult[0];
+  const filename = artifact?.filename;
   assert.equal(typeof filename, "string", "npm pack result must include filename");
   tarballPath = path.join(repoRoot, filename);
   assert.ok(fs.existsSync(tarballPath), `packed tarball missing: ${tarballPath}`);
 
-  run(npmCommand, ["init", "--yes"], { cwd: installRoot });
-  run(
-    npmCommand,
-    ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarballPath],
-    { cwd: installRoot },
+  const packedPaths = new Set((artifact.files ?? []).map((entry) => entry.path));
+  for (const required of ["bin/agentify.js", "dist/cli.js", "dist/prompts/builder.md"] ) {
+    assert.ok(packedPaths.has(required), `tarball is missing required compiled artifact: ${required}`);
+  }
+  assert.ok(
+    [...packedPaths].some((entry) => entry.startsWith("dist/workflows/") && entry.endsWith(".json")),
+    "tarball must include packaged workflow assets",
   );
+  assert.ok(![...packedPaths].some((entry) => entry.startsWith("src/")), "tarball must not publish raw src/");
+  assert.ok(![...packedPaths].some((entry) => entry.includes("jiti")), "tarball must not publish jiti runtime files");
+
+  run(npmCommand, ["init", "--yes"], { cwd: installRoot });
+  run(npmCommand, ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarballPath], { cwd: installRoot });
 
   const bin = path.join(
     installRoot,
@@ -69,7 +83,14 @@ try {
   const version = run(bin, ["--version"], { cwd: installRoot, env, timeout: 30_000 });
   assert.equal(version.stdout.trim(), packageJson.version);
 
-  console.log(`installed package smoke test passed (${packageJson.version}).`);
+  const deepImport = run(
+    nodeCommand,
+    ["--input-type=module", "--eval", "import('agentify/src/core/audit/prompt.ts')"],
+    { cwd: installRoot, env, timeout: 30_000, expectFailure: true },
+  );
+  assert.match(`${deepImport.stderr}\n${deepImport.stdout}`, /ERR_PACKAGE_PATH_NOT_EXPORTED|Cannot find package/);
+
+  console.log(`installed compiled package smoke test passed (${packageJson.version}).`);
 } finally {
   if (tarballPath) fs.rmSync(tarballPath, { force: true });
   fs.rmSync(installRoot, { recursive: true, force: true });
