@@ -34,7 +34,7 @@ export async function runManualTrigger(options: ManualTriggerOptions): Promise<v
     cwd: options.cwd,
     runtime: options.runtime ?? new PiSdkRuntime(),
     noWorktree: options.noWorktree,
-    logger: (paths) => ({
+    logger: (_paths) => ({
       info: (m, f) => log(`[info] ${m}${f ? " " + JSON.stringify(f) : ""}`),
       warn: (m, f) => log(`[warn] ${m}${f ? " " + JSON.stringify(f) : ""}`),
       error: (m, f) => log(`[error] ${m}${f ? " " + JSON.stringify(f) : ""}`),

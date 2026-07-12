@@ -193,7 +193,7 @@ export class PeerRegistry {
    * older than this AND a live PID are kept (they may be busy);
    * entries with a dead PID are always pruned.
    */
-  list(staleMs = 60_000): { live: PeerEntry[]; pruned: PeerEntry[] } {
+  list(_staleMs = 60_000): { live: PeerEntry[]; pruned: PeerEntry[] } {
     const live: PeerEntry[] = [];
     const pruned: PeerEntry[] = [];
     if (!fs.existsSync(this.agentsDirPath)) return { live, pruned };

@@ -18,7 +18,7 @@
 // the AIW's review verdict is success, run `shouldAutoShip`; if
 // it returns true, call `autoShipAiw` to push + merge.
 
-import { aiwStatePaths, type AiwPaths } from "./aiw/paths.ts";
+import { aiwStatePaths } from "./aiw/paths.ts";
 import { readSnapshot, type KpisSnapshot } from "./aiw/kpis.ts";
 import { checkAfkGate, DEFAULT_AFK_THRESHOLD, type GateResult } from "./aiw/afk-gate.ts";
 import { runShipPhase, type ShipPhaseResult } from "./aiw/ship.ts";

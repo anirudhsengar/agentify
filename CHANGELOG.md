@@ -25,6 +25,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - npm publication now uses the exact tarball verified by CI.
 - The public npm package exposes only the `agentify` executable and blocks deep imports.
 - The CLI binary executes `dist/cli.js` directly; `jiti` and runtime TypeScript execution were removed.
+- TypeScript now rejects unused locals and parameters across production code and tests.
 
 ### Fixed
 

@@ -153,7 +153,7 @@ async function testListHandlesCorruptEntry(): Promise<void> {
     // Write a corrupt entry next to it.
     const agentsDirPath = path.join(dir, "projects", reg.project, "agents");
     fs.writeFileSync(path.join(agentsDirPath, "corrupt.json"), "{not valid json");
-    const { live, pruned } = reg.list();
+    const { live } = reg.list();
     assert.equal(live.length, 1);
     assert.equal(live[0]?.name, "good");
     // Corrupt entry was pruned silently.

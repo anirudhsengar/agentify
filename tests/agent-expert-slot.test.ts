@@ -5,7 +5,6 @@ import * as path from "node:path";
 import { AuthStorage } from "@earendil-works/pi-coding-agent";
 import { runSelfImprove, runQuestion } from "../src/core/agent-expert.ts";
 import { authPath } from "../src/core/agentify-config.ts";
-import { ExpertRegistry } from "../src/core/agent-expert.ts";
 
 function tempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -43,7 +42,7 @@ async function runSelfImproveResolvesScoringSlot(): Promise<void> {
     let capturedEnv: NodeJS.ProcessEnv | undefined;
     const result = await runSelfImprove(expert, cwd, {
       configDir,
-      syncer: async (args) => {
+      syncer: async (_args) => {
         // Capture env passed to spawn
         capturedEnv = process.env as NodeJS.ProcessEnv;
         return {

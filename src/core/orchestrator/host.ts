@@ -18,7 +18,6 @@
 // `shutdown()` aborts the orchestrator session, soft-interrupts
 // all live agents, and writes a final session record.
 
-import * as path from "node:path";
 import { randomBytes } from "node:crypto";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { AgentRuntime, AgentRuntimeSessionOptions, AgentifyConfig } from "../types.ts";
@@ -37,9 +36,7 @@ import {
   appendOrchestratorEvent,
   appendOrchestratorExecutionLog,
   ensureOrchestratorDirs,
-  listAgentDirs,
   orchestratorPaths,
-  readAgentState,
   readOrchestratorSession,
   writeOrchestratorSession,
   listOpenEscalations,

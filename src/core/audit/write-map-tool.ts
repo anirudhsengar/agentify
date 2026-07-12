@@ -27,14 +27,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Value } from "typebox/value";
-import { StringEnum } from "@earendil-works/pi-ai";
-import { Type } from "typebox";
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { LEGACY_PI_STATE_RELATIVE_DIR } from "../state-dir.ts";
 import {
     CodebaseMapSchema,
-    ConfidenceSchema,
-    CoverageStatusSchema,
     PartialCodebaseMapSchema,
     WriteMapDeltaParamsSchema,
     WriteMapParamsSchema,

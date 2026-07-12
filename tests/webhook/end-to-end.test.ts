@@ -12,7 +12,6 @@ import * as http from "node:http";
 import * as os from "node:os";
 import * as path from "node:path";
 import { rebuildQueue, queuePaths } from "../../src/core/webhook/queue.ts";
-import { startDaemon } from "../../src/core/webhook/index.ts";
 import { loadRegistry } from "../../src/core/webhook/trigger-registry.ts";
 import type { Trigger } from "../../src/core/webhook/state.ts";
 import type {
@@ -104,7 +103,6 @@ async function testEndToEnd(): Promise<void> {
     },
   };
 
-  let daemon: Awaited<ReturnType<typeof startDaemon>> | null = null;
   try {
     // Use the dispatch path with a custom runtime. We construct the
     // server + worker directly (rather than startDaemon) so we can pass

@@ -28,8 +28,6 @@
 // The worker's ComsPeer listens on a Unix socket; the parent's
 // orchestrator discovers the worker via the file registry.
 
-import * as fs from "node:fs";
-import * as path from "node:path";
 import { OrchestratorHost } from "./host.ts";
 import { ComsPeer } from "../coms/server.ts";
 import { AgentManager } from "./agent-manager.ts";
@@ -168,7 +166,7 @@ export class OrchestratorWorker {
   // Internal: handle an inbound command via peer mesh
   // -------------------------------------------------------------------------
 
-  private async handleCommand(body: string, msgId: string, sender: string): Promise<void> {
+  private async handleCommand(body: string, msgId: string, _sender: string): Promise<void> {
     let cmd: CommandEnvelope;
     try {
       cmd = JSON.parse(body) as CommandEnvelope;

@@ -17,7 +17,7 @@ import {
 import { ProjectClassifier } from "../src/core/project-classifier.ts";
 import { writeGreenfieldFormation } from "../src/core/greenfield-artifacts.ts";
 import { readGreenfieldStateAt } from "../src/core/greenfield-state.ts";
-import { readManifest, readManifestAt } from "../src/core/manifest.ts";
+import { readManifestAt } from "../src/core/manifest.ts";
 import { resolveCanonicalStateDir } from "../src/core/state-dir.ts";
 import { readProjectState } from "../src/core/project-state.ts";
 import {

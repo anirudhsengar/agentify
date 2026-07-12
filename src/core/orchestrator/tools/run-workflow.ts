@@ -4,7 +4,7 @@ import { Type } from "typebox";
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { WorkflowRunner } from "../workflow-runner.ts";
 import type { WorkflowRegistry } from "../workflow-registry.ts";
-import { validateInputs, validateWorkflowSpec } from "../workflow-spec.ts";
+import { validateInputs } from "../workflow-spec.ts";
 
 const RunWorkflowParams = Type.Object({
   workflow: Type.String({

@@ -5,7 +5,6 @@ import * as path from "node:path";
 import { Writable } from "node:stream";
 import {
   authPath,
-  configPath,
   defaultConfigDir,
   loadAgentifyConfig,
   saveAgentifyConfig,
@@ -77,9 +76,6 @@ class TestUi implements AgentifyUi {
   }
 }
 
-function tempDir(prefix: string): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
 
 /**
  * Run `fn` with HOME pointed at a fresh temp dir so `defaultConfigDir()`

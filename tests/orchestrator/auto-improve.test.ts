@@ -23,7 +23,6 @@ import {
   AutoImproveScheduler,
   type AutoImproveSchedulerOptions,
 } from "../../src/core/orchestrator/auto-improve.ts";
-import { ExpertRegistry } from "../../src/core/agent-expert.ts";
 import {
   AgentStatus,
   makeQueuedAgentState,

@@ -17,6 +17,8 @@ interface PackageJson {
 interface TypeScriptConfig {
   compilerOptions?: {
     strict?: boolean;
+    noUnusedLocals?: boolean;
+    noUnusedParameters?: boolean;
   };
 }
 
@@ -40,9 +42,11 @@ test("changelog keeps a structured Unreleased section", () => {
   }
 });
 
-test("strict TypeScript remains enabled", () => {
+test("strict TypeScript and unused-code checks remain enabled", () => {
   const config = JSON.parse(read("tsconfig.json")) as TypeScriptConfig;
   assert.equal(config.compilerOptions?.strict, true);
+  assert.equal(config.compilerOptions?.noUnusedLocals, true);
+  assert.equal(config.compilerOptions?.noUnusedParameters, true);
 });
 
 test("documentation index covers every maintained trust boundary", () => {

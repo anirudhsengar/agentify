@@ -24,7 +24,6 @@
 // `ShipPhaseResult` the runner records in the state.
 
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import type { AiwLogger } from "./logging.ts";
 import { logPhaseStart, logPhaseEnd } from "./logging.ts";
@@ -113,7 +112,6 @@ export async function runShipPhase(args: ShipPhaseArgs): Promise<ShipPhaseResult
     changeType,
     remote = "origin",
     baseBranch = "main",
-    signal,
     logger,
     force,
     exec = realExecLayer,

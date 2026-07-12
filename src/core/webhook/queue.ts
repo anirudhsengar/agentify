@@ -239,7 +239,7 @@ export function tryClaim(paths: QueuePaths, taskId: string, pid: number): ClaimH
   return handle;
 }
 
-export function releaseClaim(paths: QueuePaths, handle: ClaimHandle): void {
+export function releaseClaim(_paths: QueuePaths, handle: ClaimHandle): void {
   try {
     if (fs.existsSync(handle.path)) {
       const existing = readClaim(handle.path);

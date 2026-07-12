@@ -107,10 +107,10 @@ export function interpolate(
       }
       return typeof cur === "string" ? cur : JSON.stringify(cur);
     })
-    .replace(/\$\{agents\[([a-zA-Z0-9_-]+)\]\.([a-zA-Z0-9_.]+)\}/g, (m, id, path) =>
+    .replace(/\$\{agents\[([a-zA-Z0-9_-]+)\]\.([a-zA-Z0-9_.]+)\}/g, (_m, id, path) =>
       subst("agents", `${id}.${path}`),
     )
-    .replace(/\$\{aiws\[([a-zA-Z0-9_-]+)\]\.([a-zA-Z0-9_.]+)\}/g, (m, id, path) =>
+    .replace(/\$\{aiws\[([a-zA-Z0-9_-]+)\]\.([a-zA-Z0-9_.]+)\}/g, (_m, id, path) =>
       subst("aiws", `${id}.${path}`),
     );
 }

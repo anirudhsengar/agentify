@@ -29,7 +29,7 @@ const ComposeWorkflowParams = Type.Object({
 });
 
 export function composeWorkflowTool(
-  registry: WorkflowRegistry,
+  _registry: WorkflowRegistry,
   runner: WorkflowRunner,
   projectWorkflowsDir: string | null,
 ): ToolDefinition {

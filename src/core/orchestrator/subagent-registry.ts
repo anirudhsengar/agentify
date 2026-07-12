@@ -60,7 +60,7 @@ export interface AgentDefinition extends AgentFrontmatter {
  * "inherit the orchestrator's allowed tools, filtered to safe
  * defaults" (read-only by default in the base runtime).
  */
-export function parseAgentFrontmatter(raw: string, filePath: string): {
+export function parseAgentFrontmatter(raw: string, _filePath: string): {
   frontmatter: AgentFrontmatter;
   body: string;
 } | null {

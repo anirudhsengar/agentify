@@ -9,7 +9,7 @@ import {
   type ManagedManifest,
   type ManagedManifestFile,
 } from "../src/core/manifest.ts";
-import { newRunId, persistRunArtifacts, revertLastRun } from "../src/core/revert.ts";
+import { persistRunArtifacts, revertLastRun } from "../src/core/revert.ts";
 import { LEGACY_PI_STATE_RELATIVE_DIR } from "../src/core/state-dir.ts";
 import type { AgentifyUi } from "../src/core/types.ts";
 

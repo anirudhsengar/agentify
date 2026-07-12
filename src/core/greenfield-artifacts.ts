@@ -573,7 +573,7 @@ function validateFormationGate(formation: GreenfieldFormation): string[] {
 
 export function renderGreenfieldArtifacts(
   formation: GreenfieldFormation,
-  options?: { stateDir?: string },
+  _options?: { stateDir?: string },
 ): RenderGreenfieldArtifactsResult {
   const gateErrors = validateFormationGate(formation);
   if (gateErrors.length > 0) {

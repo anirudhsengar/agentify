@@ -24,12 +24,6 @@ import {
   writeAiwState,
 } from "../../src/core/aiw/paths.ts";
 import {
-  finishPhase,
-  startPhase,
-  skipPhase,
-  updatePhase,
-} from "../../src/core/aiw/state.ts";
-import {
   runShipPhase,
   type ExecLayer,
 } from "../../src/core/aiw/ship.ts";
