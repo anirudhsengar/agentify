@@ -201,6 +201,38 @@ tests. Legacy map fallback precedence is unchanged. Factory-bound draft
 transport reads and writes only under the configured provider state directory;
 the deprecated singleton retains the historical Pi draft path.
 
+## Module categories and dependency direction
+
+The post-refactor source tree is divided into three dependency categories:
+
+- **Supported product path:** `src/cli.ts`, CLI parsing and utility commands,
+  `agentify-app.ts`, brownfield and greenfield run modules, audit schemas and
+  validation, deterministic renderers, generation/apply, ownership, state,
+  configuration, and build/package support reachable from the installed command.
+- **Neutral shared infrastructure:** stable internal contracts and primitives that
+  may be consumed by supported and experimental code. The current shared set
+  includes core types, configuration, model resolution, Pi runtime integration,
+  execution-policy and audit-defense primitives. `orchestrator/workflow-spec.ts`
+  is an intentional neutral exception inside an otherwise experimental directory;
+  its declarative workflow JSON assets are copied to `dist/workflows/` for the
+  supported deterministic renderer.
+- **Experimental composition and runtime:** webhook, AIW, orchestrator runtime,
+  communications, Agent Expert, and maintainer-only expert outcome/qualification
+  modules. Their tests do not make them supported APIs.
+
+Allowed dependency direction is explicit: supported modules may depend only on
+other supported modules or neutral infrastructure; neutral modules must not
+depend on experimental composition roots; experimental modules may consume
+neutral or supported low-level contracts. The supported CLI graph must never
+reach an experimental runtime. Package exports, build asset copies, command
+registration, tarball contents, and public documentation are checked alongside
+the source import graph by `tests/maintenance/module-boundaries.test.ts`.
+
+Adding a new neutral exception requires an architecture review and a matching
+maintenance-test update. Moving a runtime out of the experimental category
+requires the graduation process in `docs/experimental-surfaces.md`; a source
+import, build copy, or documentation example cannot perform that graduation.
+
 ## Webhook boundary
 
 Webhook intake verifies body size and HMAC before consuming authenticated

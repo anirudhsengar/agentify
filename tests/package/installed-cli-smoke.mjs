@@ -54,6 +54,7 @@ try {
     "docs/README.md",
     "docs/architecture.md",
     "docs/build-and-package.md",
+    "docs/experimental-surfaces.md",
     "docs/refactors/modernization-baseline.md",
     "docs/refactors/runtime-reachability.md",
     "SECURITY.md",
@@ -69,6 +70,18 @@ try {
   );
   assert.ok(![...packedPaths].some((entry) => entry.startsWith("src/")), "tarball must not publish raw src/");
   assert.ok(![...packedPaths].some((entry) => entry.includes("jiti")), "tarball must not publish jiti runtime files");
+  for (const forbiddenPrefix of [
+    "dist/webhook/",
+    "dist/aiw/",
+    "dist/orchestrator/",
+    "dist/coms/",
+    "dist/agent-expert",
+  ]) {
+    assert.ok(
+      ![...packedPaths].some((entry) => entry.startsWith(forbiddenPrefix)),
+      `tarball must not expose experimental runtime assets under ${forbiddenPrefix}`,
+    );
+  }
 
   run(npmCommand, ["init", "--yes"], { cwd: installRoot });
   run(npmCommand, ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarballPath], { cwd: installRoot });
@@ -126,12 +139,24 @@ try {
   assert.match(utility.stdout, /OpenAI Codex uses OAuth/);
   assert.match(utility.stdout, /pi auth login openai-codex/);
 
-  const deepImport = run(
-    nodeCommand,
-    ["--input-type=module", "--eval", "import('agentify/src/core/audit/prompt.ts')"],
-    { cwd: installRoot, env, timeout: 30_000, expectFailure: true },
-  );
-  assert.match(`${deepImport.stderr}\n${deepImport.stdout}`, /ERR_PACKAGE_PATH_NOT_EXPORTED|Cannot find package/);
+  for (const internalPath of [
+    "audit/prompt.ts",
+    "webhook/index.ts",
+    "aiw/index.ts",
+    "orchestrator/host.ts",
+    "coms/server.ts",
+    "agent-expert.ts",
+  ]) {
+    const deepImport = run(
+      nodeCommand,
+      ["--input-type=module", "--eval", `import('agentify/src/core/${internalPath}')`],
+      { cwd: installRoot, env, timeout: 30_000, expectFailure: true },
+    );
+    assert.match(
+      `${deepImport.stderr}\n${deepImport.stdout}`,
+      /ERR_PACKAGE_PATH_NOT_EXPORTED|Cannot find package/,
+    );
+  }
 
   console.log(`installed compiled package smoke test passed (${packageJson.version}).`);
 } finally {

@@ -45,6 +45,14 @@ and implementation constraints.
 - Orchestrator, AIW, webhook, communications, and Agent Expert modules are
   internal experimental surfaces. Do not expose them through package exports or
   CLI commands without satisfying `docs/experimental-surfaces.md`.
+- Supported code may depend on supported or explicitly neutral modules only.
+  Neutral shared modules must not import experimental composition roots. The
+  sole current neutral exception inside an experimental directory is
+  `src/core/orchestrator/workflow-spec.ts`; declarative workflow JSON assets are
+  build inputs, not an orchestrator runtime API.
+- New shared exceptions, CLI routes, package exports, or build copies involving
+  experimental paths require architecture, package, and security review plus an
+  update to `tests/maintenance/module-boundaries.test.ts`.
 
 ## Security and generation invariants
 

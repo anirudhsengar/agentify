@@ -35,6 +35,11 @@ The following source areas are internal experimental implementation details:
 | Communications runtime | `src/core/coms/` | Internal agent communication registry and server |
 | Agent Expert runtime | `src/core/agent-expert.ts` and related modules | Expert evidence and outcomes |
 
+The pure `src/core/orchestrator/workflow-spec.ts` contract and declarative
+`src/core/orchestrator/workflows/` JSON assets are classified as neutral shared
+infrastructure. They support deterministic artifact rendering but do not expose
+the orchestrator runtime, host, worker, tools, or state machine.
+
 These modules:
 
 - are not CLI subcommands;
@@ -56,7 +61,10 @@ or deleting them during the security remediation would combine product-boundary
 work with broad file-path churn and make review less reliable.
 
 The restrictive npm `exports` map, documentation, CLI parser, and
-product-boundary tests enforce this boundary. Standard package imports into raw
+product-boundary tests enforce this boundary. The maintenance boundary scanner
+also resolves static imports, type-only imports, re-exports, and dynamic imports
+from the supported CLI entry point; it rejects experimental reachability and
+reverse dependencies from explicitly neutral modules. Standard package imports into raw
 source paths are rejected. The compiled-artifact packaging phase will additionally
 remove raw TypeScript source from the published tarball.
 
@@ -77,6 +85,11 @@ release decision that includes all of the following:
 Source comments or README examples cannot graduate a subsystem implicitly.
 
 ## Contribution rules
+
+Composition roots are enumerated in the machine-enforced experimental
+classification. The webhook and AIW index roots also retain their existing
+`@experimental` source markers. These designations are documentation, not an
+authority grant.
 
 Changes to internal experimental modules must:
 
