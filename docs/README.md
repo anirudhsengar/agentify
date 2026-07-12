@@ -12,6 +12,7 @@ public product contract.
 | Public CLI surface, modes, and config-utility subcommands | `README.md` (repo root) |
 | Supported versus internal experimental surfaces | `docs/experimental-surfaces.md` |
 | Experimental runtime lifecycle decisions and evidence | `docs/architecture/experimental-runtime-decisions.md` |
+| Dependency compatibility matrix and upgrade gates | `docs/architecture/dependency-compatibility-matrix.md` |
 | Generation architecture and trust boundary | `docs/architecture.md` |
 | Modernization parity baseline and behavior contract | `docs/refactors/modernization-baseline.md` |
 | Runtime reachability roots and deletion evidence | `docs/refactors/runtime-reachability.md` |
@@ -41,6 +42,8 @@ not make an internal module a supported package API.
   `src/core/package-root.ts`, `tests/package/installed-cli-smoke.mjs`.
 - **Experimental runtime lifecycle decisions** —
   `docs/architecture/experimental-runtime-decisions.md`.
+- **Dependency upgrade planning** —
+  `docs/architecture/dependency-compatibility-matrix.md`.
 - **Internal experimental orchestrator** — `src/core/orchestrator/`.
 - **Internal experimental AIW runtime** — `src/core/aiw/`.
 - **Internal experimental webhook runtime** — `src/core/webhook/`.
