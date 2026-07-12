@@ -76,7 +76,12 @@ class ObservedBrownfieldRuntime implements AgentRuntime {
 }
 
 class ObservedGreenfieldRuntime implements AgentRuntime {
-  observed: { cwd: string; configDir: string; signal?: AbortSignal } | null = null;
+  observed: {
+    cwd: string;
+    configDir: string;
+    config: { provider?: string; model?: string; thinkingLevel?: string };
+    signal?: AbortSignal;
+  } | null = null;
 
   async runSession(): Promise<AgentRuntimeResult> {
     throw new Error("brownfield runtime must not run");
@@ -85,6 +90,7 @@ class ObservedGreenfieldRuntime implements AgentRuntime {
   async runGreenfield(options: {
     cwd: string;
     configDir: string;
+    config: { provider?: string; model?: string; thinkingLevel?: string };
     signal?: AbortSignal;
   }): Promise<AgentRuntimeResult> {
     this.observed = options;
@@ -201,6 +207,7 @@ async function testGreenfieldLifecycleContract(): Promise<void> {
       assert.deepEqual(runtime.observed, {
         cwd,
         configDir,
+        config: { provider: "openai", model: "fixture", thinkingLevel: "medium" },
         signal: controller.signal,
       });
       assertOrdered(ui.events, [
