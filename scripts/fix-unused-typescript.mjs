@@ -27,7 +27,7 @@ const formatHost = {
   getNewLine: () => "\n",
 };
 
-function readConfig() {
+function readConfig(overrides = {}) {
   const loaded = ts.readConfigFile(CONFIG_PATH, ts.sys.readFile);
   if (loaded.error) {
     throw new Error(ts.flattenDiagnosticMessageText(loaded.error.messageText, "\n"));
@@ -36,7 +36,7 @@ function readConfig() {
     loaded.config,
     ts.sys,
     ROOT,
-    { noUnusedLocals: true, noUnusedParameters: true },
+    overrides,
     CONFIG_PATH,
   );
   if (parsed.errors.length > 0) {
@@ -45,7 +45,7 @@ function readConfig() {
   return parsed;
 }
 
-const parsed = readConfig();
+const parsed = readConfig({ noUnusedLocals: true, noUnusedParameters: true });
 const versions = new Map(parsed.fileNames.map((fileName) => [path.resolve(fileName), 0]));
 const host = {
   getCompilationSettings: () => parsed.options,
@@ -125,10 +125,12 @@ for (let cycle = 0; cycle < 6; cycle += 1) {
   }
 }
 
-const remaining = unusedDiagnostics();
-if (remaining.length > 0) {
-  throw new Error(`Unused-code cleanup did not converge:\n${ts.formatDiagnosticsWithColorAndContext(remaining, formatHost)}`);
-}
+const workflowsPath = path.join(ROOT, "tests/aiw/workflows.test.ts");
+let workflows = fs.readFileSync(workflowsPath, "utf-8");
+workflows = workflows
+  .replace("  let reviewPathSeen: string | null = null;\n", "")
+  .replace("      reviewPathSeen = reviewPath;\n", "");
+fs.writeFileSync(workflowsPath, workflows);
 
 const rawConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
 rawConfig.compilerOptions.noUnusedLocals = true;
@@ -137,6 +139,10 @@ fs.writeFileSync(CONFIG_PATH, `${JSON.stringify(rawConfig, null, 2)}\n`);
 
 const maintenancePath = path.join(ROOT, "tests/maintenance/documentation-invariants.test.ts");
 let maintenance = fs.readFileSync(maintenancePath, "utf-8");
+const beforeInterface = `interface TypeScriptConfig {\n  compilerOptions?: {\n    strict?: boolean;\n  };\n}`;
+const afterInterface = `interface TypeScriptConfig {\n  compilerOptions?: {\n    strict?: boolean;\n    noUnusedLocals?: boolean;\n    noUnusedParameters?: boolean;\n  };\n}`;
+if (!maintenance.includes(beforeInterface)) throw new Error("TypeScriptConfig interface marker did not match");
+maintenance = maintenance.replace(beforeInterface, afterInterface);
 const beforeTest = `test("strict TypeScript remains enabled", () => {\n  const config = JSON.parse(read("tsconfig.json")) as TypeScriptConfig;\n  assert.equal(config.compilerOptions?.strict, true);\n});`;
 const afterTest = `test("strict TypeScript and unused-code checks remain enabled", () => {\n  const config = JSON.parse(read("tsconfig.json")) as TypeScriptConfig;\n  assert.equal(config.compilerOptions?.strict, true);\n  assert.equal(config.compilerOptions?.noUnusedLocals, true);\n  assert.equal(config.compilerOptions?.noUnusedParameters, true);\n});`;
 if (!maintenance.includes(beforeTest)) throw new Error("maintenance invariant marker did not match");
@@ -148,5 +154,12 @@ const changedMarker = "- The CLI binary executes `dist/cli.js` directly; `jiti` 
 const changedEntry = `${changedMarker}\n- TypeScript now rejects unused locals and parameters across production code and tests.`;
 if (!changelog.includes(changedMarker)) throw new Error("changelog insertion marker did not match");
 fs.writeFileSync(changelogPath, changelog.replace(changedMarker, changedEntry));
+
+const finalConfig = readConfig();
+const finalProgram = ts.createProgram(finalConfig.fileNames, finalConfig.options);
+const finalDiagnostics = ts.getPreEmitDiagnostics(finalProgram);
+if (finalDiagnostics.length > 0) {
+  throw new Error(`Generated cleanup does not typecheck:\n${ts.formatDiagnosticsWithColorAndContext(finalDiagnostics, formatHost)}`);
+}
 
 process.stdout.write(`unused-code cleanup complete: ${appliedEdits} compiler edits applied\n`);
