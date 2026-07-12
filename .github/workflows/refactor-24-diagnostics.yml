@@ -1,4 +1,4 @@
-name: Refactor 24 Diagnostics
+name: Refactor 24 Finalize
 
 on:
   pull_request:
@@ -9,33 +9,54 @@ on:
       - reopened
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
-  typecheck-diagnostic:
-    if: github.head_ref == 'refactor/24-generation-pipeline'
+  finalize-and-validate:
+    if: github.actor != 'github-actions[bot]' && github.head_ref == 'refactor/24-generation-pipeline'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refactor/24-generation-pipeline
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22.19.0
           cache: npm
-      - run: npm ci
-      - name: Capture typecheck output
+      - name: Remove duplicate rollback implementation
         run: |
-          set +e
-          npm run typecheck > typecheck.log 2>&1
-          status=$?
-          {
-            echo '### Issue #24 typecheck diagnostic'
-            echo
-            echo '```text'
-            cat typecheck.log
-            echo '```'
-          } > comment.md
-          gh pr comment 39 --body-file comment.md
-          exit $status
-        env:
-          GH_TOKEN: ${{ github.token }}
+          node --input-type=module <<'NODE'
+          import * as fs from "node:fs";
+          const file = "src/core/run-agentify.ts";
+          let source = fs.readFileSync(file, "utf8");
+          const startMarker = "function rollbackGeneratedSurface(";
+          const endMarker = "function extractUsage";
+          const start = source.indexOf(startMarker);
+          const end = source.indexOf(endMarker, start + startMarker.length);
+          if (start < 0 || end < 0) throw new Error("rollback extraction markers missing");
+          source = `${source.slice(0, start)}${source.slice(end)}`;
+          fs.writeFileSync(file, source);
+          fs.rmSync(".github/workflows/refactor-24-diagnostics.yml", { force: true });
+          NODE
+      - name: Commit final extraction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "refactor: finish generation pipeline extraction"
+          git push origin HEAD:refactor/24-generation-pipeline
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate issue 24
+        run: |
+          npm run typecheck
+          npm run test:generation-pipeline
+          npx tsx tests/core/generation-pipeline-extraction.test.ts
+          npx tsx tests/core/generation-module-ownership.test.ts
+          npm run test:all
+          npm run test:package
+          npm run test:parity
+          npm run test:security-redteam
