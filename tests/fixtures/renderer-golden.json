@@ -1,0 +1,667 @@
+{
+  "full": {
+    "artifacts": [
+      {
+        "relativePath": "AGENTS.md",
+        "content": "<!-- agentify:managed -->\n# Agent Guide\n\n## Build\n\nRun `npm test` before review.\n\n## Pitfalls\n\nDo not edit generated files by hand.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": true,
+        "source": "agent-guide-renderer"
+      },
+      {
+        "relativePath": "specs/README.md",
+        "content": "<!-- agentify:managed -->\n# Specs\n\nSpec guidance.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": true,
+        "source": "always-on-docs-renderer"
+      },
+      {
+        "relativePath": "ai_docs/README.md",
+        "content": "<!-- agentify:managed -->\n# AI Docs\n\nAI context.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": true,
+        "source": "always-on-docs-renderer"
+      },
+      {
+        "relativePath": "app_review/README.md",
+        "content": "<!-- agentify:managed -->\n# App Review\n\nStores TestResult and ReviewResult artifacts produced by agentify review and test skills.\nScreenshots and visual evidence should live under branch-specific subdirectories.\n\n## Required Entries\n\n- TestResult: validation commands, exit status, relevant stdout/stderr tail, and artifacts.\n- ReviewResult: verdict, blockers, non-blocking risks, files reviewed, and follow-up recommendation.\n- Evidence: screenshots or logs for UI, workflow, or operational changes.\n- Traceability: branch, commit, issue/PR link, changed paths, and reviewer/agent identity.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": "app_docs/README.md",
+        "content": "<!-- agentify:managed -->\n# App Docs\n\nStores feature documentation written by the agentify document skill after reviewed changes.\nKeep durable application knowledge here and link it from `.pi/conditional_docs.md` when it should be loaded conditionally.\n\n## Entry Template\n\n- What changed: durable behavior, domain rule, workflow, or operational fact.\n- Why it matters: the failure mode this knowledge prevents.\n- When to load: trigger phrases or touched paths for `.pi/conditional_docs.md`.\n- Validation: command or review evidence that proved the documented behavior.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": "app_fix_reports/README.md",
+        "content": "<!-- agentify:managed -->\n# App Fix Reports\n\nStores patch reports written by the agentify fix skill.\nEach report should explain the blocker fixed, files touched, validation run, and any residual risk.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": "app_docs/agentic_kpis.md",
+        "content": "<!-- agentify:managed -->\n# Agentic KPIs\n\n| Date | Branch | Change | Review Result | Fixes | Validation | Notes |\n|------|--------|--------|---------------|-------|------------|-------|\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": ".pi/conditional_docs.md",
+        "content": "<!-- agentify:managed -->\n# Conditional Docs\n\nLoad these docs when the task matches the listed condition.\n\n## Bootstrap Entries\n\n- `ai_docs/README.md` when repository-wide AI context is useful.\n\n## Format\n\n- `path`: repository-relative document path.\n- `when`: 2-4 short trigger phrases describing when to load it.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": ".pi/workflows/payments-plan-build-review-fix.json",
+        "content": "{\n  \"name\": \"payments_plan_build_review_fix\",\n  \"description\": \"Scout with the Payments specialist, then run the canonical plan-build-review-fix AIW loop.\",\n  \"tags\": [\n    \"agentify\",\n    \"specialist\",\n    \"payments\"\n  ],\n  \"inputs\": {\n    \"prompt\": {\n      \"type\": \"string\",\n      \"description\": \"The Payments work request to plan, build, review, and fix.\"\n    },\n    \"change_type\": {\n      \"type\": \"string\",\n      \"default\": \"feature\",\n      \"values\": [\n        \"chore\",\n        \"bug\",\n        \"feature\"\n      ]\n    }\n  },\n  \"parallelism\": \"sequential\",\n  \"max_runtime_minutes\": 120,\n  \"steps\": [\n    {\n      \"id\": \"scout\",\n      \"description\": \"Gather Payments context before implementation.\",\n      \"handler\": \"subagent\",\n      \"subagent_template\": \"payments\",\n      \"domain\": [\n        \"payments\"\n      ],\n      \"user_prompt\": \"Scout the payments area for this request: ${inputs.prompt}\\nReturn concrete files, invariants, pitfalls, and validation commands.\\nRepository validation surface: tsc --noEmit; npm test.\"\n    },\n    {\n      \"id\": \"implement\",\n      \"description\": \"Run the canonical AIW after specialist reconnaissance.\",\n      \"handler\": \"aiw\",\n      \"workflow_type\": \"plan_build_review_fix\",\n      \"prompt\": \"${inputs.prompt}\\n\\nSpecialist scout context:\\n${agents[scout].result_text}\",\n      \"change_type\": \"${inputs.change_type}\",\n      \"depends_on\": [\n        \"scout\"\n      ]\n    }\n  ]\n}\n",
+        "marker": "sha256",
+        "kind": "workflow",
+        "required": false,
+        "source": "specialist-workflow-renderer"
+      },
+      {
+        "relativePath": ".pi/agents/payments.md",
+        "content": "---\nname: payments\ndescription: Payments specialist.\nglobs:\n  - src/payments\n---\n<!-- agentify:managed -->\n\nUse payment invariants.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feature-agent-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/db-migration.md",
+        "content": "---\ndescription: Use for database migrations.\ntype: prompt-template\n---\n<!-- agentify:managed -->\n\nCheck migrations before app code.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "prompt-template-renderer"
+      },
+      {
+        "relativePath": ".pi/extensions/migration-check.ts",
+        "content": "# agentify:managed\nexport const name = 'migration-check';\n",
+        "marker": "# agentify:managed",
+        "kind": "extension",
+        "required": false,
+        "source": "extension-candidate-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/feature.md",
+        "content": "---\ndescription: Write an agentify build spec for feature work in this repository.\nargument-hint: \"<one-sentence feature task>\"\n---\n<!-- agentify:managed -->\n\n# Feature\n\n## Goal\n\nWrite a build spec for $ARGUMENTS to `specs/feature-<slug>.md`.\nThe implementer will run `/implement <spec-path>` after the spec is reviewed.\n\n## Workflow\n\n1. Read `specs/README.md` for this repository's spec conventions.\n2. Read `.pi/conditional_docs.md` and load matching docs when present.\n3. Read `AGENTS.md` for current build, test, and ownership guidance.\n4. Inspect the relevant files before naming implementation steps.\n5. Write the spec with `## Relevant Files`, `## Steps`, and `## Validation Commands`.\n\n## Validation Surface\n\n- Test: npm test\n- Lint: not configured\n- Typecheck: tsc --noEmit\n- E2E: not configured\n\n## Validation By Change Type\n\n- chore: `npm test`\n- bug: `npm test`\n- feature: `npm test`\n\n## Instructions\n\n- MUST end with runnable validation commands.\n- MUST cite concrete repository paths in Relevant Files.\n- MUST NOT write product code from this prompt.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "lifecycle-prompt-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/bug.md",
+        "content": "---\ndescription: Write an agentify build spec for bug work in this repository.\nargument-hint: \"<one-sentence bug task>\"\n---\n<!-- agentify:managed -->\n\n# Bug\n\n## Goal\n\nWrite a build spec for $ARGUMENTS to `specs/bug-<slug>.md`.\nThe implementer will run `/implement <spec-path>` after the spec is reviewed.\n\n## Workflow\n\n1. Read `specs/README.md` for this repository's spec conventions.\n2. Read `.pi/conditional_docs.md` and load matching docs when present.\n3. Read `AGENTS.md` for current build, test, and ownership guidance.\n4. Inspect the relevant files before naming implementation steps.\n5. Write the spec with `## Relevant Files`, `## Steps`, and `## Validation Commands`.\n\n## Validation Surface\n\n- Test: npm test\n- Lint: not configured\n- Typecheck: tsc --noEmit\n- E2E: not configured\n\n## Validation By Change Type\n\n- chore: `npm test`\n- bug: `npm test`\n- feature: `npm test`\n\n## Instructions\n\n- MUST end with runnable validation commands.\n- MUST cite concrete repository paths in Relevant Files.\n- MUST NOT write product code from this prompt.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "lifecycle-prompt-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/api-endpoint.md",
+        "content": "---\ndescription: api-endpoint-specific feature template. Use for recurring feature work in the api-endpoint area.\nargument-hint: \"<one-sentence feature task in api-endpoint>\"\n---\n<!-- agentify:managed -->\n\n# Api Endpoint (feature)\n\n## Goal\n\nWrite a build spec for $ARGUMENTS using `.pi/prompts/feature.md` as the base format, enriched with api-endpoint context.\n\n## Area Context\n\n- Source feature agent: `.pi/agents/payments.md`\n- Rationale: API endpoint work is recurring and benefits from local routing conventions.\n- Trigger phrases:\n  - new API route\n  - endpoint change\n\n## Workflow\n\n1. Read `.pi/prompts/feature.md` for the base spec flow.\n2. Read `.pi/agents/payments.md` for local conventions, key files, and pitfalls.\n3. Read `AGENTS.md` and `.pi/conditional_docs.md`.\n4. Inspect relevant files before naming implementation steps.\n5. Write the spec to `specs/<type>-<slug>.md` with area-specific risks and validation.\n\n## Validation Surface\n\n- Test: npm test\n- Lint: not configured\n- Typecheck: tsc --noEmit\n- E2E: not configured\n\n## Instructions\n\n- MUST include area-specific files, conventions, and pitfalls when they affect the task.\n- MUST NOT invent files or commands.\n- MUST NOT write product code from this prompt.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "per-area-prompt-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/expertise.yaml",
+        "content": "# agentify:managed\ndomain: \"billing\"\nlast_updated: \"2026-07-05T00:00:00.000Z\"\nprimary_paths:\n  - \"src/billing\"\noverview:\n  description: \"Billing carries recurring payment invariants.\"\n  key_files:\n    - path: \"src/billing/index.ts\"\n      line_range: [1, 120]\n      purpose: \"Billing entry point.\"\nkey_types:\n  - name: \"Invoice\"\n    path: \"src/billing/types.ts:1\"\n    purpose: \"Stable billing contract.\"\npatterns:\n  - name: \"idempotency\"\n    description: \"Billing writes must be idempotent.\"\n    example_ref: \"src/billing/index.ts:42\"\npitfalls:\n  - risk: \"Double charging on retry.\"\n    consequence: \"Customers can be charged twice.\"\n    reference: \"src/billing/index.ts:55\"\nconventions:\n  - \"Amounts are stored in cents.\"\ntesting:\n  command: \"npm test -- tests/billing.test.ts\"\n  test_paths:\n    - \"tests/billing.test.ts\"\nentry_points:\n  - \"src/billing/index.ts\"\nstability: \"high\"\nrecurrence: \"high\"\n",
+        "marker": "# agentify:managed",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/question.md",
+        "content": "---\ndescription: billing expert - answer questions about billing.\nargument-hint: \"<question>\"\n---\n<!-- agentify:managed -->\n\n# billing Expert Question\n\nRead .pi/prompts/experts/billing/expertise.yaml first.\nAnswer the user's question from that expertise and cite repository file:line references when available.\nIf the expertise is stale or insufficient, say what must be re-read before acting.\n\nQuestion:\n\n$ARGUMENTS\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/self-improve.md",
+        "content": "---\ndescription: billing expert - refresh expertise.yaml after code changes.\n---\n<!-- agentify:managed -->\n\n# billing Expert Self-Improve\n\nUpdate .pi/prompts/experts/billing/expertise.yaml from the current repository state.\nPreserve stable knowledge, remove stale claims, add newly discovered patterns and pitfalls, and update last_updated to today's ISO timestamp.\nOnly edit this expert directory unless explicitly asked to change product code.\n\nPrimary paths:\n\n- src/billing\n\nValidation:\n\n- npm test -- tests/billing.test.ts\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/plan.md",
+        "content": "---\ndescription: billing expert - plan work using domain expertise.\nargument-hint: \"<task>\"\n---\n<!-- agentify:managed -->\n\n# billing Expert Plan\n\nRead .pi/prompts/experts/billing/expertise.yaml and plan the requested task.\nDo not edit files in this mode.\n\n## Relevant expert knowledge\n\n- Rationale: Billing carries recurring payment invariants.\n- Primary paths:\n  - `src/billing`\n- Entry points:\n  - `src/billing/index.ts`\n- Key files:\n  - `src/billing/index.ts` lines 1-120: Billing entry point.\n- Key types:\n  - Invoice (`src/billing/types.ts:1`): Stable billing contract.\n- Patterns to preserve:\n  - idempotency: Billing writes must be idempotent. (src/billing/index.ts:42)\n- Pitfalls to actively check:\n  - Double charging on retry.: Customers can be charged twice. (src/billing/index.ts:55)\n- Conventions:\n  - Amounts are stored in cents.\n- Validation:\n  - npm test -- tests/billing.test.ts\n  - `tests/billing.test.ts`\n\n## Required planning output\n\n- Task interpretation: restate the requested change in this domain's terms.\n- Relevant files and types: cite the exact expertise entries or repository file:line refs that should shape the work.\n- Invariants and pitfalls: name the patterns to preserve and the risks the implementation must avoid.\n- Validation plan: pick the smallest sufficient command and test paths from the expert knowledge; explain any broader suite needed.\n- Staleness check: if the expertise is stale, thin, or contradicted by the repository, name the files that must be re-read before implementation.\n\n\n$ARGUMENTS\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/plan_build_improve.md",
+        "content": "---\ndescription: billing expert - plan, build, validate, then refresh expertise.\nargument-hint: \"<task>\"\n---\n<!-- agentify:managed -->\n\n# billing Expert Plan Build Improve\n\nUse .pi/prompts/experts/billing/expertise.yaml before planning or editing.\nBefore editing, produce the same risk-aware plan required by plan.md and apply these expert constraints to the implementation.\nImplement the task at the smallest safe scope, run the relevant validation, then update this expert's expertise.yaml if the work changed durable domain knowledge.\n\n## Relevant expert knowledge\n\n- Rationale: Billing carries recurring payment invariants.\n- Primary paths:\n  - `src/billing`\n- Entry points:\n  - `src/billing/index.ts`\n- Key files:\n  - `src/billing/index.ts` lines 1-120: Billing entry point.\n- Key types:\n  - Invoice (`src/billing/types.ts:1`): Stable billing contract.\n- Patterns to preserve:\n  - idempotency: Billing writes must be idempotent. (src/billing/index.ts:42)\n- Pitfalls to actively check:\n  - Double charging on retry.: Customers can be charged twice. (src/billing/index.ts:55)\n- Conventions:\n  - Amounts are stored in cents.\n- Validation:\n  - npm test -- tests/billing.test.ts\n  - `tests/billing.test.ts`\n\n## Required build loop\n\n- Plan against the key files, key types, patterns, pitfalls, conventions, and validation above.\n- Edit only the smallest necessary domain surface.\n- Run `npm test -- tests/billing.test.ts`.\n- If durable knowledge changes, update `.pi/prompts/experts/billing/expertise.yaml` before finishing.\n\n$ARGUMENTS\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/skills/prime-db/SKILL.md",
+        "content": "---\nname: prime-db\ndescription: Prime the local database before integration tests.\n---\n<!-- agentify:managed -->\n\n# prime-db\n\n## When To Use\n\nPrime the local database before integration tests.\n\n## Preconditions\n\n- Read `AGENTS.md` for current validation and ownership rules before running this skill.\n- Confirm the script or command exists in the repository and understand any required arguments.\n- Do not run against production data or credentials unless the task explicitly authorizes that environment.\n\n## Workflow\n\n```bash\nscripts/prime-db.sh <args>\n```\n\n## Validation\n\n- Inspect the exit code before deciding success.\n- Read the final stdout/stderr lines and treat warnings as possible residual risk.\n- If the skill changed repository files or state, run the relevant validation commands from `AGENTS.md`.\n\n## Output\n\nReport success or failure clearly. If wrapping a script, inspect its exit code and last output lines before deciding the result.\n\n## Report\n\nInclude the command run, arguments used, files or state touched, validation performed, and any residual risk.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "skill",
+        "required": false,
+        "source": "skill-candidate-renderer"
+      },
+      {
+        "relativePath": ".pi/extensions/run-tests.ts",
+        "content": "# agentify:managed\nimport { execFile } from \"node:child_process\";\nimport { promisify } from \"node:util\";\nimport { Type } from \"typebox\";\nimport type { ExtensionAPI } from \"@earendil-works/pi-coding-agent\";\n\nconst execFileAsync = promisify(execFile);\nconst TOOL_NAME = \"run-tests\";\nconst COMMAND = \"npm\";\nconst ARGS = [\"test\"];\nconst PARAMS = Type.Object({});\n\nexport default function register(pi: ExtensionAPI): void {\n  pi.registerTool({\n    name: TOOL_NAME,\n    label: \"run-tests\",\n    description: \"Run the repository test suite.\",\n    parameters: PARAMS,\n    async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {\n      try {\n        const { stdout, stderr } = await execFileAsync(COMMAND, ARGS, {\n          cwd: process.cwd(),\n          maxBuffer: 2 * 1024 * 1024,\n        });\n        const text = [\n          `[SUCCESS] ${TOOL_NAME}`,\n          stdout ? `stdout:\\n${stdout}` : \"\",\n          stderr ? `stderr:\\n${stderr}` : \"\",\n        ].filter(Boolean).join(\"\\n\");\n        return { content: [{ type: \"text\", text }] };\n      } catch (err) {\n        const e = err as { stdout?: string; stderr?: string; message?: string };\n        const text = [\n          `[ERROR] ${TOOL_NAME}`,\n          e.stdout ? `stdout:\\n${e.stdout}` : \"\",\n          e.stderr ? `stderr:\\n${e.stderr}` : \"\",\n          e.message ?? String(err),\n        ].filter(Boolean).join(\"\\n\");\n        return { content: [{ type: \"text\", text }], isError: true };\n      }\n    },\n  });\n}\n",
+        "marker": "# agentify:managed",
+        "kind": "extension",
+        "required": false,
+        "source": "custom-tool-candidate-renderer"
+      }
+    ],
+    "errors": []
+  },
+  "sparse": {
+    "artifacts": [
+      {
+        "relativePath": "AGENTS.md",
+        "content": "<!-- agentify:managed -->\n# AGENTS.md\n\nWorking notes for coding agents. This file is generated from the validated agentify codebase map.\n\n## Project\n\n- Type: test-fixture\n- Domain: A synthetic repository used by agentify tests.\n- Languages: typescript\n\n## First Files\n\n- `src/index.ts` - Entry point.\n\n## Validation\n\n- `tsc --noEmit`\n- `npm test`\n\n## Validation By Change Type\n\n- chore: `npm test`\n- bug: `npm test`\n- feature: `npm test`\n\n## Conventions\n\n- Files: kebab-case.ts\n- Functions: camelCase\n- Errors: raise\n\n## Pitfalls\n\n- `src/index.ts:1`: Fixture pitfall for coverage substance check. (None; test fixture only.)\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": true,
+        "source": "fallback-agent-guide-renderer"
+      },
+      {
+        "relativePath": "specs/README.md",
+        "content": "<!-- agentify:managed -->\n# Specs\n\nAgentify-generated spec guidance from the validated codebase map.\n\n## Validation By Change Type\n\n- chore: `npm test`\n- bug: `npm test`\n- feature: `npm test`\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": true,
+        "source": "fallback-specs-renderer"
+      },
+      {
+        "relativePath": "ai_docs/README.md",
+        "content": "<!-- agentify:managed -->\n# AI Docs\n\nAgentify-generated always-on context from the validated codebase map.\n\n## Module Boundaries\n\n- `src/index.ts` -> `src/lib.ts` (import)\n\n## Security Notes\n\n- no destructive git\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": true,
+        "source": "fallback-ai-docs-renderer"
+      },
+      {
+        "relativePath": "app_review/README.md",
+        "content": "<!-- agentify:managed -->\n# App Review\n\nStores TestResult and ReviewResult artifacts produced by agentify review and test skills.\nScreenshots and visual evidence should live under branch-specific subdirectories.\n\n## Required Entries\n\n- TestResult: validation commands, exit status, relevant stdout/stderr tail, and artifacts.\n- ReviewResult: verdict, blockers, non-blocking risks, files reviewed, and follow-up recommendation.\n- Evidence: screenshots or logs for UI, workflow, or operational changes.\n- Traceability: branch, commit, issue/PR link, changed paths, and reviewer/agent identity.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": "app_docs/README.md",
+        "content": "<!-- agentify:managed -->\n# App Docs\n\nStores feature documentation written by the agentify document skill after reviewed changes.\nKeep durable application knowledge here and link it from `.pi/conditional_docs.md` when it should be loaded conditionally.\n\n## Entry Template\n\n- What changed: durable behavior, domain rule, workflow, or operational fact.\n- Why it matters: the failure mode this knowledge prevents.\n- When to load: trigger phrases or touched paths for `.pi/conditional_docs.md`.\n- Validation: command or review evidence that proved the documented behavior.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": "app_fix_reports/README.md",
+        "content": "<!-- agentify:managed -->\n# App Fix Reports\n\nStores patch reports written by the agentify fix skill.\nEach report should explain the blocker fixed, files touched, validation run, and any residual risk.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": "app_docs/agentic_kpis.md",
+        "content": "<!-- agentify:managed -->\n# Agentic KPIs\n\n| Date | Branch | Change | Review Result | Fixes | Validation | Notes |\n|------|--------|--------|---------------|-------|------------|-------|\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": ".pi/conditional_docs.md",
+        "content": "<!-- agentify:managed -->\n# Conditional Docs\n\nLoad these docs when the task matches the listed condition.\n\n## Bootstrap Entries\n\n- `ai_docs/README.md` when repository-wide AI context is useful.\n\n## Format\n\n- `path`: repository-relative document path.\n- `when`: 2-4 short trigger phrases describing when to load it.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": ".pi/workflows/payments-plan-build-review-fix.json",
+        "content": "{\n  \"name\": \"payments_plan_build_review_fix\",\n  \"description\": \"Scout with the Payments specialist, then run the canonical plan-build-review-fix AIW loop.\",\n  \"tags\": [\n    \"agentify\",\n    \"specialist\",\n    \"payments\"\n  ],\n  \"inputs\": {\n    \"prompt\": {\n      \"type\": \"string\",\n      \"description\": \"The Payments work request to plan, build, review, and fix.\"\n    },\n    \"change_type\": {\n      \"type\": \"string\",\n      \"default\": \"feature\",\n      \"values\": [\n        \"chore\",\n        \"bug\",\n        \"feature\"\n      ]\n    }\n  },\n  \"parallelism\": \"sequential\",\n  \"max_runtime_minutes\": 120,\n  \"steps\": [\n    {\n      \"id\": \"scout\",\n      \"description\": \"Gather Payments context before implementation.\",\n      \"handler\": \"subagent\",\n      \"subagent_template\": \"payments\",\n      \"domain\": [\n        \"payments\"\n      ],\n      \"user_prompt\": \"Scout the payments area for this request: ${inputs.prompt}\\nReturn concrete files, invariants, pitfalls, and validation commands.\\nRepository validation surface: tsc --noEmit; npm test.\"\n    },\n    {\n      \"id\": \"implement\",\n      \"description\": \"Run the canonical AIW after specialist reconnaissance.\",\n      \"handler\": \"aiw\",\n      \"workflow_type\": \"plan_build_review_fix\",\n      \"prompt\": \"${inputs.prompt}\\n\\nSpecialist scout context:\\n${agents[scout].result_text}\",\n      \"change_type\": \"${inputs.change_type}\",\n      \"depends_on\": [\n        \"scout\"\n      ]\n    }\n  ]\n}\n",
+        "marker": "sha256",
+        "kind": "workflow",
+        "required": false,
+        "source": "specialist-workflow-renderer"
+      },
+      {
+        "relativePath": ".pi/agents/payments.md",
+        "content": "---\nname: payments\ndescription: Agentify specialist for payments.\nglobs:\n  - payments\n---\n<!-- agentify:managed -->\n\nUse the validated codebase map before changing this area.\n\n## Scope\n\n- Specialist: payments\n- Domain hypothesis: A synthetic repository used by agentify tests.\n- Primary glob: payments\n\n## First Files\n\n- `src/index.ts` - Entry point.\n\n## Validation\n\n- `tsc --noEmit`\n- `npm test`\n\n## Pitfalls\n\n- `src/index.ts:1`: Fixture pitfall for coverage substance check. Consequence: None; test fixture only.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "fallback-feature-agent-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/feature.md",
+        "content": "---\ndescription: Write an agentify build spec for feature work in this repository.\nargument-hint: \"<one-sentence feature task>\"\n---\n<!-- agentify:managed -->\n\n# Feature\n\n## Goal\n\nWrite a build spec for $ARGUMENTS to `specs/feature-<slug>.md`.\nThe implementer will run `/implement <spec-path>` after the spec is reviewed.\n\n## Workflow\n\n1. Read `specs/README.md` for this repository's spec conventions.\n2. Read `.pi/conditional_docs.md` and load matching docs when present.\n3. Read `AGENTS.md` for current build, test, and ownership guidance.\n4. Inspect the relevant files before naming implementation steps.\n5. Write the spec with `## Relevant Files`, `## Steps`, and `## Validation Commands`.\n\n## Validation Surface\n\n- Test: npm test\n- Lint: not configured\n- Typecheck: tsc --noEmit\n- E2E: not configured\n\n## Validation By Change Type\n\n- chore: `npm test`\n- bug: `npm test`\n- feature: `npm test`\n\n## Instructions\n\n- MUST end with runnable validation commands.\n- MUST cite concrete repository paths in Relevant Files.\n- MUST NOT write product code from this prompt.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "lifecycle-prompt-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/bug.md",
+        "content": "---\ndescription: Write an agentify build spec for bug work in this repository.\nargument-hint: \"<one-sentence bug task>\"\n---\n<!-- agentify:managed -->\n\n# Bug\n\n## Goal\n\nWrite a build spec for $ARGUMENTS to `specs/bug-<slug>.md`.\nThe implementer will run `/implement <spec-path>` after the spec is reviewed.\n\n## Workflow\n\n1. Read `specs/README.md` for this repository's spec conventions.\n2. Read `.pi/conditional_docs.md` and load matching docs when present.\n3. Read `AGENTS.md` for current build, test, and ownership guidance.\n4. Inspect the relevant files before naming implementation steps.\n5. Write the spec with `## Relevant Files`, `## Steps`, and `## Validation Commands`.\n\n## Validation Surface\n\n- Test: npm test\n- Lint: not configured\n- Typecheck: tsc --noEmit\n- E2E: not configured\n\n## Validation By Change Type\n\n- chore: `npm test`\n- bug: `npm test`\n- feature: `npm test`\n\n## Instructions\n\n- MUST end with runnable validation commands.\n- MUST cite concrete repository paths in Relevant Files.\n- MUST NOT write product code from this prompt.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "lifecycle-prompt-renderer"
+      }
+    ],
+    "errors": []
+  },
+  "invalidSchema": {
+    "artifacts": [],
+    "errors": [
+      ": must have required properties meta, skeleton, module_graph, type_contract_surface, conventions, pitfalls, validation_surface, operational_surface, security_surface, coverage, open_questions, exploration_log"
+    ],
+    "validationErrors": [
+      {
+        "path": "",
+        "message": "must have required properties meta, skeleton, module_graph, type_contract_surface, conventions, pitfalls, validation_surface, operational_surface, security_surface, coverage, open_questions, exploration_log"
+      }
+    ]
+  },
+  "coverageIncomplete": {
+    "artifacts": [],
+    "errors": [
+      "/coverage/D1_topography: coverage status is not 'covered'"
+    ],
+    "validationErrors": [
+      {
+        "path": "/coverage/D1_topography",
+        "message": "coverage status is not 'covered'"
+      }
+    ]
+  },
+  "unsafe": {
+    "artifacts": [
+      {
+        "relativePath": "AGENTS.md",
+        "content": "<!-- agentify:managed -->\n# Agent Guide\n\n## Build\n\nRun `npm test` before review.\n\n## Pitfalls\n\nDo not edit generated files by hand.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": true,
+        "source": "agent-guide-renderer"
+      },
+      {
+        "relativePath": "specs/README.md",
+        "content": "<!-- agentify:managed -->\n# Specs\n\nSpec guidance.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": true,
+        "source": "always-on-docs-renderer"
+      },
+      {
+        "relativePath": "ai_docs/README.md",
+        "content": "<!-- agentify:managed -->\n# AI Docs\n\nAI context.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": true,
+        "source": "always-on-docs-renderer"
+      },
+      {
+        "relativePath": "app_review/README.md",
+        "content": "<!-- agentify:managed -->\n# App Review\n\nStores TestResult and ReviewResult artifacts produced by agentify review and test skills.\nScreenshots and visual evidence should live under branch-specific subdirectories.\n\n## Required Entries\n\n- TestResult: validation commands, exit status, relevant stdout/stderr tail, and artifacts.\n- ReviewResult: verdict, blockers, non-blocking risks, files reviewed, and follow-up recommendation.\n- Evidence: screenshots or logs for UI, workflow, or operational changes.\n- Traceability: branch, commit, issue/PR link, changed paths, and reviewer/agent identity.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": "app_docs/README.md",
+        "content": "<!-- agentify:managed -->\n# App Docs\n\nStores feature documentation written by the agentify document skill after reviewed changes.\nKeep durable application knowledge here and link it from `.pi/conditional_docs.md` when it should be loaded conditionally.\n\n## Entry Template\n\n- What changed: durable behavior, domain rule, workflow, or operational fact.\n- Why it matters: the failure mode this knowledge prevents.\n- When to load: trigger phrases or touched paths for `.pi/conditional_docs.md`.\n- Validation: command or review evidence that proved the documented behavior.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": "app_fix_reports/README.md",
+        "content": "<!-- agentify:managed -->\n# App Fix Reports\n\nStores patch reports written by the agentify fix skill.\nEach report should explain the blocker fixed, files touched, validation run, and any residual risk.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": "app_docs/agentic_kpis.md",
+        "content": "<!-- agentify:managed -->\n# Agentic KPIs\n\n| Date | Branch | Change | Review Result | Fixes | Validation | Notes |\n|------|--------|--------|---------------|-------|------------|-------|\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": ".pi/conditional_docs.md",
+        "content": "<!-- agentify:managed -->\n# Conditional Docs\n\nLoad these docs when the task matches the listed condition.\n\n## Bootstrap Entries\n\n- `ai_docs/README.md` when repository-wide AI context is useful.\n\n## Format\n\n- `path`: repository-relative document path.\n- `when`: 2-4 short trigger phrases describing when to load it.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": ".pi/workflows/payments-plan-build-review-fix.json",
+        "content": "{\n  \"name\": \"payments_plan_build_review_fix\",\n  \"description\": \"Scout with the Payments specialist, then run the canonical plan-build-review-fix AIW loop.\",\n  \"tags\": [\n    \"agentify\",\n    \"specialist\",\n    \"payments\"\n  ],\n  \"inputs\": {\n    \"prompt\": {\n      \"type\": \"string\",\n      \"description\": \"The Payments work request to plan, build, review, and fix.\"\n    },\n    \"change_type\": {\n      \"type\": \"string\",\n      \"default\": \"feature\",\n      \"values\": [\n        \"chore\",\n        \"bug\",\n        \"feature\"\n      ]\n    }\n  },\n  \"parallelism\": \"sequential\",\n  \"max_runtime_minutes\": 120,\n  \"steps\": [\n    {\n      \"id\": \"scout\",\n      \"description\": \"Gather Payments context before implementation.\",\n      \"handler\": \"subagent\",\n      \"subagent_template\": \"payments\",\n      \"domain\": [\n        \"payments\"\n      ],\n      \"user_prompt\": \"Scout the payments area for this request: ${inputs.prompt}\\nReturn concrete files, invariants, pitfalls, and validation commands.\\nRepository validation surface: tsc --noEmit; npm test.\"\n    },\n    {\n      \"id\": \"implement\",\n      \"description\": \"Run the canonical AIW after specialist reconnaissance.\",\n      \"handler\": \"aiw\",\n      \"workflow_type\": \"plan_build_review_fix\",\n      \"prompt\": \"${inputs.prompt}\\n\\nSpecialist scout context:\\n${agents[scout].result_text}\",\n      \"change_type\": \"${inputs.change_type}\",\n      \"depends_on\": [\n        \"scout\"\n      ]\n    }\n  ]\n}\n",
+        "marker": "sha256",
+        "kind": "workflow",
+        "required": false,
+        "source": "specialist-workflow-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/db-migration.md",
+        "content": "---\ndescription: Use for database migrations.\ntype: prompt-template\n---\n<!-- agentify:managed -->\n\nCheck migrations before app code.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "prompt-template-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/feature.md",
+        "content": "---\ndescription: Write an agentify build spec for feature work in this repository.\nargument-hint: \"<one-sentence feature task>\"\n---\n<!-- agentify:managed -->\n\n# Feature\n\n## Goal\n\nWrite a build spec for $ARGUMENTS to `specs/feature-<slug>.md`.\nThe implementer will run `/implement <spec-path>` after the spec is reviewed.\n\n## Workflow\n\n1. Read `specs/README.md` for this repository's spec conventions.\n2. Read `.pi/conditional_docs.md` and load matching docs when present.\n3. Read `AGENTS.md` for current build, test, and ownership guidance.\n4. Inspect the relevant files before naming implementation steps.\n5. Write the spec with `## Relevant Files`, `## Steps`, and `## Validation Commands`.\n\n## Validation Surface\n\n- Test: npm test\n- Lint: not configured\n- Typecheck: tsc --noEmit\n- E2E: not configured\n\n## Validation By Change Type\n\n- chore: `npm test`\n- bug: `npm test`\n- feature: `npm test`\n\n## Instructions\n\n- MUST end with runnable validation commands.\n- MUST cite concrete repository paths in Relevant Files.\n- MUST NOT write product code from this prompt.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "lifecycle-prompt-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/bug.md",
+        "content": "---\ndescription: Write an agentify build spec for bug work in this repository.\nargument-hint: \"<one-sentence bug task>\"\n---\n<!-- agentify:managed -->\n\n# Bug\n\n## Goal\n\nWrite a build spec for $ARGUMENTS to `specs/bug-<slug>.md`.\nThe implementer will run `/implement <spec-path>` after the spec is reviewed.\n\n## Workflow\n\n1. Read `specs/README.md` for this repository's spec conventions.\n2. Read `.pi/conditional_docs.md` and load matching docs when present.\n3. Read `AGENTS.md` for current build, test, and ownership guidance.\n4. Inspect the relevant files before naming implementation steps.\n5. Write the spec with `## Relevant Files`, `## Steps`, and `## Validation Commands`.\n\n## Validation Surface\n\n- Test: npm test\n- Lint: not configured\n- Typecheck: tsc --noEmit\n- E2E: not configured\n\n## Validation By Change Type\n\n- chore: `npm test`\n- bug: `npm test`\n- feature: `npm test`\n\n## Instructions\n\n- MUST end with runnable validation commands.\n- MUST cite concrete repository paths in Relevant Files.\n- MUST NOT write product code from this prompt.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "lifecycle-prompt-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/api-endpoint.md",
+        "content": "---\ndescription: api-endpoint-specific feature template. Use for recurring feature work in the api-endpoint area.\nargument-hint: \"<one-sentence feature task in api-endpoint>\"\n---\n<!-- agentify:managed -->\n\n# Api Endpoint (feature)\n\n## Goal\n\nWrite a build spec for $ARGUMENTS using `.pi/prompts/feature.md` as the base format, enriched with api-endpoint context.\n\n## Area Context\n\n- Source feature agent: `.pi/agents/payments.md`\n- Rationale: API endpoint work is recurring and benefits from local routing conventions.\n- Trigger phrases:\n  - new API route\n  - endpoint change\n\n## Workflow\n\n1. Read `.pi/prompts/feature.md` for the base spec flow.\n2. Read `.pi/agents/payments.md` for local conventions, key files, and pitfalls.\n3. Read `AGENTS.md` and `.pi/conditional_docs.md`.\n4. Inspect relevant files before naming implementation steps.\n5. Write the spec to `specs/<type>-<slug>.md` with area-specific risks and validation.\n\n## Validation Surface\n\n- Test: npm test\n- Lint: not configured\n- Typecheck: tsc --noEmit\n- E2E: not configured\n\n## Instructions\n\n- MUST include area-specific files, conventions, and pitfalls when they affect the task.\n- MUST NOT invent files or commands.\n- MUST NOT write product code from this prompt.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "per-area-prompt-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/expertise.yaml",
+        "content": "# agentify:managed\ndomain: \"billing\"\nlast_updated: \"2026-07-05T00:00:00.000Z\"\nprimary_paths:\n  - \"src/billing\"\noverview:\n  description: \"Billing carries recurring payment invariants.\"\n  key_files:\n    - path: \"src/billing/index.ts\"\n      line_range: [1, 120]\n      purpose: \"Billing entry point.\"\nkey_types:\n  - name: \"Invoice\"\n    path: \"src/billing/types.ts:1\"\n    purpose: \"Stable billing contract.\"\npatterns:\n  - name: \"idempotency\"\n    description: \"Billing writes must be idempotent.\"\n    example_ref: \"src/billing/index.ts:42\"\npitfalls:\n  - risk: \"Double charging on retry.\"\n    consequence: \"Customers can be charged twice.\"\n    reference: \"src/billing/index.ts:55\"\nconventions:\n  - \"Amounts are stored in cents.\"\ntesting:\n  command: \"npm test -- tests/billing.test.ts\"\n  test_paths:\n    - \"tests/billing.test.ts\"\nentry_points:\n  - \"src/billing/index.ts\"\nstability: \"high\"\nrecurrence: \"high\"\n",
+        "marker": "# agentify:managed",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/question.md",
+        "content": "---\ndescription: billing expert - answer questions about billing.\nargument-hint: \"<question>\"\n---\n<!-- agentify:managed -->\n\n# billing Expert Question\n\nRead .pi/prompts/experts/billing/expertise.yaml first.\nAnswer the user's question from that expertise and cite repository file:line references when available.\nIf the expertise is stale or insufficient, say what must be re-read before acting.\n\nQuestion:\n\n$ARGUMENTS\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/self-improve.md",
+        "content": "---\ndescription: billing expert - refresh expertise.yaml after code changes.\n---\n<!-- agentify:managed -->\n\n# billing Expert Self-Improve\n\nUpdate .pi/prompts/experts/billing/expertise.yaml from the current repository state.\nPreserve stable knowledge, remove stale claims, add newly discovered patterns and pitfalls, and update last_updated to today's ISO timestamp.\nOnly edit this expert directory unless explicitly asked to change product code.\n\nPrimary paths:\n\n- src/billing\n\nValidation:\n\n- npm test -- tests/billing.test.ts\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/plan.md",
+        "content": "---\ndescription: billing expert - plan work using domain expertise.\nargument-hint: \"<task>\"\n---\n<!-- agentify:managed -->\n\n# billing Expert Plan\n\nRead .pi/prompts/experts/billing/expertise.yaml and plan the requested task.\nDo not edit files in this mode.\n\n## Relevant expert knowledge\n\n- Rationale: Billing carries recurring payment invariants.\n- Primary paths:\n  - `src/billing`\n- Entry points:\n  - `src/billing/index.ts`\n- Key files:\n  - `src/billing/index.ts` lines 1-120: Billing entry point.\n- Key types:\n  - Invoice (`src/billing/types.ts:1`): Stable billing contract.\n- Patterns to preserve:\n  - idempotency: Billing writes must be idempotent. (src/billing/index.ts:42)\n- Pitfalls to actively check:\n  - Double charging on retry.: Customers can be charged twice. (src/billing/index.ts:55)\n- Conventions:\n  - Amounts are stored in cents.\n- Validation:\n  - npm test -- tests/billing.test.ts\n  - `tests/billing.test.ts`\n\n## Required planning output\n\n- Task interpretation: restate the requested change in this domain's terms.\n- Relevant files and types: cite the exact expertise entries or repository file:line refs that should shape the work.\n- Invariants and pitfalls: name the patterns to preserve and the risks the implementation must avoid.\n- Validation plan: pick the smallest sufficient command and test paths from the expert knowledge; explain any broader suite needed.\n- Staleness check: if the expertise is stale, thin, or contradicted by the repository, name the files that must be re-read before implementation.\n\n\n$ARGUMENTS\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/plan_build_improve.md",
+        "content": "---\ndescription: billing expert - plan, build, validate, then refresh expertise.\nargument-hint: \"<task>\"\n---\n<!-- agentify:managed -->\n\n# billing Expert Plan Build Improve\n\nUse .pi/prompts/experts/billing/expertise.yaml before planning or editing.\nBefore editing, produce the same risk-aware plan required by plan.md and apply these expert constraints to the implementation.\nImplement the task at the smallest safe scope, run the relevant validation, then update this expert's expertise.yaml if the work changed durable domain knowledge.\n\n## Relevant expert knowledge\n\n- Rationale: Billing carries recurring payment invariants.\n- Primary paths:\n  - `src/billing`\n- Entry points:\n  - `src/billing/index.ts`\n- Key files:\n  - `src/billing/index.ts` lines 1-120: Billing entry point.\n- Key types:\n  - Invoice (`src/billing/types.ts:1`): Stable billing contract.\n- Patterns to preserve:\n  - idempotency: Billing writes must be idempotent. (src/billing/index.ts:42)\n- Pitfalls to actively check:\n  - Double charging on retry.: Customers can be charged twice. (src/billing/index.ts:55)\n- Conventions:\n  - Amounts are stored in cents.\n- Validation:\n  - npm test -- tests/billing.test.ts\n  - `tests/billing.test.ts`\n\n## Required build loop\n\n- Plan against the key files, key types, patterns, pitfalls, conventions, and validation above.\n- Edit only the smallest necessary domain surface.\n- Run `npm test -- tests/billing.test.ts`.\n- If durable knowledge changes, update `.pi/prompts/experts/billing/expertise.yaml` before finishing.\n\n$ARGUMENTS\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/skills/prime-db/SKILL.md",
+        "content": "---\nname: prime-db\ndescription: Prime the local database before integration tests.\n---\n<!-- agentify:managed -->\n\n# prime-db\n\n## When To Use\n\nPrime the local database before integration tests.\n\n## Preconditions\n\n- Read `AGENTS.md` for current validation and ownership rules before running this skill.\n- Confirm the script or command exists in the repository and understand any required arguments.\n- Do not run against production data or credentials unless the task explicitly authorizes that environment.\n\n## Workflow\n\n```bash\nscripts/prime-db.sh <args>\n```\n\n## Validation\n\n- Inspect the exit code before deciding success.\n- Read the final stdout/stderr lines and treat warnings as possible residual risk.\n- If the skill changed repository files or state, run the relevant validation commands from `AGENTS.md`.\n\n## Output\n\nReport success or failure clearly. If wrapping a script, inspect its exit code and last output lines before deciding the result.\n\n## Report\n\nInclude the command run, arguments used, files or state touched, validation performed, and any residual risk.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "skill",
+        "required": false,
+        "source": "skill-candidate-renderer"
+      },
+      {
+        "relativePath": ".pi/extensions/run-tests.ts",
+        "content": "# agentify:managed\nimport { execFile } from \"node:child_process\";\nimport { promisify } from \"node:util\";\nimport { Type } from \"typebox\";\nimport type { ExtensionAPI } from \"@earendil-works/pi-coding-agent\";\n\nconst execFileAsync = promisify(execFile);\nconst TOOL_NAME = \"run-tests\";\nconst COMMAND = \"npm\";\nconst ARGS = [\"test\"];\nconst PARAMS = Type.Object({});\n\nexport default function register(pi: ExtensionAPI): void {\n  pi.registerTool({\n    name: TOOL_NAME,\n    label: \"run-tests\",\n    description: \"Run the repository test suite.\",\n    parameters: PARAMS,\n    async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {\n      try {\n        const { stdout, stderr } = await execFileAsync(COMMAND, ARGS, {\n          cwd: process.cwd(),\n          maxBuffer: 2 * 1024 * 1024,\n        });\n        const text = [\n          `[SUCCESS] ${TOOL_NAME}`,\n          stdout ? `stdout:\\n${stdout}` : \"\",\n          stderr ? `stderr:\\n${stderr}` : \"\",\n        ].filter(Boolean).join(\"\\n\");\n        return { content: [{ type: \"text\", text }] };\n      } catch (err) {\n        const e = err as { stdout?: string; stderr?: string; message?: string };\n        const text = [\n          `[ERROR] ${TOOL_NAME}`,\n          e.stdout ? `stdout:\\n${e.stdout}` : \"\",\n          e.stderr ? `stderr:\\n${e.stderr}` : \"\",\n          e.message ?? String(err),\n        ].filter(Boolean).join(\"\\n\");\n        return { content: [{ type: \"text\", text }], isError: true };\n      }\n    },\n  });\n}\n",
+        "marker": "# agentify:managed",
+        "kind": "extension",
+        "required": false,
+        "source": "custom-tool-candidate-renderer"
+      }
+    ],
+    "errors": [
+      "invalid feature agent name: bad/name",
+      "invalid extension candidate name: bad extension"
+    ]
+  },
+  "duplicate": {
+    "artifacts": [
+      {
+        "relativePath": "AGENTS.md",
+        "content": "<!-- agentify:managed -->\n# Agent Guide\n\n## Build\n\nRun `npm test` before review.\n\n## Pitfalls\n\nDo not edit generated files by hand.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": true,
+        "source": "agent-guide-renderer"
+      },
+      {
+        "relativePath": "specs/README.md",
+        "content": "<!-- agentify:managed -->\n# Specs\n\nSpec guidance.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": true,
+        "source": "always-on-docs-renderer"
+      },
+      {
+        "relativePath": "ai_docs/README.md",
+        "content": "<!-- agentify:managed -->\n# AI Docs\n\nAI context.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": true,
+        "source": "always-on-docs-renderer"
+      },
+      {
+        "relativePath": "app_review/README.md",
+        "content": "<!-- agentify:managed -->\n# App Review\n\nStores TestResult and ReviewResult artifacts produced by agentify review and test skills.\nScreenshots and visual evidence should live under branch-specific subdirectories.\n\n## Required Entries\n\n- TestResult: validation commands, exit status, relevant stdout/stderr tail, and artifacts.\n- ReviewResult: verdict, blockers, non-blocking risks, files reviewed, and follow-up recommendation.\n- Evidence: screenshots or logs for UI, workflow, or operational changes.\n- Traceability: branch, commit, issue/PR link, changed paths, and reviewer/agent identity.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": "app_docs/README.md",
+        "content": "<!-- agentify:managed -->\n# App Docs\n\nStores feature documentation written by the agentify document skill after reviewed changes.\nKeep durable application knowledge here and link it from `.pi/conditional_docs.md` when it should be loaded conditionally.\n\n## Entry Template\n\n- What changed: durable behavior, domain rule, workflow, or operational fact.\n- Why it matters: the failure mode this knowledge prevents.\n- When to load: trigger phrases or touched paths for `.pi/conditional_docs.md`.\n- Validation: command or review evidence that proved the documented behavior.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": "app_fix_reports/README.md",
+        "content": "<!-- agentify:managed -->\n# App Fix Reports\n\nStores patch reports written by the agentify fix skill.\nEach report should explain the blocker fixed, files touched, validation run, and any residual risk.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": "app_docs/agentic_kpis.md",
+        "content": "<!-- agentify:managed -->\n# Agentic KPIs\n\n| Date | Branch | Change | Review Result | Fixes | Validation | Notes |\n|------|--------|--------|---------------|-------|------------|-------|\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": ".pi/conditional_docs.md",
+        "content": "<!-- agentify:managed -->\n# Conditional Docs\n\nLoad these docs when the task matches the listed condition.\n\n## Bootstrap Entries\n\n- `ai_docs/README.md` when repository-wide AI context is useful.\n\n## Format\n\n- `path`: repository-relative document path.\n- `when`: 2-4 short trigger phrases describing when to load it.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feedback-loop-renderer"
+      },
+      {
+        "relativePath": ".pi/workflows/payments-plan-build-review-fix.json",
+        "content": "{\n  \"name\": \"payments_plan_build_review_fix\",\n  \"description\": \"Scout with the Payments specialist, then run the canonical plan-build-review-fix AIW loop.\",\n  \"tags\": [\n    \"agentify\",\n    \"specialist\",\n    \"payments\"\n  ],\n  \"inputs\": {\n    \"prompt\": {\n      \"type\": \"string\",\n      \"description\": \"The Payments work request to plan, build, review, and fix.\"\n    },\n    \"change_type\": {\n      \"type\": \"string\",\n      \"default\": \"feature\",\n      \"values\": [\n        \"chore\",\n        \"bug\",\n        \"feature\"\n      ]\n    }\n  },\n  \"parallelism\": \"sequential\",\n  \"max_runtime_minutes\": 120,\n  \"steps\": [\n    {\n      \"id\": \"scout\",\n      \"description\": \"Gather Payments context before implementation.\",\n      \"handler\": \"subagent\",\n      \"subagent_template\": \"payments\",\n      \"domain\": [\n        \"payments\"\n      ],\n      \"user_prompt\": \"Scout the payments area for this request: ${inputs.prompt}\\nReturn concrete files, invariants, pitfalls, and validation commands.\\nRepository validation surface: tsc --noEmit; npm test.\"\n    },\n    {\n      \"id\": \"implement\",\n      \"description\": \"Run the canonical AIW after specialist reconnaissance.\",\n      \"handler\": \"aiw\",\n      \"workflow_type\": \"plan_build_review_fix\",\n      \"prompt\": \"${inputs.prompt}\\n\\nSpecialist scout context:\\n${agents[scout].result_text}\",\n      \"change_type\": \"${inputs.change_type}\",\n      \"depends_on\": [\n        \"scout\"\n      ]\n    }\n  ]\n}\n",
+        "marker": "sha256",
+        "kind": "workflow",
+        "required": false,
+        "source": "specialist-workflow-renderer"
+      },
+      {
+        "relativePath": ".pi/agents/payments.md",
+        "content": "---\nname: payments\ndescription: Payments specialist.\nglobs:\n  - src/payments\n---\n<!-- agentify:managed -->\n\nUse payment invariants.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "audit",
+        "required": false,
+        "source": "feature-agent-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/db-migration.md",
+        "content": "---\ndescription: Use for database migrations.\ntype: prompt-template\n---\n<!-- agentify:managed -->\n\nCheck migrations before app code.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "prompt-template-renderer"
+      },
+      {
+        "relativePath": ".pi/extensions/migration-check.ts",
+        "content": "# agentify:managed\nexport const name = 'migration-check';\n",
+        "marker": "# agentify:managed",
+        "kind": "extension",
+        "required": false,
+        "source": "extension-candidate-renderer"
+      },
+      {
+        "relativePath": ".pi/extensions/run-tests.ts",
+        "content": "# agentify:managed\nexport const duplicate = true;\n",
+        "marker": "# agentify:managed",
+        "kind": "extension",
+        "required": false,
+        "source": "extension-candidate-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/feature.md",
+        "content": "---\ndescription: Write an agentify build spec for feature work in this repository.\nargument-hint: \"<one-sentence feature task>\"\n---\n<!-- agentify:managed -->\n\n# Feature\n\n## Goal\n\nWrite a build spec for $ARGUMENTS to `specs/feature-<slug>.md`.\nThe implementer will run `/implement <spec-path>` after the spec is reviewed.\n\n## Workflow\n\n1. Read `specs/README.md` for this repository's spec conventions.\n2. Read `.pi/conditional_docs.md` and load matching docs when present.\n3. Read `AGENTS.md` for current build, test, and ownership guidance.\n4. Inspect the relevant files before naming implementation steps.\n5. Write the spec with `## Relevant Files`, `## Steps`, and `## Validation Commands`.\n\n## Validation Surface\n\n- Test: npm test\n- Lint: not configured\n- Typecheck: tsc --noEmit\n- E2E: not configured\n\n## Validation By Change Type\n\n- chore: `npm test`\n- bug: `npm test`\n- feature: `npm test`\n\n## Instructions\n\n- MUST end with runnable validation commands.\n- MUST cite concrete repository paths in Relevant Files.\n- MUST NOT write product code from this prompt.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "lifecycle-prompt-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/bug.md",
+        "content": "---\ndescription: Write an agentify build spec for bug work in this repository.\nargument-hint: \"<one-sentence bug task>\"\n---\n<!-- agentify:managed -->\n\n# Bug\n\n## Goal\n\nWrite a build spec for $ARGUMENTS to `specs/bug-<slug>.md`.\nThe implementer will run `/implement <spec-path>` after the spec is reviewed.\n\n## Workflow\n\n1. Read `specs/README.md` for this repository's spec conventions.\n2. Read `.pi/conditional_docs.md` and load matching docs when present.\n3. Read `AGENTS.md` for current build, test, and ownership guidance.\n4. Inspect the relevant files before naming implementation steps.\n5. Write the spec with `## Relevant Files`, `## Steps`, and `## Validation Commands`.\n\n## Validation Surface\n\n- Test: npm test\n- Lint: not configured\n- Typecheck: tsc --noEmit\n- E2E: not configured\n\n## Validation By Change Type\n\n- chore: `npm test`\n- bug: `npm test`\n- feature: `npm test`\n\n## Instructions\n\n- MUST end with runnable validation commands.\n- MUST cite concrete repository paths in Relevant Files.\n- MUST NOT write product code from this prompt.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "lifecycle-prompt-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/api-endpoint.md",
+        "content": "---\ndescription: api-endpoint-specific feature template. Use for recurring feature work in the api-endpoint area.\nargument-hint: \"<one-sentence feature task in api-endpoint>\"\n---\n<!-- agentify:managed -->\n\n# Api Endpoint (feature)\n\n## Goal\n\nWrite a build spec for $ARGUMENTS using `.pi/prompts/feature.md` as the base format, enriched with api-endpoint context.\n\n## Area Context\n\n- Source feature agent: `.pi/agents/payments.md`\n- Rationale: API endpoint work is recurring and benefits from local routing conventions.\n- Trigger phrases:\n  - new API route\n  - endpoint change\n\n## Workflow\n\n1. Read `.pi/prompts/feature.md` for the base spec flow.\n2. Read `.pi/agents/payments.md` for local conventions, key files, and pitfalls.\n3. Read `AGENTS.md` and `.pi/conditional_docs.md`.\n4. Inspect relevant files before naming implementation steps.\n5. Write the spec to `specs/<type>-<slug>.md` with area-specific risks and validation.\n\n## Validation Surface\n\n- Test: npm test\n- Lint: not configured\n- Typecheck: tsc --noEmit\n- E2E: not configured\n\n## Instructions\n\n- MUST include area-specific files, conventions, and pitfalls when they affect the task.\n- MUST NOT invent files or commands.\n- MUST NOT write product code from this prompt.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "prompt",
+        "required": false,
+        "source": "per-area-prompt-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/expertise.yaml",
+        "content": "# agentify:managed\ndomain: \"billing\"\nlast_updated: \"2026-07-05T00:00:00.000Z\"\nprimary_paths:\n  - \"src/billing\"\noverview:\n  description: \"Billing carries recurring payment invariants.\"\n  key_files:\n    - path: \"src/billing/index.ts\"\n      line_range: [1, 120]\n      purpose: \"Billing entry point.\"\nkey_types:\n  - name: \"Invoice\"\n    path: \"src/billing/types.ts:1\"\n    purpose: \"Stable billing contract.\"\npatterns:\n  - name: \"idempotency\"\n    description: \"Billing writes must be idempotent.\"\n    example_ref: \"src/billing/index.ts:42\"\npitfalls:\n  - risk: \"Double charging on retry.\"\n    consequence: \"Customers can be charged twice.\"\n    reference: \"src/billing/index.ts:55\"\nconventions:\n  - \"Amounts are stored in cents.\"\ntesting:\n  command: \"npm test -- tests/billing.test.ts\"\n  test_paths:\n    - \"tests/billing.test.ts\"\nentry_points:\n  - \"src/billing/index.ts\"\nstability: \"high\"\nrecurrence: \"high\"\n",
+        "marker": "# agentify:managed",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/question.md",
+        "content": "---\ndescription: billing expert - answer questions about billing.\nargument-hint: \"<question>\"\n---\n<!-- agentify:managed -->\n\n# billing Expert Question\n\nRead .pi/prompts/experts/billing/expertise.yaml first.\nAnswer the user's question from that expertise and cite repository file:line references when available.\nIf the expertise is stale or insufficient, say what must be re-read before acting.\n\nQuestion:\n\n$ARGUMENTS\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/self-improve.md",
+        "content": "---\ndescription: billing expert - refresh expertise.yaml after code changes.\n---\n<!-- agentify:managed -->\n\n# billing Expert Self-Improve\n\nUpdate .pi/prompts/experts/billing/expertise.yaml from the current repository state.\nPreserve stable knowledge, remove stale claims, add newly discovered patterns and pitfalls, and update last_updated to today's ISO timestamp.\nOnly edit this expert directory unless explicitly asked to change product code.\n\nPrimary paths:\n\n- src/billing\n\nValidation:\n\n- npm test -- tests/billing.test.ts\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/plan.md",
+        "content": "---\ndescription: billing expert - plan work using domain expertise.\nargument-hint: \"<task>\"\n---\n<!-- agentify:managed -->\n\n# billing Expert Plan\n\nRead .pi/prompts/experts/billing/expertise.yaml and plan the requested task.\nDo not edit files in this mode.\n\n## Relevant expert knowledge\n\n- Rationale: Billing carries recurring payment invariants.\n- Primary paths:\n  - `src/billing`\n- Entry points:\n  - `src/billing/index.ts`\n- Key files:\n  - `src/billing/index.ts` lines 1-120: Billing entry point.\n- Key types:\n  - Invoice (`src/billing/types.ts:1`): Stable billing contract.\n- Patterns to preserve:\n  - idempotency: Billing writes must be idempotent. (src/billing/index.ts:42)\n- Pitfalls to actively check:\n  - Double charging on retry.: Customers can be charged twice. (src/billing/index.ts:55)\n- Conventions:\n  - Amounts are stored in cents.\n- Validation:\n  - npm test -- tests/billing.test.ts\n  - `tests/billing.test.ts`\n\n## Required planning output\n\n- Task interpretation: restate the requested change in this domain's terms.\n- Relevant files and types: cite the exact expertise entries or repository file:line refs that should shape the work.\n- Invariants and pitfalls: name the patterns to preserve and the risks the implementation must avoid.\n- Validation plan: pick the smallest sufficient command and test paths from the expert knowledge; explain any broader suite needed.\n- Staleness check: if the expertise is stale, thin, or contradicted by the repository, name the files that must be re-read before implementation.\n\n\n$ARGUMENTS\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/prompts/experts/billing/plan_build_improve.md",
+        "content": "---\ndescription: billing expert - plan, build, validate, then refresh expertise.\nargument-hint: \"<task>\"\n---\n<!-- agentify:managed -->\n\n# billing Expert Plan Build Improve\n\nUse .pi/prompts/experts/billing/expertise.yaml before planning or editing.\nBefore editing, produce the same risk-aware plan required by plan.md and apply these expert constraints to the implementation.\nImplement the task at the smallest safe scope, run the relevant validation, then update this expert's expertise.yaml if the work changed durable domain knowledge.\n\n## Relevant expert knowledge\n\n- Rationale: Billing carries recurring payment invariants.\n- Primary paths:\n  - `src/billing`\n- Entry points:\n  - `src/billing/index.ts`\n- Key files:\n  - `src/billing/index.ts` lines 1-120: Billing entry point.\n- Key types:\n  - Invoice (`src/billing/types.ts:1`): Stable billing contract.\n- Patterns to preserve:\n  - idempotency: Billing writes must be idempotent. (src/billing/index.ts:42)\n- Pitfalls to actively check:\n  - Double charging on retry.: Customers can be charged twice. (src/billing/index.ts:55)\n- Conventions:\n  - Amounts are stored in cents.\n- Validation:\n  - npm test -- tests/billing.test.ts\n  - `tests/billing.test.ts`\n\n## Required build loop\n\n- Plan against the key files, key types, patterns, pitfalls, conventions, and validation above.\n- Edit only the smallest necessary domain surface.\n- Run `npm test -- tests/billing.test.ts`.\n- If durable knowledge changes, update `.pi/prompts/experts/billing/expertise.yaml` before finishing.\n\n$ARGUMENTS\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "expert",
+        "required": false,
+        "source": "expert-domain-renderer"
+      },
+      {
+        "relativePath": ".pi/skills/prime-db/SKILL.md",
+        "content": "---\nname: prime-db\ndescription: Prime the local database before integration tests.\n---\n<!-- agentify:managed -->\n\n# prime-db\n\n## When To Use\n\nPrime the local database before integration tests.\n\n## Preconditions\n\n- Read `AGENTS.md` for current validation and ownership rules before running this skill.\n- Confirm the script or command exists in the repository and understand any required arguments.\n- Do not run against production data or credentials unless the task explicitly authorizes that environment.\n\n## Workflow\n\n```bash\nscripts/prime-db.sh <args>\n```\n\n## Validation\n\n- Inspect the exit code before deciding success.\n- Read the final stdout/stderr lines and treat warnings as possible residual risk.\n- If the skill changed repository files or state, run the relevant validation commands from `AGENTS.md`.\n\n## Output\n\nReport success or failure clearly. If wrapping a script, inspect its exit code and last output lines before deciding the result.\n\n## Report\n\nInclude the command run, arguments used, files or state touched, validation performed, and any residual risk.\n",
+        "marker": "<!-- agentify:managed -->",
+        "kind": "skill",
+        "required": false,
+        "source": "skill-candidate-renderer"
+      },
+      {
+        "relativePath": ".pi/extensions/run-tests.ts",
+        "content": "# agentify:managed\nimport { execFile } from \"node:child_process\";\nimport { promisify } from \"node:util\";\nimport { Type } from \"typebox\";\nimport type { ExtensionAPI } from \"@earendil-works/pi-coding-agent\";\n\nconst execFileAsync = promisify(execFile);\nconst TOOL_NAME = \"run-tests\";\nconst COMMAND = \"npm\";\nconst ARGS = [\"test\"];\nconst PARAMS = Type.Object({});\n\nexport default function register(pi: ExtensionAPI): void {\n  pi.registerTool({\n    name: TOOL_NAME,\n    label: \"run-tests\",\n    description: \"Run the repository test suite.\",\n    parameters: PARAMS,\n    async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {\n      try {\n        const { stdout, stderr } = await execFileAsync(COMMAND, ARGS, {\n          cwd: process.cwd(),\n          maxBuffer: 2 * 1024 * 1024,\n        });\n        const text = [\n          `[SUCCESS] ${TOOL_NAME}`,\n          stdout ? `stdout:\\n${stdout}` : \"\",\n          stderr ? `stderr:\\n${stderr}` : \"\",\n        ].filter(Boolean).join(\"\\n\");\n        return { content: [{ type: \"text\", text }] };\n      } catch (err) {\n        const e = err as { stdout?: string; stderr?: string; message?: string };\n        const text = [\n          `[ERROR] ${TOOL_NAME}`,\n          e.stdout ? `stdout:\\n${e.stdout}` : \"\",\n          e.stderr ? `stderr:\\n${e.stderr}` : \"\",\n          e.message ?? String(err),\n        ].filter(Boolean).join(\"\\n\");\n        return { content: [{ type: \"text\", text }], isError: true };\n      }\n    },\n  });\n}\n",
+        "marker": "# agentify:managed",
+        "kind": "extension",
+        "required": false,
+        "source": "custom-tool-candidate-renderer"
+      }
+    ],
+    "errors": [
+      "duplicate rendered artifact path: .pi/extensions/run-tests.ts"
+    ]
+  }
+}
