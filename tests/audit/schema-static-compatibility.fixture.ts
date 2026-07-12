@@ -22,7 +22,7 @@ type Equal<Left, Right> =
 type Expect<Value extends true> = Value;
 
 type RequiredKeys<Value> = {
-  [Key in keyof Value]-?: Record<string, never> extends Pick<Value, Key> ? never : Key;
+  [Key in keyof Value]-?: {} extends Pick<Value, Key> ? never : Key;
 }[keyof Value];
 
 export type CodebaseMapAliasParity = Expect<
