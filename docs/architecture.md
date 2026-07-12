@@ -109,6 +109,35 @@ templates and lifecycle prompts, experts, and skills/extensions. `index.ts` owns
 schema/coverage validation, family composition order, unsafe-path checks, duplicate
 checks, and the legacy façade exports. Renderer modules perform no filesystem I/O.
 
+## Structured write-map ownership
+
+The stable `src/core/audit/write-map-tool.ts` path is a compatibility façade for
+the application-owned `write_map` and `write_map_delta` trust boundary. Internal
+responsibilities are separated as follows:
+
+- `map-storage.ts` owns provider-scoped canonical, draft, and history paths,
+  canonical persistence, atomic draft transport, legacy fallback reads, and
+  per-factory execution context;
+- `map-input.ts` owns relative and absolute input resolution, byte caps, BOM
+  handling, JSON parsing, and stable file-read error translation;
+- `map-validation.ts` owns complete and partial TypeBox validation plus stable
+  validation-error formatting, while `schema.ts` remains the schema and default
+  source of truth;
+- `map-coverage.ts` formats coverage closure, reasons, summaries, and warnings
+  from the schema-owned closure assessment;
+- `map-delta.ts` owns the existing shallow-overwrite, deep-merge, and append
+  semantics;
+- `map-observability.ts` owns per-dimension retry counters and soft-ceiling
+  guidance without imposing a hard cap;
+- `write-map-tools.ts` owns the factory-created tool definitions and exact
+  model-visible protocol; and
+- `legacy-write-map.ts` owns deprecated constants and wrappers preserving
+  historical direct-call behavior.
+
+The façade re-exports the same functions, types, constants, singleton tools, and
+factory API. Storage, validation, coverage, and tool modules do not redefine the
+audit TypeBox schemas or expand the package surface.
+
 ## Generation pipeline ownership
 
 Repository-facing generation primitives live under `src/core/generation/`.
@@ -148,10 +177,9 @@ receive the same run-owned state directory through function arguments.
 Production orchestration does not call `setMapSessionStateDir` or
 `setRendererStateDir`. Those setters, singleton map tools, and legacy path
 constants remain deprecated compatibility adapters for older direct callers and
-tests. Legacy map fallback precedence is unchanged. The provider-scoped draft
-transport discrepancy is intentionally not corrected here; it is investigated
-separately in Issue #31 so any behavioral or migration change receives its own
-compatibility analysis.
+tests. Legacy map fallback precedence is unchanged. Factory-bound draft
+transport reads and writes only under the configured provider state directory;
+the deprecated singleton retains the historical Pi draft path.
 
 ## Webhook boundary
 

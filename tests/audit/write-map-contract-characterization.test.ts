@@ -1,0 +1,487 @@
+import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import {
+  CodebaseMapSchema,
+  COVERAGE_DIMENSIONS,
+  WriteMapDeltaParamsSchema,
+  WriteMapParamsSchema,
+  type CodebaseMap,
+} from "../../src/core/audit/schema.ts";
+import {
+  AGENTIFY_OUTPUT_DIR,
+  DRAFT_DIR,
+  DRAFT_PATH,
+  DRAFT_TRANSPORT_DIR,
+  HISTORY_DIR,
+  MAP_FILENAME,
+  canonicalMapPath,
+  createWriteMapTools,
+  getReserveCount,
+  loadCanonicalMap,
+  loadCanonicalMapAt,
+  resetReserveCounters,
+  writeMapDeltaTool,
+  writeMapTool,
+} from "../../src/core/audit/write-map-tool.ts";
+import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+
+const MAX_MAP_FILE_BYTES = 1_000_000;
+const MAX_INLINE_MAP_BYTES = 100_000;
+
+function tempDir(name: string): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), `agentify-write-map-${name}-`));
+}
+
+function normalize(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
+function cloneMap(map: CodebaseMap = makeValidCodebaseMap()): CodebaseMap {
+  return structuredClone(map);
+}
+
+async function executeTool(
+  tool: ToolDefinition,
+  params: unknown,
+  cwd: string,
+): Promise<Awaited<ReturnType<NonNullable<ToolDefinition["execute"]>>>> {
+  assert.ok(tool.execute, `${tool.name} must expose execute`);
+  return tool.execute(
+    `characterize-${tool.name}`,
+    params as never,
+    undefined,
+    undefined,
+    { cwd } as never,
+  );
+}
+
+function isToolError(result: unknown): boolean {
+  return (result as { isError?: boolean }).isError === true;
+}
+
+function resultText(result: Awaited<ReturnType<NonNullable<ToolDefinition["execute"]>>>): string {
+  const first = result.content?.[0];
+  return first?.type === "text" ? first.text : "";
+}
+
+function resultDetails(
+  result: Awaited<ReturnType<NonNullable<ToolDefinition["execute"]>>>,
+): Record<string, unknown> {
+  return (result.details ?? {}) as Record<string, unknown>;
+}
+
+function readJson(filePath: string): CodebaseMap {
+  return JSON.parse(fs.readFileSync(filePath, "utf8")) as CodebaseMap;
+}
+
+function makeOversizedMap(): CodebaseMap {
+  const map = cloneMap();
+  map.meta.domain_hypothesis = "x".repeat(MAX_INLINE_MAP_BYTES + 1);
+  return map;
+}
+
+function makeArtifactIntents(includeScaffoldRuntime: boolean): NonNullable<CodebaseMap["artifact_intents"]> {
+  return {
+    agent_guide: {
+      title: "Agent guide",
+      sections: [{ heading: "Scope", body: "Repository-specific guidance." }],
+    },
+    always_on_docs: [],
+    feature_agents: [],
+    prompt_templates: [],
+    experts: [],
+    extension_candidates: [],
+    ...(includeScaffoldRuntime
+      ? { scaffold_runtime: { state_machine_notes: ["preserve-me"] } }
+      : {}),
+  };
+}
+
+async function testToolDefinitionContract(): Promise<void> {
+  assert.equal(writeMapTool.name, "write_map");
+  assert.equal(writeMapTool.label, "Write Codebase Map");
+  assert.equal(
+    writeMapTool.description,
+    "Persist the 10-dimension codebase map to ./.pi/agentify/codebase_map.json. " +
+      "Schema-enforced via TypeBox. Two modes: (1) inline `map` for small maps (≤ 3KB); " +
+      "(2) `map_file` pointing to a JSON file for large maps. The tool reads, " +
+      "validates, and writes the canonical map. Gap entries in the coverage block are " +
+      "allowed in the data and reported in the result; weak `covered` entries are " +
+      "also reported with the same closure rules as the final post-run gate. " +
+      "In `auto` mode (default), inline maps that exceed 100KB are transparently " +
+      "fall-backed to the file-based transport. " +
+      "Call multiple times during exploration to persist progress; call once with the " +
+      "final map before rendering the report.",
+  );
+  assert.strictEqual(writeMapTool.parameters, WriteMapParamsSchema);
+
+  assert.equal(writeMapDeltaTool.name, "write_map_delta");
+  assert.equal(writeMapDeltaTool.label, "Write Codebase Map Delta");
+  assert.equal(
+    writeMapDeltaTool.description,
+    "Merge a partial delta into the canonical codebase map. Used by `gap_filler` " +
+      "sub-agents to close a single dimension's gap without re-persisting the entire " +
+      "map. The delta is schema-validated via PartialCodebaseMapSchema. The merge " +
+      "strategy controls how delta fields are combined with the existing map " +
+      "(`shallow_overwrite` = default, `deep_merge` = recursive merge, `append` = " +
+      "push onto arrays). If `dimension` is provided, the corresponding coverage " +
+      "entry is set to `covered` with the delta's `confidence` and `evidence_summary`. " +
+      "Per-dimension gap_filler count is tracked (soft ceiling of 3, no hard cap; observability only).",
+  );
+  assert.strictEqual(writeMapDeltaTool.parameters, WriteMapDeltaParamsSchema);
+  assert.ok(CodebaseMapSchema);
+}
+
+async function testInlineDefaultsCoverageAndStorageContract(): Promise<void> {
+  const cwd = tempDir("inline");
+  const tools = createWriteMapTools({ stateDir: ".claude/agentify" });
+  const map = cloneMap() as CodebaseMap & Record<string, unknown>;
+  delete map.schema_version;
+  delete map.generated_at;
+
+  const result = await executeTool(tools.writeMapTool, { map }, cwd);
+  assert.equal(isToolError(result), false);
+
+  const canonical = tools.canonicalMapPath(cwd);
+  const persisted = readJson(canonical);
+  const content = JSON.stringify(persisted, null, 2);
+  const size = Buffer.byteLength(content, "utf8");
+  assert.equal(
+    resultText(result),
+    `Wrote codebase map to ${canonical} (${size} bytes). Source: (inline). ` +
+      "Injected defaults: schema_version, generated_at. All 10 coverage dimensions closed.",
+  );
+  assert.equal(fs.readFileSync(canonical, "utf8"), content);
+  assert.equal(fs.statSync(canonical).mode & 0o777, 0o644);
+  assert.equal(persisted.schema_version, "1");
+  assert.match(persisted.generated_at ?? "", /^\d{4}-\d{2}-\d{2}T/);
+
+  const details = resultDetails(result);
+  assert.deepEqual(details.injected_defaults, ["schema_version", "generated_at"]);
+  assert.equal(details.path, canonical);
+  assert.equal(details.size_bytes, size);
+  assert.equal(details.source_path, "(inline)");
+  assert.deepEqual(details.coverage_summary, {
+    covered: [...COVERAGE_DIMENSIONS],
+    gap: [],
+    total: COVERAGE_DIMENSIONS.length,
+  });
+  assert.deepEqual(details.gap_warning, null);
+}
+
+async function testInputLoadingAndDraftContract(): Promise<void> {
+  const cwd = tempDir("input");
+  const tools = createWriteMapTools({ stateDir: ".agents/agentify" });
+  const map = cloneMap();
+
+  const relativeInput = "inputs/bom-map.json";
+  fs.mkdirSync(path.join(cwd, "inputs"), { recursive: true });
+  fs.writeFileSync(path.join(cwd, relativeInput), `\ufeff${JSON.stringify(map)}`);
+  const relativeResult = await executeTool(
+    tools.writeMapTool,
+    { map_file: relativeInput, mode: "file" },
+    cwd,
+  );
+  assert.equal(resultDetails(relativeResult).source_path, path.join(cwd, relativeInput));
+
+  const absoluteCwd = tempDir("absolute");
+  const absoluteTools = createWriteMapTools({ stateDir: ".claude/agentify" });
+  const absoluteInput = path.join(absoluteCwd, "absolute.json");
+  fs.writeFileSync(absoluteInput, JSON.stringify(map));
+  const absoluteResult = await executeTool(
+    absoluteTools.writeMapTool,
+    { map_file: absoluteInput, mode: "file" },
+    absoluteCwd,
+  );
+  assert.equal(resultDetails(absoluteResult).source_path, absoluteInput);
+
+  const missing = path.join(cwd, "missing.json");
+  const missingResult = await executeTool(tools.writeMapTool, { map_file: missing }, cwd);
+  assert.equal(isToolError(missingResult), true);
+  assert.equal(
+    resultText(missingResult),
+    `Error: map_file at ${missing} does not exist. Make sure you called the \`write\` tool first to create it.`,
+  );
+
+  const malformed = path.join(cwd, "malformed.json");
+  fs.writeFileSync(malformed, "{ nope");
+  const malformedResult = await executeTool(tools.writeMapTool, { map_file: malformed }, cwd);
+  assert.equal(isToolError(malformedResult), true);
+  assert.match(
+    resultText(malformedResult),
+    new RegExp(
+      `^Error: map_file at ${malformed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} is not valid JSON: .+\\. ` +
+        "Check encoding \\(UTF-8 expected, no BOM\\) and that the file is fully written\\.$",
+    ),
+  );
+
+  const oversizedFile = path.join(cwd, "oversized.json");
+  fs.writeFileSync(oversizedFile, Buffer.alloc(MAX_MAP_FILE_BYTES + 1, 0x20));
+  const oversizedFileResult = await executeTool(
+    tools.writeMapTool,
+    { map_file: oversizedFile },
+    cwd,
+  );
+  assert.equal(
+    resultText(oversizedFileResult),
+    `Error: failed to read map_file at ${oversizedFile}: map_file is ${MAX_MAP_FILE_BYTES + 1} bytes, ` +
+      `exceeds ${MAX_MAP_FILE_BYTES} byte cap. Likely a duplicated section; review the JSON and re-write.`,
+  );
+
+  const unreadable = path.join(cwd, "directory-input");
+  fs.mkdirSync(unreadable);
+  const unreadableResult = await executeTool(tools.writeMapTool, { map_file: unreadable }, cwd);
+  assert.match(
+    resultText(unreadableResult),
+    new RegExp(`^Error: failed to read map_file at ${unreadable.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:`),
+  );
+
+  const oversizedMap = makeOversizedMap();
+  const inlineSize = Buffer.byteLength(JSON.stringify(oversizedMap), "utf8");
+  const strictResult = await executeTool(
+    tools.writeMapTool,
+    { map: oversizedMap, mode: "inline" },
+    cwd,
+  );
+  assert.equal(
+    resultText(strictResult),
+    `Error: inline map is ${inlineSize} bytes, exceeds the ${MAX_INLINE_MAP_BYTES} byte cap. ` +
+      "Use the file-based mode instead: build the JSON as a string, " +
+      `call \`write\` with path="${tools.draftPathRelative}" and content=<the json string>, ` +
+      `then call write_map with {map_file: "${tools.draftPathRelative}"}.`,
+  );
+
+  const autoCwd = tempDir("auto");
+  const autoTools = createWriteMapTools({ stateDir: ".agents/agentify" });
+  const autoResult = await executeTool(autoTools.writeMapTool, { map: oversizedMap }, autoCwd);
+  const draftPath = path.join(autoCwd, autoTools.draftPathRelative);
+  assert.equal(resultDetails(autoResult).source_path, `auto-fallback:${draftPath}`);
+  assert.ok(fs.existsSync(draftPath));
+  assert.equal(fs.statSync(draftPath).mode & 0o777, 0o644);
+  assert.deepEqual(
+    fs.readdirSync(path.dirname(draftPath)).filter((name) => name.endsWith(".tmp")),
+    [],
+  );
+  assert.ok(fs.existsSync(autoTools.canonicalMapPath(autoCwd)));
+
+  const fileModeInline = await executeTool(tools.writeMapTool, { map, mode: "file" }, cwd);
+  assert.equal(
+    resultText(fileModeInline),
+    "Error: write_map called with `mode: 'file'` and inline `map`. " +
+      "Use the file-based mode instead: build the JSON as a string, " +
+      `call \`write\` with path="${tools.draftPathRelative}" and content=<the json string>, ` +
+      `then call write_map with {map_file: "${tools.draftPathRelative}"}.`,
+  );
+
+  const emptyResult = await executeTool(tools.writeMapTool, {}, cwd);
+  assert.equal(
+    resultText(emptyResult),
+    "Error: write_map called with empty arguments. Provide either `map` (inline object) or " +
+      "`map_file` (path to a JSON file). For large maps, use the file-based mode: build the JSON as a " +
+      `string, call the \`write\` tool with path="${tools.draftPathRelative}" and content=<the json string>, ` +
+      `then call write_map with {map_file: "${tools.draftPathRelative}"}.`,
+  );
+
+  const bothResult = await executeTool(
+    tools.writeMapTool,
+    { map, map_file: relativeInput },
+    cwd,
+  );
+  assert.equal(
+    resultText(bothResult),
+    "Error: write_map called with both `map` and `map_file`. Provide exactly one.",
+  );
+}
+
+async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
+  const historyCwd = tempDir("history");
+  const historyTools = createWriteMapTools({ stateDir: ".claude/agentify" });
+  const firstMap = cloneMap();
+  await executeTool(historyTools.writeMapTool, { map: firstMap }, historyCwd);
+  const firstBytes = fs.readFileSync(historyTools.canonicalMapPath(historyCwd), "utf8");
+
+  const secondMap = cloneMap(firstMap);
+  secondMap.meta.domain_hypothesis = "Second persisted map.";
+  await executeTool(historyTools.writeMapTool, { map: secondMap }, historyCwd);
+  const historyDir = path.join(historyCwd, historyTools.historyRelative);
+  const historyFiles = fs.readdirSync(historyDir);
+  assert.equal(historyFiles.length, 1);
+  assert.match(historyFiles[0] ?? "", /^codebase_map\.\d{4}-\d{2}-\d{2}T.*\.previous\.json$/);
+  assert.equal(fs.readFileSync(path.join(historyDir, historyFiles[0]!), "utf8"), firstBytes);
+
+  const invalidCwd = tempDir("invalid");
+  const invalidTools = createWriteMapTools({ stateDir: ".agents/agentify" });
+  const invalidResult = await executeTool(invalidTools.writeMapTool, { map: {} }, invalidCwd);
+  assert.equal(isToolError(invalidResult), true);
+  assert.equal(
+    resultText(invalidResult),
+    "Error: Schema validation failed with 1 error(s):\n" +
+      "  - (root): must have required properties meta, skeleton, module_graph, " +
+      "type_contract_surface, conventions, pitfalls, validation_surface, " +
+      "operational_surface, security_surface, coverage, open_questions, exploration_log, " +
+      "expected unknown",
+  );
+
+  const partialCwd = tempDir("partial-invalid");
+  const partialTools = createWriteMapTools({ stateDir: ".claude/agentify" });
+  await executeTool(partialTools.writeMapTool, { map: cloneMap() }, partialCwd);
+  const partialResult = await executeTool(
+    partialTools.writeMapDeltaTool,
+    { delta: { pitfalls: [{}] } },
+    partialCwd,
+  );
+  assert.equal(isToolError(partialResult), true);
+  assert.equal(
+    resultText(partialResult),
+    "Error: Partial schema validation failed with 1 error(s):\n" +
+      "  - /pitfalls/0: must have required properties module, what, consequence, line_ref, " +
+      "expected unknown",
+  );
+
+  const coverageCwd = tempDir("coverage");
+  const coverageTools = createWriteMapTools({ stateDir: ".agents/agentify" });
+  const coverageMap = cloneMap();
+  coverageMap.validation_surface.test_command = "";
+  const coverageResult = await executeTool(coverageTools.writeMapTool, { map: coverageMap }, coverageCwd);
+  const coverageCanonical = coverageTools.canonicalMapPath(coverageCwd);
+  const coverageSize = Buffer.byteLength(fs.readFileSync(coverageCanonical, "utf8"), "utf8");
+  assert.equal(
+    resultText(coverageResult),
+    `Wrote codebase map to ${coverageCanonical} (${coverageSize} bytes). Source: (inline). ` +
+      "9/10 coverage dimensions closed. Unresolved: D6_validation: covered but test/validation command evidence is empty.",
+  );
+  assert.deepEqual(resultDetails(coverageResult).gap_warning, [
+    "D6_validation: covered but test/validation command evidence is empty",
+  ]);
+
+  const newPitfall = {
+    module: "src/new.ts",
+    what: "New pitfall.",
+    consequence: "Characterizes array merge behavior.",
+    line_ref: 2,
+  };
+
+  const shallowCwd = tempDir("merge-shallow");
+  const shallowTools = createWriteMapTools({ stateDir: ".claude/agentify" });
+  await executeTool(shallowTools.writeMapTool, { map: cloneMap() }, shallowCwd);
+  const shallowResult = await executeTool(
+    shallowTools.writeMapDeltaTool,
+    { delta: { pitfalls: [newPitfall] } },
+    shallowCwd,
+  );
+  assert.equal(resultDetails(shallowResult).merge_strategy, "shallow_overwrite");
+  assert.deepEqual(readJson(shallowTools.canonicalMapPath(shallowCwd)).pitfalls, [newPitfall]);
+
+  const appendCwd = tempDir("merge-append");
+  const appendTools = createWriteMapTools({ stateDir: ".agents/agentify" });
+  const appendBase = cloneMap();
+  await executeTool(appendTools.writeMapTool, { map: appendBase }, appendCwd);
+  await executeTool(
+    appendTools.writeMapDeltaTool,
+    { delta: { pitfalls: [newPitfall] }, merge_strategy: "append" },
+    appendCwd,
+  );
+  assert.deepEqual(readJson(appendTools.canonicalMapPath(appendCwd)).pitfalls, [
+    ...appendBase.pitfalls,
+    newPitfall,
+  ]);
+
+  const deepCwd = tempDir("merge-deep");
+  const deepTools = createWriteMapTools({ stateDir: ".claude/agentify" });
+  const deepBase = cloneMap();
+  deepBase.artifact_intents = makeArtifactIntents(true);
+  await executeTool(deepTools.writeMapTool, { map: deepBase }, deepCwd);
+  const deltaIntents = makeArtifactIntents(false);
+  deltaIntents.agent_guide.title = "Updated guide";
+  await executeTool(
+    deepTools.writeMapDeltaTool,
+    { delta: { artifact_intents: deltaIntents }, merge_strategy: "deep_merge" },
+    deepCwd,
+  );
+  const deepMap = readJson(deepTools.canonicalMapPath(deepCwd));
+  assert.equal(deepMap.artifact_intents?.agent_guide.title, "Updated guide");
+  assert.deepEqual(deepMap.artifact_intents?.scaffold_runtime, {
+    state_machine_notes: ["preserve-me"],
+  });
+}
+
+async function testObservabilityFactoryAndLegacyContract(): Promise<void> {
+  resetReserveCounters();
+  const cwd = tempDir("reserve");
+  const tools = createWriteMapTools({
+    stateDir: ".claude/agentify",
+    mapFilename: "custom-map.json",
+  });
+  assert.equal(tools.canonicalMapRelative, ".claude/agentify/custom-map.json");
+  assert.equal(tools.draftDirectoryRelative, ".claude/agentify/.agentify");
+  assert.equal(tools.draftPathRelative, ".claude/agentify/.agentify/draft.json");
+  assert.equal(tools.historyRelative, ".claude/agentify/history");
+  assert.equal(tools.canonicalMapPath(cwd), path.join(cwd, ".claude/agentify/custom-map.json"));
+
+  await executeTool(tools.writeMapTool, { map: cloneMap() }, cwd);
+  let fourthText = "";
+  for (let count = 1; count <= 4; count += 1) {
+    const result = await executeTool(
+      tools.writeMapDeltaTool,
+      {
+        delta: {},
+        dimension: "D1_topography",
+        confidence: "high",
+        evidence_summary: "Reconfirmed topography evidence.",
+      },
+      cwd,
+    );
+    assert.equal(resultDetails(result).gap_filler_count, count);
+    if (count === 4) fourthText = resultText(result);
+  }
+  assert.equal(getReserveCount("D1_topography"), 4);
+  assert.match(
+    fourthText,
+    /Note: gap_filler dispatched 4x for D1_topography \(beyond soft ceiling of 3; LLM should consider a different angle or mark honest null\)$/,
+  );
+  resetReserveCounters();
+  assert.equal(getReserveCount("D1_topography"), 0);
+
+  assert.equal(AGENTIFY_OUTPUT_DIR, path.join(".pi", "agentify"));
+  assert.equal(MAP_FILENAME, "codebase_map.json");
+  assert.equal(DRAFT_DIR, path.join(".pi", "agentify", ".agentify"));
+  assert.equal(DRAFT_TRANSPORT_DIR, DRAFT_DIR);
+  assert.equal(DRAFT_PATH, path.join(DRAFT_DIR, "draft.json"));
+  assert.equal(HISTORY_DIR, path.join(".pi", "agentify", "history"));
+  assert.equal(canonicalMapPath(cwd), path.join(cwd, ".pi", "agentify", "codebase_map.json"));
+
+  const legacyCwd = tempDir("legacy");
+  const legacyPath = canonicalMapPath(legacyCwd);
+  fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+  fs.writeFileSync(legacyPath, `\ufeff${JSON.stringify(cloneMap())}`);
+  assert.ok(loadCanonicalMap(legacyCwd));
+  assert.ok(loadCanonicalMapAt(legacyCwd, ".agents/agentify"));
+
+  assert.equal(normalize(DRAFT_PATH), ".pi/agentify/.agentify/draft.json");
+}
+
+const tests: Array<{ name: string; fn: () => Promise<void> }> = [
+  { name: "tool definition contract", fn: testToolDefinitionContract },
+  { name: "inline defaults coverage and storage contract", fn: testInlineDefaultsCoverageAndStorageContract },
+  { name: "input loading and draft contract", fn: testInputLoadingAndDraftContract },
+  { name: "history validation coverage and merge contract", fn: testHistoryValidationCoverageAndMergeContract },
+  { name: "observability factory and legacy contract", fn: testObservabilityFactoryAndLegacyContract },
+];
+
+let passed = 0;
+for (const test of tests) {
+  try {
+    await test.fn();
+    passed += 1;
+    console.log(`  ok ${test.name}`);
+  } catch (error) {
+    console.error(`  FAIL ${test.name}: ${(error as Error).message}`);
+    if ((error as Error).stack) console.error((error as Error).stack);
+    process.exit(1);
+  }
+}
+
+console.log(`write-map contract characterization tests passed (${passed}/${tests.length}).`);
