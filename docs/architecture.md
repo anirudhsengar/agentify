@@ -99,6 +99,16 @@ compatibility exports preserve older internal import locations without making
 them new package APIs. Package-version reading is similarly centralized in
 `src/core/package-version.ts`.
 
+## Deterministic renderer ownership
+
+The stable `src/core/artifacts/renderers.ts` import path is a compatibility façade.
+Pure renderer families live under `src/core/artifacts/renderers/`: artifact builders
+and validation-command helpers provide shared formatting; dedicated modules own the
+agent guide, always-on docs, feedback-loop docs, workflows, feature agents, prompt
+templates and lifecycle prompts, experts, and skills/extensions. `index.ts` owns
+schema/coverage validation, family composition order, unsafe-path checks, duplicate
+checks, and the legacy façade exports. Renderer modules perform no filesystem I/O.
+
 ## Generation pipeline ownership
 
 Repository-facing generation primitives live under `src/core/generation/`.

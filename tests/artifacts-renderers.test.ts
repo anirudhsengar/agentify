@@ -4,132 +4,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { Value } from "typebox/value";
 import { CodebaseMapSchema } from "../src/core/audit/schema.ts";
-import { renderBrownfieldArtifacts } from "../src/core/artifacts/renderers.ts";
+import { renderBrownfieldArtifacts, renderValidatedBrownfieldArtifacts } from "../src/core/artifacts/renderers.ts";
 import { AGENTIFY_MANAGED_MARKERS } from "../src/core/artifact-exporters.ts";
 import { ExpertRegistry } from "../src/core/agent-expert.ts";
 import { WorkflowRegistry } from "../src/core/orchestrator/workflow-registry.ts";
 import { makeValidCodebaseMap } from "./fixtures/codebase-map.ts";
-
-function makeIntentMap() {
-  const map = makeValidCodebaseMap({
-    artifact_intents: {
-      agent_guide: {
-        title: "Agent Guide",
-        sections: [
-          { heading: "Build", body: "Run `npm test` before review." },
-          { heading: "Pitfalls", body: "Do not edit generated files by hand." },
-        ],
-      },
-      always_on_docs: [
-        { path: "specs/README.md", title: "Specs", body: "Spec guidance." },
-        { path: "ai_docs/README.md", title: "AI Docs", body: "AI context." },
-      ],
-      feature_agents: [
-        {
-          name: "payments",
-          description: "Payments specialist.",
-          globs: ["src/payments"],
-          body: "Use payment invariants.",
-        },
-      ],
-      prompt_templates: [
-        {
-          name: "db-migration",
-          description: "Use for database migrations.",
-          body: "Check migrations before app code.",
-        },
-      ],
-      experts: [
-        {
-          name: "billing",
-          domain: "Billing",
-          body: "Ask billing questions.",
-        },
-      ],
-      extension_candidates: [
-        {
-          name: "migration-check",
-          description: "Checks migration safety.",
-          body: "export const name = 'migration-check';\n",
-        },
-      ],
-      scaffold_runtime: {
-        state_machine_notes: ["Use the default state contract."],
-      },
-    },
-    expert_evidence: {
-      expert_domains: [
-        {
-          domain: "billing",
-          rationale: "Billing carries recurring payment invariants.",
-          primary_paths: ["src/billing"],
-          entry_points: ["src/billing/index.ts"],
-          test_paths: ["tests/billing.test.ts"],
-          key_files: [
-            {
-              path: "src/billing/index.ts",
-              purpose: "Billing entry point.",
-              line_range: [1, 120],
-            },
-          ],
-          key_types: [
-            {
-              name: "Invoice",
-              path: "src/billing/types.ts:1",
-              purpose: "Stable billing contract.",
-            },
-          ],
-          patterns: [
-            {
-              name: "idempotency",
-              description: "Billing writes must be idempotent.",
-              example_ref: "src/billing/index.ts:42",
-            },
-          ],
-          pitfalls: [
-            {
-              risk: "Double charging on retry.",
-              consequence: "Customers can be charged twice.",
-              reference: "src/billing/index.ts:55",
-            },
-          ],
-          conventions: ["Amounts are stored in cents."],
-          stability: "high",
-          recurrence: "high",
-          test_command: "npm test -- tests/billing.test.ts",
-          last_updated: "2026-07-05T00:00:00.000Z",
-        },
-      ],
-    },
-    customization_evidence: {
-      custom_tool_candidates: [
-        {
-          name: "run-tests",
-          existing_command: "npm test",
-          purpose: "Run the repository test suite.",
-          source_path: "package.json#scripts.test",
-        },
-      ],
-      skill_candidates: [
-        {
-          name: "prime-db",
-          purpose: "Prime the local database before integration tests.",
-          steps_or_script_path: "scripts/prime-db.sh",
-        },
-      ],
-    },
-  });
-  map.meta.lifecycle.per_area_template_candidates = [
-    {
-      area_name: "api-endpoint",
-      issue_type: "feature",
-      trigger_phrases: ["new API route", "endpoint change"],
-      rationale: "API endpoint work is recurring and benefits from local routing conventions.",
-      source_feature_agent: ".pi/agents/payments.md",
-    },
-  ];
-  return map;
-}
+import { makeRendererIntentMap } from "./fixtures/renderer-maps.ts";
 
 function tempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -144,7 +24,7 @@ function writeArtifacts(cwd: string, result: ReturnType<typeof renderBrownfieldA
 }
 
 function testRendersIntentBundleDeterministically(): void {
-  const map = makeIntentMap();
+  const map = makeRendererIntentMap();
   const first = renderBrownfieldArtifacts(map);
   const second = renderBrownfieldArtifacts(map);
   assert.deepEqual(second, first);
@@ -168,7 +48,7 @@ function testRendersIntentBundleDeterministically(): void {
 function testRenderedExpertsAreDiscoverableByRuntime(): void {
   const cwd = tempDir("agentify-rendered-experts-");
   try {
-    const result = renderBrownfieldArtifacts(makeIntentMap());
+    const result = renderBrownfieldArtifacts(makeRendererIntentMap());
     assert.deepEqual(result.errors, []);
     writeArtifacts(cwd, result);
 
@@ -189,7 +69,7 @@ function testRenderedProjectWorkflowsAreDiscoverableByRuntime(): void {
   const cwd = tempDir("agentify-rendered-workflows-");
   const configDir = tempDir("agentify-rendered-workflows-config-");
   try {
-    const result = renderBrownfieldArtifacts(makeIntentMap());
+    const result = renderBrownfieldArtifacts(makeRendererIntentMap());
     assert.deepEqual(result.errors, []);
     writeArtifacts(cwd, result);
 
@@ -215,7 +95,7 @@ function testRenderedProjectWorkflowsAreDiscoverableByRuntime(): void {
 }
 
 function testRendersFeedbackLoopStorageAndSkillCandidates(): void {
-  const result = renderBrownfieldArtifacts(makeIntentMap());
+  const result = renderBrownfieldArtifacts(makeRendererIntentMap());
   assert.deepEqual(result.errors, []);
   const byPath = new Map(result.artifacts.map((artifact) => [artifact.relativePath, artifact]));
 
@@ -239,7 +119,7 @@ function testRendersFeedbackLoopStorageAndSkillCandidates(): void {
 }
 
 function testRendersCustomToolCandidatesAsExtensions(): void {
-  const result = renderBrownfieldArtifacts(makeIntentMap());
+  const result = renderBrownfieldArtifacts(makeRendererIntentMap());
   assert.deepEqual(result.errors, []);
   const extension = result.artifacts.find((artifact) => artifact.relativePath === ".pi/extensions/run-tests.ts");
   assert.ok(extension, "expected custom tool candidate to render as an extension");
@@ -251,7 +131,7 @@ function testRendersCustomToolCandidatesAsExtensions(): void {
 }
 
 function testRendersLifecyclePromptTemplates(): void {
-  const result = renderBrownfieldArtifacts(makeIntentMap());
+  const result = renderBrownfieldArtifacts(makeRendererIntentMap());
   assert.deepEqual(result.errors, []);
   const byPath = new Map(result.artifacts.map((artifact) => [artifact.relativePath, artifact]));
   for (const promptPath of [
@@ -268,14 +148,14 @@ function testRendersLifecyclePromptTemplates(): void {
 }
 
 function testSchemaRejectsUnsafeIntentNamesAndPaths(): void {
-  const unsafe = makeIntentMap() as unknown as { artifact_intents: { feature_agents: Array<{ name: string; globs: string[] }> } };
+  const unsafe = makeRendererIntentMap() as unknown as { artifact_intents: { feature_agents: Array<{ name: string; globs: string[] }> } };
   unsafe.artifact_intents.feature_agents[0].name = "bad/name";
   unsafe.artifact_intents.feature_agents[0].globs = ["../secrets"];
   assert.equal(Value.Check(CodebaseMapSchema, unsafe), false);
 }
 
 function testRendererRejectsOversizedAgentsMd(): void {
-  const map = makeIntentMap();
+  const map = makeRendererIntentMap();
   map.artifact_intents!.agent_guide.sections = [
     { heading: "Too Long", body: Array.from({ length: 220 }, (_, index) => `line ${index}`).join("\n") },
   ];
@@ -293,7 +173,39 @@ function testFallbackRendererProducesManagedCoreFiles(): void {
   assert.ok(result.artifacts.some((artifact) => artifact.relativePath === ".pi/workflows/payments-plan-build-review-fix.json"));
 }
 
+function testMatchesGoldenRendererOutputs(): void {
+  const golden = JSON.parse(fs.readFileSync(
+    new URL("./fixtures/renderer-golden.json", import.meta.url),
+    "utf8",
+  ));
+  const full = makeRendererIntentMap();
+  const sparse = makeValidCodebaseMap();
+  const coverageIncomplete = makeValidCodebaseMap();
+  const firstCoverageKey = Object.keys(coverageIncomplete.coverage)[0] as keyof typeof coverageIncomplete.coverage;
+  coverageIncomplete.coverage[firstCoverageKey] = {
+    ...coverageIncomplete.coverage[firstCoverageKey],
+    status: "gap",
+  };
+  const unsafe = makeRendererIntentMap() as any;
+  unsafe.artifact_intents.feature_agents[0].name = "bad/name";
+  unsafe.artifact_intents.extension_candidates[0].name = "bad extension";
+  unsafe.artifact_intents.always_on_docs.push({ path: "../escape.md", title: "Escape", body: "Unsafe." });
+  const duplicate = makeRendererIntentMap() as any;
+  duplicate.artifact_intents.extension_candidates.push({
+    name: "run-tests",
+    description: "Conflicts with the generated custom tool extension.",
+    body: "export const duplicate = true;",
+  });
+  assert.deepEqual(renderBrownfieldArtifacts(full), golden.full);
+  assert.deepEqual(renderBrownfieldArtifacts(sparse), golden.sparse);
+  assert.deepEqual(renderValidatedBrownfieldArtifacts({}), golden.invalidSchema);
+  assert.deepEqual(renderValidatedBrownfieldArtifacts(coverageIncomplete), golden.coverageIncomplete);
+  assert.deepEqual(renderBrownfieldArtifacts(unsafe), golden.unsafe);
+  assert.deepEqual(renderBrownfieldArtifacts(duplicate), golden.duplicate);
+}
+
 const tests: Array<{ name: string; fn: () => void }> = [
+  { name: "matchesGoldenRendererOutputs", fn: testMatchesGoldenRendererOutputs },
   { name: "rendersIntentBundleDeterministically", fn: testRendersIntentBundleDeterministically },
   { name: "renderedExpertsAreDiscoverableByRuntime", fn: testRenderedExpertsAreDiscoverableByRuntime },
   { name: "renderedProjectWorkflowsAreDiscoverableByRuntime", fn: testRenderedProjectWorkflowsAreDiscoverableByRuntime },
