@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   apply:
@@ -28,7 +29,25 @@ jobs:
       - name: Apply explicit state contexts
         run: node scripts/apply-refactor-26.mjs
       - name: Typecheck
-        run: npm run typecheck
+        shell: bash
+        run: |
+          set +e
+          npm run typecheck > typecheck.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            {
+              echo '### Issue #26 typecheck diagnostic'
+              echo
+              echo '```text'
+              cat typecheck.log
+              echo '```'
+            } > typecheck-comment.md
+            gh pr comment 41 --body-file typecheck-comment.md
+          fi
+          cat typecheck.log
+          exit "$status"
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Run focused state-context tests
         run: |
           npx tsx tests/core/state-directory-legacy-characterization.test.ts
