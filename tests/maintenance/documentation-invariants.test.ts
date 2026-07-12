@@ -14,6 +14,14 @@ interface PackageJson {
   exports?: Record<string, string>;
 }
 
+interface TypeScriptConfig {
+  compilerOptions?: {
+    strict?: boolean;
+    noUnusedLocals?: boolean;
+    noUnusedParameters?: boolean;
+  };
+}
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "../..");
 
@@ -34,6 +42,13 @@ test("changelog keeps a structured Unreleased section", () => {
   }
 });
 
+test("strict and unused TypeScript checks remain enabled", () => {
+  const config = JSON.parse(read("tsconfig.json")) as TypeScriptConfig;
+  assert.equal(config.compilerOptions?.strict, true);
+  assert.equal(config.compilerOptions?.noUnusedLocals, true);
+  assert.equal(config.compilerOptions?.noUnusedParameters, true);
+});
+
 test("documentation index covers every maintained trust boundary", () => {
   const index = read("docs/README.md");
   for (const documentedPath of [
@@ -48,8 +63,14 @@ test("documentation index covers every maintained trust boundary", () => {
     "CONTRIBUTING.md",
     "AGENTS.md",
   ]) {
-    assert.ok(index.includes(`\`${documentedPath}\``), `documentation index must reference ${documentedPath}`);
-    assert.ok(fs.existsSync(path.join(REPO_ROOT, documentedPath)), `${documentedPath} must exist`);
+    assert.ok(
+      index.includes(`\`${documentedPath}\``),
+      `documentation index must reference ${documentedPath}`,
+    );
+    assert.ok(
+      fs.existsSync(path.join(REPO_ROOT, documentedPath)),
+      `${documentedPath} must exist`,
+    );
   }
 });
 
@@ -97,7 +118,10 @@ test("dependency policy documentation matches package metadata", () => {
 
   for (const dependency of Object.keys(packageJson.dependencies ?? {})) {
     assert.ok(agents.includes(`\`${dependency}\``), `AGENTS.md must classify ${dependency}`);
-    assert.ok(contributing.includes(`\`${dependency}\``), `CONTRIBUTING.md must classify ${dependency}`);
+    assert.ok(
+      contributing.includes(`\`${dependency}\``),
+      `CONTRIBUTING.md must classify ${dependency}`,
+    );
   }
 
   for (const buildDependency of ["esbuild", "tsx", "typescript"]) {
