@@ -25,13 +25,6 @@ fs.writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
 console.log("applied: package metadata");
 
 replaceOnce(
-  ".github/workflows/release-publish.yml",
-  "explicit release build",
-  "      - name: Build release tarball\n        run: npm pack --ignore-scripts",
-  "      - name: Build release tarball\n        run: npm run build && npm pack --ignore-scripts",
-);
-
-replaceOnce(
   "docs/README.md",
   "packaging documentation index",
   "| Verified artifact release process | `docs/release-process.md` |",
