@@ -54,8 +54,8 @@ jobs:
       - run: npm ci
       - run: npm audit --omit=dev --audit-level=high
 
-  modernization-validation:
-    name: Modernization validation floor
+  package-smoke:
+    name: Modernization validation and packed package smoke
     needs: [typecheck, tests, dependency-audit]
     runs-on: ubuntu-latest
     steps:
@@ -66,6 +66,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:parity
+      - run: npm run test:package
       - run: npm run test:maintenance
       - run: npm run test:generated-output
       - run: npm run test:security-redteam
