@@ -21,6 +21,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Brownfield write-map tools and deterministic renderers now capture provider-scoped state through explicit per-run factories and contexts; deprecated mutable adapters remain for compatibility.
 - Brownfield and greenfield run orchestration now live in explicit mode-specific modules behind the stable `runAgentify` coordinator.
 - Repository-facing snapshot, staging, apply, reporting, and session-agent generation primitives now have dedicated internal owners while retaining compatibility re-exports.
 - Shared artifact, agent-file, generated-surface, and package-version primitives now have dependency-neutral canonical owners with compatibility re-exports.
