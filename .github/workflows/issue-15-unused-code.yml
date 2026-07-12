@@ -27,7 +27,20 @@ jobs:
       - name: Verify generated diff
         run: git diff --check
       - name: Typecheck with unused-code checks
-        run: npm run typecheck
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck > unused-code-typecheck.log 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unused-code-typecheck-log
+          path: unused-code-typecheck.log
+          retention-days: 1
+      - name: Stop on typecheck failure
+        if: steps.typecheck.outcome == 'failure'
+        run: |
+          cat unused-code-typecheck.log
+          exit 1
       - name: Full test suite
         run: npm run test:all
       - name: Installed package smoke
