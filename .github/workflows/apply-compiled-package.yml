@@ -49,7 +49,7 @@ jobs:
             git config user.name github-actions[bot]
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
             git status --short
-            git add package.json package-lock.json .github/workflows/release-publish.yml docs/README.md docs/experimental-surfaces.md
+            git add package.json package-lock.json docs/README.md docs/experimental-surfaces.md
             git diff --cached --check
             git diff --cached --stat
             git commit -m "build: publish compiled JavaScript runtime"
