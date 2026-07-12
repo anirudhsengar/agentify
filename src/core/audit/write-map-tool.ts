@@ -24,6 +24,7 @@
 // so "covered" status without substantive evidence is surfaced
 // immediately to the agent.
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Value } from "typebox/value";
@@ -65,9 +66,23 @@ export const HISTORY_DIR = path.join(LEGACY_PI_STATE_RELATIVE_DIR, "history");
 // at the top of every audit. Defaults to `LEGACY_PI_STATE_RELATIVE_DIR` so
 // any existing direct caller (e.g. tests) keeps the prior behavior.
 // ----------------------------------------------------------------------------
+interface MapToolExecutionContext {
+  stateDir: string;
+  mapFilename: string;
+}
+
+const mapToolExecutionContext = new AsyncLocalStorage<MapToolExecutionContext>();
 let currentSessionStateDir = LEGACY_PI_STATE_RELATIVE_DIR;
 
+function activeMapPathConfig(): MapToolExecutionContext {
+  return mapToolExecutionContext.getStore() ?? {
+    stateDir: currentSessionStateDir,
+    mapFilename: MAP_FILENAME,
+  };
+}
+
 /**
+ * @deprecated Production callers must use `createWriteMapTools({ stateDir })`.
  * Set the per-session state dir that the legacy `writeMapTool` and
  * `writeMapDeltaTool` use for write/read paths. Called by `run-agentify.ts`
  * at the start of each audit run. Tests that bypass
@@ -182,6 +197,13 @@ export interface MapTools {
   /** Posix-style relative path of the canonical map, e.g.
    *  `.claude/agentify/codebase_map.json`. */
   canonicalMapRelative: string;
+  /** Selected-state draft directory. The final draft file remains the legacy
+   * path until Issue #31 resolves migration behavior. */
+  draftDirectoryRelative: string;
+  /** Historical provider-agnostic draft file path, preserved for parity. */
+  draftPathRelative: string;
+  /** Selected-state previous-map history directory. */
+  historyRelative: string;
 }
 
 function formatCoverageClosure(map: CodebaseMap): {
@@ -267,13 +289,14 @@ function consumeReserve(dim: CoverageDimension): { allowed: boolean; reason?: st
 // ============================================================================
 
 function writeCanonicalMap(cwd: string, map: CodebaseMap): { path: string; size_bytes: number } {
-    const dir = path.join(cwd, currentSessionStateDir);
+    const config = activeMapPathConfig();
+    const dir = path.join(cwd, config.stateDir);
     fs.mkdirSync(dir, { recursive: true });
 
     // Archive the existing map before overwriting. Always on;
     // re-running agentify in the same codebase preserves a
     // timestamped previous copy under <stateDir>/history/.
-    const existingPath = path.join(dir, MAP_FILENAME);
+    const existingPath = path.join(dir, config.mapFilename);
     if (fs.existsSync(existingPath)) {
         try {
             const histDir = path.join(dir, "history");
@@ -286,7 +309,7 @@ function writeCanonicalMap(cwd: string, map: CodebaseMap): { path: string; size_
         }
     }
 
-    const filePath = path.join(dir, MAP_FILENAME);
+    const filePath = path.join(dir, config.mapFilename);
     const content = JSON.stringify(map, null, 2);
     fs.writeFileSync(filePath, content, { mode: 0o644 });
     return { path: filePath, size_bytes: Buffer.byteLength(content, "utf8") };
@@ -294,7 +317,7 @@ function writeCanonicalMap(cwd: string, map: CodebaseMap): { path: string; size_
 
 /** Atomic write-then-rename for the draft transport. */
 function writeDraftAtomically(cwd: string, content: string): string {
-    const dir = path.join(cwd, currentSessionStateDir, ".agentify");
+    const dir = path.join(cwd, activeMapPathConfig().stateDir, ".agentify");
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(cwd, DRAFT_PATH);
     const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
@@ -346,7 +369,12 @@ function loadMapFromFile(
 }
 
 function readCanonicalMap(cwd: string): CodebaseMap | null {
-    const filePath = path.join(cwd, AGENTIFY_OUTPUT_DIR, MAP_FILENAME);
+    // Factory-bound tools read their captured state. Deprecated singleton tools
+    // retain the historical legacy read path even when their write setter moves.
+    const scoped = mapToolExecutionContext.getStore();
+    const filePath = scoped
+      ? path.join(cwd, scoped.stateDir, scoped.mapFilename)
+      : path.join(cwd, AGENTIFY_OUTPUT_DIR, MAP_FILENAME);
     if (!fs.existsSync(filePath)) return null;
     const loaded = loadMapFromFile(filePath, cwd);
     return loaded.map as CodebaseMap;
@@ -913,3 +941,37 @@ export const writeMapDeltaTool = defineTool({
         };
     },
 }) as unknown as ToolDefinition;
+
+type ToolExecute = NonNullable<ToolDefinition["execute"]>;
+
+function bindToolToMapContext(
+  tool: ToolDefinition,
+  context: MapToolExecutionContext,
+): ToolDefinition {
+  const execute = tool.execute.bind(tool) as ToolExecute;
+  return {
+    ...tool,
+    execute: ((...args: Parameters<ToolExecute>) =>
+      mapToolExecutionContext.run(context, () => execute(...args))) as ToolExecute,
+  } as ToolDefinition;
+}
+
+/** Create state-directory-isolated write-map tools for one run. */
+export function createWriteMapTools(config: MapPathConfig): MapTools {
+  const context: MapToolExecutionContext = Object.freeze({
+    stateDir: config.stateDir,
+    mapFilename: config.mapFilename ?? MAP_FILENAME,
+  });
+  const normalize = (value: string): string => value.replace(/\\/g, "/");
+  return {
+    writeMapTool: bindToolToMapContext(writeMapTool, context),
+    writeMapDeltaTool: bindToolToMapContext(writeMapDeltaTool, context),
+    canonicalMapPath: (cwd: string) => path.join(cwd, context.stateDir, context.mapFilename),
+    canonicalMapRelative: normalize(path.join(context.stateDir, context.mapFilename)),
+    draftDirectoryRelative: normalize(path.join(context.stateDir, ".agentify")),
+    // Preserve the mismatch tracked by Issue #31. Do not migrate silently here.
+    draftPathRelative: normalize(DRAFT_PATH),
+    historyRelative: normalize(path.join(context.stateDir, "history")),
+  };
+}
+

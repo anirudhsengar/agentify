@@ -55,7 +55,10 @@ export type ValidatedRenderResult = RenderArtifactsResult & {
 };
 
 /** Deterministic trust boundary used before any repository-facing apply. */
-export function renderValidatedBrownfieldArtifacts(input: unknown): ValidatedRenderResult {
+export function renderValidatedBrownfieldArtifacts(
+  input: unknown,
+  context?: RenderContext | { stateDir?: string },
+): ValidatedRenderResult {
   const schemaErrors = Value.Errors(CodebaseMapSchema, input).map((error) => {
     const detail = error as unknown as { path?: string; instancePath?: string; message: string };
     return { path: detail.path ?? detail.instancePath ?? "(root)", message: detail.message };
@@ -70,7 +73,7 @@ export function renderValidatedBrownfieldArtifacts(input: unknown): ValidatedRen
   }));
   if (coverageErrors.length > 0) return { artifacts: [], errors: coverageErrors.map((e) => `${e.path}: ${e.message}`), validationErrors: coverageErrors };
 
-  return { ...renderBrownfieldArtifacts(map), validationErrors: [] };
+  return { ...renderBrownfieldArtifacts(map, context), validationErrors: [] };
 }
 
 const KEBAB_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -80,23 +83,23 @@ const SHELL_SYNTAX = /[;&|<>`$]/;
 
 const REQUIRED_ALWAYS_ON_DOCS = new Set(["specs/README.md", "ai_docs/README.md"]);
 
-// Session-scoped state dir. The audit resolves its state dir at the
-// top of every run; the renderer helpers consult this via the
-// `stateDirFor` getter so the legacy literal doesn't need to be threaded
-// through every helper signature. Defaults to `.pi` — the same root
-// that hosts `.pi/agents/`, `.pi/prompts/`, etc. — so direct callers
-// (tests) get the historical paths. Production runs override this via
-// `setRendererStateDir` once the orchestrator has resolved the canonical
-// state dir for the current target set.
-let currentRendererStateDir = ".pi";
-
-/** Set the per-session state dir used by the artifact renderers. */
-export function setRendererStateDir(stateDir: string): void {
-  currentRendererStateDir = stateDir;
+export interface RenderContext {
+  stateDir: string;
 }
 
-function stateDirFor(): string {
-  return currentRendererStateDir;
+// Deprecated direct callers retain the historical mutable default. Supported
+// production orchestration always supplies an explicit RenderContext.
+let legacyRendererStateDir = ".pi";
+
+/** @deprecated Pass an explicit RenderContext to render functions. */
+export function setRendererStateDir(stateDir: string): void {
+  legacyRendererStateDir = stateDir;
+}
+
+function resolveRenderContext(
+  context?: RenderContext | { stateDir?: string },
+): RenderContext {
+  return { stateDir: context?.stateDir ?? legacyRendererStateDir };
 }
 
 function isSafeRelativePath(relativePath: string): boolean {
@@ -687,13 +690,13 @@ function renderFallbackFeatureAgentBody(name: string, map: CodebaseMap): string 
   ].join("\n");
 }
 
-function renderFallbackFeatureAgents(map: CodebaseMap): RenderedArtifact[] {
+function renderFallbackFeatureAgents(map: CodebaseMap, context: RenderContext): RenderedArtifact[] {
   const domains = map.meta.suggested_subagent_domains ?? [];
   return domains
     .filter(isKebabName)
     .slice(0, 12)
     .map((name) => markdownArtifact({
-      relativePath: `${stateDirFor()}/agents/${name}.md`,
+      relativePath: `${context.stateDir}/agents/${name}.md`,
       kind: "audit",
       required: false,
       source: "fallback-feature-agent-renderer",
@@ -777,6 +780,7 @@ function renderProjectWorkflowArtifacts(
   map: CodebaseMap,
   intents: ArtifactIntents | undefined,
   errors: string[],
+  context: RenderContext,
 ): RenderedArtifact[] {
   const artifacts: RenderedArtifact[] = [];
   for (const agentName of renderedWorkflowAgentNames(map, intents)) {
@@ -787,7 +791,7 @@ function renderProjectWorkflowArtifacts(
       continue;
     }
     artifacts.push(jsonArtifact({
-      relativePath: `${stateDirFor()}/workflows/${agentName}-plan-build-review-fix.json`,
+      relativePath: `${context.stateDir}/workflows/${agentName}-plan-build-review-fix.json`,
       kind: "workflow",
       required: false,
       source: "specialist-workflow-renderer",
@@ -944,7 +948,7 @@ function renderFeedbackLoopArtifacts(map: CodebaseMap, intents: ArtifactIntents 
   ];
 }
 
-function renderSkillCandidate(skill: SkillCandidateIntent): RenderedArtifact {
+function renderSkillCandidate(skill: SkillCandidateIntent, context: RenderContext): RenderedArtifact {
   const commandLike = !skill.steps_or_script_path.includes("\n")
     && !skill.steps_or_script_path.trim().startsWith("-");
   const workflow = commandLike
@@ -959,7 +963,7 @@ function renderSkillCandidate(skill: SkillCandidateIntent): RenderedArtifact {
         .filter((line) => line.length > 0)
         .map((line, index) => `${index + 1}. ${line.replace(/^[-*]\s*/, "")}`);
   return markdownArtifact({
-    relativePath: `${stateDirFor()}/skills/${skill.name}/SKILL.md`,
+    relativePath: `${context.stateDir}/skills/${skill.name}/SKILL.md`,
     kind: "skill",
     required: false,
     source: "skill-candidate-renderer",
@@ -1003,7 +1007,7 @@ function renderSkillCandidate(skill: SkillCandidateIntent): RenderedArtifact {
   });
 }
 
-function renderSkillCandidateArtifacts(map: CodebaseMap, errors: string[]): RenderedArtifact[] {
+function renderSkillCandidateArtifacts(map: CodebaseMap, errors: string[], context: RenderContext): RenderedArtifact[] {
   const skillCandidates = map.customization_evidence?.skill_candidates ?? [];
   const existingSkills = new Set(map.meta.documentation.existing_pi_skills ?? []);
   const artifacts: RenderedArtifact[] = [];
@@ -1013,7 +1017,7 @@ function renderSkillCandidateArtifacts(map: CodebaseMap, errors: string[]): Rend
       continue;
     }
     if (existingSkills.has(skill.name)) continue;
-    artifacts.push(renderSkillCandidate(skill));
+    artifacts.push(renderSkillCandidate(skill, context));
   }
   return artifacts;
 }
@@ -1030,12 +1034,12 @@ function splitShellFreeCommand(command: string): string[] | null {
   });
 }
 
-function renderCustomToolCandidate(tool: CustomToolCandidateIntent): RenderedArtifact | null {
+function renderCustomToolCandidate(tool: CustomToolCandidateIntent, context: RenderContext): RenderedArtifact | null {
   const argv = splitShellFreeCommand(tool.existing_command);
   if (!argv || argv.length === 0) return null;
   const [command, ...args] = argv;
   return hashCommentArtifact({
-    relativePath: `${stateDirFor()}/extensions/${tool.name}.ts`,
+    relativePath: `${context.stateDir}/extensions/${tool.name}.ts`,
     kind: "extension",
     required: false,
     source: "custom-tool-candidate-renderer",
@@ -1087,7 +1091,7 @@ function renderCustomToolCandidate(tool: CustomToolCandidateIntent): RenderedArt
   });
 }
 
-function renderCustomToolCandidateArtifacts(map: CodebaseMap, errors: string[]): RenderedArtifact[] {
+function renderCustomToolCandidateArtifacts(map: CodebaseMap, errors: string[], context: RenderContext): RenderedArtifact[] {
   const customToolCandidates = map.customization_evidence?.custom_tool_candidates ?? [];
   const existingExtensionNames = new Set(
     (map.meta.documentation.existing_pi_extensions ?? [])
@@ -1101,7 +1105,7 @@ function renderCustomToolCandidateArtifacts(map: CodebaseMap, errors: string[]):
       continue;
     }
     if (existingExtensionNames.has(tool.name)) continue;
-    const artifact = renderCustomToolCandidate(tool);
+    const artifact = renderCustomToolCandidate(tool, context);
     if (artifact) artifacts.push(artifact);
   }
   return artifacts;
@@ -1248,12 +1252,13 @@ function renderLifecyclePromptArtifacts(map: CodebaseMap, existingPaths: Set<str
 
 export function renderBrownfieldArtifacts(
   map: CodebaseMap,
-  options?: { stateDir?: string },
+  context?: RenderContext | { stateDir?: string },
 ): RenderArtifactsResult {
   const artifacts: RenderedArtifact[] = [];
   const errors: string[] = [];
   const intents = map.artifact_intents;
-  const stateDir = options?.stateDir ?? ".pi";
+  const renderContext = resolveRenderContext(context);
+  const stateDir = renderContext.stateDir;
 
   const agentGuide = intents ? renderIntentAgentGuide(intents) : renderFallbackAgentGuide(map);
   if (countLines(agentGuide) > AGENTS_MD_MAX_LINES) {
@@ -1270,7 +1275,7 @@ export function renderBrownfieldArtifacts(
 
   artifacts.push(...renderAlwaysOnDocs(map, intents));
   artifacts.push(...renderFeedbackLoopArtifacts(map, intents));
-  artifacts.push(...renderProjectWorkflowArtifacts(map, intents, errors));
+  artifacts.push(...renderProjectWorkflowArtifacts(map, intents, errors, renderContext));
 
   if (intents) {
     for (const agent of intents.feature_agents) {
@@ -1323,7 +1328,7 @@ export function renderBrownfieldArtifacts(
       }));
     }
   } else {
-    artifacts.push(...renderFallbackFeatureAgents(map));
+    artifacts.push(...renderFallbackFeatureAgents(map, renderContext));
   }
 
   artifacts.push(...renderLifecyclePromptArtifacts(
@@ -1343,8 +1348,8 @@ export function renderBrownfieldArtifacts(
     artifacts.push(...renderExpertDomainArtifacts(expert));
   }
 
-  artifacts.push(...renderSkillCandidateArtifacts(map, errors));
-  artifacts.push(...renderCustomToolCandidateArtifacts(map, errors));
+  artifacts.push(...renderSkillCandidateArtifacts(map, errors, renderContext));
+  artifacts.push(...renderCustomToolCandidateArtifacts(map, errors, renderContext));
 
   const unsafe = artifacts
     .map((artifact) => artifact.relativePath)
