@@ -55,6 +55,8 @@ test("documentation index covers every maintained trust boundary", () => {
     "docs/architecture.md",
     "docs/build-and-package.md",
     "docs/experimental-surfaces.md",
+    "docs/refactors/modernization-baseline.md",
+    "docs/refactors/runtime-reachability.md",
     "docs/state-lifecycle.md",
     "docs/webhook-security.md",
     "docs/release-process.md",
@@ -107,6 +109,8 @@ test("binary and scripts preserve the compiled package boundary", () => {
   assert.equal(packageJson.scripts?.build, "node scripts/build.mjs");
   assert.equal(packageJson.scripts?.prepack, "npm run build");
   assert.ok(packageJson.scripts?.["test:package"]?.includes("installed-cli-smoke.mjs"));
+  assert.ok(packageJson.scripts?.["test:parity"]?.includes("tests/parity/"));
+  assert.ok(packageJson.scripts?.["test:parity"]?.includes("test:package"));
   assert.ok(packageJson.scripts?.["release:check"]?.includes("test:package"));
 });
 
