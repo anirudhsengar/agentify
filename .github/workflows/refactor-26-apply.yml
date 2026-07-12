@@ -57,10 +57,29 @@ jobs:
           npx tsx tests/core/state-context-production-ownership.test.ts
           npm run test:generation-pipeline
       - name: Commit implementation
+        shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/core/audit/write-map-tool.ts src/core/artifacts/renderers.ts src/core/runs/brownfield-run.ts tests/core/state-directory-isolation.test.ts tests/core/state-context-production-ownership.test.ts
-          git diff --cached --check
-          git commit -m "refactor: isolate state directories per run"
-          git push origin HEAD:refactor/26-explicit-state-contexts
+          set +e
+          {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/core/audit/write-map-tool.ts src/core/artifacts/renderers.ts src/core/runs/brownfield-run.ts tests/core/state-directory-isolation.test.ts tests/core/state-context-production-ownership.test.ts
+            git diff --cached --check
+            git commit -m "refactor: isolate state directories per run"
+            git push origin HEAD:refactor/26-explicit-state-contexts
+          } > commit.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            {
+              echo '### Issue #26 commit diagnostic'
+              echo
+              echo '```text'
+              cat commit.log
+              echo '```'
+            } > commit-comment.md
+            gh pr comment 41 --body-file commit-comment.md
+          fi
+          cat commit.log
+          exit "$status"
+        env:
+          GH_TOKEN: ${{ github.token }}
