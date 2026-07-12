@@ -53,6 +53,7 @@ try {
     "dist/prompts/builder.md",
     "docs/README.md",
     "docs/architecture.md",
+    "docs/architecture/dependency-compatibility-matrix.md",
     "docs/architecture/experimental-runtime-decisions.md",
     "docs/build-and-package.md",
     "docs/experimental-surfaces.md",
