@@ -1,5 +1,4 @@
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { ModelRegistry } from "@earendil-works/pi-coding-agent";
 import {
   AuthStorage,
@@ -21,12 +20,13 @@ import { createWriteGreenfieldArtifactsTool } from "./greenfield-artifacts.ts";
 import { createSpawnExplorerTool } from "./audit/spawn-explorer-tool.ts";
 import { resolveModelOrThrow, selectModelForRole } from "./models/resolver.ts";
 import { shippedSkillsSourceDir } from "./shipped-paths.ts";
+import { resolvePackageRoot } from "./package-root.ts";
 import {
   assertRequestedToolsAllowed,
   createRepositoryWriteExecutionPolicy,
 } from "./security/execution-policy.ts";
 
-const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const PACKAGE_ROOT = resolvePackageRoot();
 const SHIPPED_SKILLS_DIR = shippedSkillsSourceDir(PACKAGE_ROOT);
 
 type UsageLike = {
