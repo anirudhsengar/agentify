@@ -41,10 +41,28 @@ jobs:
       - name: Install packed compiled CLI
         run: npm run test:package
       - name: Commit compiled package migration
+        id: commit
+        continue-on-error: true
         run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add package.json package-lock.json .github/workflows/release-publish.yml docs/README.md docs/experimental-surfaces.md
-          git diff --cached --check
-          git commit -m "build: publish compiled JavaScript runtime"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          set +e
+          {
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git status --short
+            git add package.json package-lock.json .github/workflows/release-publish.yml docs/README.md docs/experimental-surfaces.md
+            git diff --cached --check
+            git diff --cached --stat
+            git commit -m "build: publish compiled JavaScript runtime"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          } > compiled-package-commit.log 2>&1
+          exit $?
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compiled-package-commit-diagnostics
+          path: compiled-package-commit.log
+          if-no-files-found: warn
+          retention-days: 1
+      - name: Stop on commit failure
+        if: steps.commit.outcome == 'failure'
+        run: exit 1
