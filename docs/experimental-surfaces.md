@@ -55,10 +55,10 @@ validate future architecture, and are used by contract and security tests. Movin
 or deleting them during the security remediation would combine product-boundary
 work with broad file-path churn and make review less reliable.
 
-The current enforcement boundary is the absence of package exports, the explicit
-CLI parser, documentation, and product-boundary tests. Raw source may still be
-present in 0.1.x packages until the compiled-package remediation lands; its
-presence does not make deep imports supported or stable.
+The restrictive npm `exports` map, documentation, CLI parser, and
+product-boundary tests enforce this boundary. Standard package imports into raw
+source paths are rejected. The compiled-artifact packaging phase will additionally
+remove raw TypeScript source from the published tarball.
 
 ## Graduation requirements
 

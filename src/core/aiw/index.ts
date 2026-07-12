@@ -1,4 +1,11 @@
-// index.ts — the AIW module's public surface.
+/**
+ * @experimental Internal AIW composition root.
+ *
+ * This module is not a public CLI command or package export and carries no
+ * semantic-version compatibility guarantee. Repository tests and internal code
+ * may import it directly; package consumers must use the supported `agentify`
+ * executable. See `docs/experimental-surfaces.md`.
+ */
 //
 // One entry point: `startAiwRunner(options)`. Returns an `AiwRunner`
 // that exposes the four operations a caller needs:
@@ -247,7 +254,7 @@ function mergeSignals(signals: AbortSignal[]): AbortSignal {
 }
 
 // ---------------------------------------------------------------------------
-// Public exports
+// Internal experimental exports
 // ---------------------------------------------------------------------------
 
 export {
@@ -325,5 +332,3 @@ export { runPlanBuildReview } from "./workflows/plan-build-review.ts";
 export { runPlanBuildReviewFix } from "./workflows/plan-build-review-fix.ts";
 export { runPlanBuildReviewShip } from "./workflows/plan-build-review-ship.ts";
 
-// Re-export our own runner types so callers can import from a single entry.
-export type {} from "./index.ts";

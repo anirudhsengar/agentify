@@ -67,5 +67,8 @@
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run typecheck && npm run test:all && npm run test:package",
     "inspect-log": "node src/core/audit/scripts/inspect-log.mjs"
+  },
+  "exports": {
+    "./package.json": "./package.json"
   }
 }

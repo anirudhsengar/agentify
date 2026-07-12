@@ -15,7 +15,11 @@ async function testPackageExposesOnlyCliRuntime(): Promise<void> {
     exports?: unknown;
   };
   assert.deepEqual(packageJson.bin, { agentify: "./bin/agentify.js" });
-  assert.equal(packageJson.exports, undefined, "experimental modules must not be package exports");
+  assert.deepEqual(
+    packageJson.exports,
+    { "./package.json": "./package.json" },
+    "the package export map must reject deep imports into experimental source",
+  );
 }
 
 async function testCliHasNoExperimentalCommands(): Promise<void> {

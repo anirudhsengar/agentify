@@ -48,8 +48,10 @@ See [docs/README.md](docs/README.md) for the documentation index.
 
 ## What It Does
 
-agentify exposes one public entrypoint and hides the rest of the
-machinery behind it.
+The installed `agentify` command is the only supported public runtime surface
+in 0.1.x. Internal runtime modules are experimental implementation details, not
+package APIs or hidden command families. See
+[docs/experimental-surfaces.md](docs/experimental-surfaces.md).
 
 - **Audit/comprehension:** scan an existing codebase and generate its
   agentic surface: `AGENTS.md`, `specs/README.md`, `ai_docs/README.md`,
@@ -281,10 +283,11 @@ The runtime entry (`agentify` with no positional arguments) is what
 performs the brownfield audit or starts the greenfield chat. The
 config-utility subcommands exist to inspect and edit `~/.agentify/`
 without manually editing files. The `--mode` flag skips project-kind
-classification for ambiguous repos. Internal runtimes (`webhook`,
-`aiw`, `orchestrator`, `expert`) are library-only and never appear as
-subcommands. See the entry-mode and slot design notes in
-`docs/README.md`.
+classification for ambiguous repos. Internal experimental runtimes
+(`webhook`, `aiw`, `orchestrator`, `coms`, `expert`) are not public
+subcommands or package exports. See
+[docs/experimental-surfaces.md](docs/experimental-surfaces.md) and the entry-mode
+notes in `docs/README.md`.
 
 ### Model slots
 
@@ -328,12 +331,11 @@ optionally explorer/lite). The CLI lets you change this later.
   specialist, and expert context, then passes that route to the implementation
   agent.
 
-Webhook, AIW, orchestrator, and expert modules may still exist
-internally. The public GitHub loop uses generated workflow/specialist/expert
-context plus the orchestration-planner prompt; it does not expose the internal
-OrchestratorHost as a public command or hosted control plane. See
-the public orchestration-plane boundary as documented in
-`docs/README.md`.
+Webhook, AIW, orchestrator, communications, and expert modules remain internal
+experimental code. The public GitHub loop uses generated
+workflow/specialist/expert context plus the orchestration-planner prompt; it does
+not expose an internal host as a public command, library API, or hosted control
+plane. See [docs/experimental-surfaces.md](docs/experimental-surfaces.md).
 
 The shipped skill pack lives in `packaged/skills/` — outside
 `.agents/` or `.claude/` at the repo root by design. The installer
