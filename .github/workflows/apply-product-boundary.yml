@@ -1,0 +1,39 @@
+name: apply-product-boundary
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.ref == 'agent/phase-8-product-boundary-main' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+          cache: npm
+      - run: npm ci
+      - name: Apply product boundary
+        run: node .github/scripts/apply-product-boundary.mjs
+      - name: Validate focused boundary
+        run: |
+          npm run typecheck
+          npx tsx tests/product-boundary.test.ts
+          npm run test:package
+      - name: Commit product boundary
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add package.json README.md docs/experimental-surfaces.md src/core/aiw/index.ts tests/product-boundary.test.ts
+          git diff --cached --check
+          git commit -m "docs: enforce supported product boundary"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
