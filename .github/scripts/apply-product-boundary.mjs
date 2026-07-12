@@ -32,7 +32,7 @@ replacePattern(
   "remove AIW self export",
   /\n\/\/ Re-export our own runner types so callers can import from a single entry\.\r?\nexport type \{\} from "\.\/index\.ts";\r?\n?$/,
   "\n",
-  /@experimental Internal AIW composition root[\s\S]*?$(?![\s\S]*export type \{\} from "\.\/index\.ts")/,
+  /^(?![\s\S]*export type \{\} from "\.\/index\.ts";)[\s\S]*$/,
 );
 
 replacePattern(
