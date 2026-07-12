@@ -69,9 +69,29 @@ jobs:
       - run: npm run build
       - name: CLI parity
         run: npm run test:parity:cli
-      - name: Generated-bundle parity
+      - name: Generated render inventory
+        if: ${{ always() }}
+        env:
+          AGENTIFY_PARITY_CASE: render
+        run: npm run test:parity:generated
+      - name: Generated apply semantics
+        if: ${{ always() }}
+        env:
+          AGENTIFY_PARITY_CASE: apply
+        run: npm run test:parity:generated
+      - name: Generated required-conflict atomicity
+        if: ${{ always() }}
+        env:
+          AGENTIFY_PARITY_CASE: conflict
+        run: npm run test:parity:generated
+      - name: Generated symlink protection
+        if: ${{ always() }}
+        env:
+          AGENTIFY_PARITY_CASE: symlink
         run: npm run test:parity:generated
       - name: State-directory parity
+        if: ${{ always() }}
         run: npm run test:parity:state
       - name: Packed package smoke
+        if: ${{ always() }}
         run: npm run test:package
