@@ -1,15 +1,19 @@
-name: Apply Issue 23 shared-primitives refactor
+name: Complete Issue 23 shared-primitives refactor
 
 on:
-  push:
+  pull_request:
     branches:
-      - refactor/23-shared-primitives
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: write
 
 jobs:
-  apply-refactor:
+  complete-refactor:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -24,7 +28,7 @@ jobs:
           node-version: "22.19.0"
           cache: npm
 
-      - name: Apply exact move-and-rewire refactor
+      - name: Apply exact remaining rewires
         shell: bash
         run: |
           python <<'PY'
@@ -43,250 +47,6 @@ jobs:
               if count != 1:
                   raise RuntimeError(f"{label}: expected one match, found {count}")
               return text.replace(old, new, 1)
-
-          write("src/core/artifacts/generated-surface.ts", '''export const GENERATED_SURFACE_PATHS = [
-            "AGENTS.md",
-            "CLAUDE.md",
-            "CONTEXT.md",
-            "specs/README.md",
-            "ai_docs/README.md",
-            "conditional_docs.md",
-            ".pi/conditional_docs.md",
-            "SETUP.md",
-            ".pi/agents",
-            ".pi/prompts",
-            ".pi/workflows",
-            ".pi/extensions",
-            ".pi/skills",
-            ".agents",
-            ".claude",
-            ".codex",
-            ".github/actions",
-            ".github/agent-prompts",
-            ".github/scripts",
-            ".github/workflows",
-            "app_docs",
-            "app_review",
-            "app_fix_reports",
-          ] as const;
-
-          /** Normalize repository-relative artifact paths without resolving them. */
-          export function normalizeArtifactPath(relativePath: string): string {
-            return relativePath.replace(/\\\\/g, "/").replace(/^\\.\\/+/, "");
-          }
-          ''')
-
-          write("src/core/artifacts/managed-markers.ts", '''import { normalizeArtifactPath } from "./generated-surface.ts";
-
-          export const MARKDOWN_MANAGED_MARKER = "<!-- agentify:managed -->";
-          export const TOML_MANAGED_MARKER = "# agentify:managed";
-          export const SHA256_MANAGED_MARKER = "sha256";
-
-          export const AGENTIFY_MANAGED_MARKERS = {
-            markdown: MARKDOWN_MANAGED_MARKER,
-            toml: TOML_MANAGED_MARKER,
-          } as const;
-
-          /** Insert the managed marker after YAML frontmatter when present. */
-          export function addMarkdownManagedMarker(raw: string): string {
-            if (raw.includes(MARKDOWN_MANAGED_MARKER)) return raw;
-            const frontmatter = raw.match(/^(---\\n[\\s\\S]*?\\n---\\n?)([\\s\\S]*)$/);
-            if (!frontmatter) return `${MARKDOWN_MANAGED_MARKER}\\n${raw}`;
-            return `${frontmatter[1]}${MARKDOWN_MANAGED_MARKER}\\n${frontmatter[2]}`;
-          }
-
-          /** Insert the hash-comment marker after a shebang when present. */
-          export function addHashCommentManagedMarker(raw: string): string {
-            if (raw.includes(TOML_MANAGED_MARKER)) return raw;
-            if (raw.startsWith("#!")) {
-              const newline = raw.indexOf("\\n");
-              if (newline >= 0) {
-                return `${raw.slice(0, newline + 1)}${TOML_MANAGED_MARKER}\\n${raw.slice(newline + 1)}`;
-              }
-            }
-            return `${TOML_MANAGED_MARKER}\\n${raw}`;
-          }
-
-          export function addManagedMarker(raw: string, marker: string): string {
-            if (marker === MARKDOWN_MANAGED_MARKER) return addMarkdownManagedMarker(raw);
-            if (marker === TOML_MANAGED_MARKER) return addHashCommentManagedMarker(raw);
-            return raw.includes(marker) ? raw : `${marker}\\n${raw}`;
-          }
-
-          export function markerForArtifactPath(relativePath: string): string {
-            const normalized = normalizeArtifactPath(relativePath);
-            if (normalized.endsWith(".md")) return MARKDOWN_MANAGED_MARKER;
-            if (normalized.endsWith(".json")) return SHA256_MANAGED_MARKER;
-            return TOML_MANAGED_MARKER;
-          }
-          ''')
-
-          write("src/core/artifacts/agent-file-conventions.ts", '''export const RESERVED_AGENT_NAMES = [
-            "scout",
-            "review",
-            "implement",
-            "test",
-            "fix",
-            "document",
-          ] as const;
-
-          export const RESERVED_AGENT_FILENAMES: readonly string[] = RESERVED_AGENT_NAMES.map(
-            (name) => `${name}.md`,
-          );
-
-          const RESERVED_AGENT_FILENAME_SET = new Set<string>(RESERVED_AGENT_FILENAMES);
-
-          export function isReservedAgentFilename(filename: string): boolean {
-            return RESERVED_AGENT_FILENAME_SET.has(filename);
-          }
-
-          export function isFeatureAgentFilename(filename: string): boolean {
-            return filename.endsWith(".md") && !isReservedAgentFilename(filename);
-          }
-          ''')
-
-          write("src/core/package-version.ts", '''import * as fs from "node:fs";
-          import * as path from "node:path";
-          import { resolvePackageRoot } from "./package-root.ts";
-
-          /** Read package.json from a source or compiled package root. */
-          export function readPackageVersion(packageRoot: string = resolvePackageRoot()): string {
-            try {
-              const raw = fs.readFileSync(path.join(packageRoot, "package.json"), "utf-8");
-              const parsed = JSON.parse(raw) as { version?: string };
-              return parsed.version ?? "unknown";
-            } catch {
-              return "unknown";
-            }
-          }
-          ''')
-
-          path = "src/core/artifact-exporters.ts"
-          text = read(path)
-          text = replace_once(text, '''import { shippedSkillsSourceDir } from "./shipped-paths.ts";
-
-          const MD_MARKER = "<!-- agentify:managed -->";
-          const TOML_MARKER = "# agentify:managed";
-
-          const RESERVED_AGENT_FILES = new Set([
-            "scout.md",
-            "review.md",
-            "implement.md",
-            "test.md",
-            "fix.md",
-            "document.md",
-          ]);
-          ''', '''import { shippedSkillsSourceDir } from "./shipped-paths.ts";
-          import { isFeatureAgentFilename } from "./artifacts/agent-file-conventions.ts";
-          import {
-            AGENTIFY_MANAGED_MARKERS,
-            MARKDOWN_MANAGED_MARKER,
-            TOML_MANAGED_MARKER,
-            addMarkdownManagedMarker,
-          } from "./artifacts/managed-markers.ts";
-          ''', "artifact-exporters imports and constants")
-          text = replace_once(text, '''function addMarkdownMarker(raw: string, marker: string): string {
-            if (raw.includes(marker)) return raw;
-            const frontmatter = raw.match(/^(---\\n[\\s\\S]*?\\n---\\n?)([\\s\\S]*)$/);
-            if (!frontmatter) return `${marker}\\n${raw}`;
-            return `${frontmatter[1]}${marker}\\n${frontmatter[2]}`;
-          }
-
-          export function addMarkdownManagedMarker(raw: string): string {
-            return addMarkdownMarker(raw, MD_MARKER);
-          }
-
-          ''', "", "artifact-exporters markdown helper")
-          text = text.replace("MD_MARKER", "MARKDOWN_MANAGED_MARKER")
-          text = text.replace("TOML_MARKER", "TOML_MANAGED_MARKER")
-          text = replace_once(
-              text,
-              '.filter((entry) => !RESERVED_AGENT_FILES.has(entry.name))',
-              '.filter((entry) => isFeatureAgentFilename(entry.name))',
-              "artifact-exporters reserved filter",
-          )
-          text = replace_once(text, '''export const AGENTIFY_MANAGED_MARKERS = {
-            markdown: MARKDOWN_MANAGED_MARKER,
-            toml: TOML_MANAGED_MARKER,
-          } as const;
-          ''', '''export { AGENTIFY_MANAGED_MARKERS, addMarkdownManagedMarker };
-          ''', "artifact-exporters compatibility exports")
-          write(path, text)
-
-          path = "src/core/artifacts/renderers.ts"
-          text = read(path)
-          text = replace_once(text, '''import { AGENTIFY_MANAGED_MARKERS, addMarkdownManagedMarker } from "../artifact-exporters.ts";
-          ''', '''import {
-            AGENTIFY_MANAGED_MARKERS,
-            addMarkdownManagedMarker,
-          } from "./managed-markers.ts";
-          import { normalizeArtifactPath } from "./generated-surface.ts";
-          ''', "renderers marker import")
-          text = replace_once(text, '''function normalizePath(relativePath: string): string {
-            return relativePath.replace(/\\\\/g, "/").replace(/^\\.\\/+/, "");
-          }
-
-          ''', "", "renderers normalize helper")
-          text = text.replace("normalizePath", "normalizeArtifactPath")
-          write(path, text)
-
-          path = "src/core/manifest.ts"
-          text = read(path)
-          text = replace_once(text, '''import { AGENTIFY_MANAGED_MARKERS } from "./artifact-exporters.ts";
-          ''', '''import { normalizeArtifactPath } from "./artifacts/generated-surface.ts";
-          import { markerForArtifactPath } from "./artifacts/managed-markers.ts";
-          ''', "manifest primitive imports")
-          text = replace_once(text, '''function normalizePath(relativePath: string): string {
-            return relativePath.replace(/\\\\/g, "/").replace(/^\\.\\/+/, "");
-          }
-
-          ''', "", "manifest normalize helper")
-          text = text.replace("normalizePath", "normalizeArtifactPath")
-          text = replace_once(text, '''export function markerForPath(relativePath: string): string {
-            const normalized = normalizeArtifactPath(relativePath);
-            if (normalized.endsWith(".md")) return AGENTIFY_MANAGED_MARKERS.markdown;
-            if (normalized.endsWith(".json")) return "sha256";
-            return AGENTIFY_MANAGED_MARKERS.toml;
-          }
-          ''', '''export function markerForPath(relativePath: string): string {
-            return markerForArtifactPath(relativePath);
-          }
-          ''', "manifest marker forwarding")
-          write(path, text)
-
-          path = "src/core/scaffold-installer.ts"
-          text = read(path)
-          text = replace_once(text, '''import { addMarkdownManagedMarker, AGENTIFY_MANAGED_MARKERS } from "./artifact-exporters.ts";
-          ''', '''import {
-            AGENTIFY_MANAGED_MARKERS,
-            addManagedMarker,
-          } from "./artifacts/managed-markers.ts";
-          ''', "scaffold marker import")
-          text = replace_once(text, '''function addHashMarker(raw: string): string {
-            if (raw.includes(HASH_MARKER)) return raw;
-            if (raw.startsWith("#!")) {
-              const newline = raw.indexOf("\\n");
-              if (newline >= 0) {
-                return `${raw.slice(0, newline + 1)}${HASH_MARKER}\\n${raw.slice(newline + 1)}`;
-              }
-            }
-            return `${HASH_MARKER}\\n${raw}`;
-          }
-
-          function addMarker(raw: string, marker: string): string {
-            return marker === MARKDOWN_MARKER ? addMarkdownManagedMarker(raw) : addHashMarker(raw);
-          }
-
-          ''', "", "scaffold marker helpers")
-          text = replace_once(text, "  const content = addMarker(raw, marker);", "  const content = addManagedMarker(raw, marker);", "scaffold marker call")
-          write(path, text)
-
-          path = "src/core/greenfield-artifacts.ts"
-          text = read(path)
-          text = replace_once(text, '''} from "./artifact-exporters.ts";
-          ''', '''} from "./artifacts/managed-markers.ts";
-          ''', "greenfield marker import")
-          write(path, text)
 
           path = "src/core/run-agentify.ts"
           text = read(path)
@@ -335,7 +95,7 @@ jobs:
             "app_fix_reports",
           ] as const;
 
-          ''', "", "run-agentify duplicated conventions")
+          ''', "", "run-agentify duplicate constants")
           text = replace_once(text, '''function toRel(cwd: string, filePath: string): string {
             return path.relative(cwd, filePath).split(path.sep).join("/");
           }
@@ -364,32 +124,36 @@ jobs:
             }
           }
 
-          ''', "", "run-agentify package version helper")
+          ''', "", "run-agentify package version duplicate")
           text = text.replace("loadAgentifyVersion()", "readPackageVersion(packageRoot())")
-          if "loadAgentifyVersion" in text or "RESERVED_AGENT_NAMES" in text:
-              raise RuntimeError("run-agentify retained a removed duplicate")
+          if "RESERVED_AGENT_NAMES" in text or "loadAgentifyVersion" in text:
+              raise RuntimeError("run-agentify retained a duplicate primitive")
           write(path, text)
 
-          path = "src/cli.ts"
+          path = "src/core/artifacts/renderers.ts"
           text = read(path)
-          text = replace_once(text, '''import * as fs from "node:fs";
-          import * as path from "node:path";
-          ''', "", "cli fs imports")
-          text = replace_once(text, '''import { PiSdkRuntime, packageRoot } from "./core/pi-sdk-runtime.ts";
-          ''', '''import { PiSdkRuntime } from "./core/pi-sdk-runtime.ts";
-          import { readPackageVersion } from "./core/package-version.ts";
-          ''', "cli package imports")
-          text = replace_once(text, '''function readPackageVersion(): string {
-            try {
-              const raw = fs.readFileSync(path.join(packageRoot(), "package.json"), "utf-8");
-              const parsed = JSON.parse(raw) as { version?: string };
-              return parsed.version ?? "unknown";
-            } catch {
-              return "unknown";
-            }
+          text = replace_once(text, '''import { AGENTIFY_MANAGED_MARKERS, addMarkdownManagedMarker } from "../artifact-exporters.ts";
+          ''', '''import {
+            AGENTIFY_MANAGED_MARKERS,
+            addMarkdownManagedMarker,
+          } from "./managed-markers.ts";
+          import { normalizeArtifactPath } from "./generated-surface.ts";
+          ''', "renderer primitive imports")
+          text = replace_once(text, '''function normalizePath(relativePath: string): string {
+            return relativePath.replace(/\\\\/g, "/").replace(/^\\.\\/+/, "");
           }
 
-          ''', "", "cli package version helper")
+          ''', "", "renderer path duplicate")
+          text = text.replace("normalizePath", "normalizeArtifactPath")
+          if "../artifact-exporters.ts" in text or "function normalizePath" in text:
+              raise RuntimeError("renderer retained a reversed primitive dependency")
+          write(path, text)
+
+          path = "src/core/greenfield-artifacts.ts"
+          text = read(path)
+          text = replace_once(text, '''} from "./artifact-exporters.ts";
+          ''', '''} from "./artifacts/managed-markers.ts";
+          ''', "greenfield marker import")
           write(path, text)
 
           write("tests/core/shared-primitives.test.ts", '''import assert from "node:assert/strict";
@@ -570,7 +334,7 @@ jobs:
       - run: npx tsx tests/core/shared-primitives.test.ts
       - run: git diff --check
 
-      - name: Commit refactor
+      - name: Commit completed refactor
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
