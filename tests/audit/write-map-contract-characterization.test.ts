@@ -316,9 +316,13 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   const invalidTools = createWriteMapTools({ stateDir: ".agents/agentify" });
   const invalidResult = await executeTool(invalidTools.writeMapTool, { map: {} }, invalidCwd);
   assert.equal(isToolError(invalidResult), true);
-  assert.match(
+  assert.equal(
     resultText(invalidResult),
-    /^Error: Schema validation failed with \d+ error\(s\)(?: \(and \d+ more\))?:\n  - \/meta:/,
+    "Error: Schema validation failed with 1 error(s):\n" +
+      "  - (root): must have required properties meta, skeleton, module_graph, " +
+      "type_contract_surface, conventions, pitfalls, validation_surface, " +
+      "operational_surface, security_surface, coverage, open_questions, exploration_log, " +
+      "expected unknown",
   );
 
   const partialCwd = tempDir("partial-invalid");
