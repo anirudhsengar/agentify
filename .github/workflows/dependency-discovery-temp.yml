@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - deps/34-discovery
+  workflow_dispatch:
 
 permissions:
   contents: read
