@@ -87,6 +87,14 @@ high-severity dependency audit, packed-package smoke tests, and CodeQL.
 - **Internal means internal.** Orchestrator, AIW, webhook, communications, and
   Agent Expert modules remain experimental and are not package APIs. Follow
   `docs/experimental-surfaces.md` before attempting to productize one.
+- **Dependencies flow toward stable layers.** Supported product modules may
+  import supported or explicitly neutral infrastructure; neutral modules may not
+  depend on experimental composition roots. Experimental runtimes may consume
+  low-level supported or neutral contracts.
+- **Neutral exceptions are reviewed, not inferred.**
+  `src/core/orchestrator/workflow-spec.ts` and its declarative workflow assets are
+  the current exception inside an experimental area. Adding another exception
+  requires architecture documentation and maintenance-test coverage.
 - **Schemas are centralized.** Audit TypeBox schemas live in
   `src/core/audit/schema.ts`.
   Coverage assessment, map defaults, and legacy-field interpretation live in
