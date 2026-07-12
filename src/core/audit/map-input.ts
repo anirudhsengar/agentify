@@ -17,15 +17,17 @@ export interface LoadedMapInput {
 export function loadMapFromFile(filePath: string, cwd: string): LoadedMapInput {
     const absolute = path.isAbsolute(filePath) ? filePath : path.join(cwd, filePath);
     let raw: string;
+    let descriptor: number | undefined;
     try {
-        const stat = fs.statSync(absolute);
+        descriptor = fs.openSync(absolute, "r");
+        const stat = fs.fstatSync(descriptor);
         if (stat.size > MAX_MAP_FILE_BYTES) {
             throw new Error(
                 `map_file is ${stat.size} bytes, exceeds ${MAX_MAP_FILE_BYTES} byte cap. ` +
                     `Likely a duplicated section; review the JSON and re-write.`,
             );
         }
-        raw = fs.readFileSync(absolute, "utf-8");
+        raw = fs.readFileSync(descriptor, "utf-8");
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (err instanceof Error && (err as NodeJS.ErrnoException).code === "ENOENT") {
@@ -34,6 +36,14 @@ export function loadMapFromFile(filePath: string, cwd: string): LoadedMapInput {
             );
         }
         throw new Error(`failed to read map_file at ${absolute}: ${msg}`);
+    } finally {
+        if (descriptor !== undefined) {
+            try {
+                fs.closeSync(descriptor);
+            } catch {
+                // Preserve the established read/validation result if close fails.
+            }
+        }
     }
     if (raw.charCodeAt(0) === 0xfeff) {
         raw = raw.slice(1);
