@@ -14,24 +14,12 @@ const FORMAT_OPTIONS = {
   newLineCharacter: "\n",
   semicolons: ts.SemicolonPreference.Insert,
 };
-const USER_PREFERENCES = {
-  quotePreference: "double",
-};
-
-function readConfig() {
-  const loaded = ts.readConfigFile(CONFIG_PATH, ts.sys.readFile);
-  if (loaded.error) {
-    throw new Error(ts.flattenDiagnosticMessageText(loaded.error.messageText, "\n"));
-  }
-  const parsed = ts.parseJsonConfigFileContent(loaded.config, ts.sys, ROOT, {
-    noUnusedLocals: true,
-    noUnusedParameters: true,
-  }, CONFIG_PATH);
-  if (parsed.errors.length > 0) {
-    throw new Error(ts.formatDiagnosticsWithColorAndContext(parsed.errors, formatHost));
-  }
-  return parsed;
-}
+const USER_PREFERENCES = { quotePreference: "double" };
+const FIX_IDS = [
+  "unusedIdentifier_deleteImports",
+  "unusedIdentifier_prefix",
+  "unusedIdentifier_delete",
+];
 
 const formatHost = {
   getCanonicalFileName: (fileName) => fileName,
@@ -39,13 +27,30 @@ const formatHost = {
   getNewLine: () => "\n",
 };
 
-const parsed = readConfig();
-const versions = new Map(parsed.fileNames.map((fileName) => [fileName, 0]));
+function readConfig() {
+  const loaded = ts.readConfigFile(CONFIG_PATH, ts.sys.readFile);
+  if (loaded.error) {
+    throw new Error(ts.flattenDiagnosticMessageText(loaded.error.messageText, "\n"));
+  }
+  const parsed = ts.parseJsonConfigFileContent(
+    loaded.config,
+    ts.sys,
+    ROOT,
+    { noUnusedLocals: true, noUnusedParameters: true },
+    CONFIG_PATH,
+  );
+  if (parsed.errors.length > 0) {
+    throw new Error(ts.formatDiagnosticsWithColorAndContext(parsed.errors, formatHost));
+  }
+  return parsed;
+}
 
+const parsed = readConfig();
+const versions = new Map(parsed.fileNames.map((fileName) => [path.resolve(fileName), 0]));
 const host = {
   getCompilationSettings: () => parsed.options,
   getScriptFileNames: () => [...versions.keys()],
-  getScriptVersion: (fileName) => String(versions.get(fileName) ?? 0),
+  getScriptVersion: (fileName) => String(versions.get(path.resolve(fileName)) ?? 0),
   getScriptSnapshot: (fileName) => {
     if (!fs.existsSync(fileName)) return undefined;
     return ts.ScriptSnapshot.fromString(fs.readFileSync(fileName, "utf-8"));
@@ -58,96 +63,66 @@ const host = {
   directoryExists: ts.sys.directoryExists,
   getDirectories: ts.sys.getDirectories,
 };
-
 const service = ts.createLanguageService(host, ts.createDocumentRegistry());
 
-function findNodeAtPosition(sourceFile, position) {
-  let match = sourceFile;
-  const visit = (node) => {
-    if (position >= node.getFullStart() && position < node.getEnd()) {
-      match = node;
-      ts.forEachChild(node, visit);
-    }
-  };
-  visit(sourceFile);
-  return match;
-}
-
-function hasParameterAncestor(node) {
-  let current = node;
-  while (current) {
-    if (ts.isParameter(current)) return true;
-    current = current.parent;
-  }
-  return false;
-}
-
-function selectFix(diagnostic, fixes) {
-  if (fixes.length === 0) return undefined;
+function unusedDiagnostics() {
   const program = service.getProgram();
-  const sourceFile = diagnostic.file && program?.getSourceFile(diagnostic.file.fileName);
-  const node = sourceFile && diagnostic.start !== undefined
-    ? findNodeAtPosition(sourceFile, diagnostic.start)
-    : undefined;
-  const parameter = node ? hasParameterAncestor(node) : false;
-
-  if (parameter) {
-    const underscoreFix = fixes.find((fix) => /underscore/i.test(fix.description));
-    if (underscoreFix) return underscoreFix;
-  }
-
-  return fixes.find((fix) => /remove.*unused|delete.*unused/i.test(fix.description)) ?? fixes[0];
+  if (!program) throw new Error("TypeScript language service did not produce a program");
+  return program.getSemanticDiagnostics()
+    .filter((diagnostic) => UNUSED_CODES.has(diagnostic.code) && diagnostic.file)
+    .sort((left, right) => {
+      const fileOrder = left.file.fileName.localeCompare(right.file.fileName);
+      return fileOrder !== 0 ? fileOrder : (left.start ?? 0) - (right.start ?? 0);
+    });
 }
 
 function applyTextChanges(changes) {
+  let editCount = 0;
   for (const change of changes) {
     const fileName = path.resolve(change.fileName);
     let text = fs.readFileSync(fileName, "utf-8");
     const sorted = [...change.textChanges].sort((left, right) => right.span.start - left.span.start);
     for (const edit of sorted) {
       text = `${text.slice(0, edit.span.start)}${edit.newText}${text.slice(edit.span.start + edit.span.length)}`;
+      editCount += 1;
     }
-    fs.writeFileSync(fileName, text);
-    versions.set(fileName, (versions.get(fileName) ?? 0) + 1);
+    if (sorted.length > 0) {
+      fs.writeFileSync(fileName, text);
+      versions.set(fileName, (versions.get(fileName) ?? 0) + 1);
+    }
   }
+  return editCount;
 }
 
-function unusedDiagnostics() {
-  const program = service.getProgram();
-  if (!program) throw new Error("TypeScript language service did not produce a program");
-  return program.getSemanticDiagnostics()
-    .filter((diagnostic) => UNUSED_CODES.has(diagnostic.code) && diagnostic.file && diagnostic.start !== undefined)
-    .sort((left, right) => {
-      const fileOrder = left.file.fileName.localeCompare(right.file.fileName);
-      return fileOrder !== 0 ? fileOrder : left.start - right.start;
-    });
-}
+let appliedEdits = 0;
+for (let cycle = 0; cycle < 6; cycle += 1) {
+  const before = unusedDiagnostics();
+  if (before.length === 0) break;
+  let cycleEdits = 0;
 
-let applied = 0;
-for (let iteration = 0; iteration < 500; iteration += 1) {
-  const diagnostics = unusedDiagnostics();
-  if (diagnostics.length === 0) break;
-
-  const diagnostic = diagnostics[0];
-  const fileName = diagnostic.file.fileName;
-  const start = diagnostic.start;
-  const fixes = service.getCodeFixesAtPosition(
-    fileName,
-    start,
-    start + (diagnostic.length ?? 0),
-    [diagnostic.code],
-    FORMAT_OPTIONS,
-    USER_PREFERENCES,
-  );
-  const fix = selectFix(diagnostic, fixes);
-  if (!fix) {
-    const rendered = ts.formatDiagnostic(diagnostic, formatHost);
-    throw new Error(`No safe TypeScript code fix was available:\n${rendered}`);
+  for (const fixId of FIX_IDS) {
+    const fileNames = [...new Set(unusedDiagnostics().map((diagnostic) => diagnostic.file.fileName))];
+    for (const fileName of fileNames) {
+      const combined = service.getCombinedCodeFix(
+        { type: "file", fileName },
+        fixId,
+        FORMAT_OPTIONS,
+        USER_PREFERENCES,
+      );
+      const edits = applyTextChanges(combined.changes);
+      if (edits > 0) {
+        process.stdout.write(`${fixId}: ${path.relative(ROOT, fileName)} (${edits} edits)\n`);
+        cycleEdits += edits;
+        appliedEdits += edits;
+      }
+    }
   }
 
-  applyTextChanges(fix.changes);
-  applied += 1;
-  process.stdout.write(`applied ${fix.fixName}: ${fix.description}\n`);
+  const after = unusedDiagnostics();
+  process.stdout.write(`cycle ${cycle + 1}: ${before.length} -> ${after.length} diagnostics\n`);
+  if (after.length > 0 && cycleEdits === 0) {
+    throw new Error(`Compiler fixes made no progress:\n${ts.formatDiagnosticsWithColorAndContext(after, formatHost)}`);
+  }
 }
 
 const remaining = unusedDiagnostics();
@@ -164,20 +139,14 @@ const maintenancePath = path.join(ROOT, "tests/maintenance/documentation-invaria
 let maintenance = fs.readFileSync(maintenancePath, "utf-8");
 const beforeTest = `test("strict TypeScript remains enabled", () => {\n  const config = JSON.parse(read("tsconfig.json")) as TypeScriptConfig;\n  assert.equal(config.compilerOptions?.strict, true);\n});`;
 const afterTest = `test("strict TypeScript and unused-code checks remain enabled", () => {\n  const config = JSON.parse(read("tsconfig.json")) as TypeScriptConfig;\n  assert.equal(config.compilerOptions?.strict, true);\n  assert.equal(config.compilerOptions?.noUnusedLocals, true);\n  assert.equal(config.compilerOptions?.noUnusedParameters, true);\n});`;
-if (!maintenance.includes(beforeTest)) {
-  throw new Error("maintenance invariant marker did not match");
-}
-maintenance = maintenance.replace(beforeTest, afterTest);
-fs.writeFileSync(maintenancePath, maintenance);
+if (!maintenance.includes(beforeTest)) throw new Error("maintenance invariant marker did not match");
+fs.writeFileSync(maintenancePath, maintenance.replace(beforeTest, afterTest));
 
 const changelogPath = path.join(ROOT, "CHANGELOG.md");
 let changelog = fs.readFileSync(changelogPath, "utf-8");
 const changedMarker = "- The CLI binary executes `dist/cli.js` directly; `jiti` and runtime TypeScript execution were removed.";
 const changedEntry = `${changedMarker}\n- TypeScript now rejects unused locals and parameters across production code and tests.`;
-if (!changelog.includes(changedMarker)) {
-  throw new Error("changelog insertion marker did not match");
-}
-changelog = changelog.replace(changedMarker, changedEntry);
-fs.writeFileSync(changelogPath, changelog);
+if (!changelog.includes(changedMarker)) throw new Error("changelog insertion marker did not match");
+fs.writeFileSync(changelogPath, changelog.replace(changedMarker, changedEntry));
 
-process.stdout.write(`unused-code cleanup complete: ${applied} TypeScript code fixes applied\n`);
+process.stdout.write(`unused-code cleanup complete: ${appliedEdits} compiler edits applied\n`);
