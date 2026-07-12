@@ -1,38 +1,38 @@
 # Dependency compatibility matrix
 
-Status: Issue #34 discovery record  
+Status: accepted discovery record for Issue #34  
 Discovery date: 2026-07-12  
 Implementation gate: Issues #32 and #33 must be merged before any dependency version changes
 
-## Decision summary
+## Executive decision
 
-This document records the version-neutral discovery phase for Issue #34. The discovery PR changes no dependency range, lockfile entry, Node engine, runtime export, schema, generated asset, or package boundary.
+This discovery PR changes no dependency range, lockfile entry, Node engine, runtime export, schema, generated asset, or package boundary.
 
-| Group | Baseline | Candidate or decision | Status | Implementation issue |
-| --- | --- | --- | --- | --- |
-| TypeScript and Node declarations | TypeScript 5.9.3; `@types/node` 22.19.21 | TypeScript 6.0.3; retain Node 22 declarations unless support policy changes | **Approved with required config migration; gated** | #60 |
-| Build tooling | esbuild 0.25.12; tsx 4.22.4 | esbuild 0.28.1; tsx 4.23.0 | **Approved; gated** | #61 |
-| TypeBox | direct 1.2.9; Pi nested 1.1.38 | direct 1.3.6 | **Approved but hard-blocked on #33** | #62 |
-| Pi runtime pair | 0.80.6 / 0.80.6 | 0.80.6 / 0.80.6 | **Unnecessary today; re-evaluate at gate** | #63 |
-| Smithy integrity override | override 4.4.7 plus nested 2.2.0 | review 4.4.8, retention, narrowing, or removal | **Blocked pending provenance/integrity review** | #64 |
-| Node support policy | engine `>=22.19.0`; required CI on 22.19.0 and 24 | retain current floor unless later evidence justifies change | **No engine change approved** | #65 |
+| Group | Resolved baseline | Candidate or decision | Publication date | Status | Implementation issue |
+| --- | --- | --- | --- | --- | --- |
+| TypeScript and Node declarations | TypeScript 5.9.3; `@types/node` 22.19.21 | TypeScript 6.0.3; retain the Node 22 declaration line | TS 6.0.3: 2026-04-16; Node types 22.19.21: 2026-06-10 | **Approved with required config migration; gated** | #60 |
+| esbuild and tsx | esbuild 0.25.12; tsx 4.22.4 | esbuild 0.28.1; tsx 4.23.0 | 2026-06-11; 2026-07-03 | **Approved as one group; gated** | #61 |
+| TypeBox | direct 1.2.9; Pi nested 1.1.38 | direct 1.3.6 | 2026-07-08 | **Approved; hard-blocked on #33** | #62 |
+| Pi runtime pair | 0.80.6 / 0.80.6 | 0.80.6 / 0.80.6 | 2026-07-09 / 2026-07-09 | **Unnecessary today; re-evaluate at gate** | #63 |
+| Smithy integrity override | override 4.4.7 plus nested 2.2.0 | review 4.4.8, retention, narrowing, or removal | 4.4.8: 2026-07-10 | **Blocked pending provenance review** | #64 |
+| Node engine/support | engine `>=22.19.0`; CI on 22.19.0 and 24 | retain the current floor unless later evidence justifies change | Node 22 EOL: 2027-04-30; Node 24 EOL: 2028-04-30 | **No engine change approved** | #65 |
 
-TypeScript 7.0.2 was evaluated but is not an approved candidate for this cycle. It removes `baseUrl`, rejects the current paths mapping, and introduces twenty platform compiler packages. TypeScript 6 is the required migration bridge.
+TypeScript 7.0.2, published 2026-07-08, was evaluated but is not approved for this cycle. It removes `baseUrl`, rejects the current non-relative `paths` target, and introduces twenty platform-specific compiler packages. TypeScript 6 is the migration bridge.
 
-## Gate before implementation
+## Implementation gate
 
 No implementation issue may begin until latest `main` proves all of the following:
 
 1. Issue #32 state migration and deprecated write-map retirement are merged.
 2. Issue #33 schema decomposition and golden contract tests are merged.
-3. Issue #35 decision documentation is merged. This condition is already satisfied by PR #49.
+3. Issue #35 decision documentation remains merged; PR #49 satisfied this condition.
 4. `npm run typecheck`, `npm run test:all`, `npm run test:package`, `npm run test:security-redteam`, `npm run test:parity`, and `npm run release:check` pass.
 5. `npm pack --json --ignore-scripts` and `npm audit --omit=dev` have been reviewed.
-6. The minimum supported Node version and current supported Node version are both green.
+6. The exact minimum supported Node version and the current supported Node version are green.
 
 ## Baseline inventory
 
-### Manifest
+### Manifest ranges
 
 ```text
 engines.node                         >=22.19.0
@@ -62,197 +62,153 @@ esbuild (tsx nested)                 0.28.1
 @smithy/util-buffer-from (nested)    2.2.0
 ```
 
-The baseline production audit reported zero known vulnerabilities across all severities. That result is evidence, not proof of supply-chain integrity or behavioral compatibility.
+The baseline production audit reported zero known vulnerabilities. Audit output is investigation evidence; it is not proof of behavioral compatibility, package provenance, or deterministic installation.
 
-## Compatibility records
+## TypeScript and `@types/node`
 
-### TypeScript
-
-| Field | Assessment |
+| Required field | Compatibility assessment |
 | --- | --- |
-| Current version | Declared `^5.6.0`; resolved 5.9.3. |
-| Candidate version | 6.0.3. TypeScript 7.0.2 is explicitly deferred. |
-| Release date | Recorded from the official npm registry in the discovery evidence; final implementation must re-query because the selected patch may advance. |
-| Official migration documentation | [TypeScript 6 release notes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html) and the compiler-provided [TS6 migration link](https://aka.ms/ts6). |
-| Breaking API/type changes | TypeScript 6 changes ambient `types` defaults, deprecates `baseUrl`, old Node module resolution, legacy module formats, `outFile`, and several compatibility options. Agentify already sets `types: ["node"]`, uses ESM/bundler resolution, and has strict mode enabled. The remaining concrete blocker is `baseUrl`. |
-| Runtime behavior changes | `tsc` is a development-time checker only (`noEmit`); no direct runtime code should change. New inference or diagnostics may expose real source/API problems. |
-| Node requirements | TypeScript 6 remains compatible with the existing Node floor in discovery. The implementation must verify the candidate package engine at the gate. |
-| ESM implications | Preserve `module: "ESNext"`, `moduleResolution: "Bundler"`, explicit `.ts` import checking, and JSON-module handling. Remove reliance on `baseUrl` and use explicit relative `paths` targets. |
-| Bundling implications | None expected directly, but type-only resolution must continue to agree with esbuild's ESM resolution. |
-| Schema implications | Type inference changes can affect TypeBox `Static<>` surfaces; run schema static/serialized contract tests. |
-| Tool/session API implications | Pi tool/session types may become stricter or infer differently; do not cast away incompatibilities. |
-| Security advisory effects | No production advisory is resolved by the compiler upgrade. Review compiler package provenance and lockfile structure. |
-| Expected lockfile impact | TypeScript 6 should update the compiler entry without TypeScript 7's twenty native/platform packages. Investigate any unexpected additions. |
-| Required tests | Typecheck, maintenance, all tests, schema/tool characterization, parity, package smoke, release check, Node minimum/current CI. |
-| Decision | **Approved with required migration.** Upgrade to 6.x after the gate; do not use `ignoreDeprecations` as the final fix for `baseUrl`. |
+| Current version | TypeScript range `^5.6.0`, resolved 5.9.3. Node types range `^22.0.0`, resolved 22.19.21. |
+| Candidate version | TypeScript 6.0.3. Keep `@types/node` on the latest compatible Node 22 line; 24.13.3 was inspected but is not approved while the runtime floor is Node 22.19.0. |
+| Release date | TypeScript 6.0.3: 2026-04-16. Node types 22.19.21: 2026-06-10. Inspected Node types 24.13.3: 2026-07-08. |
+| Official migration documentation | [TypeScript 6 release notes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html), compiler-provided [TS6 migration guidance](https://aka.ms/ts6), [DefinitelyTyped Node declarations](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node), and the [Node release schedule](https://github.com/nodejs/Release/blob/main/schedule.json). |
+| Breaking API/type changes | TypeScript 6 changes default ambient-type discovery and deprecates `baseUrl`, Node 10 module resolution, legacy module formats, `outFile`, and compatibility options. Agentify already declares `types: ["node"]`, strict mode, ESM, and bundler resolution. The concrete blocker is `baseUrl`. Node 24 declarations may expose APIs absent on Node 22. |
+| Runtime behavior changes | `tsc` remains `noEmit`; runtime behavior should not change. New inference and diagnostics can reveal real schema, Pi API, ESM, or test typing differences. |
+| Node requirements | TypeScript 6 is compatible with the current floor in discovery. Declaration policy must follow the minimum runtime rather than the newest published Node types. |
+| ESM implications | Preserve `module: "ESNext"`, `moduleResolution: "Bundler"`, JSON modules, and `.ts` import checking. Remove `baseUrl` and make `paths` targets explicitly relative. |
+| Bundling implications | No direct emitted bundle change is expected, but TypeScript resolution must continue to agree with esbuild resolution. |
+| Schema implications | Re-check every TypeBox `Static<>` contract and schema façade export because compiler inference may change without serialized JSON changing. |
+| Tool/session API implications | Pi session, provider, event, usage, and tool definitions may infer more strictly; do not hide incompatibility with broad casts. |
+| Security advisory effects | No production advisory is fixed by the compiler. Review package provenance and unexpected compiler-package additions. |
+| Expected lockfile impact | TypeScript 6 should update the compiler entry without TypeScript 7's twenty platform packages. Retaining Node 22 types should limit type movement to `@types/node` and possibly `undici-types`. |
+| Required tests | Effective-config comparison, typecheck, maintenance, all tests, schema/tool/session characterization, parity, installed-package smoke, release check, Node 22.19.0 and current supported Node CI. |
+| Decision | **Approved with migration.** Upgrade to TypeScript 6 after the gate. Do not use `ignoreDeprecations` as the final `baseUrl` solution. Do not adopt Node 24 types implicitly. |
 
-Discovery probes:
+Isolated evidence:
 
 - TypeScript 6.0.3 reports `baseUrl` as deprecated and points to the TS6 migration guide.
-- TypeScript 7.0.2 reports `baseUrl` as removed and rejects the current non-relative paths target.
-- TypeScript 7 adds twenty `@typescript/typescript-*` platform packages; this is not accepted implicitly.
+- TypeScript 7.0.2 reports `baseUrl` as removed and rejects the current paths mapping.
+- TypeScript 7 adds twenty `@typescript/typescript-*` platform packages and is deferred.
 
-### `@types/node`
+## esbuild and tsx
 
-| Field | Assessment |
+| Required field | Compatibility assessment |
 | --- | --- |
-| Current version | Declared `^22.0.0`; root resolves 22.19.21. |
-| Candidate version | Retain the latest Node 22 line for the TypeScript 6 PR. Node 24.13.3 was inspected but is not approved while runtime support begins at Node 22.19.0. |
-| Release date | Re-query the selected Node 22 patch at implementation time. |
-| Official migration documentation | [DefinitelyTyped Node declarations](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node) and the [Node release schedule](https://github.com/nodejs/Release/blob/main/schedule.json). |
-| Breaking API/type changes | A Node 24 declaration jump can expose APIs absent on the Node 22 runtime and can alter globals, web types, streams, filesystem, subprocess, and test typings. |
-| Runtime behavior changes | Type declarations do not change runtime, but can authorize source that fails on the supported minimum runtime. |
-| Node requirements | The declaration policy must follow the product support floor, not the newest published types. |
-| ESM implications | Review Node ESM loader, import attributes, URL, and module declarations against Node 22 behavior. |
-| Bundling implications | None expected; compile-time global/module resolution can affect build inputs. |
-| Schema implications | None directly, except inferred Node-backed values in schemas or validators. |
-| Tool/session API implications | Provider, stream, fetch, abort, event, and filesystem types may change. |
-| Security advisory effects | None directly. |
-| Expected lockfile impact | Retaining the 22 line should limit movement to `@types/node` and `undici-types` if a newer 22 patch exists. |
-| Required tests | Typecheck plus full runtime tests on Node 22.19.0 and current supported Node. |
-| Decision | **No major declaration upgrade approved.** Keep Node types aligned with the minimum runtime; revisit in #65. |
+| Current version | esbuild 0.25.12; tsx 4.22.4. The existing tsx subtree already carries esbuild 0.28.1 separately. |
+| Candidate version | esbuild 0.28.1 and tsx 4.23.0 as one coherent group. |
+| Release date | esbuild 0.28.1: 2026-06-11. tsx 4.23.0: 2026-07-03. |
+| Official migration documentation | [esbuild changelog](https://github.com/evanw/esbuild/blob/master/CHANGELOG.md), [tsx releases](https://github.com/privatenumber/tsx/releases), and the [tsx package contract](https://github.com/privatenumber/tsx/blob/master/package.json). |
+| Breaking API/type changes | esbuild 0.28.0 is intentionally a breaking release. Review build/transform options, warnings, binary integrity behavior, and platform package handling. tsx remains on 4.x and officially depends on esbuild `~0.28.0`. |
+| Runtime behavior changes | esbuild owns the compiled CLI; tsx executes repository tests and scripts. Parser, resolver, ESM/CJS interop, lowering, tree-shaking, source maps, or loader changes can alter behavior. |
+| Node requirements | Both candidates require Node >=18, below Agentify's floor. |
+| ESM implications | Preserve esbuild `format: "esm"`, Node platform behavior, externalization, executable startup, and tsx `.ts` ESM resolution on Node 22 and 24. |
+| Bundling implications | Compare `dist/cli.js`, source maps, warnings, size, prompt/workflow asset copying, installed startup, and tarball inventory. No output drift is accepted merely because the bundle runs. |
+| Schema implications | No API migration is expected, but bundled schema objects and generated outputs must remain equivalent. |
+| Tool/session API implications | Ensure bundling does not duplicate, omit, or rewrite Pi and TypeBox runtime boundaries. |
+| Security advisory effects | esbuild 0.28 adds npm/Deno binary integrity checks. 0.28.1 includes a Windows development-server traversal fix; Agentify does not use the development server, but the integrity improvement supports upgrading. |
+| Expected lockfile impact | Root esbuild plus 26 platform packages update; tsx updates; 27 nested tsx/esbuild platform entries disappear through deduplication. No production dependency should move. |
+| Required tests | Build, generation pipeline, maintenance, all tests, parity, package smoke, source-map/bundle/tarball comparison, audit, Node minimum/current CI. |
+| Decision | **Approved as one dependency group.** |
 
-### esbuild
+The isolated pair built the 14.2 MB ESM bundle and passed generation-pipeline tests. Its maintenance failure came only from the temporary discovery script being intentionally absent from the standalone-script allowlist; that script is not retained.
 
-| Field | Assessment |
+## TypeBox
+
+| Required field | Compatibility assessment |
 | --- | --- |
-| Current version | Declared/resolved 0.25.12. |
-| Candidate version | 0.28.1. |
-| Release date | 2026-06-11 (official npm registry evidence collected during discovery). |
-| Official migration documentation | [Official esbuild changelog](https://github.com/evanw/esbuild/blob/master/CHANGELOG.md). |
-| Breaking API/type changes | 0.28.0 is intentionally a breaking release. Review changed build/transform options, integrity checks, platform binary behavior, and warnings. |
-| Runtime behavior changes | The bundled CLI can change if parsing, lowering, tree-shaking, minification, resolution, or sourcemaps change. Agentify does not accept output drift merely because the bundle executes. |
-| Node requirements | Candidate requires Node >=18, below Agentify's floor. |
-| ESM implications | Preserve `format: "esm"`, Node platform, package externalization decisions, and executable entry semantics. |
-| Bundling implications | Directly owns `dist/cli.js` and sourcemap production. Compare size, warnings, copied assets, startup, and tarball inventory. |
-| Schema implications | No schema API change; generated/bundled schema objects must remain behaviorally identical. |
-| Tool/session API implications | Bundling must not duplicate, omit, or rewrite Pi/TypeBox runtime boundaries. |
-| Security advisory effects | 0.28.0 adds npm/Deno binary integrity checking; 0.28.1 includes a Windows development-server traversal fix. Agentify does not use esbuild's dev server, but the security change supports upgrading. |
-| Expected lockfile impact | Root esbuild and 26 platform packages update; tsx's nested esbuild/platform tree deduplicates away when paired with tsx 4.23.0. |
-| Required tests | Build, generation pipeline, all tests, parity, installed CLI/package smoke, bundle/tarball comparison, Node minimum/current CI. |
-| Decision | **Approved as a pair with tsx.** |
+| Current version | Direct range `^1.1.38`, resolved 1.2.9. Pi subtrees retain exact 1.1.38 copies. |
+| Candidate version | Direct TypeBox 1.3.6. |
+| Release date | 2026-07-08. |
+| Official migration documentation | [TypeBox 1.3 changelog](https://github.com/sinclairzx81/typebox/blob/main/changelog/1.3.0.md) and the [official repository](https://github.com/sinclairzx81/typebox). |
+| Breaking API/type changes | 1.3 removes deprecated `Base`, `Awaited`, `Promise`, `AsyncIterator`, `Iterator`, and `Value.Mutate` APIs and changes compiler/reference and future TypeScript inference internals. No audited Agentify import uses the removed APIs. |
+| Runtime behavior changes | Validation, compilation, errors, references, defaults, cloning, repair, and Unicode/length behavior can change even when serialized schemas look identical. |
+| Node requirements | No higher engine requirement was observed; verify the final patch manifest at implementation. |
+| ESM implications | Preserve existing `typebox` and Value/compiler import paths and package export resolution. |
+| Bundling implications | Only a minor bundle-size change is expected; no runtime asset should be added. |
+| Schema implications | Critical: preserve serialized schema semantics, static types, required/optional fields, enums/literals, bounds, constraints, descriptions, validation acceptance/rejection, error paths, write-map parameters, and stable façades. |
+| Tool/session API implications | Pi model-visible tools consume TypeBox parameter schemas; preserve JSON schemas and validator behavior. |
+| Security advisory effects | No audit vulnerability was identified. The release contains correctness and maintenance changes. |
+| Expected lockfile impact | Only root `node_modules/typebox` should move from 1.2.9 to 1.3.6. Pi's exact nested 1.1.38 copies should remain until the Pi group changes them. |
+| Required tests | Complete schema goldens, schema/write-map characterization, validation/error fixtures, execution-policy/tool-schema tests, generated parity, all tests, package smoke, Node minimum/current CI. |
+| Decision | **Approved but hard-blocked until Issue #33 merges.** |
 
-### tsx
+The isolated 1.3.6 probe passed typecheck and the audit schema/write-map golden characterization. The later unit failure was caused by not building `dist/cli.js` in the probe sequence, not by TypeBox.
 
-| Field | Assessment |
+## Pi runtime pair
+
+| Required field | Compatibility assessment |
 | --- | --- |
-| Current version | Declared `^4.20.0`; resolved 4.22.4. |
-| Candidate version | 4.23.0. |
-| Release date | 2026-07-03 (official npm registry evidence collected during discovery). |
-| Official migration documentation | [Official releases](https://github.com/privatenumber/tsx/releases) and [package contract](https://github.com/privatenumber/tsx/blob/master/package.json). |
-| Breaking API/type changes | Remains on 4.x. Review release notes for loader, watch, CJS/ESM, source-map, and Node feature-detection changes. |
-| Runtime behavior changes | Repository tests and scripts execute through tsx; loader or resolution differences can alter test discovery and failures. |
-| Node requirements | Official package requires Node >=18, below Agentify's floor. |
-| ESM implications | tsx is an ESM loader/CLI. Preserve `.ts` execution, import resolution, and subprocess behavior across Node 22 and 24. |
-| Bundling implications | tsx 4.23.0 officially depends on esbuild `~0.28.0`, enabling one deduplicated esbuild tree. |
-| Schema implications | None directly; all schema tests run through tsx. |
-| Tool/session API implications | None directly; all runtime characterization tests depend on reliable TS execution. |
-| Security advisory effects | Inherits the paired esbuild security/integrity improvements. |
-| Expected lockfile impact | tsx changes and 27 nested esbuild/platform entries are removed through deduplication. |
-| Required tests | Complete test discovery, generation pipeline, maintenance, parity, security, package smoke, Node minimum/current CI. |
-| Decision | **Approved only with esbuild 0.28.x.** |
+| Current version | `@earendil-works/pi-ai` 0.80.6 and `@earendil-works/pi-coding-agent` 0.80.6. |
+| Candidate version | 0.80.6 / 0.80.6; no newer registry release existed on 2026-07-12. |
+| Release date | Pi AI 0.80.6: 2026-07-09. Pi coding agent 0.80.6: 2026-07-09. |
+| Official migration documentation | Official [Pi AI npm package](https://www.npmjs.com/package/@earendil-works/pi-ai), [Pi coding-agent npm package](https://www.npmjs.com/package/@earendil-works/pi-coding-agent), and their declared [source repository](https://github.com/earendil-works/pi-mono). |
+| Breaking API/type changes | None today because there is no version delta. A future pair requires review of model/provider discovery, auth, session creation, event shapes, tools, usage/cost, cancellation, and errors. |
+| Runtime behavior changes | No current delta. Future releases are high-impact because the pair owns the model/provider session runtime and provider SDK graph. |
+| Node requirements | Both packages require Node >=22.19.0, exactly matching Agentify's floor. |
+| ESM implications | Both are ESM packages. Preserve exports, dynamic provider loading, and bundle/runtime resolution. |
+| Bundling implications | Pi dominates the bundled production graph; a future change requires complete bundle and tarball inventory comparison. |
+| Schema implications | Both currently depend on TypeBox 1.1.38 internally; a future pair may change tool-schema conversion. |
+| Tool/session API implications | Critical: characterize `createAgentSession`, provider/model resolution, auth, events, tool definitions, interruption, and usage/cost before adaptation. |
+| Security advisory effects | Baseline audit is clean. Future provider SDK, undici, networking, AWS/Smithy, or nested shrinkwrap changes need explicit review. |
+| Expected lockfile impact | The 0.80.6 paired simulation changes zero entries. Future releases require a complete categorized lockfile report. |
+| Required tests | Brownfield and greenfield runtime tests, providers/auth/models, slots, session events, cancellation, tool schemas, execution policy, cost, installed package, bundle/tarball, minimum/current Node CI. |
+| Decision | **Unnecessary today.** Re-query at the gate and upgrade the pair atomically only when a newer compatible pair exists; otherwise close #63 as no-op. |
 
-The isolated pair built the ESM bundle and passed generation-pipeline tests. Its maintenance failure came exclusively from the temporary discovery script being unclassified; that script is removed from the final discovery PR.
+## `@smithy/util-buffer-from` override
 
-### TypeBox
-
-| Field | Assessment |
+| Required field | Compatibility assessment |
 | --- | --- |
-| Current version | Declared `^1.1.38`; direct root resolves 1.2.9; Pi subtrees use exact 1.1.38. |
-| Candidate version | Direct dependency 1.3.6. |
-| Release date | 2026-07-08 (official npm registry evidence collected during discovery). |
-| Official migration documentation | [TypeBox 1.3 changelog](https://github.com/sinclairzx81/typebox/blob/main/changelog/1.3.0.md). |
-| Breaking API/type changes | 1.3 removes deprecated `Base`, `Awaited`, `Promise`, `AsyncIterator`, `Iterator`, and `Value.Mutate`; it also changes compiler/reference internals and TypeScript 7 inference preparation. No audited Agentify import uses the removed APIs. |
-| Runtime behavior changes | Validation, compilation, repair, cloning, errors, references, defaults, and Unicode/length behavior can change even when schema JSON is identical. |
-| Node requirements | No higher runtime requirement was observed. Verify the final package manifest at implementation. |
-| ESM implications | Preserve the current `import { Type, type Static } from "typebox"` and Value/compiler imports. |
-| Bundling implications | Bundle size may shift slightly; no new runtime asset is expected. |
-| Schema implications | Critical. Preserve serialized schema semantics, static types, error paths, required/optional fields, literals/enums, bounds, descriptions, and write-map/tool schemas. |
-| Tool/session API implications | Pi model-visible tools consume TypeBox schemas. Preserve parameter JSON schemas and validation behavior. |
-| Security advisory effects | No audit vulnerability was identified. The maintenance line contains correctness fixes. |
-| Expected lockfile impact | Only root `node_modules/typebox` should change from 1.2.9 to 1.3.6; Pi nested 1.1.38 copies remain. |
-| Required tests | Schema goldens, schema/write-map characterization, tool-schema/execution-policy tests, all tests, generated parity, package smoke, Node minimum/current CI. |
-| Decision | **Approved but hard-blocked until #33 merges.** |
-
-The isolated 1.3.6 probe passed typecheck and the audit schema/write-map golden characterization. The later unit failure was a probe-order issue (`dist/cli.js` was not built), not a TypeBox incompatibility.
-
-### `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent`
-
-| Field | Assessment |
-| --- | --- |
-| Current version | Both declared/resolved 0.80.6. |
-| Candidate version | 0.80.6 for both; no newer registry release existed on 2026-07-12. |
-| Release date | Pi AI: 2026-07-09; Pi coding agent: 2026-07-09. |
-| Official migration documentation | Official npm package pages and the packages' declared source repository: [Pi AI](https://www.npmjs.com/package/@earendil-works/pi-ai), [Pi coding agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent), [source](https://github.com/earendil-works/pi-mono). |
-| Breaking API/type changes | None to assess because there is no candidate delta. A future candidate must be reviewed for session, provider, model, tool, event, auth, usage/cost, cancellation, and error-shape changes. |
-| Runtime behavior changes | No current delta. The packages own the model/provider session runtime and a large provider SDK graph, so future changes are high-impact. |
-| Node requirements | Both require Node >=22.19.0, matching Agentify's floor. |
-| ESM implications | Both are ESM packages. Preserve imports, exports, dynamic provider loading, and bundle behavior. |
-| Bundling implications | Pi packages dominate the bundled dependency graph; future upgrades require complete bundle/tarball comparison. |
-| Schema implications | Both depend on TypeBox 1.1.38 internally. A future pair may alter model/tool schema conversion. |
-| Tool/session API implications | Critical. Characterize `createAgentSession`, model registry/resolution, provider auth, event streams, tools, interruption, and usage/cost. |
-| Security advisory effects | Baseline audit is clean. Future provider SDK, undici, Smithy/AWS, or networking changes need explicit review. |
-| Expected lockfile impact | Current pair simulation changes zero entries. Future upgrades require full categorization, including nested shrinkwrap copies. |
-| Required tests | Brownfield/greenfield runtime, model/provider/auth, slots, session events, cancellation, tool schemas, execution policy, cost, package/bundle, Node minimum/current CI. |
-| Decision | **Unnecessary today.** Re-query after #32/#33; upgrade as a pair only, or close #63 as no-op. |
-
-### `@smithy/util-buffer-from` override
-
-| Field | Assessment |
-| --- | --- |
-| Current version | Root override 4.4.7; nested Pi coding-agent shrinkwrap still contains 2.2.0. |
-| Candidate version | 4.4.8 is latest, but the action may be retain, update, narrow, or remove. |
-| Release date | 4.4.8 published 2026-07-10. |
-| Official migration documentation | [Smithy TypeScript](https://github.com/smithy-lang/smithy-typescript), [npm package](https://www.npmjs.com/package/@smithy/util-buffer-from), and Agentify commit `bf53892336ad69cf3653e7497b391b5b9ddf033e`. |
-| Breaking API/type changes | A 2.x-to-4.x graph change changes dependencies and Node engines. The root override does not necessarily rewrite nested shrinkwrap entries. |
-| Runtime behavior changes | Buffer conversion is used in AWS/Smithy provider paths. Preserve binary correctness and Bedrock behavior. |
-| Node requirements | 4.4.x requires Node >=18; 2.2.0 requires Node >=14. Both are below Agentify's floor. |
-| ESM implications | No expected surface change; review Smithy module graph and duplicate copies. |
-| Bundling implications | Override choice changes Smithy core/is-array-buffer placement and may alter bundle contents. |
+| Current version | Root npm override 4.4.7; Pi coding-agent's nested shrinkwrap still contains 2.2.0. |
+| Candidate version | 4.4.8 is latest, but the final action may be retain, update, narrow, or remove. |
+| Release date | 4.4.8: 2026-07-10. |
+| Official migration documentation | [Smithy TypeScript](https://github.com/smithy-lang/smithy-typescript), the [npm package](https://www.npmjs.com/package/@smithy/util-buffer-from), and Agentify commit `bf53892336ad69cf3653e7497b391b5b9ddf033e`. |
+| Breaking API/type changes | Moving between 2.x and 4.x changes dependencies and engines. A root override does not necessarily rewrite package-internal shrinkwrap entries. |
+| Runtime behavior changes | Buffer conversion participates in AWS/Smithy provider paths; binary correctness and Bedrock behavior must be preserved. |
+| Node requirements | 4.4.x requires Node >=18; 2.2.0 requires Node >=14. Both remain below Agentify's floor. |
+| ESM implications | No public ESM change is expected; review duplicate Smithy copies and module placement. |
+| Bundling implications | Override choice changes Smithy core/is-array-buffer placement and can alter the production bundle. |
 | Schema implications | None directly. |
-| Tool/session API implications | Provider/Bedrock requests are the relevant runtime seam. |
-| Security advisory effects | The override was added because npm re-published 2.2.0 with different bytes, causing lock integrity failure. `npm audit` does not answer that provenance question. |
-| Expected lockfile impact | Removing the override removes root 4.4.7, adds root `@smithy/is-array-buffer`, and adds another nested 2.2.0 under `@smithy/util-utf8`; an existing Pi nested 2.2.0 remains. |
-| Required tests | Clean-cache `npm ci`, integrity/provenance review, audit, Bedrock/provider tests, security-redteam, all/package/parity, bundle/tarball comparison, Node minimum/current CI. |
-| Decision | **Blocked.** No automatic removal or forced upgrade; resolve in #64 after the Pi graph is final. |
+| Tool/session API implications | Bedrock/provider request and response behavior is the relevant runtime seam. |
+| Security advisory effects | The override was added after npm re-published 2.2.0 with different bytes, causing `npm ci` integrity failures. `npm audit` does not resolve provenance or deterministic-install concerns. |
+| Expected lockfile impact | Removing the override removes root 4.4.7, adds root `@smithy/is-array-buffer`, and adds another nested 2.2.0 under `@smithy/util-utf8`; the existing Pi nested 2.2.0 remains. |
+| Required tests | Clean-cache `npm ci`, registry integrity/provenance review, audit, Bedrock/provider characterization, security-redteam, all/package/parity, bundle/tarball comparison, minimum/current Node CI. |
+| Decision | **Blocked.** Do not remove or force-upgrade it automatically. Resolve #64 after the Pi dependency graph is final. |
 
-The isolated removal probe passed typecheck, security-redteam, and audit with zero vulnerabilities. That is necessary but insufficient evidence because the original control addressed re-published bytes and deterministic installation.
+The isolated removal probe passed typecheck, security-redteam, and audit with zero reported vulnerabilities. That is necessary but insufficient because the original control addressed re-published bytes and deterministic installation.
 
-### Node engine and support matrix
+## Node engine and support policy
 
-| Field | Assessment |
+| Required field | Compatibility assessment |
 | --- | --- |
-| Current version | Product floor `>=22.19.0`; CI requires Node 22.19.0 and Node 24. |
-| Candidate version | Retain current floor. Node 26 may be evaluated as an informational/current-release lane, not silently declared supported. |
-| Release date/lifecycle | Node 22 ends 2027-04-30; Node 24 ends 2028-04-30; Node 26 started 2026-05-05 and is scheduled for LTS on 2026-10-28. |
+| Current version | Product engine `>=22.19.0`; required CI on Node 22.19.0 and Node 24. |
+| Candidate version | Retain the current floor. Node 26 may be evaluated separately as an informational/current-release lane. |
+| Release date/lifecycle | Node 22 support ends 2027-04-30. Node 24 ends 2028-04-30. Node 26 began 2026-05-05 and is scheduled for LTS on 2026-10-28. |
 | Official migration documentation | [Node release schedule](https://github.com/nodejs/Release/blob/main/schedule.json) and [previous releases](https://nodejs.org/en/about/previous-releases). |
 | Breaking API/type changes | A floor change affects installation, ESM, globals, fetch/undici, filesystem/subprocess behavior, test tooling, and user support. |
-| Runtime behavior changes | Node is the product runtime; any floor/current-line change is user-visible support policy. |
-| Node requirements | Current direct candidates do not require raising the floor. Pi explicitly matches 22.19.0. |
+| Runtime behavior changes | Node is the product runtime. A minimum/current-line change is a product-support decision, not a transitive dependency detail. |
+| Node requirements | Current candidates do not require a higher floor. The Pi pair explicitly matches 22.19.0. |
 | ESM implications | Verify resolution, import attributes, URLs, loaders, subprocesses, and bundled ESM on every required line. |
-| Bundling implications | esbuild/tsx binaries and bundle execution must be tested per required line. |
-| Schema implications | None directly; JSON/Unicode/runtime behavior must remain stable. |
-| Tool/session API implications | Fetch, AbortSignal, streams, events, subprocesses, and filesystem APIs underpin Pi sessions and tools. |
-| Security advisory effects | Supported Node lines receive different security maintenance windows. Do not retain an EOL line or claim an untested current release. |
-| Expected lockfile impact | No lockfile impact from retaining the policy. Engine changes must not be hidden inside another dependency PR. |
-| Required tests | Full suite, installed package, bundle/tarball, brownfield/greenfield, schema/tool policy on exact minimum and current supported versions. |
-| Decision | **No engine change approved.** Decide explicitly in #65 after all dependency groups. |
+| Bundling implications | esbuild/tsx binaries and compiled CLI execution must be tested on exact supported versions. |
+| Schema implications | None directly; JSON, Unicode, and validation runtime behavior must remain stable. |
+| Tool/session API implications | Fetch, AbortSignal, streams, events, subprocesses, and filesystem behavior underpin Pi sessions and tools. |
+| Security advisory effects | Supported lines have different maintenance windows. Do not retain EOL support or claim an untested current release. |
+| Expected lockfile impact | None when retaining policy. Never hide an engine change inside another dependency PR. |
+| Required tests | Full required suite, installed package, bundle/tarball, brownfield/greenfield, schema/tool policy on exact minimum and current supported versions. |
+| Decision | **No engine change approved.** Decide explicitly in #65 after every dependency group is resolved. |
 
 ## Isolated lockfile simulations
 
 | Simulation | Added | Removed | Changed | Interpretation |
 | --- | ---: | ---: | ---: | --- |
-| TypeScript 7.0.2 + Node 24 types | 20 | 0 | 3 | Adds native/platform TypeScript compiler packages; not approved for this cycle. |
+| TypeScript 7.0.2 + Node 24 types | 20 | 0 | 3 | Adds native/platform TypeScript packages; not approved. |
 | esbuild 0.28.1 + tsx 4.23.0 | 0 | 27 | 28 | Deduplicates tsx's nested esbuild/platform tree into the root candidate. |
 | TypeBox 1.3.6 | 0 | 0 | 1 | Root TypeBox only. |
 | Pi 0.80.6 pair | 0 | 0 | 0 | Already current. |
 | Smithy override removal | 2 | 1 | 0 | Reintroduces another nested 2.2.0 path; requires integrity review. |
 
-Every simulation retained a zero-vulnerability `npm audit --omit=dev` result. Audit output must continue to be treated as investigation evidence, not an instruction to force incompatible upgrades.
+Every simulation retained a zero-vulnerability production audit result. Audit output remains evidence, not an instruction to force incompatible upgrades.
 
 ## Approved implementation order
-
-The default order remains valid:
 
 1. #60 — TypeScript 6 and Node declaration alignment.
 2. #61 — esbuild and tsx.
@@ -261,9 +217,9 @@ The default order remains valid:
 5. #64 — Smithy override/integrity review after the Pi graph is final.
 6. #65 — Node engine/support decision last.
 
-The only refinement is that TypeScript 7 is deferred and `@types/node` does not jump to Node 24 while the product floor remains Node 22. This preserves the requested ordering and prevents a type package from changing product support implicitly.
+The order remains the requested default. The refinement is that TypeScript 7 is deferred and `@types/node` does not jump to Node 24 while the product floor remains Node 22.
 
-## Mandatory rules for every implementation PR
+## Rules for every implementation PR
 
 - One dependency group per branch and PR.
 - Re-query official release notes, migration guides, publish dates, engines, exports, and advisories immediately before implementation.
@@ -288,7 +244,7 @@ npm pack --json --ignore-scripts
 npm audit --omit=dev
 ```
 
-Additional mandatory coverage by group:
+Additional mandatory coverage:
 
 - TypeScript: effective config, static schema/tool/session types, minimum/current Node.
 - Build tooling: installed CLI, generation pipeline, bundle/source-map/tarball comparison.
@@ -299,4 +255,4 @@ Additional mandatory coverage by group:
 
 ## Discovery evidence and cleanup
 
-Candidate metadata, publication dates, lockfile-only simulations, and isolated characterization were collected in temporary pull-request CI. The temporary workflow and probe script are discovery instruments only and must not remain in the final PR. The final discovery branch must contain no `package.json` or `package-lock.json` diff.
+Candidate versions, publication dates, lockfile-only simulations, and isolated characterization were collected through temporary pull-request CI. Those discovery instruments are not retained. The final discovery branch contains no `package.json` or `package-lock.json` change.
