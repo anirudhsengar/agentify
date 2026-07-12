@@ -21,6 +21,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Audit TypeBox declarations remain centralized in `schema.ts`, while coverage assessment, map defaults, and legacy-field interpretation now have focused internal owners behind stable re-exports.
 - Structured write-map storage, input loading, validation, coverage formatting, delta merging, observability, tool construction, and legacy compatibility now have dedicated internal owners behind the stable façade.
 - Deterministic brownfield artifact rendering is decomposed into pure output-family modules behind the stable renderer façade.
 - Brownfield write-map tools and deterministic renderers now capture provider-scoped state through explicit per-run factories and contexts; deprecated mutable adapters remain for compatibility.

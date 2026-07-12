@@ -32,6 +32,10 @@ and implementation constraints.
 ## Ownership boundaries
 
 - `src/core/audit/schema.ts` is the only file defining audit TypeBox schemas.
+- Audit coverage logic, map default injection, and legacy-field interpretation live
+  in `coverage.ts`, `map-defaults.ts`, and `schema-compatibility.ts`; preserve
+  their compatibility re-exports from `schema.ts` and do not add TypeBox
+  declarations there.
 - Audit defense and capability policy live under `src/core/audit/defense/`.
 - State transaction behavior lives in `src/core/state-transaction.ts` and must
   remain crash-recoverable.

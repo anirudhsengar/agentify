@@ -89,6 +89,9 @@ high-severity dependency audit, packed-package smoke tests, and CodeQL.
   `docs/experimental-surfaces.md` before attempting to productize one.
 - **Schemas are centralized.** Audit TypeBox schemas live in
   `src/core/audit/schema.ts`.
+  Coverage assessment, map defaults, and legacy-field interpretation live in
+  adjacent algorithm modules and remain re-exported by `schema.ts` for
+  compatibility.
 - **Security is capability-based.** Every model-backed session must receive an
   explicit execution policy. Prompts do not grant or restrict authority.
 - **Brownfield audits are read-only.** Do not restore unrestricted `bash`,

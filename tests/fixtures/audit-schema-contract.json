@@ -1,0 +1,157 @@
+{
+  "serialization": {
+    "codebase_map": {
+      "sha256": "3f6f86dd0a909c1c8c179a53d9c832905beba1c2b511960327ad403ea4ca11d9",
+      "bytes": 40551
+    },
+    "partial_codebase_map": {
+      "sha256": "d4b32c59999d9b612a48a7870127495eb5ca96c1ad7311d5ea1f8240a7764f16",
+      "bytes": 39982
+    },
+    "write_map_params": {
+      "sha256": "2bde81d12c125b6e35a4cdacbb142da63ce9ad73d20ce3a99633970466dae767",
+      "bytes": 41193
+    },
+    "write_map_delta_params": {
+      "sha256": "235e368c13f3d72372f85d2204145b6208649422d64d66e0b155cf1e1a2b327c",
+      "bytes": 41015
+    }
+  },
+  "required": {
+    "codebase_map": [
+      "meta",
+      "skeleton",
+      "module_graph",
+      "type_contract_surface",
+      "conventions",
+      "pitfalls",
+      "validation_surface",
+      "operational_surface",
+      "security_surface",
+      "coverage",
+      "open_questions",
+      "exploration_log"
+    ],
+    "partial_codebase_map": [],
+    "write_map_params": [],
+    "write_map_delta_params": [
+      "delta"
+    ],
+    "coverage": [
+      "D1_topography",
+      "D2_module_boundaries",
+      "D3_type_contract",
+      "D4_conventions",
+      "D5_pitfalls",
+      "D6_validation",
+      "D7_operational",
+      "D8_security",
+      "D9_process",
+      "D10_documentation"
+    ]
+  },
+  "properties": {
+    "codebase_map": [
+      "schema_version",
+      "generated_at",
+      "meta",
+      "skeleton",
+      "module_graph",
+      "type_contract_surface",
+      "conventions",
+      "pitfalls",
+      "validation_surface",
+      "operational_surface",
+      "security_surface",
+      "coverage",
+      "open_questions",
+      "exploration_log",
+      "schema_migration_history",
+      "customization_evidence",
+      "expert_evidence",
+      "artifact_intents"
+    ],
+    "partial_codebase_map": [
+      "schema_version",
+      "generated_at",
+      "meta",
+      "skeleton",
+      "module_graph",
+      "type_contract_surface",
+      "conventions",
+      "pitfalls",
+      "validation_surface",
+      "operational_surface",
+      "security_surface",
+      "coverage",
+      "open_questions",
+      "exploration_log",
+      "customization_evidence",
+      "expert_evidence",
+      "artifact_intents"
+    ],
+    "write_map_params": [
+      "map",
+      "map_file",
+      "mode"
+    ],
+    "write_map_delta_params": [
+      "dimension",
+      "confidence",
+      "evidence_summary",
+      "delta",
+      "merge_strategy"
+    ]
+  },
+  "enums": {
+    "coverage_dimensions": [
+      "D1_topography",
+      "D2_module_boundaries",
+      "D3_type_contract",
+      "D4_conventions",
+      "D5_pitfalls",
+      "D6_validation",
+      "D7_operational",
+      "D8_security",
+      "D9_process",
+      "D10_documentation"
+    ],
+    "write_mode": [
+      "inline",
+      "file",
+      "auto"
+    ],
+    "merge_strategy": [
+      "shallow_overwrite",
+      "deep_merge",
+      "append"
+    ],
+    "delta_confidence": [
+      "high",
+      "medium",
+      "low"
+    ],
+    "coverage_status": [
+      "covered",
+      "gap"
+    ]
+  },
+  "defaults": {
+    "schema_version": "1",
+    "write_mode": "auto",
+    "merge_strategy": "shallow_overwrite"
+  },
+  "bounds": {
+    "agent_guide_sections": {
+      "minItems": 1,
+      "maxItems": 20
+    },
+    "feature_agents": {
+      "minItems": 0,
+      "maxItems": 24
+    },
+    "write_map_file_description": "Path (absolute or cwd-relative) to a JSON file containing the codebase map. Use for large maps (> 3KB) or when the LLM has built the JSON via the `write` tool. The tool reads, validates, and writes the canonical map to ./.pi/agentify/codebase_map.json.",
+    "write_mode_description": "Persist mode. `inline` (strict) errors if the inline map exceeds 100KB. `file` (strict) requires explicit `map_file`. `auto` (default) falls back to file-based persistence transparently when inline exceeds the cap.",
+    "merge_strategy_description": "How to merge the delta into the canonical map. `shallow_overwrite` (default) replaces matching top-level keys. `deep_merge` recursively merges objects. `append` pushes onto existing arrays."
+  }
+}
