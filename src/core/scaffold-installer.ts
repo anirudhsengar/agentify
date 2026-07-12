@@ -1,7 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { alongsidePathFor } from "./apply-policy.ts";
-import { addMarkdownManagedMarker, AGENTIFY_MANAGED_MARKERS } from "./artifact-exporters.ts";
+import {
+  AGENTIFY_MANAGED_MARKERS,
+  addManagedMarker,
+} from "./artifacts/managed-markers.ts";
 import type { ArtifactWrite } from "./types.ts";
 
 const HASH_MARKER = AGENTIFY_MANAGED_MARKERS.toml;
@@ -32,25 +35,10 @@ function markerFor(filePath: string): string {
   return path.extname(filePath) === ".md" ? MARKDOWN_MARKER : HASH_MARKER;
 }
 
-function addHashMarker(raw: string): string {
-  if (raw.includes(HASH_MARKER)) return raw;
-  if (raw.startsWith("#!")) {
-    const newline = raw.indexOf("\n");
-    if (newline >= 0) {
-      return `${raw.slice(0, newline + 1)}${HASH_MARKER}\n${raw.slice(newline + 1)}`;
-    }
-  }
-  return `${HASH_MARKER}\n${raw}`;
-}
-
-function addMarker(raw: string, marker: string): string {
-  return marker === MARKDOWN_MARKER ? addMarkdownManagedMarker(raw) : addHashMarker(raw);
-}
-
 function copyManaged(source: string, destination: string): ArtifactWrite {
   const marker = markerFor(destination);
   const raw = fs.readFileSync(source, "utf-8");
-  const content = addMarker(raw, marker);
+  const content = addManagedMarker(raw, marker);
   if (fs.existsSync(destination)) {
     const existing = fs.readFileSync(destination, "utf-8");
     if (!existing.includes(marker)) {
