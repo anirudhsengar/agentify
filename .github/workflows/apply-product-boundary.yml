@@ -26,21 +26,40 @@ jobs:
         id: apply
         continue-on-error: true
         run: node .github/scripts/apply-product-boundary.mjs > product-boundary.log 2>&1
+      - name: Validate focused boundary
+        id: validate
+        if: steps.apply.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set +e
+          npm run typecheck > boundary-typecheck.log 2>&1
+          typecheck_status=$?
+          npx tsx tests/product-boundary.test.ts > boundary-test.log 2>&1
+          boundary_status=$?
+          npm run test:package > boundary-package.log 2>&1
+          package_status=$?
+          printf 'typecheck=%s\nboundary=%s\npackage=%s\n' "$typecheck_status" "$boundary_status" "$package_status" > boundary-status.log
+          if [ "$typecheck_status" -ne 0 ] || [ "$boundary_status" -ne 0 ] || [ "$package_status" -ne 0 ]; then
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: product-boundary-diagnostics
-          path: product-boundary.log
-          if-no-files-found: error
+          path: |
+            product-boundary.log
+            boundary-status.log
+            boundary-typecheck.log
+            boundary-test.log
+            boundary-package.log
+          if-no-files-found: warn
           retention-days: 1
       - name: Stop on patch failure
         if: steps.apply.outcome == 'failure'
         run: exit 1
-      - name: Validate focused boundary
-        run: |
-          npm run typecheck
-          npx tsx tests/product-boundary.test.ts
-          npm run test:package
+      - name: Stop on validation failure
+        if: steps.validate.outcome == 'failure'
+        run: exit 1
       - name: Commit product boundary
         run: |
           git config user.name github-actions[bot]
