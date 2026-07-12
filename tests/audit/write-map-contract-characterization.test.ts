@@ -58,6 +58,10 @@ async function executeTool(
   );
 }
 
+function isToolError(result: unknown): boolean {
+  return (result as { isError?: boolean }).isError === true;
+}
+
 function resultText(result: Awaited<ReturnType<NonNullable<ToolDefinition["execute"]>>>): string {
   const first = result.content?.[0];
   return first?.type === "text" ? first.text : "";
@@ -139,7 +143,7 @@ async function testInlineDefaultsCoverageAndStorageContract(): Promise<void> {
   delete map.generated_at;
 
   const result = await executeTool(tools.writeMapTool, { map }, cwd);
-  assert.equal(result.isError, undefined);
+  assert.equal(isToolError(result), false);
 
   const canonical = tools.canonicalMapPath(cwd);
   const persisted = readJson(canonical);
@@ -196,7 +200,7 @@ async function testInputLoadingAndDraftContract(): Promise<void> {
 
   const missing = path.join(cwd, "missing.json");
   const missingResult = await executeTool(tools.writeMapTool, { map_file: missing }, cwd);
-  assert.equal(missingResult.isError, true);
+  assert.equal(isToolError(missingResult), true);
   assert.equal(
     resultText(missingResult),
     `Error: map_file at ${missing} does not exist. Make sure you called the \`write\` tool first to create it.`,
@@ -205,7 +209,7 @@ async function testInputLoadingAndDraftContract(): Promise<void> {
   const malformed = path.join(cwd, "malformed.json");
   fs.writeFileSync(malformed, "{ nope");
   const malformedResult = await executeTool(tools.writeMapTool, { map_file: malformed }, cwd);
-  assert.equal(malformedResult.isError, true);
+  assert.equal(isToolError(malformedResult), true);
   assert.match(
     resultText(malformedResult),
     new RegExp(
@@ -311,7 +315,7 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   const invalidCwd = tempDir("invalid");
   const invalidTools = createWriteMapTools({ stateDir: ".agents/agentify" });
   const invalidResult = await executeTool(invalidTools.writeMapTool, { map: {} }, invalidCwd);
-  assert.equal(invalidResult.isError, true);
+  assert.equal(isToolError(invalidResult), true);
   assert.match(
     resultText(invalidResult),
     /^Error: Schema validation failed with \d+ error\(s\)(?: \(and \d+ more\))?:\n  - \/meta:/,
@@ -325,7 +329,7 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
     { delta: { pitfalls: [{}] } },
     partialCwd,
   );
-  assert.equal(partialResult.isError, true);
+  assert.equal(isToolError(partialResult), true);
   assert.match(
     resultText(partialResult),
     /^Error: Partial schema validation failed with \d+ error\(s\)(?: \(and \d+ more\))?:\n  - \/pitfalls\/0\/module:/,
