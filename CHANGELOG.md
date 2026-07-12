@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Modernization behavior and runtime-reachability contracts with a reusable CLI, generated-bundle, state-directory, and installed-package parity gate.
 - Typed top-level CLI parsing with process-level regression coverage.
 - Recursive test discovery, security regression suites, and installed-package smoke tests.
 - Explicit per-session execution policies for tools, filesystem roots, shell access, and network posture.
