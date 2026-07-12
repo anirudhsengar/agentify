@@ -1,0 +1,63 @@
+name: Refactor 24 Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    if: github.head_ref == 'refactor/24-generation-pipeline'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - name: Run and report validation
+        shell: bash
+        run: |
+          set +e
+          : > validation.log
+          overall=0
+          run_gate() {
+            name="$1"
+            shift
+            {
+              echo
+              echo "===== ${name} ====="
+              "$@"
+            } >> validation.log 2>&1
+            status=$?
+            echo "STATUS ${name}: ${status}" >> validation.log
+            if [ "$status" -ne 0 ]; then overall=1; fi
+          }
+          run_gate "typecheck" npm run typecheck
+          run_gate "generation-pipeline" npm run test:generation-pipeline
+          run_gate "focused-extraction" npx tsx tests/core/generation-pipeline-extraction.test.ts
+          run_gate "focused-ownership" npx tsx tests/core/generation-module-ownership.test.ts
+          run_gate "test-all" npm run test:all
+          run_gate "test-package" npm run test:package
+          run_gate "test-parity" npm run test:parity
+          run_gate "security-redteam" npm run test:security-redteam
+          {
+            echo '### Issue #24 validation diagnostic'
+            echo
+            echo '```text'
+            tail -c 60000 validation.log
+            echo
+            echo '```'
+          } > comment.md
+          gh pr comment 39 --body-file comment.md
+          exit "$overall"
+        env:
+          GH_TOKEN: ${{ github.token }}
