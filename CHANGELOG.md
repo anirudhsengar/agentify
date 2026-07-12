@@ -21,6 +21,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Shared artifact, agent-file, generated-surface, and package-version primitives now have dependency-neutral canonical owners with compatibility re-exports.
 - Removed four evidence-backed, raw-source-only orphan scripts and corrected stale provider-state migration guidance.
 - Brownfield audits and explorer sessions are read-only by capability, not by prompt convention.
 - Webhook and AIW sessions now receive explicit repository-jail policies.
