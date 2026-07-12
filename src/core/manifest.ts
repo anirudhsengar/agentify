@@ -1,7 +1,8 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { AGENTIFY_MANAGED_MARKERS } from "./artifact-exporters.ts";
+import { normalizeArtifactPath } from "./artifacts/generated-surface.ts";
+import { markerForArtifactPath } from "./artifacts/managed-markers.ts";
 import { LEGACY_PI_STATE_RELATIVE_DIR } from "./state-dir.ts";
 import type { AgentifyRepoMode } from "./repo-status.ts";
 import type { ManagedArtifactKind } from "./artifacts/renderers.ts";
@@ -153,10 +154,6 @@ export interface ManifestFileInput {
   preservedSha256?: string;
 }
 
-function normalizePath(relativePath: string): string {
-  return relativePath.replace(/\\/g, "/").replace(/^\.\/+/, "");
-}
-
 export function sha256(content: string | Buffer): string {
   return crypto.createHash("sha256").update(content).digest("hex");
 }
@@ -178,14 +175,11 @@ export function codebaseMapPathFor(cwd: string, stateDir: string): string {
 }
 
 export function markerForPath(relativePath: string): string {
-  const normalized = normalizePath(relativePath);
-  if (normalized.endsWith(".md")) return AGENTIFY_MANAGED_MARKERS.markdown;
-  if (normalized.endsWith(".json")) return "sha256";
-  return AGENTIFY_MANAGED_MARKERS.toml;
+  return markerForArtifactPath(relativePath);
 }
 
 export function kindForPath(relativePath: string): ManagedArtifactKind {
-  const normalized = normalizePath(relativePath);
+  const normalized = normalizeArtifactPath(relativePath);
   if (normalized.startsWith(".agents/") || normalized.startsWith(".claude/") || normalized.startsWith(".pi/skills/")) return "skill";
   if (normalized.startsWith(".codex/") || normalized === "CLAUDE.md") return "harness_export";
   if (normalized.startsWith(".github/") || normalized === "SETUP.md") return "scaffold";
@@ -214,8 +208,8 @@ export function kindForPath(relativePath: string): ManagedArtifactKind {
  * dir.
  */
 export function dynamicKindForPath(relativePath: string, stateDir: string): ManagedArtifactKind {
-  const normalized = normalizePath(relativePath);
-  const normalizedStateDir = normalizePath(stateDir);
+  const normalized = normalizeArtifactPath(relativePath);
+  const normalizedStateDir = normalizeArtifactPath(stateDir);
   const statePrefix = normalizedStateDir.endsWith("/") ? normalizedStateDir : `${normalizedStateDir}/`;
   if (normalized.startsWith(".agents/") || normalized.startsWith(".claude/") || normalized.startsWith(".pi/skills/")) return "skill";
   if (normalized.startsWith(".codex/") || normalized === "CLAUDE.md") return "harness_export";
@@ -229,7 +223,7 @@ export function dynamicKindForPath(relativePath: string, stateDir: string): Mana
 }
 
 export function isRequiredManagedPath(relativePath: string, mode: Exclude<AgentifyRepoMode, "unknown">): boolean {
-  const normalized = normalizePath(relativePath);
+  const normalized = normalizeArtifactPath(relativePath);
   const required = mode === "greenfield" ? REQUIRED_GREENFIELD_FILES : REQUIRED_BROWNFIELD_FILES;
   return required.includes(normalized as never);
 }
@@ -248,9 +242,9 @@ export function isRequiredManagedPathFor(
   stateDir: string,
 ): boolean {
   if (mode === "greenfield") {
-    return REQUIRED_GREENFIELD_FILES.includes(normalizePath(relativePath) as never);
+    return REQUIRED_GREENFIELD_FILES.includes(normalizeArtifactPath(relativePath) as never);
   }
-  return requiredBrownfieldFiles(stateDir).includes(normalizePath(relativePath));
+  return requiredBrownfieldFiles(stateDir).includes(normalizeArtifactPath(relativePath));
 }
 
 export function manifestFileFromContent(
@@ -258,7 +252,7 @@ export function manifestFileFromContent(
   mode: Exclude<AgentifyRepoMode, "unknown"> = "brownfield",
   stateDir?: string,
 ): ManagedManifestFile {
-  const relativePath = normalizePath(input.relativePath);
+  const relativePath = normalizeArtifactPath(input.relativePath);
   const kind = input.kind ?? (stateDir !== undefined
     ? dynamicKindForPath(relativePath, stateDir)
     : kindForPath(relativePath));
