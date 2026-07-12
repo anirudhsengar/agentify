@@ -1,0 +1,21 @@
+name: Refactor 25 Validation
+
+on:
+  push:
+    branches:
+      - refactor/25-run-orchestration
+
+permissions:
+  contents: read
+
+jobs:
+  characterize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - run: npx tsx tests/core/run-orchestration-characterization.test.ts
