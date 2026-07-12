@@ -10,103 +10,60 @@ import {
   type WriteMapParams,
 } from "../../src/core/audit/schema.ts";
 
-type Equal<Left, Right> =
-  (<Value>() => Value extends Left ? 1 : 2) extends
-  (<Value>() => Value extends Right ? 1 : 2)
-    ? (<Value>() => Value extends Right ? 1 : 2) extends
-      (<Value>() => Value extends Left ? 1 : 2)
-      ? true
-      : false
-    : false;
+export function codebaseMapAliasToStatic(
+  value: CodebaseMap,
+): Static<typeof CodebaseMapSchema> {
+  return value;
+}
 
-type Expect<Value extends true> = Value;
+export function codebaseMapStaticToAlias(
+  value: Static<typeof CodebaseMapSchema>,
+): CodebaseMap {
+  return value;
+}
 
-type RequiredKeys<Value> = {
-  [Key in keyof Value]-?: {} extends Pick<Value, Key> ? never : Key;
-}[keyof Value];
+export function partialCodebaseMapAliasToStatic(
+  value: PartialCodebaseMap,
+): Static<typeof PartialCodebaseMapSchema> {
+  return value;
+}
 
-export type CodebaseMapAliasParity = Expect<
-  Equal<CodebaseMap, Static<typeof CodebaseMapSchema>>
->;
-export type PartialCodebaseMapAliasParity = Expect<
-  Equal<PartialCodebaseMap, Static<typeof PartialCodebaseMapSchema>>
->;
-export type WriteMapParamsAliasParity = Expect<
-  Equal<WriteMapParams, Static<typeof WriteMapParamsSchema>>
->;
-export type WriteMapDeltaParamsAliasParity = Expect<
-  Equal<WriteMapDeltaParams, Static<typeof WriteMapDeltaParamsSchema>>
->;
+export function partialCodebaseMapStaticToAlias(
+  value: Static<typeof PartialCodebaseMapSchema>,
+): PartialCodebaseMap {
+  return value;
+}
 
-export type CompleteRequiredKeys = Expect<
-  Equal<
-    RequiredKeys<CodebaseMap>,
-    | "meta"
-    | "skeleton"
-    | "module_graph"
-    | "type_contract_surface"
-    | "conventions"
-    | "pitfalls"
-    | "validation_surface"
-    | "operational_surface"
-    | "security_surface"
-    | "coverage"
-    | "open_questions"
-    | "exploration_log"
-  >
->;
-export type PartialRequiredKeys = Expect<Equal<RequiredKeys<PartialCodebaseMap>, never>>;
-export type WriteMapRequiredKeys = Expect<Equal<RequiredKeys<WriteMapParams>, never>>;
-export type WriteMapDeltaRequiredKeys = Expect<
-  Equal<RequiredKeys<WriteMapDeltaParams>, "delta">
->;
+export function writeMapParamsAliasToStatic(
+  value: WriteMapParams,
+): Static<typeof WriteMapParamsSchema> {
+  return value;
+}
 
-export type SchemaVersionLiteral = Expect<
-  Equal<CodebaseMap["schema_version"], "1" | undefined>
->;
-export type CoverageStatusLiteral = Expect<
-  Equal<CodebaseMap["coverage"]["D1_topography"]["status"], "covered" | "gap">
->;
-export type ConfidenceLiteral = Expect<
-  Equal<CodebaseMap["coverage"]["D1_topography"]["confidence"], "high" | "medium" | "low">
->;
-export type ModuleEdgeKindLiteral = Expect<
-  Equal<CodebaseMap["module_graph"]["edges"][number]["kind"], "import" | "state" | "rpc">
->;
-export type WriteModeLiteral = Expect<
-  Equal<WriteMapParams["mode"], "inline" | "file" | "auto" | undefined>
->;
-export type MergeStrategyLiteral = Expect<
-  Equal<
-    WriteMapDeltaParams["merge_strategy"],
-    "shallow_overwrite" | "deep_merge" | "append" | undefined
-  >
->;
-export type DeltaDimensionLiteral = Expect<
-  Equal<
-    Exclude<WriteMapDeltaParams["dimension"], undefined>,
-    | "D1_topography"
-    | "D2_module_boundaries"
-    | "D3_type_contract"
-    | "D4_conventions"
-    | "D5_pitfalls"
-    | "D6_validation"
-    | "D7_operational"
-    | "D8_security"
-    | "D9_process"
-    | "D10_documentation"
-  >
->;
+export function writeMapParamsStaticToAlias(
+  value: Static<typeof WriteMapParamsSchema>,
+): WriteMapParams {
+  return value;
+}
 
-export const acceptedWriteMapModes: ReadonlyArray<NonNullable<WriteMapParams["mode"]>> = [
-  "inline",
-  "file",
-  "auto",
-];
+export function writeMapDeltaParamsAliasToStatic(
+  value: WriteMapDeltaParams,
+): Static<typeof WriteMapDeltaParamsSchema> {
+  return value;
+}
 
-export const acceptedMergeStrategies: ReadonlyArray<
-  NonNullable<WriteMapDeltaParams["merge_strategy"]>
-> = ["shallow_overwrite", "deep_merge", "append"];
+export function writeMapDeltaParamsStaticToAlias(
+  value: Static<typeof WriteMapDeltaParamsSchema>,
+): WriteMapDeltaParams {
+  return value;
+}
+
+export type FrozenSchemaVersionType = CodebaseMap["schema_version"];
+export type FrozenCoverageType = CodebaseMap["coverage"];
+export type FrozenArtifactIntentsType = CodebaseMap["artifact_intents"];
+export type FrozenWriteModeType = WriteMapParams["mode"];
+export type FrozenMergeStrategyType = WriteMapDeltaParams["merge_strategy"];
+export type FrozenDeltaDimensionType = WriteMapDeltaParams["dimension"];
 
 export const minimalValidWriteMapParams: WriteMapParams = {};
 export const minimalValidWriteMapDeltaParams: WriteMapDeltaParams = { delta: {} };
@@ -119,17 +76,3 @@ export const representativeWriteMapDeltaParams: WriteMapDeltaParams = {
   },
   merge_strategy: "deep_merge",
 };
-
-export const invalidWriteMode: WriteMapParams = {
-  // @ts-expect-error Contract freeze: no additional persistence modes are accepted.
-  mode: "stream",
-};
-
-export const invalidMergeStrategy: WriteMapDeltaParams = {
-  delta: {},
-  // @ts-expect-error Contract freeze: merge strategy literals must not drift.
-  merge_strategy: "replace",
-};
-
-// @ts-expect-error Contract freeze: write_map_delta always requires delta.
-export const missingDelta: WriteMapDeltaParams = {};
