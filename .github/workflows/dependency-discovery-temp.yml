@@ -1,9 +1,9 @@
 name: Dependency compatibility discovery (temporary)
 
 on:
-  push:
+  pull_request:
     branches:
-      - deps/34-discovery
+      - main
   workflow_dispatch:
 
 permissions:
