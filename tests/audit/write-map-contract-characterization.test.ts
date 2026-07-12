@@ -334,9 +334,11 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
     partialCwd,
   );
   assert.equal(isToolError(partialResult), true);
-  assert.match(
+  assert.equal(
     resultText(partialResult),
-    /^Error: Partial schema validation failed with \d+ error\(s\)(?: \(and \d+ more\))?:\n  - \/pitfalls\/0\/module:/,
+    "Error: Partial schema validation failed with 1 error(s):\n" +
+      "  - /pitfalls/0: must have required properties module, what, consequence, line_ref, " +
+      "expected unknown",
   );
 
   const coverageCwd = tempDir("coverage");
