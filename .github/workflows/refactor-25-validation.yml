@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   apply:
@@ -26,9 +27,28 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Apply orchestration extraction
-        run: node scripts/apply-refactor-25.mjs
+        run: |
+          node scripts/apply-refactor-25.mjs
+          node scripts/fix-refactor-25.mjs
       - name: Typecheck extracted modules
-        run: npm run typecheck
+        shell: bash
+        run: |
+          set +e
+          npm run typecheck > typecheck.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            {
+              echo '### Issue #25 extraction typecheck'
+              echo
+              echo '```text'
+              cat typecheck.log
+              echo '```'
+            } > comment.md
+            gh pr comment 40 --body-file comment.md
+          fi
+          exit "$status"
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Run lifecycle characterization
         run: npx tsx tests/core/run-orchestration-characterization.test.ts
       - name: Commit extracted orchestration
