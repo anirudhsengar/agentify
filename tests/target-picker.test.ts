@@ -11,7 +11,7 @@ class QueueingUi implements AgentifyUi {
   secretCalls: { message: string }[] = [];
 
   constructor(
-    private readonly multiSelectAnswers: ReadonlyArray<ReadonlyArray<string>> = [],
+    multiSelectAnswers: ReadonlyArray<ReadonlyArray<string>> = [],
   ) {
     // shift() mutates, so we work through a mutable local array.
     this._mutableAnswers = [...multiSelectAnswers];

@@ -8,7 +8,6 @@ import {
   ExpertRegistry,
   expertsTouchedBy,
   findStaleExperts,
-  parseExpertiseYaml,
   parseExpertiseYamlText,
   runQuestion,
   runSelfImprove,

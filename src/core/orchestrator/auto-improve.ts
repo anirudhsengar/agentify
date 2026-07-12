@@ -32,26 +32,20 @@
 //     "YAML longer than 1000 lines")
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import {
   ExpertRegistry,
   expertsTouchedBy,
-  parseExpertiseYaml,
   runSelfImprove,
   type ExpertDomain,
   type SelfImproveSyncer,
 } from "../agent-expert.ts";
 import type { Model, Api } from "@earendil-works/pi-ai";
-// Model is used as the type for liteModel in AutoImproveSchedulerOptions.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _ModelRef = Model<Api>;
 import {
   agentPaths,
   appendOrchestratorExecutionLog,
   orchestratorPaths,
   readAgentState,
-  readAgentEvents,
 } from "./paths.ts";
 import type { AgentState } from "./state.ts";
 

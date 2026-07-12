@@ -13,7 +13,6 @@
 // One task at a time per process is the v1 default. A `concurrency`
 // option allows parallel dispatch without sharing context.
 
-import * as fs from "node:fs";
 import { makeDefenseHook } from "../audit/defense-hook.ts";
 import { AgentifyLog } from "../audit/log.ts";
 import { getThinkingLevel } from "../audit/state.ts";

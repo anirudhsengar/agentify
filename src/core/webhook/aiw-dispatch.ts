@@ -22,7 +22,6 @@ import {
 } from "../aiw/worker.ts";
 import { generateAiwId } from "../aiw/state.ts";
 import {
-  TaskStatus,
   type Trigger,
   type WebhookTaskRecord,
 } from "./state.ts";

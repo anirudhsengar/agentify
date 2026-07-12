@@ -77,13 +77,6 @@ function setup(): Harness {
   };
 }
 
-function tool(name: string) {
-  return {
-    name,
-    // Pick from the tools list.
-    list: (h: Harness) => h.tools.find((t) => t.name === name),
-  };
-}
 
 async function callTool(h: Harness, name: string, params: Record<string, unknown>): Promise<{
   text: string;

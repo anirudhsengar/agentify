@@ -39,14 +39,12 @@ import {
   appendWorkflowRunEvent,
   readWorkflowRunEvents,
   appendWorkflowRunExecutionLog,
-  listWorkflowRunDirs,
   readAllWorkflowRunStates,
 } from "./paths.ts";
 import type { AgentManager } from "./agent-manager.ts";
 import type { AiwBridge } from "./aiw-bridge.ts";
 import { evaluateWhen, interpolate } from "./expression.ts";
 import {
-  summarizeEvent,
   appendSummaryDigest,
   type SummaryEvent,
 } from "./summarizer.ts";
@@ -774,7 +772,6 @@ async function executeComposeStep(
 
   // Compose a sub-state and run the DAG on a nested scope.
   const inner = step.steps as unknown[];
-  const innerCompleted: Record<string, WorkflowStepResult> = { ...completed };
   // Don't share completed across the compose boundary at execution time;
   // we want only siblings.
   for (const id of Object.keys(completed)) {
@@ -955,7 +952,7 @@ function shouldRetry(
 }
 
 function buildWhenCtx(
-  spec: WorkflowSpec,
+  _spec: WorkflowSpec,
   completed: Record<string, WorkflowStepResult>,
   inputs: Record<string, string | number | boolean | string[]>,
   attempt: number,
@@ -1002,7 +999,7 @@ function readInputPath(
   return cur;
 }
 
-function applyInputs(spec: WorkflowSpec, inputs: Record<string, string | number | boolean | string[]>): WorkflowSpec {
+function applyInputs(spec: WorkflowSpec, _inputs: Record<string, string | number | boolean | string[]>): WorkflowSpec {
   // A resolved spec is identical structurally with all `${inputs.X}` substituted
   // into user_prompt/prompt/template strings, lazily at execution time. We
   // preserve `spec` here for the run record (recorded before substitutions).

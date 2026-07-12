@@ -183,7 +183,6 @@ async function testPlanBuildReviewFixRunsFixOnBlock(): Promise<void> {
   // Stub: review returns blocker; we'll have the orchestrator look
   // for the review file and find the JSON. We seed a fake review
   // file at the path the orchestrator would look for.
-  let reviewPathSeen: string | null = null;
   const runtime = makeStubRuntime(async (phase, options) => {
     if (phase === "review") {
       // Write a review file in the cwd so readReviewResult finds it.
@@ -199,7 +198,6 @@ async function testPlanBuildReviewFixRunsFixOnBlock(): Promise<void> {
         screenshots: [],
       };
       fs.writeFileSync(reviewPath, JSON.stringify(reviewJson));
-      reviewPathSeen = reviewPath;
       return { text: JSON.stringify(reviewJson), turns: 2, cost: 0.01 };
     }
     return { text: `output for ${phase}`, turns: 2, cost: 0.01 };

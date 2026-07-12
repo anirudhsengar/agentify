@@ -163,7 +163,7 @@ export function parseExpertiseYamlText(raw: string): ExpertiseYaml {
     lines.push({ indent, body: rawLine.replace(/^ */, "") });
   }
 
-  function parseValue(start: number, parentIndent: number): { value: unknown; end: number } {
+  function parseValue(start: number, _parentIndent: number): { value: unknown; end: number } {
     // Caller guarantees lines[start] exists and has indent > parentIndent.
     const first = lines[start]!;
     const firstBody = first.body;

@@ -266,7 +266,7 @@ interface Bucket {
 export function createRateLimiter(): RateLimiter {
   const buckets = new Map<string, Bucket>();
   return {
-    allow(triggerId) {
+    allow(_triggerId) {
       // Without a configured rate limit, always allow. The actual
       // limit check happens inside the per-trigger check below.
       return true;

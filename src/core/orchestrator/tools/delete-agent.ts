@@ -1,7 +1,7 @@
 // tools/delete-agent.ts
 
 import { Type } from "typebox";
-import { defineTool, type AgentToolResult, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { AgentManager } from "../agent-manager.ts";
 
 const DeleteAgentParams = Type.Object({

@@ -5,10 +5,6 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { AiwBridge } from "../../src/core/orchestrator/aiw-bridge.ts";
-import { FakeRuntime } from "./fake-runtime.ts";
-import { AgentManager } from "../../src/core/orchestrator/agent-manager.ts";
-import { SubagentRegistry } from "../../src/core/orchestrator/subagent-registry.ts";
-import { PiSdkRuntime } from "../../src/core/pi-sdk-runtime.ts";
 
 function tempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -80,8 +76,6 @@ async function testStartAndCheck(): Promise<void> {
   const cfg = tempDir("agentify-bridge-start-");
   try {
     // Use a FakeRuntime so we don't make LLM calls.
-    const runtime = new FakeRuntime();
-    const registry = SubagentRegistry.fromCwd(cfg, cfg);
     // Build a custom bridge: but the AiwRunner inside uses its own
     // runtime — for full control we'd need to inject; for the smoke
     // test we just use a noWorktree config. The runner

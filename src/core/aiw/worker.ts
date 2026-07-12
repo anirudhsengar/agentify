@@ -19,7 +19,6 @@
 //     webhook/queue.ts) ensures the next worker can resume from the
 //     last persisted state via `AiwRunner.resume()`.
 
-import * as fs from "node:fs";
 import { startAiwRunner, type AiwRunner } from "./index.ts";
 import {
   appendRecord,
@@ -40,7 +39,6 @@ import {
   type WebhookTaskRecord,
 } from "../webhook/state.ts";
 import type { AgentRuntime } from "../types.ts";
-import { defaultConfigDir } from "../agentify-config.ts";
 
 export interface AiwWorkerOptions {
   configDir: string;

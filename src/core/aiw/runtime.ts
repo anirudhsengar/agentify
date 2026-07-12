@@ -49,13 +49,10 @@ import {
   failPhase,
   finishPhase,
   getPhase,
-  isTerminal,
   skipPhase,
   startPhase,
-  updatePhase,
   type AiwState,
   type PhaseName as PhaseNameT,
-  type WorkflowName,
 } from "./state.ts";
 import { readAiwState, writeAiwState } from "./paths.ts";
 import {
@@ -557,7 +554,6 @@ export interface RunWorkflowArgs {
  */
 export async function runWorkflow(args: RunWorkflowArgs): Promise<AiwState> {
   let { paths, state, runtime, signal, logger } = args;
-  const configDir = paths.aiwRoot.replace(/\/aiw(\/[^/]+)?$/, "");
 
   // Mark workflow as running.
   state = { ...state, status: AiwStatus.Running };
@@ -788,7 +784,7 @@ interface ReviewResultLite {
  * look for a JSON object via balanced-brace matching (the review
  * skill may write Markdown with an embedded JSON block).
  */
-function readReviewResult(state: AiwState, reviewPath: string | null): ReviewResultLite | null {
+function readReviewResult(_state: AiwState, reviewPath: string | null): ReviewResultLite | null {
   if (!reviewPath) return null;
   try {
     if (!existsSync(reviewPath)) return null;

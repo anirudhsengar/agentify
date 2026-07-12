@@ -40,7 +40,6 @@ import {
 import {
   resolveIsolation,
   removeWorktree,
-  type IsolationResult,
 } from "./isolation.ts";
 import {
   makeAiwLogger,

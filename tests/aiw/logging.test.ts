@@ -17,7 +17,6 @@ import {
   recordPhasePrompt,
 } from "../../src/core/aiw/logging.ts";
 import {
-  AiwStatus,
   PhaseName,
   makeQueuedAiwState,
   WorkflowName,

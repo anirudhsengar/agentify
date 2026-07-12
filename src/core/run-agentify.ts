@@ -12,7 +12,7 @@ import {
 } from "./apply-policy.ts";
 import { resolveApplyPolicy } from "./agentifyrc.ts";
 import { exportAgenticSurface, addMarkdownManagedMarker } from "./artifact-exporters.ts";
-import { newRunId, persistRunArtifacts } from "./revert.ts";
+import { persistRunArtifacts } from "./revert.ts";
 import { packageRoot } from "./pi-sdk-runtime.ts";
 import { ProjectClassifier } from "./project-classifier.ts";
 import { readPackagedSkillTiers, skillsForClassification } from "./skill-curation.ts";
@@ -63,14 +63,12 @@ import {
 // spawn_explorer is constructed inside PiSdkRuntime.runSession, so
 // the tool factory is imported only in pi-sdk-runtime.ts.
 import {
-  DRAFT_TRANSPORT_DIR,
   loadCanonicalMapAt,
   setMapSessionStateDir,
   writeMapDeltaTool,
   writeMapTool,
 } from "./audit/write-map-tool.ts";
 import {
-  buildGreenfieldStateAt,
   validateGreenfieldArtifacts,
   writeGreenfieldStateAt,
 } from "./greenfield-state.ts";
@@ -182,59 +180,14 @@ const GENERATED_SURFACE_PATHS = [
 // where the current code writes; the provider-scoped state dir
 // migration will be wired in Step 5 when snapshot persistence
 // lives under the resolved dir.
-const INTERNAL_STATE_PATHS = [
-  codebaseMapRelativePath(LEGACY_PI_STATE_RELATIVE_DIR),
-  manifestRelativePath(LEGACY_PI_STATE_RELATIVE_DIR),
-] as const;
 
-/**
- * Internal state paths (canonical map + managed manifest) under
- * the supplied state dir. Used by the state-dir-aware snapshot
- * path.
- */
-function internalStatePathsFor(stateDir: string): readonly string[] {
-  return [codebaseMapRelativePath(stateDir), manifestRelativePath(stateDir)];
-}
 
-function cleanupInternalScaffolding(cwd: string): void {
-  try {
-    fs.rmSync(path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR), { recursive: true, force: true });
-  } catch {
-    // Best effort cleanup.
-  }
-}
 
-/**
- * State-dir-aware cleanup of the entire audit state dir. Used by
- * the brownfield audit at the start of a run to ensure no stale
- * state from a previous provider choice is left behind.
- */
-function cleanupInternalScaffoldingAt(cwd: string, stateDir: string): void {
-  try {
-    fs.rmSync(path.join(cwd, stateDir), { recursive: true, force: true });
-  } catch {
-    // Best effort cleanup.
-  }
-}
 
 // Remove only the transient draft/history transport, preserving the
 // canonical codebase_map.json. Run at the END of a run so the map
 // survives as a managed audit artifact: AGENTS.md points to it,
 // and partial/aborted runs keep their progress for inspection.
-function cleanupTransientScaffolding(cwd: string): void {
-  const transient = [
-    path.join(cwd, DRAFT_TRANSPORT_DIR),
-    path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, "history"),
-    path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, "logs"),
-  ];
-  for (const target of transient) {
-    try {
-      fs.rmSync(target, { recursive: true, force: true });
-    } catch {
-      // Best effort cleanup.
-    }
-  }
-}
 
 /**
  * State-dir-aware transient cleanup. Mirrors
@@ -432,55 +385,8 @@ function rollbackGeneratedSurface(
   return { removed, restored };
 }
 
-function collectInternalStateSnapshot(cwd: string): AuditArtifactSnapshot {
-  const snapshot: AuditArtifactSnapshot = new Map();
-  for (const rel of INTERNAL_STATE_PATHS) {
-    const filePath = path.join(cwd, rel);
-    if (!fs.existsSync(filePath)) continue;
-    const content = fs.readFileSync(filePath);
-    snapshot.set(rel, {
-      ownership: "managed",
-      content,
-      mode: fs.statSync(filePath).mode & 0o777,
-    });
-  }
-  return snapshot;
-}
 
-function restoreInternalStateSnapshot(cwd: string, snapshot: AuditArtifactSnapshot): void {
-  for (const rel of INTERNAL_STATE_PATHS) {
-    const filePath = path.join(cwd, rel);
-    const entry = snapshot.get(rel);
-    if (entry) {
-      restoreSnapshotFile(cwd, rel, entry);
-    } else {
-      fs.rmSync(filePath, { force: true });
-    }
-  }
-}
 
-/**
- * State-dir-aware variant of `restoreInternalStateSnapshot`. Used
- * when the audit is wired to a provider-scoped state dir. The
- * snapshot itself is built against the legacy constants for
- * backward compat — the function shape matches the legacy version
- * but operates on the supplied `stateDir`.
- */
-function restoreInternalStateSnapshotAt(
-  cwd: string,
-  snapshot: AuditArtifactSnapshot,
-  stateDir: string,
-): void {
-  for (const rel of internalStatePathsFor(stateDir)) {
-    const filePath = path.join(cwd, rel);
-    const entry = snapshot.get(rel);
-    if (entry) {
-      restoreSnapshotFile(cwd, rel, entry);
-    } else {
-      fs.rmSync(filePath, { force: true });
-    }
-  }
-}
 
 function writeFileUnderRoot(root: string, relativePath: string, content: string | Buffer): void {
   const filePath = path.join(root, relativePath);

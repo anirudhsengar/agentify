@@ -30,10 +30,8 @@ import {
   matchesClause,
   resolvePromptInvocation,
   checkRateLimit,
-  type RateLimiter,
 } from "./trigger-registry.ts";
 import {
-  TaskStatus,
   defaultToolsForTrigger,
   type Trigger,
   type WebhookTaskRecord,

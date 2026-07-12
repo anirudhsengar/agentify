@@ -58,7 +58,6 @@ import {
 import type { SubagentRegistry } from "./subagent-registry.ts";
 import type { AgentDefinition } from "./subagent-registry.ts";
 import { writeCostRecord, readCostRecord, orchestratorPaths } from "./paths.ts";
-import type { OrchestratorPaths } from "./paths.ts";
 import {
   createReadOnlyExecutionPolicy,
   createRepositoryWriteExecutionPolicy,

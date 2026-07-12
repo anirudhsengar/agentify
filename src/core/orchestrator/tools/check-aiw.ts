@@ -1,7 +1,7 @@
 // tools/check-aiw.ts
 
 import { Type } from "typebox";
-import { defineTool, type AgentToolResult, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { AiwBridge } from "../aiw-bridge.ts";
 
 const CheckAiwParams = Type.Object({
