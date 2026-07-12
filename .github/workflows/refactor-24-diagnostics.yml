@@ -1,0 +1,41 @@
+name: Refactor 24 Diagnostics
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  typecheck-diagnostic:
+    if: github.head_ref == 'refactor/24-generation-pipeline'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - name: Capture typecheck output
+        run: |
+          set +e
+          npm run typecheck > typecheck.log 2>&1
+          status=$?
+          {
+            echo '### Issue #24 typecheck diagnostic'
+            echo
+            echo '```text'
+            cat typecheck.log
+            echo '```'
+          } > comment.md
+          gh pr comment 39 --body-file comment.md
+          exit $status
+        env:
+          GH_TOKEN: ${{ github.token }}
