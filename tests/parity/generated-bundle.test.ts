@@ -19,6 +19,8 @@ import {
 
 const FIXED_TIMESTAMP = "2026-07-12T00:00:00.000Z";
 const SELECTED_CASE = process.env["AGENTIFY_PARITY_CASE"];
+const USER_AGENTS = "# Developer-owned instructions\n\nKeep exactly.\n";
+const USER_FEATURE_AGENT = "# User payments notes\n";
 
 function skipUnless(caseName: string): boolean {
   return SELECTED_CASE !== undefined && SELECTED_CASE !== caseName;
@@ -40,6 +42,12 @@ function fixedCodebaseMap(): CodebaseMap {
 
 function removeTree(root: string): void {
   fs.rmSync(root, { recursive: true, force: true });
+}
+
+function seedUserOwnedFiles(cwd: string): void {
+  fs.writeFileSync(path.join(cwd, "AGENTS.md"), USER_AGENTS);
+  fs.mkdirSync(path.join(cwd, ".pi", "agents"), { recursive: true });
+  fs.writeFileSync(path.join(cwd, ".pi", "agents", "payments.md"), USER_FEATURE_AGENT);
 }
 
 test(
@@ -90,46 +98,56 @@ test(
 );
 
 test(
-  "apply is deterministic while preserving managed and user-owned files",
-  { skip: skipUnless("apply") },
+  "first apply preserves user-owned files and records deterministic alongside output",
+  { skip: skipUnless("apply-user") },
   () => {
-    const cwd = makeParityTempDir("agentify-parity-apply-");
+    const cwd = makeParityTempDir("agentify-parity-apply-user-");
     try {
-      const userAgents = "# Developer-owned instructions\n\nKeep exactly.\n";
-      const userFeatureAgent = "# User payments notes\n";
-      fs.writeFileSync(path.join(cwd, "AGENTS.md"), userAgents);
-      fs.mkdirSync(path.join(cwd, ".pi", "agents"), { recursive: true });
-      fs.writeFileSync(path.join(cwd, ".pi", "agents", "payments.md"), userFeatureAgent);
-
-      const map = fixedCodebaseMap();
-      const first = applyBrownfieldFixture(cwd, map, "parity-run-one");
-      assert.ok(first.applied?.manifest);
-      assert.equal(first.applied.requiredConflictCount, 0);
-      assert.equal(fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf-8"), userAgents);
+      seedUserOwnedFiles(cwd);
+      const result = applyBrownfieldFixture(cwd, fixedCodebaseMap(), "parity-run-one");
+      assert.ok(result.applied?.manifest);
+      assert.equal(result.applied.requiredConflictCount, 0);
+      assert.equal(fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf-8"), USER_AGENTS);
       assert.equal(
         fs.readFileSync(path.join(cwd, ".pi", "agents", "payments.md"), "utf-8"),
-        userFeatureAgent,
+        USER_FEATURE_AGENT,
       );
-      assert.ok(first.applied.writes.some((write) =>
+      assert.ok(result.applied.writes.some((write) =>
         write.action === "alongside" && write.path.endsWith("AGENTS.md")
       ));
-      assert.ok(first.applied.writes.some((write) =>
+      assert.ok(result.applied.writes.some((write) =>
         write.action === "alongside" && write.path.endsWith("payments.md")
       ));
       assert.ok(fs.existsSync(path.join(cwd, "AGENTS.agentify.md")));
       assert.ok(fs.existsSync(path.join(cwd, ".pi", "agents", "payments.agentify.md")));
 
+      const manifest = readManifestAt(cwd, PARITY_STATE_DIR);
+      assert.ok(manifest);
+      assert.equal(manifest.state_dir, PARITY_STATE_DIR);
+      assert.equal(manifest.run_id, "parity-run-one");
+      assert.deepEqual(
+        manifest.files.map((file) => file.path),
+        manifest.files.map((file) => file.path).sort(),
+      );
+    } finally {
+      removeTree(cwd);
+    }
+  },
+);
+
+test(
+  "repeated identical apply preserves normalized repository bytes",
+  { skip: skipUnless("apply-repeat") },
+  () => {
+    const cwd = makeParityTempDir("agentify-parity-apply-repeat-");
+    try {
+      seedUserOwnedFiles(cwd);
+      const map = fixedCodebaseMap();
+      const first = applyBrownfieldFixture(cwd, map, "parity-run-one");
+      assert.ok(first.applied?.manifest);
       const firstStableTree = readGeneratedTree(cwd, {
         normalizeVolatileManifestFields: true,
       });
-      const firstManifest = readManifestAt(cwd, PARITY_STATE_DIR);
-      assert.ok(firstManifest);
-      assert.equal(firstManifest.state_dir, PARITY_STATE_DIR);
-      assert.equal(firstManifest.run_id, "parity-run-one");
-      assert.deepEqual(
-        firstManifest.files.map((file) => file.path),
-        firstManifest.files.map((file) => file.path).sort(),
-      );
 
       const second = applyBrownfieldFixture(cwd, map, "parity-run-two");
       assert.ok(second.applied?.manifest);
@@ -139,14 +157,31 @@ test(
         firstStableTree,
       );
       assert.equal(readManifestAt(cwd, PARITY_STATE_DIR)?.run_id, "parity-run-two");
+    } finally {
+      removeTree(cwd);
+    }
+  },
+);
 
+test(
+  "managed files update at their canonical path",
+  { skip: skipUnless("apply-managed") },
+  () => {
+    const cwd = makeParityTempDir("agentify-parity-apply-managed-");
+    try {
+      const map = fixedCodebaseMap();
+      const first = applyBrownfieldFixture(cwd, map, "parity-managed-first");
+      assert.ok(first.applied?.manifest);
       const managedPath = path.join(cwd, "specs", "README.md");
       const staleManagedContent = `${AGENTIFY_MANAGED_MARKERS.markdown}\n# stale managed content\n`;
       fs.writeFileSync(managedPath, staleManagedContent);
-      const managedUpdate = applyBrownfieldFixture(cwd, map, "parity-managed-update");
-      assert.ok(managedUpdate.applied?.manifest);
+
+      const update = applyBrownfieldFixture(cwd, map, "parity-managed-update");
+      assert.ok(update.applied?.manifest);
       assert.notEqual(fs.readFileSync(managedPath, "utf-8"), staleManagedContent);
-      assert.equal(fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf-8"), userAgents);
+      assert.ok(update.applied.writes.some((write) =>
+        write.action === "written" && write.path === managedPath
+      ));
     } finally {
       removeTree(cwd);
     }
