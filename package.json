@@ -24,7 +24,7 @@
   },
   "files": [
     "bin",
-    "src",
+    "dist",
     "scaffold",
     "docs",
     "packaged",
@@ -42,17 +42,17 @@
   "dependencies": {
     "@earendil-works/pi-ai": "^0.80.6",
     "@earendil-works/pi-coding-agent": "^0.80.6",
-    "jiti": "^2.7.0",
     "typebox": "^1.1.38"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "^0.25.12",
     "tsx": "^4.20.0",
     "typescript": "^5.6.0"
   },
   "scripts": {
     "test:unit": "node tests/scripts/run-test-files.mjs --exclude tests/generation-pipeline.test.ts",
-    "test:all": "npm run test:generation-pipeline && npm run test:unit && bash tests/run.sh",
+    "test:all": "npm run build && npm run test:generation-pipeline && npm run test:unit && bash tests/run.sh",
     "test": "npm run typecheck && npm run test:all",
     "test:generation-pipeline": "tsx tests/generation-pipeline.test.ts",
     "test:package": "node tests/package/installed-cli-smoke.mjs",
@@ -65,8 +65,10 @@
     "qualify:release-evidence": "tsx src/core/scripts/qualify-release-evidence.ts",
     "release:check": "npm run typecheck && npm run test:all && npm run test:package",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run typecheck && npm run test:all && npm run test:package",
-    "inspect-log": "node src/core/audit/scripts/inspect-log.mjs"
+    "prepublishOnly": "npm run release:check",
+    "inspect-log": "node src/core/audit/scripts/inspect-log.mjs",
+    "build": "node scripts/build.mjs",
+    "prepack": "npm run build"
   },
   "exports": {
     "./package.json": "./package.json"
