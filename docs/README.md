@@ -12,6 +12,8 @@ public product contract.
 | Public CLI surface, modes, and config-utility subcommands | `README.md` (repo root) |
 | Supported versus internal experimental surfaces | `docs/experimental-surfaces.md` |
 | Generation architecture and trust boundary | `docs/architecture.md` |
+| Modernization parity baseline and behavior contract | `docs/refactors/modernization-baseline.md` |
+| Runtime reachability roots and deletion evidence | `docs/refactors/runtime-reachability.md` |
 | Compiled build, runtime assets, and npm package boundary | `docs/build-and-package.md` |
 | Execution-policy security model | `SECURITY.md` (repo root) |
 | Transactional provider-state lifecycle | `docs/state-lifecycle.md` |
@@ -42,5 +44,6 @@ not make an internal module a supported package API.
 - **Named model slots** — `src/core/models/`.
 - **Harness export** — `src/core/artifact-exporters.ts`.
 - **Shipped scaffold** — `scaffold/`.
+- **Modernization parity gate** — `tests/parity/`, `npm run test:parity`.
 - **Maintenance invariants** — `tests/maintenance/`.
 - **Complete tests** — `tests/`.
