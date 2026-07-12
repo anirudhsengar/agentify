@@ -4,17 +4,25 @@ on:
   push:
     branches:
       - refactor/24-generation-pipeline
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: write
 
 jobs:
   apply-and-validate:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && (github.ref_name == 'refactor/24-generation-pipeline' || github.head_ref == 'refactor/24-generation-pipeline')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: refactor/24-generation-pipeline
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
