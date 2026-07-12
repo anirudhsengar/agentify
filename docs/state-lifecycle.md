@@ -103,6 +103,27 @@ On migration rollback, legacy state returns to `.pi/agentify/`. On migration
 commit, the provider-selected destination remains authoritative and the legacy
 location is removed.
 
+## Draft transport
+
+When `write_map` receives an inline map larger than its inline limit, an
+explicit per-run tool factory writes the transport file atomically to:
+
+```text
+<provider-state-dir>/.agentify/draft.json
+```
+
+The directory and final filename are derived from the same provider-scoped
+state context. Claude and universal/Codex runs therefore do not create, read,
+or overwrite a `.pi/agentify/.agentify/draft.json` file implicitly. An existing
+legacy draft is left untouched; explicit `map_file` input may still reference
+any caller-selected path.
+
+Deprecated singleton tools and the exported `DRAFT_PATH` constant retain the
+historical `.pi/agentify/.agentify/draft.json` behavior. Completed `draft.json`
+files remain available for inspection or retry, while atomic `.tmp` files are
+removed by the successful rename. Draft files are not treated as migration or
+restart checkpoints.
+
 ## Implementation references
 
 - State-directory resolution: `src/core/state-dir.ts`

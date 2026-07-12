@@ -8,9 +8,9 @@
 //   2. File-based: { map_file: "<path>" }   use for large maps.
 //
 // In "auto" mode (the default), an inline map that exceeds
-// MAX_INLINE_MAP_BYTES is transparently persisted via the
-// .pi/agentify/.agentify/draft.json transport. The agent sees a
-// successful result either way.
+// MAX_INLINE_MAP_BYTES is transparently persisted via the active
+// state directory's .agentify/draft.json transport. Deprecated singleton
+// callers retain the historical .pi/agentify/.agentify/draft.json path.
 //
 // write_map_delta (Phase 1.2):
 //   Merges a partial delta into the canonical map. Used by
@@ -79,6 +79,13 @@ function activeMapPathConfig(): MapToolExecutionContext {
     stateDir: currentSessionStateDir,
     mapFilename: MAP_FILENAME,
   };
+}
+
+function activeDraftPathRelative(): string {
+  const scoped = mapToolExecutionContext.getStore();
+  return scoped
+    ? path.join(scoped.stateDir, ".agentify", "draft.json")
+    : DRAFT_PATH;
 }
 
 /**
@@ -197,10 +204,9 @@ export interface MapTools {
   /** Posix-style relative path of the canonical map, e.g.
    *  `.claude/agentify/codebase_map.json`. */
   canonicalMapRelative: string;
-  /** Selected-state draft directory. The final draft file remains the legacy
-   * path until Issue #31 resolves migration behavior. */
+  /** Selected-state draft transport directory. */
   draftDirectoryRelative: string;
-  /** Historical provider-agnostic draft file path, preserved for parity. */
+  /** Selected-state draft transport file path. */
   draftPathRelative: string;
   /** Selected-state previous-map history directory. */
   historyRelative: string;
@@ -317,9 +323,8 @@ function writeCanonicalMap(cwd: string, map: CodebaseMap): { path: string; size_
 
 /** Atomic write-then-rename for the draft transport. */
 function writeDraftAtomically(cwd: string, content: string): string {
-    const dir = path.join(cwd, activeMapPathConfig().stateDir, ".agentify");
-    fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(cwd, DRAFT_PATH);
+    const filePath = path.join(cwd, activeDraftPathRelative());
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
     const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
     fs.writeFileSync(tmpPath, content, { mode: 0o600 });
     fs.renameSync(tmpPath, filePath);
@@ -602,6 +607,7 @@ export const writeMapTool = defineTool({
     parameters: WriteMapParamsSchema,
     async execute(_id, params, _signal, _onUpdate, ctx) {
         const mode = params.mode ?? "auto";
+        const draftPathRelative = activeDraftPathRelative().replace(/\\/g, "/");
         const hasInline = params.map !== undefined;
         const hasFile = typeof params.map_file === "string" && params.map_file.length > 0;
 
@@ -614,10 +620,9 @@ export const writeMapTool = defineTool({
                             "Error: write_map called with empty arguments. Provide either " +
                             "`map` (inline object) or `map_file` (path to a JSON file). " +
                             "For large maps, use the file-based mode: build the JSON as a " +
-                            "string, call the `write` tool with path=" +
-                            "\".pi/agentify/.agentify/draft.json\" and content=<the json " +
-                            "string>, then call write_map with " +
-                            "{map_file: \".pi/agentify/.agentify/draft.json\"}.",
+                            `string, call the \`write\` tool with path="${draftPathRelative}" ` +
+                            `and content=<the json string>, then call write_map with ` +
+                            `{map_file: "${draftPathRelative}"}.`,
                     },
                 ],
                 isError: true,
@@ -664,9 +669,9 @@ export const writeMapTool = defineTool({
                             text:
                                 "Error: write_map called with `mode: 'file'` and inline `map`. " +
                                 "Use the file-based mode instead: build the JSON as a string, " +
-                                "call `write` with path=\".pi/agentify/.agentify/draft.json\" and " +
-                                "content=<the json string>, then call write_map with " +
-                                "{map_file: \".pi/agentify/.agentify/draft.json\"}.",
+                                `call \`write\` with path="${draftPathRelative}" and ` +
+                                `content=<the json string>, then call write_map with ` +
+                                `{map_file: "${draftPathRelative}"}.`,
                         },
                     ],
                     isError: true,
@@ -683,9 +688,9 @@ export const writeMapTool = defineTool({
                                 text:
                                     `Error: inline map is ${inlineSize} bytes, exceeds the ${MAX_INLINE_MAP_BYTES} byte cap. ` +
                                     `Use the file-based mode instead: build the JSON as a string, ` +
-                                    "call `write` with path=\".pi/agentify/.agentify/draft.json\" and " +
-                                    "content=<the json string>, then call write_map with " +
-                                    "{map_file: \".pi/agentify/.agentify/draft.json\"}.",
+                                    `call \`write\` with path="${draftPathRelative}" and ` +
+                                    `content=<the json string>, then call write_map with ` +
+                                    `{map_file: "${draftPathRelative}"}.`,
                             },
                         ],
                         isError: true,
@@ -969,8 +974,7 @@ export function createWriteMapTools(config: MapPathConfig): MapTools {
     canonicalMapPath: (cwd: string) => path.join(cwd, context.stateDir, context.mapFilename),
     canonicalMapRelative: normalize(path.join(context.stateDir, context.mapFilename)),
     draftDirectoryRelative: normalize(path.join(context.stateDir, ".agentify")),
-    // Preserve the mismatch tracked by Issue #31. Do not migrate silently here.
-    draftPathRelative: normalize(DRAFT_PATH),
+    draftPathRelative: normalize(path.join(context.stateDir, ".agentify", "draft.json")),
     historyRelative: normalize(path.join(context.stateDir, "history")),
   };
 }

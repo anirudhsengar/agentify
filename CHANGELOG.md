@@ -37,6 +37,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Provider-scoped write-map factories now keep oversized-map draft transport under the selected state directory instead of writing through the legacy Pi path.
 - `--mode` and `--targets` no longer collide with subcommand dispatch.
 - Shell-based credential reads and repository mutation escapes are blocked.
 - Webhook workers can no longer run without an enforceable sandbox policy.
