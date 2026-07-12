@@ -1,4 +1,8 @@
-import { AGENTIFY_MANAGED_MARKERS, addMarkdownManagedMarker } from "../artifact-exporters.ts";
+import {
+  AGENTIFY_MANAGED_MARKERS,
+  addMarkdownManagedMarker,
+} from "./managed-markers.ts";
+import { normalizeArtifactPath } from "./generated-surface.ts";
 import {
   AGENTS_MD_MAX_LINES,
   CodebaseMapSchema,
@@ -95,12 +99,8 @@ function stateDirFor(): string {
   return currentRendererStateDir;
 }
 
-function normalizePath(relativePath: string): string {
-  return relativePath.replace(/\\/g, "/").replace(/^\.\/+/, "");
-}
-
 function isSafeRelativePath(relativePath: string): boolean {
-  const normalized = normalizePath(relativePath);
+  const normalized = normalizeArtifactPath(relativePath);
   return normalized.length > 0
     && SAFE_RELATIVE_PATH.test(normalized)
     && !normalized.split("/").some((part) => part === "" || part === ".");
@@ -174,7 +174,7 @@ function markdownArtifact(params: {
   source: string;
 }): RenderedArtifact {
   return {
-    relativePath: normalizePath(params.relativePath),
+    relativePath: normalizeArtifactPath(params.relativePath),
     content: ensureTrailingNewline(addMarkdownManagedMarker(params.body)),
     marker: AGENTIFY_MANAGED_MARKERS.markdown,
     kind: params.kind,
@@ -193,7 +193,7 @@ function hashCommentArtifact(params: {
   const marker = AGENTIFY_MANAGED_MARKERS.toml;
   const body = params.body.includes(marker) ? params.body : `${marker}\n${params.body}`;
   return {
-    relativePath: normalizePath(params.relativePath),
+    relativePath: normalizeArtifactPath(params.relativePath),
     content: ensureTrailingNewline(body),
     marker,
     kind: params.kind,
@@ -210,7 +210,7 @@ function jsonArtifact(params: {
   source: string;
 }): RenderedArtifact {
   return {
-    relativePath: normalizePath(params.relativePath),
+    relativePath: normalizeArtifactPath(params.relativePath),
     content: ensureTrailingNewline(JSON.stringify(params.value, null, 2)),
     marker: "sha256",
     kind: params.kind,
@@ -805,7 +805,7 @@ function renderAlwaysOnDocs(map: CodebaseMap, intents: ArtifactIntents | undefin
 
   if (intents) {
     for (const doc of intents.always_on_docs) {
-      const relativePath = normalizePath(doc.path);
+      const relativePath = normalizeArtifactPath(doc.path);
       if (!isSafeRelativePath(relativePath)) continue;
       add(markdownArtifact({
         relativePath,
@@ -846,7 +846,7 @@ function renderFeedbackLoopArtifacts(map: CodebaseMap, intents: ArtifactIntents 
     : ["- No existing AI docs were detected during bootstrap."];
   const generatedDocEntries = (intents?.always_on_docs ?? [])
     .map((doc) => ({
-      path: normalizePath(doc.path),
+      path: normalizeArtifactPath(doc.path),
       title: oneLine(doc.title),
     }))
     .filter((doc) => isSafeRelativePath(doc.path) && !REQUIRED_ALWAYS_ON_DOCS.has(doc.path))
@@ -1091,7 +1091,7 @@ function renderCustomToolCandidateArtifacts(map: CodebaseMap, errors: string[]):
   const customToolCandidates = map.customization_evidence?.custom_tool_candidates ?? [];
   const existingExtensionNames = new Set(
     (map.meta.documentation.existing_pi_extensions ?? [])
-      .map((entry) => normalizePath(entry).split("/").pop() ?? "")
+      .map((entry) => normalizeArtifactPath(entry).split("/").pop() ?? "")
       .map((entry) => entry.replace(/\.ts$/, "")),
   );
   const artifacts: RenderedArtifact[] = [];

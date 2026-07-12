@@ -7,7 +7,7 @@ import { Value } from "typebox/value";
 import {
   AGENTIFY_MANAGED_MARKERS,
   addMarkdownManagedMarker,
-} from "./artifact-exporters.ts";
+} from "./artifacts/managed-markers.ts";
 import { LEGACY_PI_STATE_RELATIVE_DIR } from "./state-dir.ts";
 import type { ManagedArtifactKind, RenderedArtifact } from "./artifacts/renderers.ts";
 

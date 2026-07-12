@@ -11,7 +11,14 @@ import {
   type ApplyPolicy,
 } from "./apply-policy.ts";
 import { resolveApplyPolicy } from "./agentifyrc.ts";
-import { exportAgenticSurface, addMarkdownManagedMarker } from "./artifact-exporters.ts";
+import { exportAgenticSurface } from "./artifact-exporters.ts";
+import { isFeatureAgentFilename } from "./artifacts/agent-file-conventions.ts";
+import {
+  GENERATED_SURFACE_PATHS,
+  normalizeArtifactPath,
+} from "./artifacts/generated-surface.ts";
+import { addMarkdownManagedMarker } from "./artifacts/managed-markers.ts";
+import { readPackageVersion } from "./package-version.ts";
 import { persistRunArtifacts } from "./revert.ts";
 import { packageRoot } from "./pi-sdk-runtime.ts";
 import { ProjectClassifier } from "./project-classifier.ts";
@@ -138,41 +145,6 @@ const ALWAYS_ON_ARTIFACTS = [
   "ai_docs/README.md",
 ] as const;
 
-const RESERVED_AGENT_NAMES = new Set([
-  "scout.md",
-  "review.md",
-  "implement.md",
-  "test.md",
-  "fix.md",
-  "document.md",
-]);
-
-const GENERATED_SURFACE_PATHS = [
-  AGENTS_MD_PATH,
-  "CLAUDE.md",
-  "CONTEXT.md",
-  "specs/README.md",
-  "ai_docs/README.md",
-  "conditional_docs.md",
-  ".pi/conditional_docs.md",
-  "SETUP.md",
-  ".pi/agents",
-  ".pi/prompts",
-  ".pi/workflows",
-  ".pi/extensions",
-  ".pi/skills",
-  ".agents",
-  ".claude",
-  ".codex",
-  ".github/actions",
-  ".github/agent-prompts",
-  ".github/scripts",
-  ".github/workflows",
-  "app_docs",
-  "app_review",
-  "app_fix_reports",
-] as const;
-
 // Provider-scoped state is resolved once at run entry and threaded through
 // structured writers, renderers, cleanup, persistence, and transactions.
 
@@ -214,7 +186,7 @@ function countFileLines(filePath: string): number {
 }
 
 function toRel(cwd: string, filePath: string): string {
-  return path.relative(cwd, filePath).split(path.sep).join("/");
+  return normalizeArtifactPath(path.relative(cwd, filePath));
 }
 
 function listFilesRecursively(root: string): string[] {
@@ -487,8 +459,7 @@ function mirrorSessionOutputToStaging(
   const targetAgentsDir = path.join(stagingRoot, ".pi", "agents");
   fs.mkdirSync(targetAgentsDir, { recursive: true });
   for (const entry of fs.readdirSync(agentsDir, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-    if (RESERVED_AGENT_NAMES.has(entry.name)) continue;
+    if (!entry.isFile() || !isFeatureAgentFilename(entry.name)) continue;
     const raw = fs.readFileSync(path.join(agentsDir, entry.name), "utf-8");
     fs.writeFileSync(
       path.join(targetAgentsDir, entry.name),
@@ -789,16 +760,6 @@ export function applyStagedBundle(params: {
   return { writes, requiredConflictCount, manifest };
 }
 
-function loadAgentifyVersion(): string {
-  try {
-    const raw = fs.readFileSync(path.join(packageRoot(), "package.json"), "utf-8");
-    const parsed = JSON.parse(raw) as { version?: string };
-    return parsed.version ?? "unknown";
-  } catch {
-    return "unknown";
-  }
-}
-
 function extractUsage(event: AgentSessionEvent): AssistantUsage | undefined {
   const maybe = event as {
     type?: string;
@@ -841,7 +802,7 @@ function readFinalAuditState(cwd: string, stateDir: string): FinalAuditState {
   const agentsDir = path.join(cwd, ".pi", "agents");
   if (fs.existsSync(agentsDir)) {
     for (const entry of fs.readdirSync(agentsDir)) {
-      if (entry.endsWith(".md") && !RESERVED_AGENT_NAMES.has(entry)) {
+      if (isFeatureAgentFilename(entry)) {
         featureAgentsWritten += 1;
       }
     }
@@ -1003,7 +964,7 @@ async function runBrownfieldAudit(
       args: options.args ?? "",
       model: config.model ?? "auto",
       thinking_level: config.thinkingLevel ?? "high",
-      agentify_version: loadAgentifyVersion(),
+      agentify_version: readPackageVersion(packageRoot()),
       sdk_version: PI_SDK_VERSION,
       system_prompt_sha256: promptSha,
       system_prompt_path: "src/core/audit/prompts/builder.md",
@@ -1191,7 +1152,7 @@ async function runBrownfieldAudit(
             stagingRoot,
             snapshot: artifactSnapshot,
             metadata,
-            agentifyVersion: loadAgentifyVersion(),
+            agentifyVersion: readPackageVersion(packageRoot()),
             mode: "brownfield",
             policy: userOwnedAgentsMd
               ? withAbortOnRequired(resolveApplyPolicy(options.cwd, stateDir))
@@ -1392,7 +1353,7 @@ async function runGreenfield(options: RunAgentifyOptions, config: AgentifyConfig
               stagingRoot,
               snapshot: artifactSnapshot,
               metadata,
-              agentifyVersion: loadAgentifyVersion(),
+              agentifyVersion: readPackageVersion(packageRoot()),
               mode: "greenfield",
               policy: resolveApplyPolicy(options.cwd, stateDir),
               runId,
