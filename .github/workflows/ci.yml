@@ -31,8 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        node: ["22.19.0", "24"]
+    matrix:
+      node: ["22.19.0", "24"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -56,6 +56,7 @@ jobs:
 
   package-smoke:
     name: Modernization parity and packed package smoke
+    if: ${{ always() }}
     needs: [typecheck, tests]
     runs-on: ubuntu-latest
     steps:
@@ -65,4 +66,12 @@ jobs:
           node-version: "22.19.0"
           cache: npm
       - run: npm ci
-      - run: npm run test:parity
+      - run: npm run build
+      - name: CLI parity
+        run: npm run test:parity:cli
+      - name: Generated-bundle parity
+        run: npm run test:parity:generated
+      - name: State-directory parity
+        run: npm run test:parity:state
+      - name: Packed package smoke
+        run: npm run test:package
