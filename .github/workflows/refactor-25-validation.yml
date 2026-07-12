@@ -1,42 +1,37 @@
-name: Refactor 25 Validation
+name: Refactor 25 Apply
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
-    types:
-      - synchronize
-      - reopened
+      - refactor/25-run-orchestration
 
 permissions:
-  contents: read
-  pull-requests: write
+  contents: write
 
 jobs:
-  characterize:
-    if: github.head_ref == 'refactor/25-run-orchestration'
+  apply:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22.19.0
           cache: npm
       - run: npm ci
-      - name: Run focused characterization
-        shell: bash
+      - name: Apply orchestration extraction
+        run: node scripts/apply-refactor-25.mjs
+      - name: Typecheck extracted modules
+        run: npm run typecheck
+      - name: Run lifecycle characterization
+        run: npx tsx tests/core/run-orchestration-characterization.test.ts
+      - name: Commit extracted orchestration
         run: |
-          set +e
-          npx tsx tests/core/run-orchestration-characterization.test.ts > characterization.log 2>&1
-          status=$?
-          {
-            echo '### Issue #25 characterization diagnostic'
-            echo
-            echo '```text'
-            cat characterization.log
-            echo '```'
-          } > comment.md
-          gh pr comment 40 --body-file comment.md
-          exit "$status"
-        env:
-          GH_TOKEN: ${{ github.token }}
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/core/run-agentify.ts src/core/revert.ts src/core/runs
+          git diff --cached --check
+          git commit -m "refactor: split run mode orchestration"
+          git push origin HEAD:refactor/25-run-orchestration
