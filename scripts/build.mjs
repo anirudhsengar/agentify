@@ -18,6 +18,9 @@ await build({
   platform: "node",
   format: "esm",
   target: "node22",
+  banner: {
+    js: `import { createRequire as __agentifyCreateRequire } from "node:module"; const require = __agentifyCreateRequire(import.meta.url);`,
+  },
   sourcemap: true,
   legalComments: "none",
   logLevel: "info",
