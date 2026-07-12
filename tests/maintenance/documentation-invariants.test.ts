@@ -53,6 +53,7 @@ test("documentation index covers every maintained trust boundary", () => {
   const index = read("docs/README.md");
   for (const documentedPath of [
     "docs/architecture.md",
+    "docs/architecture/dependency-compatibility-matrix.md",
     "docs/architecture/experimental-runtime-decisions.md",
     "docs/build-and-package.md",
     "docs/experimental-surfaces.md",
@@ -89,6 +90,33 @@ test("experimental runtime decision record covers every subsystem and approved a
   assert.equal((decisions.match(/\*\*Relocate internally\.\*\*/g) ?? []).length, 1);
   assert.match(decisions, /Issue #48/);
   assert.match(decisions, /No subsystem is approved for graduation, archive, or removal/);
+});
+
+test("dependency compatibility matrix preserves the upgrade gate and group ownership", () => {
+  const matrix = read("docs/architecture/dependency-compatibility-matrix.md");
+
+  for (const packageName of [
+    "@earendil-works/pi-ai",
+    "@earendil-works/pi-coding-agent",
+    "typebox",
+    "typescript",
+    "@types/node",
+    "esbuild",
+    "tsx",
+    "@smithy/util-buffer-from",
+  ]) {
+    assert.ok(matrix.includes(packageName), `compatibility matrix must include ${packageName}`);
+  }
+
+  for (const issueNumber of [60, 61, 62, 63, 64, 65]) {
+    assert.ok(matrix.includes(`#${issueNumber}`), `compatibility matrix must include #${issueNumber}`);
+  }
+
+  assert.match(matrix, /Issues #32 and #33 must be merged before any dependency version changes/);
+  assert.match(matrix, /TypeScript 7\.0\.2.*not approved/s);
+  assert.match(matrix, /TypeBox.*hard-blocked until Issue #33 merges/s);
+  assert.match(matrix, /Pi 0\.80\.6 pair \| 0 \| 0 \| 0/);
+  assert.match(matrix, /No engine change approved/);
 });
 
 test("package guidance files referenced by shipped docs are published", () => {
