@@ -18,6 +18,10 @@ function tempDir(name: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `agentify-${name}-`));
 }
 
+function isToolError(result: unknown): boolean {
+  return (result as { isError?: boolean }).isError === true;
+}
+
 async function writeMapAt(cwd: string, stateDir: string): Promise<string> {
   setMapSessionStateDir(stateDir);
   const result = await writeMapTool.execute(
@@ -27,7 +31,7 @@ async function writeMapAt(cwd: string, stateDir: string): Promise<string> {
     undefined,
     { cwd } as never,
   );
-  assert.equal(result.isError, undefined);
+  assert.equal(isToolError(result), false);
   const details = result.details as { path?: string } | undefined;
   assert.ok(details?.path);
   return details.path;
