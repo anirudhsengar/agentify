@@ -126,6 +126,23 @@ substance validation, staging, apply, and greenfield-state persistence.
 writes shared by both modes. Their meaningful lifecycle differences remain
 visible in the two functions.
 
+## State-directory ownership
+
+A supported brownfield run resolves its provider-scoped state directory once.
+It then creates a fresh `createWriteMapTools({ stateDir })` result and passes an
+explicit `RenderContext` to deterministic rendering. The tool factory captures
+canonical-map, history, and draft-layout information for that run; asynchronous
+tool execution is isolated from other in-process factories. Renderer helpers
+receive the same run-owned state directory through function arguments.
+
+Production orchestration does not call `setMapSessionStateDir` or
+`setRendererStateDir`. Those setters, singleton map tools, and legacy path
+constants remain deprecated compatibility adapters for older direct callers and
+tests. Legacy map fallback precedence is unchanged. The provider-scoped draft
+transport discrepancy is intentionally not corrected here; it is investigated
+separately in Issue #31 so any behavioral or migration change receives its own
+compatibility analysis.
+
 ## Webhook boundary
 
 Webhook intake verifies body size and HMAC before consuming authenticated
