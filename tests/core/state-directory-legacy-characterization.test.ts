@@ -81,7 +81,7 @@ function testLegacyDraftConstantRemainsProviderAgnostic(): void {
   assert.equal(
     DRAFT_PATH,
     path.join(LEGACY_PI_STATE_RELATIVE_DIR, ".agentify", "draft.json"),
-    "Issue #31 tracks the provider-scoped draft-file mismatch; Issue #26 must preserve it",
+    "deprecated draft constants remain pinned to the legacy Pi state tree",
   );
 }
 

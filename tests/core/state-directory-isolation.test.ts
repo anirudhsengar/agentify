@@ -3,7 +3,6 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
-  DRAFT_PATH,
   createWriteMapTools,
   setMapSessionStateDir,
 } from "../../src/core/audit/write-map-tool.ts";
@@ -45,7 +44,7 @@ async function testFactoryPathsAndSameProcessIsolation(): Promise<void> {
   try {
     assert.equal(claude.canonicalMapRelative, ".claude/agentify/codebase_map.json");
     assert.equal(claude.draftDirectoryRelative, ".claude/agentify/.agentify");
-    assert.equal(claude.draftPathRelative, DRAFT_PATH);
+    assert.equal(claude.draftPathRelative, ".claude/agentify/.agentify/draft.json");
     assert.equal(claude.historyRelative, ".claude/agentify/history");
     assert.equal(
       claude.canonicalMapPath(cwd),
