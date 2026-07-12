@@ -90,6 +90,15 @@ The manifest records sorted paths, hashes, state directory, and run metadata.
 Run ID and timestamp are intentionally volatile; artifact content and ownership
 are not.
 
+## Shared artifact primitives
+
+Dependency-neutral modules under `src/core/artifacts/` own managed-marker
+formatting, reserved feature-agent conventions, generated-surface paths, and
+artifact path normalization. Exporters and renderers consume these primitives;
+compatibility exports preserve older internal import locations without making
+them new package APIs. Package-version reading is similarly centralized in
+`src/core/package-version.ts`.
+
 ## Webhook boundary
 
 Webhook intake verifies body size and HMAC before consuming authenticated
