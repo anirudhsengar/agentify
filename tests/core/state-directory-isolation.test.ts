@@ -70,21 +70,28 @@ async function testFactoryPathsAndSameProcessIsolation(): Promise<void> {
   }
 }
 
-async function testFailureDoesNotLeakIntoAnotherFactory(): Promise<void> {
-  const cwd = tempDir("map-factory-failure");
+async function testThrownExecutionDoesNotLeakIntoAnotherFactory(): Promise<void> {
+  const cwd = tempDir("map-factory-throw");
   const failed = createWriteMapTools({ stateDir: ".claude/agentify" });
   const healthy = createWriteMapTools({ stateDir: ".codex/agentify" });
   try {
-    const invalid = await failed.writeMapTool.execute(
-      "invalid",
-      { map: {} } as never,
-      undefined,
-      undefined,
-      { cwd } as never,
+    const throwingParams = new Proxy({}, {
+      get(): never {
+        throw new Error("intentional factory execution failure");
+      },
+    });
+    await assert.rejects(
+      () => failed.writeMapTool.execute(
+        "throwing-run",
+        throwingParams as never,
+        undefined,
+        undefined,
+        { cwd } as never,
+      ),
+      /intentional factory execution failure/,
     );
-    assert.equal(isToolError(invalid), true);
 
-    const result = await executeWrite(healthy.writeMapTool, cwd, "healthy after failure");
+    const result = await executeWrite(healthy.writeMapTool, cwd, "healthy after throw");
     assert.equal(isToolError(result), false);
     assert.ok(fs.existsSync(healthy.canonicalMapPath(cwd)));
     assert.ok(!fs.existsSync(failed.canonicalMapPath(cwd)));
@@ -114,6 +121,6 @@ function testExplicitRendererContextsAreIsolated(): void {
 }
 
 await testFactoryPathsAndSameProcessIsolation();
-await testFailureDoesNotLeakIntoAnotherFactory();
+await testThrownExecutionDoesNotLeakIntoAnotherFactory();
 testExplicitRendererContextsAreIsolated();
 console.log("explicit state-directory isolation tests passed.");
