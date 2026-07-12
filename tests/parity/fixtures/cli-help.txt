@@ -1,0 +1,52 @@
+agentify 0.1.0
+
+Usage:
+  agentify [options]
+  agentify <subcommand> [subcommand-options]
+
+Options:
+  -h, --help                 Show this help and exit.
+  -v, --version              Print the version and exit.
+  --mode <kind>              Skip project-kind classification for ambiguous
+                             repos. <kind> is 'brownfield' or 'greenfield'.
+  --targets <csv>            Skip the agent-target picker. Comma-separated
+                             agent IDs (e.g. 'claude-code,codex,cursor').
+                             Skips the picker entirely for non-interactive
+                             use; persisted targets are NOT respected.
+
+Run agentify in the current repository. Existing repos are audited and exported to
+the coding agents you select — by default Claude Code, Codex, and Pi, prompted
+interactively. Empty/new repos start a local-first greenfield chat.
+
+agentify exposes one public runtime entrypoint: `agentify` with no positional
+arguments. Bootstrap, attach, and recovery all start there. After bootstrap, work
+through GitHub issues, comments, and PRs (see docs/lifecycle/README.md).
+
+Config subcommands (manage ~/.agentify/{config,auth}.json):
+  agentify login [--provider <name>] [--key <key>]
+    Store or replace an API key. Prompts interactively when
+    no flags are supplied. Prints setup instructions for
+    OAuth-only providers (e.g., openai-codex).
+  agentify logout [--provider <name> | --all] [--yes]
+    Remove one provider's credentials, or wipe all stored
+    auth with --all (interactive confirmation; --yes skips
+    the prompt in non-interactive shells).
+  agentify models list [--provider <name>]
+    Print available models from the Pi model registry,
+    filtered by configured auth.
+  agentify models show
+    Print the configured provider, model, and thinking level.
+  agentify models set <provider>/<model>
+    Set the model in config.json, validating against the
+    registry and current auth.
+  agentify models unset
+    Clear provider and model from config.json (preserves
+    thinkingLevel).
+
+Operational subcommands (mutate the repo):
+  agentify revert [--to <run-id>] [--keep-alongside]
+    Undo the most recent agentify run. Removes *.agentify.*
+    alongside files, restores user files from the snapshot,
+    and deletes files agentify created from scratch. Single-
+    shot, not a history. --keep-alongside preserves the
+    alongside files.
