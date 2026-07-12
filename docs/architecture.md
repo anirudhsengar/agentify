@@ -99,6 +99,17 @@ compatibility exports preserve older internal import locations without making
 them new package APIs. Package-version reading is similarly centralized in
 `src/core/package-version.ts`.
 
+## Generation pipeline ownership
+
+Repository-facing generation primitives live under `src/core/generation/`.
+`artifact-snapshot.ts` owns generated-surface snapshots and rollback;
+`staging-bundle.ts` owns temporary bundle construction and metadata;
+`apply-bundle.ts` owns conflict preflight, symlink protection, apply policy,
+and manifest assembly; `apply-report.ts` owns deterministic report text; and
+`session-agent-snapshot.ts` owns temporary feature-agent capture and mirroring.
+`run-agentify.ts` coordinates these modules and retains compatibility re-exports
+for the previously imported generation helpers.
+
 ## Webhook boundary
 
 Webhook intake verifies body size and HMAC before consuming authenticated
