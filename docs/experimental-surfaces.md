@@ -7,6 +7,13 @@ Everything else in this repository is classified explicitly below so users and
 contributors do not infer a stable library API from source layout, test coverage,
 or internal composition roots.
 
+The evidence-based lifecycle decision for every experimental subsystem is recorded
+in `docs/architecture/experimental-runtime-decisions.md`. That record retains
+webhook, AIW, orchestrator, and Agent Expert in place and approves a separate,
+behavior-preserving relocation of communications beneath the orchestrator boundary
+through Issue #48. Until that implementation merges, the source table below remains
+the current physical layout.
+
 ## Supported public surface
 
 The supported public surface consists of:
@@ -96,7 +103,8 @@ Changes to internal experimental modules must:
 - retain the `@experimental` designation on composition roots;
 - avoid adding public CLI routes or package exports incidentally;
 - include security tests when trust boundaries change;
-- update this document when scope or graduation status changes.
+- update this document when scope or graduation status changes;
+- keep the lifecycle decision record accurate when new evidence changes a decision.
 
 A proposal to expose one of these modules publicly should be reviewed separately
 from ordinary implementation work.
