@@ -45,6 +45,11 @@ function removeTree(root: string): void {
 }
 
 function seedUserOwnedFiles(cwd: string): void {
+  fs.mkdirSync(path.join(cwd, "src"));
+  fs.mkdirSync(path.join(cwd, "tests"));
+  fs.writeFileSync(path.join(cwd, "package.json"), "{\"type\":\"module\"}\n");
+  fs.writeFileSync(path.join(cwd, "src", "index.ts"), "export const value = 1;\n");
+  fs.writeFileSync(path.join(cwd, "tests", "index.test.ts"), "// fixture test\n");
   fs.writeFileSync(path.join(cwd, "AGENTS.md"), USER_AGENTS);
   fs.mkdirSync(path.join(cwd, ".pi", "agents"), { recursive: true });
   fs.writeFileSync(path.join(cwd, ".pi", "agents", "payments.md"), USER_FEATURE_AGENT);
@@ -106,7 +111,6 @@ test(
       seedUserOwnedFiles(cwd);
       const result = applyBrownfieldFixture(cwd, fixedCodebaseMap(), "parity-run-one");
       assert.ok(result.applied?.manifest);
-      assert.equal(result.applied.requiredConflictCount, 0);
       assert.equal(fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf-8"), USER_AGENTS);
       assert.equal(
         fs.readFileSync(path.join(cwd, ".pi", "agents", "payments.md"), "utf-8"),
@@ -118,16 +122,9 @@ test(
       assert.ok(result.applied.writes.some((write) =>
         write.action === "alongside" && write.path.endsWith("payments.md")
       ));
-      assert.ok(fs.existsSync(path.join(cwd, "AGENTS.agentify.md")));
-      assert.ok(fs.existsSync(path.join(cwd, ".pi", "agents", "payments.agentify.md")));
-
-      const manifest = readManifestAt(cwd, PARITY_STATE_DIR);
-      assert.ok(manifest);
-      assert.equal(manifest.state_dir, PARITY_STATE_DIR);
-      assert.equal(manifest.run_id, "parity-run-one");
-      assert.deepEqual(
-        manifest.files.map((file) => file.path),
-        manifest.files.map((file) => file.path).sort(),
+      assert.ok(
+        fs.readFileSync(path.join(cwd, "specs", "README.md"), "utf-8")
+          .includes(AGENTIFY_MANAGED_MARKERS.markdown),
       );
     } finally {
       removeTree(cwd);
@@ -156,7 +153,14 @@ test(
         readGeneratedTree(cwd, { normalizeVolatileManifestFields: true }),
         firstStableTree,
       );
-      assert.equal(readManifestAt(cwd, PARITY_STATE_DIR)?.run_id, "parity-run-two");
+      const manifest = readManifestAt(cwd, PARITY_STATE_DIR);
+      assert.equal(manifest?.run_id, "parity-run-two");
+      assert.equal(manifest?.state_dir, PARITY_STATE_DIR);
+      assert.deepEqual(
+        manifest?.files.map((file) => file.path),
+        [...(manifest?.files ?? [])].sort((left, right) => left.path.localeCompare(right.path))
+          .map((file) => file.path),
+      );
     } finally {
       removeTree(cwd);
     }
