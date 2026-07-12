@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- An audited runtime-reachability inventory and maintenance guard for standalone scripts.
 - Modernization behavior and runtime-reachability contracts with a reusable CLI, generated-bundle, state-directory, and installed-package parity gate.
 - Typed top-level CLI parsing with process-level regression coverage.
 - Recursive test discovery, security regression suites, and installed-package smoke tests.
@@ -20,6 +21,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Removed four evidence-backed, raw-source-only orphan scripts and corrected stale provider-state migration guidance.
 - Brownfield audits and explorer sessions are read-only by capability, not by prompt convention.
 - Webhook and AIW sessions now receive explicit repository-jail policies.
 - Pi runtime packages were upgraded to `0.80.6`; provider environment-auth resolution is owned by Agentify.
