@@ -16,6 +16,7 @@ public product contract.
 | Transactional provider-state lifecycle | `docs/state-lifecycle.md` |
 | Webhook HTTP security model | `docs/webhook-security.md` |
 | Verified artifact release process | `docs/release-process.md` |
+| Compiled npm package contract | `docs/packaging.md` |
 | Working notes for coding agents operating in this repo | `AGENTS.md` (repo root) |
 | Changelog | `CHANGELOG.md` (repo root) |
 | Contributing guide | `CONTRIBUTING.md` (repo root) |

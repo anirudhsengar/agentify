@@ -24,7 +24,7 @@
   },
   "files": [
     "bin",
-    "src",
+    "dist",
     "scaffold",
     "docs",
     "packaged",
@@ -42,7 +42,6 @@
   "dependencies": {
     "@earendil-works/pi-ai": "^0.80.6",
     "@earendil-works/pi-coding-agent": "^0.80.6",
-    "jiti": "^2.7.0",
     "typebox": "^1.1.38"
   },
   "devDependencies": {
@@ -65,8 +64,10 @@
     "qualify:release-evidence": "tsx src/core/scripts/qualify-release-evidence.ts",
     "release:check": "npm run typecheck && npm run test:all && npm run test:package",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run typecheck && npm run test:all && npm run test:package",
-    "inspect-log": "node src/core/audit/scripts/inspect-log.mjs"
+    "prepublishOnly": "npm run release:check",
+    "inspect-log": "node dist/core/audit/scripts/inspect-log.mjs",
+    "build": "node scripts/build.mjs",
+    "prepack": "npm run build"
   },
   "exports": {
     "./package.json": "./package.json"

@@ -57,8 +57,8 @@ work with broad file-path churn and make review less reliable.
 
 The restrictive npm `exports` map, documentation, CLI parser, and
 product-boundary tests enforce this boundary. Standard package imports into raw
-source paths are rejected. The compiled-artifact packaging phase will additionally
-remove raw TypeScript source from the published tarball.
+source paths are rejected, and the published tarball contains compiled JavaScript
+under `dist/` rather than raw TypeScript implementation source.
 
 ## Graduation requirements
 
