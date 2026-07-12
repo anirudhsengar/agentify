@@ -53,6 +53,7 @@ test("documentation index covers every maintained trust boundary", () => {
   const index = read("docs/README.md");
   for (const documentedPath of [
     "docs/architecture.md",
+    "docs/architecture/experimental-runtime-decisions.md",
     "docs/build-and-package.md",
     "docs/experimental-surfaces.md",
     "docs/refactors/modernization-baseline.md",
@@ -74,6 +75,20 @@ test("documentation index covers every maintained trust boundary", () => {
       `${documentedPath} must exist`,
     );
   }
+});
+
+test("experimental runtime decision record covers every subsystem and approved action", () => {
+  const decisions = read("docs/architecture/experimental-runtime-decisions.md");
+  for (const decisionId of ["ERD-001", "ERD-002", "ERD-003", "ERD-004", "ERD-005"]) {
+    assert.ok(decisions.includes(decisionId), `decision record must include ${decisionId}`);
+  }
+  for (const subsystem of ["Webhook", "AIW", "Orchestrator", "Communications", "Agent Expert"]) {
+    assert.ok(decisions.includes(subsystem), `decision record must include ${subsystem}`);
+  }
+  assert.equal((decisions.match(/\*\*Retain internal in place\.\*\*/g) ?? []).length, 4);
+  assert.equal((decisions.match(/\*\*Relocate internally\.\*\*/g) ?? []).length, 1);
+  assert.match(decisions, /Issue #48/);
+  assert.match(decisions, /No subsystem is approved for graduation, archive, or removal/);
 });
 
 test("package guidance files referenced by shipped docs are published", () => {
