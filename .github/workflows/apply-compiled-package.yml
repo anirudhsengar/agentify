@@ -28,12 +28,16 @@ jobs:
           npm uninstall --save jiti
       - name: Apply compiled package changes
         run: node .github/scripts/apply-compiled-package.mjs
-      - name: Validate compiled package
-        run: |
-          npm run typecheck
-          npm run test:all
-          npm run test:package
-          npm audit --omit=dev --audit-level=high
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Full test suite
+        run: npm run test:all
+      - name: Build compiled distribution
+        run: npm run build
+      - name: Installed package smoke
+        run: npm run test:package
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
       - name: Commit compiled package
         run: |
           git config user.name github-actions[bot]
