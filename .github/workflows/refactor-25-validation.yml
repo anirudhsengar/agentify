@@ -1,20 +1,24 @@
 name: Refactor 25 Apply
 
 on:
-  push:
+  pull_request:
     branches:
-      - refactor/25-run-orchestration
+      - main
+    types:
+      - synchronize
+      - reopened
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: github.head_ref == 'refactor/25-run-orchestration' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: refactor/25-run-orchestration
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
