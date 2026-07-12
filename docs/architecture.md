@@ -109,6 +109,26 @@ templates and lifecycle prompts, experts, and skills/extensions. `index.ts` owns
 schema/coverage validation, family composition order, unsafe-path checks, duplicate
 checks, and the legacy façade exports. Renderer modules perform no filesystem I/O.
 
+## Audit schema contract and algorithm ownership
+
+`src/core/audit/schema.ts` remains the sole owner of the codebase-map, partial-map,
+and write-map TypeBox declarations. Their required fields, optionality, enums,
+bounds, descriptions, and serialized forms remain contract data. The same module
+continues to re-export the established helper names for compatibility.
+
+Non-schema behavior has focused owners:
+
+- `coverage.ts` owns the canonical coverage dimensions, summary calculation,
+  substance gates, closure ordering, constants, and stable reason text;
+- `map-defaults.ts` owns shallow-copy default injection and preserves the
+  `schema_version` then `generated_at` application order; and
+- `schema-compatibility.ts` owns deterministic interpretation of documented
+  typed-versus-legacy aliases without declaring schemas.
+
+The extracted modules use schema-derived types only and do not initialize or
+redefine TypeBox declarations. Golden schema fingerprints and behavior tables
+protect the compatibility façade against contract drift.
+
 ## Structured write-map ownership
 
 The stable `src/core/audit/write-map-tool.ts` path is a compatibility façade for
@@ -121,10 +141,10 @@ responsibilities are separated as follows:
 - `map-input.ts` owns relative and absolute input resolution, byte caps, BOM
   handling, JSON parsing, and stable file-read error translation;
 - `map-validation.ts` owns complete and partial TypeBox validation plus stable
-  validation-error formatting, while `schema.ts` remains the schema and default
-  source of truth;
+  validation-error formatting, while `schema.ts` remains the TypeBox schema
+  source of truth and re-exports defaults from `map-defaults.ts`;
 - `map-coverage.ts` formats coverage closure, reasons, summaries, and warnings
-  from the schema-owned closure assessment;
+  from the coverage-owned closure assessment re-exported by `schema.ts`;
 - `map-delta.ts` owns the existing shallow-overwrite, deep-merge, and append
   semantics;
 - `map-observability.ts` owns per-dimension retry counters and soft-ceiling

@@ -157,3 +157,47 @@ test("architecture documentation names the enforced safety mechanisms", () => {
     assert.ok(architecture.includes(concept), `architecture must document ${concept}`);
   }
 });
+
+test("audit schema algorithms preserve the TypeBox ownership boundary", () => {
+  const schema = read("src/core/audit/schema.ts");
+  const algorithmPaths = [
+    "src/core/audit/coverage.ts",
+    "src/core/audit/map-defaults.ts",
+    "src/core/audit/schema-compatibility.ts",
+  ];
+
+  assert.match(schema, /import \{ Type, type Static \} from "typebox"/);
+  for (const algorithmPath of algorithmPaths) {
+    const source = read(algorithmPath);
+    assert.doesNotMatch(source, /from ["']typebox(?:\/[^"']*)?["']/);
+    assert.doesNotMatch(source, /from ["']@earendil-works\/pi-ai["']/);
+    assert.doesNotMatch(source, /\bType\s*\./);
+  }
+
+  for (const exportedName of [
+    "assessCoverageClosure",
+    "extractCoverageSummary",
+    "applyMapDefaults",
+    "resolveLifecyclePresence",
+    "resolveFrameworks",
+    "resolveApiContracts",
+    "resolveSyncedTypes",
+    "resolveProductionCredentials",
+  ]) {
+    assert.ok(schema.includes(exportedName), `schema façade must re-export ${exportedName}`);
+  }
+});
+
+test("schema algorithm ownership is documented for maintainers", () => {
+  const architecture = read("docs/architecture.md");
+  const agents = read("AGENTS.md");
+  const contributing = read("CONTRIBUTING.md");
+
+  for (const moduleName of ["coverage.ts", "map-defaults.ts", "schema-compatibility.ts"]) {
+    assert.ok(architecture.includes(`\`${moduleName}\``));
+    assert.ok(agents.includes(`\`${moduleName}\``));
+  }
+  assert.ok(contributing.includes("adjacent algorithm modules"));
+  assert.ok(architecture.includes("sole owner"));
+  assert.ok(architecture.includes("Golden schema fingerprints"));
+});
