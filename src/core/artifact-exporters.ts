@@ -4,18 +4,13 @@ import { alongsidePathFor } from "./apply-policy.ts";
 import { getAgentById, type AgentId } from "./agent-registry.ts";
 import type { AgentifyTarget, ArtifactExportResult, ArtifactWrite } from "./types.ts";
 import { shippedSkillsSourceDir } from "./shipped-paths.ts";
-
-const MD_MARKER = "<!-- agentify:managed -->";
-const TOML_MARKER = "# agentify:managed";
-
-const RESERVED_AGENT_FILES = new Set([
-  "scout.md",
-  "review.md",
-  "implement.md",
-  "test.md",
-  "fix.md",
-  "document.md",
-]);
+import { isFeatureAgentFilename } from "./artifacts/agent-file-conventions.ts";
+import {
+  AGENTIFY_MANAGED_MARKERS,
+  MARKDOWN_MANAGED_MARKER,
+  TOML_MANAGED_MARKER,
+  addMarkdownManagedMarker,
+} from "./artifacts/managed-markers.ts";
 
 export interface ArtifactExporterOptions {
   cwd: string;
@@ -82,20 +77,9 @@ function writeManagedFile(filePath: string, content: string, marker: string): Ar
   return { path: filePath, action: "written" };
 }
 
-function addMarkdownMarker(raw: string, marker: string): string {
-  if (raw.includes(marker)) return raw;
-  const frontmatter = raw.match(/^(---\n[\s\S]*?\n---\n?)([\s\S]*)$/);
-  if (!frontmatter) return `${marker}\n${raw}`;
-  return `${frontmatter[1]}${marker}\n${frontmatter[2]}`;
-}
-
-export function addMarkdownManagedMarker(raw: string): string {
-  return addMarkdownMarker(raw, MD_MARKER);
-}
-
 function copyManagedFile(source: string, destination: string, marker: string): ArtifactWrite {
   const raw = fs.readFileSync(source, "utf-8");
-  const content = marker === MD_MARKER
+  const content = marker === MARKDOWN_MANAGED_MARKER
     ? addMarkdownManagedMarker(raw)
     : raw.includes(marker) ? raw : `${marker}\n${raw}`;
   return writeManagedFile(destination, content, marker);
@@ -121,10 +105,10 @@ function copyDirManaged(sourceDir: string, destinationDir: string, writes: Artif
       if (stat.isDirectory()) {
         copyDirManaged(real, destination, writes);
       } else {
-        writes.push(copyManagedFile(real, destination, MD_MARKER));
+        writes.push(copyManagedFile(real, destination, MARKDOWN_MANAGED_MARKER));
       }
     } else if (entry.isFile()) {
-      writes.push(copyManagedFile(source, destination, MD_MARKER));
+      writes.push(copyManagedFile(source, destination, MARKDOWN_MANAGED_MARKER));
     }
   }
 }
@@ -173,8 +157,7 @@ function listFeatureAgents(cwd: string): AgentFile[] {
   const agentsDir = path.join(cwd, ".pi", "agents");
   if (!fs.existsSync(agentsDir)) return [];
   return fs.readdirSync(agentsDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-    .filter((entry) => !RESERVED_AGENT_FILES.has(entry.name))
+    .filter((entry) => entry.isFile() && isFeatureAgentFilename(entry.name))
     .map((entry) => {
       const filePath = path.join(agentsDir, entry.name);
       return parseFrontmatter(fs.readFileSync(filePath, "utf-8"), path.basename(entry.name, ".md"));
@@ -190,7 +173,7 @@ function escapeTomlBasicString(value: string): string {
 
 function asTomlAgent(agent: AgentFile): string {
   return [
-    TOML_MARKER,
+    TOML_MANAGED_MARKER,
     `name = "${escapeTomlBasicString(agent.name)}"`,
     `description = "${escapeTomlBasicString(agent.description)}"`,
     'developer_instructions = """',
@@ -202,7 +185,7 @@ function asTomlAgent(agent: AgentFile): string {
 
 function asClaudeAgent(agent: AgentFile): string {
   return [
-    MD_MARKER,
+    MARKDOWN_MANAGED_MARKER,
     "---",
     `name: ${agent.name}`,
     `description: ${agent.description}`,
@@ -220,7 +203,7 @@ function exportCodex(cwd: string, packageRoot: string, allowed?: ReadonlySet<str
     writes.push(writeManagedFile(
       path.join(cwd, ".codex", "agents", `${agent.name}.toml`),
       asTomlAgent(agent),
-      TOML_MARKER,
+      TOML_MANAGED_MARKER,
     ));
   }
   return { target: "codex", writes };
@@ -231,7 +214,7 @@ function exportClaude(cwd: string, packageRoot: string, allowed?: ReadonlySet<st
   const agentsMd = path.join(cwd, "AGENTS.md");
   if (fs.existsSync(agentsMd)) {
     const content = fs.readFileSync(agentsMd, "utf-8");
-    if (!content.includes(MD_MARKER)) {
+    if (!content.includes(MARKDOWN_MANAGED_MARKER)) {
       // Source AGENTS.md is user-owned. Rather than fail the
       // entire Claude export, save the derived CLAUDE.md
       // alongside (`CLAUDE.agentify.md`) and let the apply
@@ -250,7 +233,7 @@ function exportClaude(cwd: string, packageRoot: string, allowed?: ReadonlySet<st
       writes.push(writeManagedFile(
         path.join(cwd, "CLAUDE.md"),
         content,
-        MD_MARKER,
+        MARKDOWN_MANAGED_MARKER,
       ));
     }
   }
@@ -259,7 +242,7 @@ function exportClaude(cwd: string, packageRoot: string, allowed?: ReadonlySet<st
     writes.push(writeManagedFile(
       path.join(cwd, ".claude", "agents", `${agent.name}.md`),
       asClaudeAgent(agent),
-      MD_MARKER,
+      MARKDOWN_MANAGED_MARKER,
     ));
   }
   return { target: "claude", writes };
@@ -343,7 +326,4 @@ export function exportAgenticSurface(options: ArtifactExporterOptions): Artifact
   return results;
 }
 
-export const AGENTIFY_MANAGED_MARKERS = {
-  markdown: MD_MARKER,
-  toml: TOML_MARKER,
-} as const;
+export { AGENTIFY_MANAGED_MARKERS, addMarkdownManagedMarker };
