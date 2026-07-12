@@ -16,6 +16,7 @@ import {
 } from "../../src/core/run-agentify.ts";
 
 const STATE_DIR = ".pi/agentify";
+const SNAPSHOT_STATE_DIR = ".agents/agentify";
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "agentify-generation-extraction-"));
@@ -31,8 +32,12 @@ function testSnapshotOwnershipContentAndModes(): void {
       "<!-- agentify:managed -->\n# Managed specs\n",
       { mode: 0o640 },
     );
-    fs.mkdirSync(path.join(cwd, STATE_DIR), { recursive: true });
-    fs.writeFileSync(path.join(cwd, STATE_DIR, "codebase_map.json"), "{}\n", { mode: 0o600 });
+    fs.mkdirSync(path.join(cwd, SNAPSHOT_STATE_DIR), { recursive: true });
+    fs.writeFileSync(
+      path.join(cwd, SNAPSHOT_STATE_DIR, "codebase_map.json"),
+      "{}\n",
+      { mode: 0o600 },
+    );
 
     const snapshot = collectAuditArtifactSnapshot(cwd);
     assert.equal(snapshot.get("AGENTS.md")?.ownership, "unmanaged");
@@ -40,8 +45,11 @@ function testSnapshotOwnershipContentAndModes(): void {
     assert.equal(snapshot.get("AGENTS.md")?.mode, 0o600);
     assert.equal(snapshot.get("specs/README.md")?.ownership, "managed");
     assert.equal(snapshot.get("specs/README.md")?.mode, 0o640);
-    assert.equal(snapshot.get(`${STATE_DIR}/codebase_map.json`)?.ownership, "managed");
-    assert.equal(snapshot.get(`${STATE_DIR}/codebase_map.json`)?.mode, 0o600);
+    assert.equal(
+      snapshot.get(`${SNAPSHOT_STATE_DIR}/codebase_map.json`)?.ownership,
+      "managed",
+    );
+    assert.equal(snapshot.get(`${SNAPSHOT_STATE_DIR}/codebase_map.json`)?.mode, 0o600);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
