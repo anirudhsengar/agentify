@@ -242,37 +242,6 @@ function removeStaleSkills(
   }
 }
 
-function rollbackGeneratedSurface(
-  cwd: string,
-  snapshot: AuditArtifactSnapshot,
-): { removed: number; restored: number } {
-  let removed = 0;
-  let restored = 0;
-  for (const filePath of listGeneratedSurfaceFiles(cwd)) {
-    const rel = toRel(cwd, filePath);
-    const entry = snapshot.get(rel);
-    if (entry) {
-      restoreSnapshotFile(cwd, rel, entry);
-      restored += 1;
-      continue;
-    }
-    fs.rmSync(filePath, { force: true });
-    removed += 1;
-  }
-  for (const [rel, entry] of snapshot) {
-    const filePath = path.join(cwd, rel);
-    if (!fs.existsSync(filePath)) {
-      restoreSnapshotFile(cwd, rel, entry);
-      restored += 1;
-    }
-  }
-  cleanupEmptyGeneratedDirs(cwd);
-  return { removed, restored };
-}
-
-
-
-
 function extractUsage(event: AgentSessionEvent): AssistantUsage | undefined {
   const maybe = event as {
     type?: string;
