@@ -1,26 +1,115 @@
 # Generation architecture and trust boundary
 
+Agentify has one supported public runtime surface: the installed `agentify`
+command. Its internal architecture separates probabilistic repository
+understanding from deterministic validation, rendering, ownership, and apply
+logic.
+
+## End-to-end flow
+
 ```mermaid
 flowchart TD
-    A[Repository] --> B[Evidence collection and audit]
-    B --> C[Structured codebase map]
-    C --> D[CodebaseMapSchema and coverage validation]
-    D --> E[Brownfield artifact renderers]
-    E --> F[Managed-marker ownership and apply policy]
-    F --> G[Staged bundle and required-conflict preflight]
-    G --> H[Agents, experts, skills and workflows]
-    H --> I[GitHub issue-to-PR runtime]
+    A[CLI argv] --> B[Typed command parser]
+    B --> C[Authentication and target selection]
+    C --> D[Project classification]
+    D -->|brownfield| E[Read-only evidence collection]
+    D -->|greenfield| F[Typed formation session]
+    E --> G[Structured codebase map]
+    F --> H[Structured formation payload]
+    G --> I[Schema and coverage validation]
+    H --> J[Checkpoint and substance validation]
+    I --> K[Deterministic artifact renderers]
+    J --> K
+    K --> L[Staged bundle and conflict preflight]
+    L --> M[Transactional state and repository apply]
+    M --> N[Harness exports and GitHub scaffold]
 ```
 
-Repository understanding is the probabilistic boundary: a model may collect and
-synthesize evidence, but its output is only an input proposal. The codebase-map
-schema and coverage-quality gate are deterministic and reject malformed or
-incomplete proposals before repository-facing artifacts are rendered.
+Repository understanding is the probabilistic boundary. A model may collect and
+synthesize evidence, but its output is only an input proposal. TypeBox schemas,
+coverage gates, checkpoint validation, renderers, ownership checks, and apply
+logic are deterministic.
 
-Rendering is deterministic for a given validated map. The apply layer enforces
-ownership using Agentify's managed markers and the configured conflict policy;
-it never relies on the model to identify user-owned files. Required conflicts
-are preflighted before bundle writes, and the manifest records sorted paths and
-content hashes. Each successful run retains its own run ID and timestamp, so
-tests treat those two manifest fields as intentionally volatile. Repository safety therefore remains enforced in code even when
-model-assisted understanding is incomplete or wrong.
+## Runtime layers
+
+| Layer | Responsibilities | Trust posture |
+| --- | --- | --- |
+| CLI | Parse options and utility subcommands; select the application path | Untrusted input, strict parser |
+| Configuration | Resolve provider credentials, model slots, and targets | Secrets remain outside repository state |
+| Model runtime | Run builder, explorer, review, or workflow sessions | Explicit execution policy required |
+| Structured tools | Accept typed maps and formation payloads | Schema-validated, application-owned tools |
+| Renderers | Produce managed artifacts from validated state | Deterministic |
+| Apply | Preflight conflicts, protect user files, stage and commit changes | Deterministic and rollback-capable |
+| Exporters | Fan out selected harness surfaces | Registry-driven, managed-marker ownership |
+| GitHub scaffold | Install the asynchronous issue/comment/PR runtime | Credential-free planning plus scoped action secrets |
+
+## Capability security
+
+Every model-backed session receives an execution policy defining:
+
+- allowed built-in and trusted custom tools;
+- readable and writable roots;
+- protected paths;
+- shell permission;
+- network posture;
+- runtime and output limits.
+
+Brownfield builders and explorers are read-only. Filesystem reads are confined
+by both lexical and symlink-resolved containment. Structured custom tools such
+as `write_map` write only application-owned state and do not grant general file
+write capability. Security does not depend on a prompt or mutable global audit
+flag.
+
+See `SECURITY.md` and `docs/webhook-security.md` for threat-specific controls.
+
+## State transaction
+
+Provider-scoped state lives under `.claude/agentify`, `.agents/agentify`, or
+`.pi/agentify`. A run does not delete valid state before replacement.
+
+The transaction lifecycle is:
+
+1. recover any interrupted prior transaction;
+2. move existing state to a run-specific backup;
+3. create and journal the destination state;
+4. validate generated state and staged repository artifacts;
+5. apply repository changes;
+6. write a durable committed phase;
+7. remove the backup and journal.
+
+Any pre-commit failure restores the complete prior tree. Recovery treats a
+durable committed phase as successful even when cleanup was interrupted.
+
+## Artifact ownership and rollback
+
+Rendering is deterministic for a given validated map. Managed markers and the
+manifest identify Agentify-owned files; pre-existing user-owned files are never
+silently overwritten. Required conflicts are detected before bundle writes.
+
+The manifest records sorted paths, hashes, state directory, and run metadata.
+Run ID and timestamp are intentionally volatile; artifact content and ownership
+are not.
+
+## Webhook boundary
+
+Webhook intake verifies body size and HMAC before consuming authenticated
+trigger quotas. Optional delivery IDs and signature digests provide replay
+protection. External payloads cannot choose working directories, tool lists,
+write roots, credentials, or command policy. Public task status is redacted,
+and management reload is disabled unless explicitly enabled on loopback with an
+administrator token.
+
+Webhook, AIW, orchestrator, communications, and Agent Expert code remain
+internal experimental modules. Their source presence does not make them package
+APIs. See `docs/experimental-surfaces.md`.
+
+## Build and release boundary
+
+TypeScript source is bundled into `dist/cli.js`; required prompt and workflow
+assets are copied explicitly. The npm artifact excludes raw source and exposes
+only the command. CI verifies both supported Node versions, production
+dependencies, the packed tarball, and CodeQL. Tag publication requires the tag
+to match `package.json`, and npm receives the exact artifact that passed smoke
+testing.
+
+See `docs/build-and-package.md` and `docs/release-process.md`.

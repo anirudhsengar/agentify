@@ -1,41 +1,41 @@
-# Contributing to agentify
+# Contributing to Agentify
 
-Thanks for your interest in agentify. agentify is a Node CLI that turns
-a repository into an "agentic codebase": auditing existing code, building
-greenfield projects, and exporting harness-native surfaces (Claude Code,
-Codex, Pi, etc.). Contributions land in the same repo, ship via npm, and
-are exercised against real target repos on every PR.
+Agentify is a Node CLI that audits existing repositories, forms greenfield
+projects, and emits harness-native agent surfaces. Contributions ship through
+one repository and one npm package.
 
-> For agentic / coding-agent contributions, also read `AGENTS.md` —
-> it is the authoritative working notes for tooling agents operating in
-> this repo.
+Coding agents operating in this repository must also read `AGENTS.md`. Product
+usage and the supported command surface are documented in `README.md`.
 
 ## Code of conduct
 
-Be respectful. Assume good faith. Disagree on substance, not on
-person. We follow the [Contributor Covenant](https://www.contributor-covenant.org/version/2/1/code_of_conduct/)
-in spirit.
+Be respectful, assume good faith, and disagree on substance rather than the
+person. The project follows the Contributor Covenant in spirit.
 
-## Project layout
+## Repository layout
 
-```
+```text
 agentify/
-├── bin/                      # CLI entrypoint (bin.agentify)
+├── bin/                         # thin executable importing dist/cli.js
+├── dist/                        # generated compiled CLI and runtime assets
+├── scripts/build.mjs            # single build implementation
 ├── src/
-│   ├── cli.ts                # process argv parser
+│   ├── cli.ts                   # public CLI entry
 │   └── core/
-│       ├── agentify-app.ts   # single runtime entry; throws on unknown subcommands
-│       ├── audit/            # audit + defense hook (only schema.ts defines schemas)
-│       ├── orchestrator/     # orchestrator state and prompts
-│       ├── aiw/              # AIW worker (plan, build, review, fix)
-│       ├── webhook/          # webhook server (signature, queue, worker)
-│       ├── models/           # named model slots
-│       └── artifact-exporters/  # writes AGENTS.md, specs/, ai_docs/, harness exports
-├── scaffold/                 # the GitHub runtime scaffold shipped into target repos
-├── tests/                    # tsx unit suite + bash contract tests
-├── docs/                     # lifecycle, orientation
-└── package.json              # bin, files, engines.node>=22.19.0, prepublishOnly
+│       ├── audit/               # evidence collection, schemas, defense
+│       ├── security/            # execution-policy capability model
+│       ├── state-transaction.ts # provider-state transaction and recovery
+│       ├── orchestrator/        # internal experimental runtime
+│       ├── aiw/                 # internal experimental runtime
+│       └── webhook/             # internal experimental runtime
+├── scaffold/                    # GitHub runtime installed into target repos
+├── tests/                       # recursively discovered tests and contracts
+├── docs/                        # architecture and lifecycle documentation
+└── package.json                 # public/package/build boundary
 ```
+
+`dist/` is generated and is not committed. The installed package is narrower
+than the source checkout and does not include raw `src/`.
 
 ## Local setup
 
@@ -45,92 +45,119 @@ cd agentify
 npm ci
 ```
 
-Node `>=22.19.0` is required (pinned in `package.json` `engines` and
-in `.github/workflows/ci.yml`). The repo is ESM-only
-(`"type": "module"`).
+Node `>=22.19.0` is required. The repository and published command are ESM-only.
 
-## Running tests
+## Build and verification
 
 ```bash
-npm run typecheck           # tsc --noEmit, must pass
-npm run test:unit           # tsx unit suite
-npm test                    # typecheck + unit + bash tests/run.sh
-npm run test:scaffold-e2e   # only when scaffold/ changes
-npm run test:security-redteam  # only when defense/ or webhook/ changes
+npm run build                  # compile CLI and copy runtime assets
+npm run typecheck              # strict TypeScript validation
+npm run test:unit              # recursively discovered TypeScript tests
+npm run test:all               # build + all TypeScript and contract tests
+npm run test:package           # inspect/install/execute the packed artifact
+npm run test:maintenance       # documentation and package-policy invariants
+npm test                       # typecheck + complete executable test suite
+npm run release:check          # release-equivalent source and package gates
 ```
 
-`npm test` is what CI runs; keep it green before opening a PR.
+Use `npm run test:scaffold-e2e` when changing `scaffold/`, and
+`npm run test:security-redteam` when changing audit defense, execution policy,
+or webhook security.
+
+CI runs typecheck, the full suite on Node 22.19 and Node 24, a production
+high-severity dependency audit, packed-package smoke tests, and CodeQL.
 
 ## Pull request flow
 
-1. Fork and create a branch off `main` (`feat/...`, `fix/...`,
-   `docs/...`, `refactor/...`, `ci/...`).
-2. Make your change. Keep commits small and the diff reviewable.
-3. Update `CHANGELOG.md` `[Unreleased]` (Added / Changed / Fixed /
-   Removed). This is what release-drafter consumes.
-4. If your change is user-facing, update `README.md` and any relevant
-   file under `docs/`.
-5. If you changed behavior, add a test under `tests/` that fails
-   before your change and passes after.
-6. Run `npm test` locally and paste the result line in the PR body.
-7. Open the PR using `.github/PULL_REQUEST_TEMPLATE.md`. The CI
-   workflow will run typecheck + the full test suite.
+1. Branch from current `main` using a descriptive `feat/`, `fix/`, `docs/`,
+   `refactor/`, or `ci/` name.
+2. Keep commits focused and the diff reviewable.
+3. Add a regression test for behavior changes.
+4. Update `CHANGELOG.md` under `[Unreleased]` for notable changes.
+5. Update the relevant architecture, security, state, build, or release docs
+   when a boundary or lifecycle changes.
+6. Run the appropriate verification commands and record them in the PR body.
+7. Open the PR using `.github/PULL_REQUEST_TEMPLATE.md`.
 
 ## Architectural rules
 
-These are non-obvious and worth reading before opening a PR:
+- **One supported runtime surface.** The installed `agentify` command is the
+  supported public runtime. New public behavior must enter through documented
+  CLI commands or generated GitHub surfaces.
+- **Internal means internal.** Orchestrator, AIW, webhook, communications, and
+  Agent Expert modules remain experimental and are not package APIs. Follow
+  `docs/experimental-surfaces.md` before attempting to productize one.
+- **Schemas are centralized.** Audit TypeBox schemas live in
+  `src/core/audit/schema.ts`.
+- **Security is capability-based.** Every model-backed session must receive an
+  explicit execution policy. Prompts do not grant or restrict authority.
+- **Brownfield audits are read-only.** Do not restore unrestricted `bash`,
+  `write`, or `edit` to audit and explorer sessions.
+- **State replacement is transactional.** Preserve crash recovery, complete
+  rollback, provider-scoped state, and durable commit semantics.
+- **Rendering and ownership are deterministic.** Structured model proposals
+  must pass schemas and quality gates before render/apply. Managed markers and
+  manifests determine ownership.
+- **Build logic has one owner.** Packaging behavior belongs in
+  `scripts/build.mjs`, not duplicated workflow shell fragments.
+- **No raw-source runtime.** `bin/agentify.js` imports `dist/cli.js`. Never add a
+  runtime TypeScript loader or publish `src/` to hide a missing build asset.
 
-- **One runtime entry.** `agentify` (no args) is the only audit /
-  greenfield entrypoint. New user-facing commands must be CLI
-  subcommands under `src/cli*.ts`. Do not add slash-command
-  registration, Pi auto-discovery, or extension adapters.
-- **TypeBox schemas live in exactly one place:**
-  `src/core/audit/schema.ts`. Other modules import from it.
-- **Defense policy** lives under `src/core/audit/defense/`. Keep it
-  centralized — do not scatter defense checks across call sites.
-- **Slot resolution is strict.** The named model slots fall back to
-  `primary` only when unset; explicit user choices are never
-  silently overridden.
-- **No new runtime dependencies** without explicit maintainer
-  approval. The approved runtime set is `typebox` plus peers
-  `@earendil-works/pi-coding-agent` and `@earendil-works/pi-ai`.
-- **Strict TypeScript.** No `any`; use `unknown` and type guards.
-  `import type` for type-only imports. No default exports unless a
-  framework requires it. Avoid classes unless they hold state across
-  many methods.
+## Dependency policy
+
+New production dependencies require explicit maintainer review and an
+installed-runtime justification.
+
+Current production dependencies are:
+
+- `@earendil-works/pi-ai`
+- `@earendil-works/pi-coding-agent`
+- `typebox`
+
+They are regular dependencies because the installed command uses them. Build
+and test tooling—including `esbuild`, `tsx`, TypeScript, and `@types/node`—must
+remain in `devDependencies`.
+
+When adding a runtime asset, update the explicit copy manifest in
+`scripts/build.mjs` and the packed-package assertions in
+`tests/package/installed-cli-smoke.mjs`.
+
+## TypeScript and code style
+
+- Keep strict TypeScript and avoid `any`; use `unknown` with type guards.
+- Use `import type` for type-only imports.
+- Prefer named exports and functions with explicit data structures.
+- Use `kebab-case` files, `camelCase` functions, `PascalCase` types, and
+  `SCREAMING_SNAKE_CASE` module constants.
+- Keep TypeBox field descriptions deliberate because they steer model behavior.
 
 ## Commit messages
 
-Use [Conventional Commits](https://www.conventionalcommits.org/):
+Use Conventional Commits, for example:
 
+```text
+feat: add provider-scoped transaction recovery
+fix: reject shell-based audit mutation
+build: publish compiled distribution
+docs: document package boundary
+ci: verify tag and package version
 ```
-feat: tier the shipped skill pack, prune duplicates
-fix: ship harness exports to .pi/skills/ instead of .agents/skills/
-docs: named model slots
-refactor: thread modelRole through orchestrator sub-agents
-ci: pin Node 22.19.0 in CI workflow
-```
 
-Release-drafter reads the commit history to assemble release notes; the
-type and scope prefixes drive the auto-grouping.
+## Issues and security reports
 
-## Filing issues
-
-- **Bugs:** use the "Bug report" issue template.
-- **Features:** use the "Feature request" issue template.
-- **Security:** do **not** open a public issue. Follow `SECURITY.md`.
+Use the repository issue templates for bugs and feature requests. Do not report
+security vulnerabilities in a public issue; follow `SECURITY.md`.
 
 ## Release process
 
-1. Bump `package.json` `version` (semver). The current major is `0.x`;
-   breaking changes bump minor + reset patch.
-2. Move the `[Unreleased]` block in `CHANGELOG.md` into a dated
-   `## [<version>] - YYYY-MM-DD` section.
-3. Run `npm run release:check` locally.
-4. Tag the release. The `release-publish` workflow publishes to npm
-   and creates a GitHub release using release-drafter's draft.
+1. Update `CHANGELOG.md` and bump `package.json` according to pre-1.0 semantic
+   versioning.
+2. Run `npm run release:check`.
+3. Create a `v<package-version>` tag.
+4. The tag-only release workflow verifies the tag/version match, builds and
+   smoke-tests one tarball, publishes that exact artifact, and creates the
+   GitHub release. Manual workflow dispatch is verification-only.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed
-under the project's MIT license. See `LICENSE`.
+Contributions are licensed under the repository's MIT license.

@@ -47,8 +47,19 @@ try {
   assert.ok(fs.existsSync(tarballPath), `packed tarball missing: ${tarballPath}`);
 
   const packedPaths = new Set((artifact.files ?? []).map((entry) => entry.path));
-  for (const required of ["bin/agentify.js", "dist/cli.js", "dist/prompts/builder.md"] ) {
-    assert.ok(packedPaths.has(required), `tarball is missing required compiled artifact: ${required}`);
+  for (const required of [
+    "bin/agentify.js",
+    "dist/cli.js",
+    "dist/prompts/builder.md",
+    "docs/README.md",
+    "docs/architecture.md",
+    "docs/build-and-package.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "AGENTS.md",
+  ]) {
+    assert.ok(packedPaths.has(required), `tarball is missing required artifact: ${required}`);
   }
   assert.ok(
     [...packedPaths].some((entry) => entry.startsWith("dist/workflows/") && entry.endsWith(".json")),

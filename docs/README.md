@@ -12,6 +12,7 @@ public product contract.
 | Public CLI surface, modes, and config-utility subcommands | `README.md` (repo root) |
 | Supported versus internal experimental surfaces | `docs/experimental-surfaces.md` |
 | Generation architecture and trust boundary | `docs/architecture.md` |
+| Compiled build, runtime assets, and npm package boundary | `docs/build-and-package.md` |
 | Execution-policy security model | `SECURITY.md` (repo root) |
 | Transactional provider-state lifecycle | `docs/state-lifecycle.md` |
 | Webhook HTTP security model | `docs/webhook-security.md` |
@@ -22,9 +23,9 @@ public product contract.
 
 ## Source references
 
-Where this documentation tree does not yet cover an implementation detail, the
-source of truth remains the code under `src/`. Source availability does not make
-an internal module a supported package API.
+Documentation describes supported contracts and trust boundaries. Source code
+remains authoritative for implementation details, but source availability does
+not make an internal module a supported package API.
 
 - **Public CLI and parser** — `src/cli.ts`, `src/core/cli-parser.ts`,
   `src/core/cli-commands.ts`.
@@ -33,10 +34,13 @@ an internal module a supported package API.
 - **Execution policy** — `src/core/security/execution-policy.ts`.
 - **Transactional state** — `src/core/state-dir.ts`,
   `src/core/state-transaction.ts`.
+- **Build and package boundary** — `scripts/build.mjs`, `bin/agentify.js`,
+  `src/core/package-root.ts`, `tests/package/installed-cli-smoke.mjs`.
 - **Internal experimental orchestrator** — `src/core/orchestrator/`.
 - **Internal experimental AIW runtime** — `src/core/aiw/`.
 - **Internal experimental webhook runtime** — `src/core/webhook/`.
 - **Named model slots** — `src/core/models/`.
 - **Harness export** — `src/core/artifact-exporters.ts`.
 - **Shipped scaffold** — `scaffold/`.
-- **Tests** — `tests/`.
+- **Maintenance invariants** — `tests/maintenance/`.
+- **Complete tests** — `tests/`.
