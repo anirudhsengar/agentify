@@ -165,7 +165,7 @@ async function testBrownfieldLifecycleContract(): Promise<void> {
         "status:agentify: auditing existing codebase",
         "info:agentify: staging generated bundle at ",
         "info:agentify: audit complete.",
-        "info:GitHub bootstrap is ready.",
+        "info:agentify: GitHub bootstrap is ready.",
         "info:agentify: cleaned staging bundle at ",
         "info:agentify: log written to ",
       ]);
@@ -208,7 +208,7 @@ async function testGreenfieldLifecycleContract(): Promise<void> {
         "info:agentify: staging greenfield bundle at ",
         "info:agentify: cleaned greenfield staging bundle at ",
         "info:agentify: greenfield session complete (4 turn(s), $0.0456",
-        "info:GitHub bootstrap is ready.",
+        "info:agentify: GitHub bootstrap is ready.",
       ]);
       const projectState = readProjectState(configDir, cwd);
       assert.equal(projectState?.projectKind, "greenfield");
