@@ -41,6 +41,7 @@ pkg.files = [
 pkg.scripts = {
   ...pkg.scripts,
   build: "node scripts/build.mjs",
+  "test:all": "npm run build && npm run test:generation-pipeline && npm run test:unit && bash tests/run.sh",
   prepack: "npm run build",
   prepublishOnly: "npm run release:check",
 };
