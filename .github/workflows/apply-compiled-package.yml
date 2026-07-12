@@ -1,0 +1,44 @@
+name: apply-compiled-package
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.ref == 'agent/phase-9-compiled-distribution' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+          cache: npm
+      - run: npm ci
+      - name: Update build dependencies
+        run: |
+          npm install --save-dev esbuild@^0.25.0
+          npm uninstall --save jiti
+      - name: Apply compiled package changes
+        run: node .github/scripts/apply-compiled-package.mjs
+      - name: Validate compiled package
+        run: |
+          npm run typecheck
+          npm run test:all
+          npm run test:package
+          npm audit --omit=dev --audit-level=high
+      - name: Commit compiled package
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add package.json package-lock.json src/core/pi-sdk-runtime.ts
+          git diff --cached --check
+          git commit -m "build: publish compiled distribution"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
