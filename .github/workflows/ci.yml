@@ -74,10 +74,20 @@ jobs:
         env:
           AGENTIFY_PARITY_CASE: render
         run: npm run test:parity:generated
-      - name: Generated apply semantics
+      - name: User-owned and alongside apply
         if: ${{ always() }}
         env:
-          AGENTIFY_PARITY_CASE: apply
+          AGENTIFY_PARITY_CASE: apply-user
+        run: npm run test:parity:generated
+      - name: Repeated deterministic apply
+        if: ${{ always() }}
+        env:
+          AGENTIFY_PARITY_CASE: apply-repeat
+        run: npm run test:parity:generated
+      - name: Managed canonical update
+        if: ${{ always() }}
+        env:
+          AGENTIFY_PARITY_CASE: apply-managed
         run: npm run test:parity:generated
       - name: Generated required-conflict atomicity
         if: ${{ always() }}
