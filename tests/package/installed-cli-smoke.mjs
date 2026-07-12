@@ -54,6 +54,8 @@ try {
     "docs/README.md",
     "docs/architecture.md",
     "docs/build-and-package.md",
+    "docs/refactors/modernization-baseline.md",
+    "docs/refactors/runtime-reachability.md",
     "SECURITY.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md",
@@ -90,9 +92,39 @@ try {
   assert.match(help.stdout, /Usage:\s*\n\s*agentify \[options\]/);
   assert.match(help.stdout, /--mode <kind>/);
   assert.match(help.stdout, /--targets <csv>/);
+  assert.equal(help.stderr, "");
 
   const version = run(bin, ["--version"], { cwd: installRoot, env, timeout: 30_000 });
-  assert.equal(version.stdout.trim(), packageJson.version);
+  assert.equal(version.stdout, `${packageJson.version}\n`);
+  assert.equal(version.stderr, "");
+
+  const invalidOption = run(bin, ["--unknown"], {
+    cwd: installRoot,
+    env,
+    timeout: 30_000,
+    expectFailure: true,
+  });
+  assert.equal(invalidOption.stdout, "");
+  assert.match(invalidOption.stderr, /^agentify: .*unknown option '--unknown'/i);
+  assert.doesNotMatch(invalidOption.stderr, /\n\s*at |Error:/);
+
+  const positional = run(bin, ["unsupported-command"], {
+    cwd: installRoot,
+    env,
+    timeout: 30_000,
+    expectFailure: true,
+  });
+  assert.equal(positional.stdout, "");
+  assert.match(positional.stderr, /Known subcommands: login, logout, models, revert/);
+
+  const utility = run(bin, ["login", "--provider", "openai-codex"], {
+    cwd: installRoot,
+    env,
+    timeout: 30_000,
+  });
+  assert.equal(utility.stderr, "");
+  assert.match(utility.stdout, /OpenAI Codex uses OAuth/);
+  assert.match(utility.stdout, /pi auth login openai-codex/);
 
   const deepImport = run(
     nodeCommand,

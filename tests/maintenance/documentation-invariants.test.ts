@@ -55,6 +55,8 @@ test("documentation index covers every maintained trust boundary", () => {
     "docs/architecture.md",
     "docs/build-and-package.md",
     "docs/experimental-surfaces.md",
+    "docs/refactors/modernization-baseline.md",
+    "docs/refactors/runtime-reachability.md",
     "docs/state-lifecycle.md",
     "docs/webhook-security.md",
     "docs/release-process.md",
@@ -99,15 +101,21 @@ test("package guidance files referenced by shipped docs are published", () => {
 test("binary and scripts preserve the compiled package boundary", () => {
   const packageJson = readPackageJson();
   const binary = read("bin/agentify.js");
+  const scripts = packageJson.scripts ?? {};
 
   assert.equal(packageJson.bin?.agentify, "./bin/agentify.js");
   assert.match(binary, /from "\.\.\/dist\/cli\.js"/);
   assert.doesNotMatch(binary, /src\/cli\.ts|\bjiti\b/);
 
-  assert.equal(packageJson.scripts?.build, "node scripts/build.mjs");
-  assert.equal(packageJson.scripts?.prepack, "npm run build");
-  assert.ok(packageJson.scripts?.["test:package"]?.includes("installed-cli-smoke.mjs"));
-  assert.ok(packageJson.scripts?.["release:check"]?.includes("test:package"));
+  assert.equal(scripts.build, "node scripts/build.mjs");
+  assert.equal(scripts.prepack, "npm run build");
+  assert.ok(scripts["test:package"]?.includes("installed-cli-smoke.mjs"));
+  for (const focusedScript of ["test:parity:cli", "test:parity:generated", "test:parity:state"]) {
+    assert.ok(scripts[focusedScript]?.includes("tests/parity/"));
+    assert.ok(scripts["test:parity"]?.includes(focusedScript));
+  }
+  assert.ok(scripts["test:parity"]?.includes("test:package"));
+  assert.ok(scripts["release:check"]?.includes("test:package"));
 });
 
 test("dependency policy documentation matches package metadata", () => {

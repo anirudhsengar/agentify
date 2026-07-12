@@ -55,8 +55,8 @@ jobs:
       - run: npm audit --omit=dev --audit-level=high
 
   package-smoke:
-    name: Packed package smoke test
-    needs: [typecheck, tests]
+    name: Modernization validation and packed package smoke
+    needs: [typecheck, tests, dependency-audit]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -65,4 +65,8 @@ jobs:
           node-version: "22.19.0"
           cache: npm
       - run: npm ci
+      - run: npm run test:parity
       - run: npm run test:package
+      - run: npm run test:maintenance
+      - run: npm run test:generated-output
+      - run: npm run test:security-redteam
