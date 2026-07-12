@@ -1,23 +1,13 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { VERSION as PI_SDK_VERSION } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { defaultConfigDir, ensureAgentifyConfig } from "./agentify-config.ts";
-import {
-  alongsidePathFor,
-  resolveActionForPath,
-  type ApplyPolicy,
-} from "./apply-policy.ts";
 import { resolveApplyPolicy } from "./agentifyrc.ts";
 import { exportAgenticSurface } from "./artifact-exporters.ts";
 import { isFeatureAgentFilename } from "./artifacts/agent-file-conventions.ts";
-import {
-  GENERATED_SURFACE_PATHS,
-  normalizeArtifactPath,
-} from "./artifacts/generated-surface.ts";
-import { addMarkdownManagedMarker } from "./artifacts/managed-markers.ts";
+import { normalizeArtifactPath } from "./artifacts/generated-surface.ts";
 import { readPackageVersion } from "./package-version.ts";
 import { persistRunArtifacts } from "./revert.ts";
 import { packageRoot } from "./pi-sdk-runtime.ts";
@@ -30,17 +20,9 @@ import { writeProjectState } from "./project-state.ts";
 import {
   renderValidatedBrownfieldArtifacts,
   setRendererStateDir,
-  type RenderedArtifact,
 } from "./artifacts/renderers.ts";
 import {
-  codebaseMapRelativePath,
-  kindForPath,
-  manifestFileFromContent,
-  manifestRelativePath,
-  markerForPath,
   readManifestAt,
-  sha256,
-  writeManifestAt,
   type ManagedManifest,
   type ManagedManifestFile,
 } from "./manifest.ts";
@@ -53,7 +35,6 @@ import type {
   AgentifyTarget,
   ProjectKind,
   RunAgentifyOptions,
-  ArtifactWrite,
 } from "./types.ts";
 import { AgentifyLog } from "./audit/log.ts";
 import { loadBuilderPrompt } from "./audit/prompt.ts";
@@ -85,6 +66,30 @@ import {
 } from "./greenfield-artifacts.ts";
 import { createReadOnlyExecutionPolicy } from "./security/execution-policy.ts";
 import { beginStateTransaction } from "./state-transaction.ts";
+import {
+  collectAuditArtifactSnapshot,
+  rollbackGeneratedSurface,
+  type AuditArtifactSnapshot,
+} from "./generation/artifact-snapshot.ts";
+import { applyStagedBundle, withAbortOnRequired } from "./generation/apply-bundle.ts";
+import { formatApplyReport } from "./generation/apply-report.ts";
+import {
+  captureSessionAgentFiles,
+  cleanupSessionAgentSnapshot,
+  mirrorSessionOutputToStaging,
+} from "./generation/session-agent-snapshot.ts";
+import {
+  addWriteMetadata,
+  copyCanonicalMapToStaging,
+  makeStagingRoot,
+  writeRenderedArtifactsToStaging,
+} from "./generation/staging-bundle.ts";
+
+export {
+  applyStagedBundle,
+  collectAuditArtifactSnapshot,
+  writeRenderedArtifactsToStaging,
+};
 
 const AGENTS_MD_PATH = "AGENTS.md";
 const BUILDER_TOOL_ALLOWLIST = [
@@ -131,14 +136,6 @@ type FinalAuditState = {
   /** Why the audit did not reach `success`, when applicable. */
   gapReasons: string[];
 };
-
-type AuditSnapshotEntry = {
-  ownership: "managed" | "unmanaged";
-  content: Buffer;
-  mode: number;
-};
-
-export type AuditArtifactSnapshot = Map<string, AuditSnapshotEntry>;
 
 const ALWAYS_ON_ARTIFACTS = [
   "specs/README.md",
@@ -187,82 +184,6 @@ function countFileLines(filePath: string): number {
 
 function toRel(cwd: string, filePath: string): string {
   return normalizeArtifactPath(path.relative(cwd, filePath));
-}
-
-function listFilesRecursively(root: string): string[] {
-  if (!fs.existsSync(root)) return [];
-  const stat = fs.statSync(root);
-  if (stat.isFile()) return [root];
-  if (!stat.isDirectory()) return [];
-  const files: string[] = [];
-  const visit = (dir: string): void => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        visit(full);
-      } else if (entry.isFile()) {
-        files.push(full);
-      }
-    }
-  };
-  visit(root);
-  return files;
-}
-
-function listGeneratedSurfaceFiles(cwd: string): string[] {
-  const files = new Set<string>();
-  for (const rel of GENERATED_SURFACE_PATHS) {
-    for (const filePath of listFilesRecursively(path.join(cwd, rel))) {
-      files.add(filePath);
-    }
-  }
-  return [...files];
-}
-
-function fileHasManagedMarker(relativePath: string, content: Buffer): boolean {
-  const marker = markerForPath(relativePath);
-  if (marker === "sha256") return true;
-  return content.toString("utf-8").includes(marker);
-}
-
-export function collectAuditArtifactSnapshot(cwd: string): AuditArtifactSnapshot {
-  const snapshot: AuditArtifactSnapshot = new Map();
-  for (const filePath of listGeneratedSurfaceFiles(cwd)) {
-    if (!fs.existsSync(filePath)) continue;
-    const rel = toRel(cwd, filePath);
-    const content = fs.readFileSync(filePath);
-    snapshot.set(rel, {
-      ownership: fileHasManagedMarker(rel, content) ? "managed" : "unmanaged",
-      content,
-      mode: fs.statSync(filePath).mode & 0o777,
-    });
-  }
-  return snapshot;
-}
-
-function restoreSnapshotFile(cwd: string, relativePath: string, entry: AuditSnapshotEntry): void {
-  const filePath = path.join(cwd, relativePath);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, entry.content, { mode: entry.mode });
-  try {
-    fs.chmodSync(filePath, entry.mode);
-  } catch {
-    // Best effort on filesystems without chmod support.
-  }
-}
-
-function cleanupEmptyGeneratedDirs(cwd: string): void {
-  const dirs = GENERATED_SURFACE_PATHS
-    .map((rel) => path.join(cwd, rel))
-    .filter((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isDirectory())
-    .sort((a, b) => b.length - a.length);
-  for (const dir of dirs) {
-    try {
-      fs.rmdirSync(dir);
-    } catch {
-      // Directory was not empty or disappeared; both are fine.
-    }
-  }
 }
 
 /**
@@ -351,414 +272,6 @@ function rollbackGeneratedSurface(
 
 
 
-
-function writeFileUnderRoot(root: string, relativePath: string, content: string | Buffer): void {
-  const filePath = path.join(root, relativePath);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, content, { mode: 0o644 });
-}
-
-function makeStagingRoot(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "agentify-staging-"));
-}
-
-export function writeRenderedArtifactsToStaging(
-  stagingRoot: string,
-  artifacts: readonly RenderedArtifact[],
-  metadata: Map<string, ManagedManifestFile>,
-): void {
-  for (const artifact of artifacts) {
-    writeFileUnderRoot(stagingRoot, artifact.relativePath, artifact.content);
-    metadata.set(artifact.relativePath, manifestFileFromContent({
-      relativePath: artifact.relativePath,
-      content: artifact.content,
-      kind: artifact.kind,
-      required: artifact.required,
-      marker: artifact.marker,
-      source: artifact.source,
-    }));
-  }
-}
-
-function copyCanonicalMapToStaging(
-  cwd: string,
-  stagingRoot: string,
-  stateDir: string,
-  metadata: Map<string, ManagedManifestFile>,
-): void {
-  const mapRelPath = codebaseMapRelativePath(stateDir);
-  const source = path.join(cwd, mapRelPath);
-  if (!fs.existsSync(source)) return;
-  const content = fs.readFileSync(source);
-  writeFileUnderRoot(stagingRoot, mapRelPath, content);
-  metadata.set(mapRelPath, manifestFileFromContent({
-    relativePath: mapRelPath,
-    content,
-    kind: "state",
-    required: true,
-    marker: markerForPath(mapRelPath),
-    source: "write_map",
-  }));
-}
-
-function collectStagedFiles(stagingRoot: string, stateDir: string): Array<{ relativePath: string; content: Buffer }> {
-  const manifestRelPath = manifestRelativePath(stateDir);
-  return listFilesRecursively(stagingRoot)
-    .map((filePath) => ({
-      relativePath: toRel(stagingRoot, filePath),
-      content: fs.readFileSync(filePath),
-    }))
-    .filter((file) => file.relativePath !== manifestRelPath);
-}
-
-/**
- * Capture the brownfield session's feature-agent writes (`.pi/agents/*.md`)
- * to a fresh temp dir. The runtime writes those files into `cwd` (the
- * real target repo), but `exportAgenticSurface` reads from a separate
- * `stagingRoot` and `.pi/agents/` is wiped by `rollbackGeneratedSurface`
- * before the staging tree is built. Capturing here — before the rollback
- * runs — gives the staging-build step a stable source to mirror from.
- *
- * Returns the temp dir path; the caller is responsible for the mirror
- * (and may clean up the temp dir afterward).
- */
-function captureSessionAgentFiles(cwd: string): string {
-  const snapshotDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-session-agents-"));
-  const sourceAgentsDir = path.join(cwd, ".pi", "agents");
-  if (!fs.existsSync(sourceAgentsDir)) return snapshotDir;
-  const targetAgentsDir = path.join(snapshotDir, ".pi", "agents");
-  fs.mkdirSync(targetAgentsDir, { recursive: true });
-  for (const entry of fs.readdirSync(sourceAgentsDir, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-    fs.copyFileSync(
-      path.join(sourceAgentsDir, entry.name),
-      path.join(targetAgentsDir, entry.name),
-    );
-  }
-  return snapshotDir;
-}
-
-/**
- * Mirror a session-agent snapshot (from `captureSessionAgentFiles`)
- * into the staging tree with the agentify managed marker prepended
- * to each agent file. The exporters then read `.pi/agents/*.md` from
- * `stagingRoot` and emit per-harness outputs (`.codex/agents/*.toml`,
- * `.claude/agents/*.md`, etc.); the apply step later writes the
- * marker-prefixed source back to the target repo as a managed file.
- *
- * Reserved harness files (scout/review/implement/test/fix/document)
- * are skipped to match `listFeatureAgents` in `artifact-exporters.ts`,
- * so the exporter doesn't see them and produce per-harness variants.
- */
-function mirrorSessionOutputToStaging(
-  snapshotDir: string,
-  stagingRoot: string,
-): void {
-  const agentsDir = path.join(snapshotDir, ".pi", "agents");
-  if (!fs.existsSync(agentsDir)) return;
-  const targetAgentsDir = path.join(stagingRoot, ".pi", "agents");
-  fs.mkdirSync(targetAgentsDir, { recursive: true });
-  for (const entry of fs.readdirSync(agentsDir, { withFileTypes: true })) {
-    if (!entry.isFile() || !isFeatureAgentFilename(entry.name)) continue;
-    const raw = fs.readFileSync(path.join(agentsDir, entry.name), "utf-8");
-    fs.writeFileSync(
-      path.join(targetAgentsDir, entry.name),
-      addMarkdownManagedMarker(raw),
-      { mode: 0o644 },
-    );
-  }
-}
-
-function cleanupSessionAgentSnapshot(snapshotDir: string): void {
-  try {
-    fs.rmSync(snapshotDir, { recursive: true, force: true });
-  } catch {
-    // Best effort cleanup; a leaked temp dir is harmless.
-  }
-}
-
-/**
- * Return a copy of `policy` with `requiredAction` forced to "abort".
- * Used when the user already owns AGENTS.md before a brownfield
- * run — the existing `alongside` default would silently save the
- * agentify-managed version next to the user's file and continue
- * applying everything else, which masks the conflict from the user
- * and produces no error. Forcing abort makes the conflict visible
- * via the existing "required generated file conflict" UI error and
- * rolls back the internal state snapshot so a partial run doesn't
- * leave the repo in a half-managed state.
- */
-function withAbortOnRequired(policy: ApplyPolicy): ApplyPolicy {
-  return { ...policy, requiredAction: "abort" };
-}
-
-function addWriteMetadata(
-  stagingRoot: string,
-  writes: readonly ArtifactWrite[],
-  source: string,
-  metadata: Map<string, ManagedManifestFile>,
-): void {
-  for (const write of writes) {
-    if (write.action === "conflict") continue;
-    // For "alongside" actions, the writer wrote the content to
-    // `alongsidePath` (a sibling of the canonical). The manifest
-    // entry should key on the canonical path and record the
-    // alongside path so `verifyManifest` and `revert` can find it.
-    const contentPath = write.action === "alongside" && write.alongsidePath
-      ? write.alongsidePath
-      : write.path;
-    const canonicalRelative = toRel(stagingRoot, write.path);
-    const contentRelative = toRel(stagingRoot, contentPath);
-    const filePath = path.join(stagingRoot, contentRelative);
-    if (!fs.existsSync(filePath)) continue;
-    const content = fs.readFileSync(filePath);
-    const alongsideRel = write.action === "alongside" ? contentRelative : undefined;
-    metadata.set(canonicalRelative, manifestFileFromContent({
-      relativePath: canonicalRelative,
-      content,
-      kind: kindForPath(canonicalRelative),
-      required: undefined,
-      marker: markerForPath(canonicalRelative),
-      source,
-      alongsidePath: alongsideRel,
-    }));
-  }
-}
-
-function isConflictingDestination(
-  cwd: string,
-  relativePath: string,
-  snapshot: AuditArtifactSnapshot,
-): boolean {
-  const destination = path.join(cwd, relativePath);
-  if (hasSymlinkAncestor(cwd, relativePath)) return true;
-  const destinationStat = fs.lstatSync(destination, { throwIfNoEntry: false });
-  if (!destinationStat) return false;
-  // Never follow a repository symlink while deciding ownership. Treat it as
-  // user-owned so staged writes cannot escape the repository root.
-  if (destinationStat.isSymbolicLink()) return true;
-  const snapshotEntry = snapshot.get(relativePath);
-  // Pre-run unmanaged files (user-owned) are always conflicts:
-  // they were on disk before the run started and we must not
-  // overwrite them silently.
-  if (snapshotEntry) return snapshotEntry.ownership === "unmanaged";
-  // The destination exists but wasn't in the pre-run snapshot.
-  // Two cases reach here: (a) the runtime (or the mirror step
-  // for `.pi/agents/*.md`) wrote it during this run — agentify
-  // owns it, so overwriting with a managed version is correct;
-  // (b) the file is outside any generated-surface path and the
-  // snapshot enumeration missed it — irrelevant for the apply
-  // loop because only generated-surface paths are staged. Treat
-  // both as non-conflicts so the staged content lands at the
-  // canonical destination rather than alongside it.
-  return false;
-}
-
-function hasSymlinkAncestor(cwd: string, relativePath: string): boolean {
-  const parts = relativePath.split("/").slice(0, -1);
-  let current = cwd;
-  for (const part of parts) {
-    current = path.join(current, part);
-    const stat = fs.lstatSync(current, { throwIfNoEntry: false });
-    if (!stat) return false;
-    if (stat.isSymbolicLink()) return true;
-  }
-  return false;
-}
-
-/**
- * Format the post-run report from the apply step's writes array.
- * The summary shows counts of each action (created, kept-user,
- * saved-alongside, conflicts) and lists the alongside saves with
- * their target paths. Output goes through `ui.info` so it appears
- * in the same channel as the rest of the run's output.
- *
- * The report is deliberately deterministic and scannable: the
- * counts line first, then the alongside list (capped at 16
- * entries with a "… and N more" line), then any conflicts. The
- * goal is that a user can see what happened at a glance without
- * diffing the manifest.
- */
-function formatApplyReport(
-  writes: readonly ArtifactWrite[],
-  cwd: string,
-): string[] {
-  const written = writes.filter((w) => w.action === "written");
-  const kept = writes.filter((w) => w.action === "skipped");
-  const alongside = writes.filter((w) => w.action === "alongside");
-  const conflicts = writes.filter((w) => w.action === "conflict");
-
-  const lines: string[] = [];
-  const conflictSuffix = conflicts.length > 0
-    ? `, ${conflicts.length} conflict(s)`
-    : "";
-  lines.push(
-    `agentify: apply report: ` +
-    `${written.length} created, ` +
-    `${kept.length} kept-user, ` +
-    `${alongside.length} saved-alongside` +
-    conflictSuffix +
-    ".",
-  );
-
-  if (alongside.length > 0) {
-    lines.push(
-      "agentify: agentify's versions saved alongside (suffix .agentify.<ext>):",
-    );
-    for (const w of alongside.slice(0, 16)) {
-      const rel = toRel(cwd, w.path);
-      const alongsideRel = w.alongsidePath ?? alongsidePathFor(rel);
-      lines.push(`agentify:   - ${rel} -> ${alongsideRel}`);
-    }
-    if (alongside.length > 16) {
-      lines.push(`agentify:   ... and ${alongside.length - 16} more`);
-    }
-  }
-
-  if (conflicts.length > 0) {
-    lines.push(
-      "agentify: conflicts (not written; requiredAction=abort in rc file):",
-    );
-    for (const w of conflicts.slice(0, 8)) {
-      lines.push(
-        `agentify:   - ${toRel(cwd, w.path)}: ${w.reason ?? "conflict"}`,
-      );
-    }
-  }
-
-  return lines;
-}
-
-export function applyStagedBundle(params: {
-  cwd: string;
-  stagingRoot: string;
-  snapshot: AuditArtifactSnapshot;
-  metadata: Map<string, ManagedManifestFile>;
-  agentifyVersion: string;
-  mode: Exclude<ProjectKind, "ambiguous">;
-  policy: ApplyPolicy;
-  runId: string;
-  stateDir: string;
-}): { writes: ArtifactWrite[]; requiredConflictCount: number; manifest: ManagedManifest | null } {
-  const stagedFiles = collectStagedFiles(params.stagingRoot, params.stateDir);
-  const writes: ArtifactWrite[] = [];
-  const manifestFiles: ManagedManifestFile[] = [];
-  let requiredConflictCount = 0;
-
-  // Required aborts are a bundle-level preflight. Discover them before
-  // writing any non-conflicting file so a rejected generation is atomic.
-  for (const file of stagedFiles) {
-    const entry = params.metadata.get(file.relativePath)
-      ?? manifestFileFromContent({ relativePath: file.relativePath, content: file.content });
-    if (entry.required
-      && isConflictingDestination(params.cwd, file.relativePath, params.snapshot)
-      && resolveActionForPath(params.policy, file.relativePath, true) === "abort") {
-      requiredConflictCount += 1;
-      writes.push({
-        path: path.join(params.cwd, file.relativePath),
-        action: "conflict",
-        reason: "required file conflict; set requiredAction to \"alongside\" in .agentifyrc to save alongside",
-      });
-    }
-  }
-  if (requiredConflictCount > 0) return { writes, requiredConflictCount, manifest: null };
-
-  for (const file of stagedFiles) {
-    const baseEntry = params.metadata.get(file.relativePath)
-      ?? manifestFileFromContent({ relativePath: file.relativePath, content: file.content });
-    const isRequired = baseEntry.required;
-
-    if (!isConflictingDestination(params.cwd, file.relativePath, params.snapshot)) {
-      // No conflict — write the canonical file in the repo and
-      // record the manifest entry unchanged.
-      const destination = path.join(params.cwd, file.relativePath);
-      const existing = fs.existsSync(destination) ? fs.readFileSync(destination) : null;
-      const writeAction = existing && Buffer.compare(existing, file.content) === 0 ? "skipped" : "written";
-      fs.mkdirSync(path.dirname(destination), { recursive: true });
-      fs.writeFileSync(destination, file.content, { mode: 0o644 });
-      writes.push({ path: destination, action: writeAction });
-      manifestFiles.push(baseEntry);
-      continue;
-    }
-
-    // Conflict at the canonical path. Resolve per policy.
-    const action = resolveActionForPath(params.policy, file.relativePath, isRequired);
-
-    if (action === "abort") {
-      writes.push({
-        path: path.join(params.cwd, file.relativePath),
-        action: "conflict",
-        reason: isRequired
-          ? "required file conflict; set requiredAction to \"alongside\" in .agentifyrc to save alongside"
-          : "existing file is not agentify-managed",
-      });
-      continue;
-    }
-
-    if (action === "keep") {
-      // Leave the user's file; do not save agentify's version
-      // anywhere. Record the user's sha so `revert` knows the
-      // file was deliberately preserved.
-      const userContent = fs.readFileSync(path.join(params.cwd, file.relativePath));
-      const preservedSha = sha256(userContent);
-      writes.push({
-        path: path.join(params.cwd, file.relativePath),
-        action: "skipped",
-        reason: "user file kept; agentify's version discarded",
-      });
-      manifestFiles.push({ ...baseEntry, preservedSha256: preservedSha });
-      continue;
-    }
-
-    // action === "alongside" (default). Write the staged content
-    // to a sibling file next to the user's, leave the user's
-    // file untouched, and record both paths in the manifest.
-    const alongsideRel = alongsidePathFor(file.relativePath);
-    const alongsideDest = path.join(params.cwd, alongsideRel);
-    if (hasSymlinkAncestor(params.cwd, alongsideRel)
-      || fs.lstatSync(alongsideDest, { throwIfNoEntry: false })?.isSymbolicLink()) {
-      writes.push({
-        path: path.join(params.cwd, file.relativePath),
-        action: "conflict",
-        reason: "alongside destination is a symbolic link",
-      });
-      continue;
-    }
-    const userContent = fs.readFileSync(path.join(params.cwd, file.relativePath));
-    const preservedSha = sha256(userContent);
-    fs.mkdirSync(path.dirname(alongsideDest), { recursive: true });
-    fs.writeFileSync(alongsideDest, file.content, { mode: 0o644 });
-    writes.push({
-      path: path.join(params.cwd, file.relativePath),
-      action: "alongside",
-      reason: "user file preserved; agentify's version saved alongside",
-      alongsidePath: alongsideRel,
-    });
-    manifestFiles.push({
-      ...baseEntry,
-      sha256: sha256(file.content),
-      alongsidePath: alongsideRel,
-      preservedSha256: preservedSha,
-    });
-  }
-
-  if (requiredConflictCount > 0) {
-    return { writes, requiredConflictCount, manifest: null };
-  }
-
-  const sortedFiles = manifestFiles.sort((a, b) => a.path.localeCompare(b.path));
-  const manifest: ManagedManifest = {
-    schema_version: "2",
-    agentify_version: params.agentifyVersion,
-    generated_at: new Date().toISOString(),
-    mode: params.mode,
-    run_id: params.runId,
-    files: sortedFiles,
-  };
-  writeManifestAt(params.cwd, manifest, params.stateDir);
-  writes.push({ path: path.join(params.cwd, manifestRelativePath(params.stateDir)), action: "written" });
-  return { writes, requiredConflictCount, manifest };
-}
 
 function extractUsage(event: AgentSessionEvent): AssistantUsage | undefined {
   const maybe = event as {
