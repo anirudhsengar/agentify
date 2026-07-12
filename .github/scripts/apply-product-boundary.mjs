@@ -74,7 +74,7 @@ replacePattern(
 replacePattern(
   "docs/experimental-surfaces.md",
   "boundary enforcement wording",
-  /The npm package boundary, documentation, CLI parser, and product-boundary tests\r?\nare the enforcement mechanism\. The packaging build excludes raw TypeScript source\r?\nfrom the published artifact, preventing deep imports from becoming accidental\r?\nAPIs\./,
+  /The current enforcement boundary is the absence of package exports, the explicit\r?\nCLI parser, documentation, and product-boundary tests\. Raw source may still be\r?\npresent in 0\.1\.x packages until the compiled-package remediation lands; its\r?\npresence does not make deep imports supported or stable\./,
   `The restrictive npm \`exports\` map, documentation, CLI parser, and\nproduct-boundary tests enforce this boundary. Standard package imports into raw\nsource paths are rejected. The compiled-artifact packaging phase will additionally\nremove raw TypeScript source from the published tarball.`,
   /restrictive npm `exports` map/,
 );
