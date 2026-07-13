@@ -16,6 +16,7 @@ public product contract.
 | Generation architecture and trust boundary | `docs/architecture.md` |
 | Modernization parity baseline and behavior contract | `docs/refactors/modernization-baseline.md` |
 | Runtime reachability roots and deletion evidence | `docs/refactors/runtime-reachability.md` |
+| Audit schema domain migration design and contract freeze | `docs/refactors/audit-schema-domain-migration.md` |
 | Compiled build, runtime assets, and npm package boundary | `docs/build-and-package.md` |
 | Execution-policy security model | `SECURITY.md` (repo root) |
 | Transactional provider-state lifecycle | `docs/state-lifecycle.md` |
