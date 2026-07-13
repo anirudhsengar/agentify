@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- A compatibility-first design and characterization fixture for retiring cross-provider `.pi/agentify` fallbacks and deprecated state/write-map APIs without deleting or silently selecting user state.
 - A dependency compatibility matrix with official migration evidence, isolated lockfile impact, explicit #32/#33 gates, and six separately owned upgrade groups.
 - Evidence-based lifecycle decisions for webhook, AIW, orchestrator, communications, and Agent Expert, with communications relocation split into a dedicated follow-up issue.
 - An audited runtime-reachability inventory and maintenance guard for standalone scripts.
