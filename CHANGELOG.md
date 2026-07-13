@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-13
+
+### Fixed
+
+- `v0.2.0` was tagged, but npm publication did not complete and no GitHub release was published. The workflow passed `release-artifact/agentify-0.2.0.tgz` as an ambiguous package specification, so npm interpreted it as GitHub shorthand instead of a local tarball path.
+- The publication workflow now resolves exactly one downloaded `./release-artifact/agentify-*.tgz` file and publishes that explicit local path, failing closed when zero or multiple tarballs are present.
+
+### Changed
+
+- `0.2.1` contains the complete release contents intended for `0.2.0`, together with the corrected artifact-publication workflow.
+
 ## [0.2.0] - 2026-07-13
 
 ### Added
