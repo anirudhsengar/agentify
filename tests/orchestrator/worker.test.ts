@@ -1,10 +1,4 @@
 // tests/orchestrator/worker.test.ts — OrchestratorWorker tests.
-//
-// The worker is a long-running subprocess that exposes the
-// orchestrator's management surface over the Pi-to-Pi peer mesh.
-// Tests exercise the public route* methods (no peer mesh needed)
-// plus the peer-mesh end-to-end flow (worker receives a command
-// via coms_send, replies via peer.reply).
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
@@ -12,14 +6,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { OrchestratorWorker } from "../../src/core/orchestrator/worker.ts";
-import { ComsPeer } from "../../src/core/coms/server.ts";
-import { PeerRegistry, projectHash } from "../../src/core/coms/registry.ts";
+import { ComsPeer } from "../../src/core/orchestrator/comms/server.ts";
+import { PeerRegistry, projectHash } from "../../src/core/orchestrator/comms/registry.ts";
 import { orchestratorPaths } from "../../src/core/orchestrator/paths.ts";
 import { FakeRuntime } from "./fake-runtime.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function tempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -32,7 +22,6 @@ function setupHarness(opts: {
   const configDir = tempDir("agentify-worker-cfg-");
   const cwd = tempDir("agentify-worker-cwd-");
   const comsRoot = tempDir("agentify-worker-coms-");
-  // Pre-create orchestrator dirs.
   const orchPaths = orchestratorPaths(configDir);
   fs.mkdirSync(orchPaths.orchestratorRoot, { recursive: true });
   fs.writeFileSync(orchPaths.eventsFile, "");
@@ -62,19 +51,11 @@ function setupHarness(opts: {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 async function testWorkerStartsAndRegisters(): Promise<void> {
   const h = setupHarness({ domain: ["src/core/webhook/**"], name: "webhook-worker" });
   try {
     await h.worker.start();
-    // The worker peer is in the registry.
-    const registry = new PeerRegistry({
-      registryDir: h.comsRoot,
-      project: projectHash(h.cwd),
-    });
+    const registry = new PeerRegistry({ registryDir: h.comsRoot, project: projectHash(h.cwd) });
     const peers = registry.list().live;
     assert.equal(peers.length, 1);
     assert.equal(peers[0]?.name, "webhook-worker");
@@ -114,7 +95,6 @@ async function testWorkerCreateAgentLocal(): Promise<void> {
     assert.match(result.agent_id, /^scout-/);
     assert.equal(result.name, "scout");
     assert.equal(result.status, "running");
-    // The agent's state should carry the worker's domain.
     const { readAgentState, agentPaths } = await import("../../src/core/orchestrator/paths.ts");
     const state = readAgentState(agentPaths(h.configDir, result.agent_id));
     assert.ok(state);
@@ -130,23 +110,22 @@ async function testWorkerListAgents(): Promise<void> {
   try {
     await h.worker.start();
     h.runtime.enqueue({ resultText: "ok", costUsd: 0.001 });
-    const a = await h.worker.routeCreateAgent({
+    const agent = await h.worker.routeCreateAgent({
       name: "x",
       system_prompt: "x",
       user_prompt: "x",
       tools: ["read"],
     });
-    // Wait for the agent to complete.
     const { readAgentState, agentPaths } = await import("../../src/core/orchestrator/paths.ts");
     const start = Date.now();
     while (Date.now() - start < 5000) {
-      const s = readAgentState(agentPaths(h.configDir, a.agent_id));
-      if (s && s.status === "completed") break;
-      await new Promise((r) => setTimeout(r, 50));
+      const state = readAgentState(agentPaths(h.configDir, agent.agent_id));
+      if (state?.status === "completed") break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
     const list = h.worker.routeListAgents();
     assert.equal(list.agents.length, 1);
-    assert.equal(list.agents[0]?.agent_id, a.agent_id);
+    assert.equal(list.agents[0]?.agent_id, agent.agent_id);
   } finally {
     await h.worker.stop();
     h.cleanup();
@@ -157,20 +136,10 @@ async function testWorkerPeerMeshRoundTrip(): Promise<void> {
   const h = setupHarness({ domain: ["src/**"], name: "mesh-worker" });
   try {
     await h.worker.start();
-    // A "client" peer (a sender) connects to the worker's socket
-    // via the standard ComsPeer (which both lists peers AND can
-    // send). Since the worker's peer is in the same project, a
-    // second ComsPeer in the same project + cwd can discover it.
-    const sender = new ComsPeer({
-      name: "test-sender",
-      cwd: h.cwd,
-      comsRoot: h.comsRoot,
-    });
+    const sender = new ComsPeer({ name: "test-sender", cwd: h.cwd, comsRoot: h.comsRoot });
     await sender.listen();
-    // The sender should see the worker.
     const peers = sender.list();
-    assert.ok(peers.find((p) => p.name === "mesh-worker"), `expected mesh-worker in peers, got ${peers.map((p) => p.name).join(", ")}`);
-    // Send a ping command.
+    assert.ok(peers.find((peer) => peer.name === "mesh-worker"));
     const pending = sender.send("mesh-worker", JSON.stringify({ op: "ping", args: {} }));
     const result = await sender.await(pending.msg_id, 5_000);
     assert.equal(result.status, "complete");
@@ -190,22 +159,21 @@ async function testWorkerCheckAgentStatus(): Promise<void> {
   try {
     await h.worker.start();
     h.runtime.enqueue({ resultText: "scout done", costUsd: 0.01 });
-    const a = await h.worker.routeCreateAgent({
+    const agent = await h.worker.routeCreateAgent({
       name: "scout",
       system_prompt: "x",
       user_prompt: "x",
       tools: ["read"],
     });
-    // Wait for completion.
     const { readAgentState, agentPaths } = await import("../../src/core/orchestrator/paths.ts");
     const start = Date.now();
     while (Date.now() - start < 5000) {
-      const s = readAgentState(agentPaths(h.configDir, a.agent_id));
-      if (s && s.status === "completed") break;
-      await new Promise((r) => setTimeout(r, 50));
+      const state = readAgentState(agentPaths(h.configDir, agent.agent_id));
+      if (state?.status === "completed") break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    const result = h.worker.routeCheckAgentStatus({ agent_id: a.agent_id }) as { agent_id: string; status: string };
-    assert.equal(result.agent_id, a.agent_id);
+    const result = h.worker.routeCheckAgentStatus({ agent_id: agent.agent_id }) as { agent_id: string; status: string };
+    assert.equal(result.agent_id, agent.agent_id);
     assert.equal(result.status, "completed");
   } finally {
     await h.worker.stop();
@@ -237,13 +205,13 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
 ];
 
 let passed = 0;
-for (const t of tests) {
+for (const testCase of tests) {
   try {
-    await t.fn();
+    await testCase.fn();
     passed += 1;
-    console.log(`  ok ${t.name}`);
+    console.log(`  ok ${testCase.name}`);
   } catch (err) {
-    console.error(`  FAIL ${t.name}: ${(err as Error).message}`);
+    console.error(`  FAIL ${testCase.name}: ${(err as Error).message}`);
     if ((err as Error).stack) console.error((err as Error).stack);
     process.exit(1);
   }
