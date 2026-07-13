@@ -17,7 +17,6 @@ const EXPERIMENTAL_DIRECTORY_PREFIXES = [
   "src/core/webhook/",
   "src/core/aiw/",
   "src/core/orchestrator/",
-  "src/core/coms/",
 ] as const;
 
 const EXPERIMENTAL_FILES = new Set([
@@ -50,7 +49,6 @@ const EXPERIMENTAL_COMPOSITION_ROOTS = [
   "src/core/aiw/index.ts",
   "src/core/orchestrator/host.ts",
   "src/core/orchestrator/worker.ts",
-  "src/core/coms/server.ts",
   "src/core/agent-expert.ts",
 ] as const;
 
@@ -176,6 +174,33 @@ test("experimental composition roots retain an explicit designation", () => {
       `${sourceMarkedRoot} must retain its source-level @experimental marker`,
     );
   }
+});
+
+test("orchestrator owns the communications transport", () => {
+  const graph = buildImportGraph();
+  const commsPrefix = "src/core/orchestrator/comms/";
+
+  assert.equal(
+    fs.existsSync(path.join(REPO_ROOT, "src/core/coms")),
+    false,
+    "the separate top-level communications directory must remain removed",
+  );
+  for (const modulePath of [
+    `${commsPrefix}types.ts`,
+    `${commsPrefix}registry.ts`,
+    `${commsPrefix}server.ts`,
+  ]) {
+    assert.ok(graph.has(modulePath), `${modulePath} must remain orchestrator-owned`);
+  }
+
+  const externalConsumers = [...graph.entries()]
+    .filter(([importer, dependencies]) =>
+      !importer.startsWith(commsPrefix)
+      && [...dependencies].some((dependency) => dependency.startsWith(commsPrefix)))
+    .map(([importer]) => importer)
+    .sort((left, right) => left.localeCompare(right));
+
+  assert.deepEqual(externalConsumers, ["src/core/orchestrator/worker.ts"]);
 });
 
 test("public CLI command inventory remains restricted to supported utilities", () => {
