@@ -1,7 +1,7 @@
 # Build and package architecture
 
 Agentify is authored in TypeScript but published as a compiled Node ESM command.
-The npm artifact is intentionally narrower than the repository checkout.
+The official npm package is `@anirudhsengar/agentify`; its installed executable remains `agentify`. The npm artifact is intentionally narrower than the repository checkout.
 
 ## Build flow
 
@@ -38,7 +38,7 @@ missing and verifies representative files after copying.
 
 Code that needs the installed package root must use
 `src/core/package-root.ts`. It walks upward to the nearest `package.json` whose
-name is `agentify`, so the same code works when executed from source and from the
+name is `@anirudhsengar/agentify`, so the same code works when executed from source and from the
 bundled `dist/cli.js` location.
 
 ## Published boundary

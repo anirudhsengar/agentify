@@ -31,6 +31,8 @@ function run(command, args, options = {}) {
 }
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
+assert.equal(packageJson.name, "@anirudhsengar/agentify");
+assert.deepEqual(packageJson.bin, { agentify: "./bin/agentify.js" });
 const installRoot = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-package-smoke-"));
 const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-package-home-"));
 const priorVersionRepo = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-prior-version-repo-"));
@@ -42,8 +44,11 @@ try {
   const packResult = JSON.parse(packed.stdout);
   assert.ok(Array.isArray(packResult) && packResult.length === 1, "npm pack must return one artifact");
   const artifact = packResult[0];
+  assert.equal(artifact?.name, packageJson.name, "npm pack must preserve the scoped package identity");
+  assert.equal(artifact?.version, packageJson.version, "npm pack must preserve the release version");
   const filename = artifact?.filename;
   assert.equal(typeof filename, "string", "npm pack result must include filename");
+  assert.ok(filename.trim().length > 0, "npm pack filename must be non-empty");
   tarballPath = path.join(repoRoot, filename);
   assert.ok(fs.existsSync(tarballPath), `packed tarball missing: ${tarballPath}`);
 
@@ -73,6 +78,12 @@ try {
   );
   assert.ok(![...packedPaths].some((entry) => entry.startsWith("src/")), "tarball must not publish raw src/");
   assert.ok(![...packedPaths].some((entry) => entry.includes("jiti")), "tarball must not publish jiti runtime files");
+  for (const packedPath of packedPaths) {
+    assert.ok(!packedPath.endsWith(".tgz"), `tarball must not contain nested tarballs: ${packedPath}`);
+    assert.ok(!packedPath.includes("pack-result.json"), `tarball must not contain pack metadata: ${packedPath}`);
+    assert.ok(!packedPath.includes("release-artifact"), `tarball must not contain release scratch files: ${packedPath}`);
+    assert.ok(!packedPath.includes(".tmp"), `tarball must not contain temporary files: ${packedPath}`);
+  }
   for (const forbiddenPrefix of [
     "dist/webhook/",
     "dist/aiw/",
@@ -87,6 +98,14 @@ try {
 
   run(npmCommand, ["init", "--yes"], { cwd: installRoot });
   run(npmCommand, ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarballPath], { cwd: installRoot });
+
+  const installedPackageJsonPath = path.join(installRoot, "node_modules", "@anirudhsengar", "agentify", "package.json");
+  assert.ok(fs.existsSync(installedPackageJsonPath), "scoped package must install under node_modules/@anirudhsengar/agentify");
+  const installedPackageJson = JSON.parse(fs.readFileSync(installedPackageJsonPath, "utf-8"));
+  assert.equal(installedPackageJson.name, packageJson.name);
+  assert.equal(installedPackageJson.version, packageJson.version);
+  assert.deepEqual(installedPackageJson.bin, { agentify: "./bin/agentify.js" });
+  assert.ok(!fs.existsSync(path.join(installRoot, "node_modules", "agentify")), "unscoped agentify package must not be installed");
 
   const bin = path.join(
     installRoot,
@@ -152,12 +171,12 @@ try {
   ]) {
     const deepImport = run(
       nodeCommand,
-      ["--input-type=module", "--eval", `import('agentify/src/core/${internalPath}')`],
+      ["--input-type=module", "--eval", `import('${packageJson.name}/src/core/${internalPath}')`],
       { cwd: installRoot, env, timeout: 30_000, expectFailure: true },
     );
     assert.match(
       `${deepImport.stderr}\n${deepImport.stdout}`,
-      /ERR_PACKAGE_PATH_NOT_EXPORTED|Cannot find package/,
+      /ERR_PACKAGE_PATH_NOT_EXPORTED/,
     );
   }
 
@@ -186,7 +205,7 @@ try {
   assert.ok(fs.existsSync(path.join(priorVersionRepo, ".claude", "agentify", "manifest.json")));
   assert.ok(!fs.existsSync(path.join(priorVersionRepo, ".agents", "agentify")));
 
-  console.log(`installed compiled package smoke test passed (${packageJson.version}).`);
+  console.log(`installed compiled package smoke test passed (${packageJson.name}@${packageJson.version}).`);
 } finally {
   if (tarballPath) fs.rmSync(tarballPath, { force: true });
   fs.rmSync(installRoot, { recursive: true, force: true });

@@ -1,5 +1,5 @@
 {
-  "name": "agentify",
+  "name": "@anirudhsengar/agentify",
   "version": "0.2.1",
   "description": "One terminal command for the full life of an agentic codebase: audit existing code, start greenfield projects, and export harness-native agent surfaces.",
   "type": "module",
