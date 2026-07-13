@@ -42,346 +42,46 @@ import {
     ConfidenceSchema,
     CoverageStatusSchema,
     DimensionStatusSchema,
-    KebabNameSchema,
-    SafeRelativePathSchema,
 } from "./schema/primitives.ts";
 import { SkeletonSchema } from "./schema/skeleton.ts";
 import { TypeContractSurfaceSchema } from "./schema/type-contract.ts";
 import { OperationalSurfaceSchema } from "./schema/operational-surface.ts";
 import { SecuritySurfaceSchema } from "./schema/security-surface.ts";
 import { ValidationSurfaceSchema } from "./schema/validation-surface.ts";
+import {
+    AlwaysOnDocsIntentSchema,
+    ArtifactIntentsSchema,
+    ExpertIntentSchema,
+    ExtensionCandidateIntentSchema,
+    FeatureAgentIntentSchema,
+    PromptTemplateIntentSchema,
+    ScaffoldRuntimeIntentSchema,
+} from "./schema/artifact-intents.ts";
+import {
+    CoverageMatrixSchema,
+    ExplorationLogEntrySchema,
+    ExplorationLogSchema,
+    OpenQuestionsSchema,
+} from "./schema/coverage.ts";
+import {
+    CustomizationEvidenceSchema,
+    ExpertEvidenceSchema,
+} from "./schema/evidence.ts";
 
 export { ConfidenceSchema, CoverageStatusSchema, DimensionStatusSchema };
-
-// ============================================================================
-// Custom-tool and skill candidate derivation
-// ============================================================================
-//
-// Declared before CodebaseMapSchema so the schema can reference it
-// in its top-level `customization_evidence` field. Used by Phase 9.6 of
-// the builder prompt to emit .pi/extensions/*.ts and
-// .pi/skills/<name>/SKILL.md after the audit passes.
-
-const CustomToolCandidateSchema = Type.Object({
-    name: Type.String({
-        description:
-            "kebab-case tool name, e.g. 'run-tests', 'prime-db'. " +
-            "Must be a valid Pi tool name (lowercase, digits, " +
-            "underscores, hyphens).",
-    }),
-    existing_command: Type.String({
-        description:
-            "The shell command this tool would wrap, " +
-            "e.g. 'bun test' or 'scripts/prime_db.sh'.",
-    }),
-    purpose: Type.String({
-        description:
-            "One-line: what the tool does and why it is worth wrapping " +
-            "(typed into the tool's `description` field).",
-    }),
-    source_path: Type.Union([Type.String(), Type.Null()], {
-        description:
-            "Path where the existing command lives, " +
-            "e.g. 'package.json#scripts.test' or " +
-            "'scripts/prime_db.sh'. Null if the command is " +
-            "synthesized from a multi-source workflow.",
-    }),
-});
-
-const SkillCandidateSchema = Type.Object({
-    name: Type.String({
-        description:
-            "kebab-case skill name, e.g. 'prime-db', " +
-            "'spin-up-env'. Must match the Agent Skills standard " +
-            "(lowercase a-z, 0-9, hyphens, 1-64 chars).",
-    }),
-    purpose: Type.String({
-        description:
-            "One-line: what the skill does and when to use it " +
-            "(typed into the skill's `description` frontmatter).",
-    }),
-    steps_or_script_path: Type.String({
-        description:
-            "Either an absolute/relative path to an existing " +
-            "script the skill should invoke (preferred), or a " +
-            "3-7 step bulleted workflow as a string when no " +
-            "single script exists.",
-    }),
-});
-
-export const CustomizationEvidenceSchema = Type.Object({
-    custom_tool_candidates: Type.Array(CustomToolCandidateSchema, {
-        description:
-            "Emergent list of pi.registerTool() candidates. " +
-            "Picked from D6 test/lint/typecheck commands, " +
-            "D7 build/run/deploy commands, package_json_scripts, " +
-            "and non-trivial scripts_dir_files. " +
-            "LLM decides the count (uncapped).",
-    }),
-    skill_candidates: Type.Array(SkillCandidateSchema, {
-        description:
-            "Emergent list of /skill:<name> candidates. Picked " +
-            "from scripts_dir_files (one skill per non-trivial " +
-            "script) and any 3-7 step multi-file operation " +
-            "visible in the codebase. " +
-            "LLM decides the count (uncapped).",
-    }),
-});
-
-export type CustomizationEvidence = Static<typeof CustomizationEvidenceSchema>;
-
-// ============================================================================
-// Agent-expert domains
-// ============================================================================
-//
-// Mirrors the customization_evidence pattern. Each expert domain becomes
-// a folder under .pi/prompts/experts/<domain>/ containing
-// expertise.yaml + question.md + self-improve.md (+ optional
-// plan.md / plan_build_improve.md). Derived by the builder in
-// Phase 3.7 from the per-feature reports (Phase 2) + dimension
-// sweeps. v1 maps without this field continue to parse.
-
-const ExpertDomainSchema = Type.Object({
-    domain: Type.String({
-        description:
-            "kebab-case folder name (e.g., 'billing', 'websocket', " +
-            "'database'). Becomes .pi/prompts/experts/<domain>/. " +
-            "Invoked as /experts:<domain>:question, :self-improve, " +
-            ":plan, :plan_build_improve.",
-    }),
-    rationale: Type.String({
-        description:
-            "1-line: why this domain warrants an expert " +
-            "(repeated, high-stakes, tribal-knowledge-bearing).",
-    }),
-    primary_paths: Type.Array(Type.String(), {
-        description: "Globs or concrete paths that the expert owns.",
-    }),
-    entry_points: Type.Array(Type.String(), {
-        description: "Files a fresh agent reads first in this domain.",
-    }),
-    test_paths: Type.Array(Type.String(), {
-        description: "Where the domain's tests live.",
-    }),
-    key_files: Type.Array(Type.Object({
-        path: Type.String(),
-        purpose: Type.String({ description: "1-line: what this file is for." }),
-        line_range: Type.Tuple([
-            Type.Number({ description: "Start line, 1-indexed, inclusive." }),
-            Type.Number({ description: "End line, 1-indexed, inclusive." }),
-        ]),
-    })),
-    key_types: Type.Array(Type.Object({
-        name: Type.String(),
-        path: Type.String({ description: "file:line of the type definition." }),
-        purpose: Type.String(),
-    })),
-    patterns: Type.Array(Type.Object({
-        name: Type.String(),
-        description: Type.String(),
-        example_ref: Type.String({ description: "path:line." }),
-    })),
-    pitfalls: Type.Array(Type.Object({
-        risk: Type.String(),
-        consequence: Type.String(),
-        reference: Type.String({ description: "path:line." }),
-    })),
-    conventions: Type.Array(Type.String(), {
-        description: "Domain-specific coding rules the expert enforces.",
-    }),
-    stability: StringEnum(["high", "medium", "low"] as const, {
-        description:
-            "How often this domain's code changes. High = stable, " +
-            "memorize freely. Low = changes too fast, expertise " +
-            "goes stale.",
-    }),
-    recurrence: StringEnum(["high", "medium", "low"] as const, {
-        description:
-            "How often this domain is queried / touched in typical " +
-            "workflows. High = recurring work, expert pays off. " +
-            "Low = one-off, expert is overhead.",
-    }),
-    test_command: Type.Union([Type.String(), Type.Null()], {
-        description:
-            "Test command specific to this domain (e.g., " +
-            "'pytest tests/payments/ -q'). Falls back to the global " +
-            "validation_surface.test_command when null. The " +
-            "expert's self-improve.md runs this after any change.",
-    }),
-    last_updated: Type.String({
-        description:
-            "ISO 8601 date. Set by the builder at emission time; " +
-            "updated by self-improve.md on every run. The " +
-            "stale-detection signal.",
-    }),
-});
-
-export const ExpertEvidenceSchema = Type.Object({
-    expert_domains: Type.Array(ExpertDomainSchema, {
-        description:
-            "Emergent list of expert domains. Derived by the " +
-            "builder in Phase 3.7 from the per-feature reports " +
-            "(Phase 2) and the dimension sweeps. Capped at 8 " +
-            "(same cap as features). Honest [] is valid for " +
-            "tiny codebases.",
-    }),
-});
-
-export type ExpertEvidence = Static<typeof ExpertEvidenceSchema>;
-
-// ============================================================================
-// Coverage matrix (the gate)
-// ============================================================================
-
-const CoverageMatrixSchema = Type.Object({
-    D1_topography: DimensionStatusSchema,
-    D2_module_boundaries: DimensionStatusSchema,
-    D3_type_contract: DimensionStatusSchema,
-    D4_conventions: DimensionStatusSchema,
-    D5_pitfalls: DimensionStatusSchema,
-    D6_validation: DimensionStatusSchema,
-    D7_operational: DimensionStatusSchema,
-    D8_security: DimensionStatusSchema,
-    D9_process: DimensionStatusSchema,
-    D10_documentation: DimensionStatusSchema,
-});
-
-// ============================================================================
-// Open questions and exploration log
-// ============================================================================
-
-const OpenQuestionsSchema = Type.Array(Type.String());
-
-const ExplorationLogEntrySchema = Type.Object({
-    ts: Type.String({ description: "ISO 8601 timestamp" }),
-    action: Type.String(),
-    target: Type.String(),
-    observation: Type.String(),
-});
-
-const ExplorationLogSchema = Type.Array(ExplorationLogEntrySchema);
-
-// ============================================================================
-// Artifact intents
-// ============================================================================
-
-const MarkdownSectionIntentSchema = Type.Object({
-    heading: Type.String({
-        description: "Short Markdown heading text without leading '#'.",
-    }),
-    body: Type.String({
-        description: "Markdown body for this section, grounded in the codebase map.",
-    }),
-});
-
-export const FeatureAgentIntentSchema = Type.Object({
-    name: KebabNameSchema,
-    description: Type.String({
-        description: "One-sentence specialist description for harness routing.",
-    }),
-    globs: Type.Array(SafeRelativePathSchema, {
-        minItems: 0,
-        maxItems: 12,
-        description: "Repo-relative files or directories this feature specialist owns.",
-    }),
-    body: Type.String({
-        description: "Feature-specific instructions, conventions, pitfalls, and validation notes.",
-    }),
-});
-
-export const AlwaysOnDocsIntentSchema = Type.Object({
-    path: SafeRelativePathSchema,
-    title: Type.String({
-        description: "Document title rendered as the top-level Markdown heading.",
-    }),
-    body: Type.String({
-        description: "Markdown body for always-on docs such as specs/README.md or ai_docs/README.md.",
-    }),
-});
-
-export const PromptTemplateIntentSchema = Type.Object({
-    name: KebabNameSchema,
-    description: Type.String({
-        description: "When a coding agent should use this prompt template.",
-    }),
-    body: Type.String({
-        description: "Prompt template body grounded in codebase conventions.",
-    }),
-});
-
-export const ExpertIntentSchema = Type.Object({
-    name: KebabNameSchema,
-    domain: Type.String({
-        description: "Expertise domain this prompt set represents.",
-    }),
-    body: Type.String({
-        description: "Expert prompt material grounded in stable codebase concepts.",
-    }),
-});
-
-export const ExtensionCandidateIntentSchema = Type.Object({
-    name: KebabNameSchema,
-    description: Type.String({
-        description: "Why this extension or skill candidate exists for this repo.",
-    }),
-    body: Type.String({
-        description: "TypeScript or Markdown candidate body. Renderers validate paths before writing.",
-    }),
-});
-
-export const ScaffoldRuntimeIntentSchema = Type.Object({
-    state_machine_notes: Type.Array(Type.String(), {
-        minItems: 0,
-        maxItems: 20,
-        description: "Optional repo-specific notes for the GitHub async state machine.",
-    }),
-});
-
-export const ArtifactIntentsSchema = Type.Object({
-    agent_guide: Type.Object({
-        title: Type.String({
-            description: "Title rendered into AGENTS.md.",
-        }),
-        sections: Type.Array(MarkdownSectionIntentSchema, {
-            minItems: 1,
-            maxItems: 20,
-            description: "Ordered AGENTS.md sections. Renderer enforces the 200-line cap.",
-        }),
-    }),
-    always_on_docs: Type.Array(AlwaysOnDocsIntentSchema, {
-        minItems: 0,
-        maxItems: 20,
-        description: "Deterministic Markdown docs rendered by TypeScript, not written by the LLM.",
-    }),
-    feature_agents: Type.Array(FeatureAgentIntentSchema, {
-        minItems: 0,
-        maxItems: 24,
-        description: "Generated feature specialists rendered to .pi/agents/<name>.md.",
-    }),
-    prompt_templates: Type.Array(PromptTemplateIntentSchema, {
-        minItems: 0,
-        maxItems: 24,
-        description: "Repo-specific prompt templates rendered to .pi/prompts/<name>.md.",
-    }),
-    experts: Type.Array(ExpertIntentSchema, {
-        minItems: 0,
-        maxItems: 24,
-        description:
-            "Legacy expert prompt material. Prefer expert_evidence.expert_domains; " +
-            "renderers convert either source into .pi/prompts/experts/<domain>/ " +
-            "with expertise.yaml, question.md, self-improve.md, plan.md, and " +
-            "plan_build_improve.md.",
-    }),
-    extension_candidates: Type.Array(ExtensionCandidateIntentSchema, {
-        minItems: 0,
-        maxItems: 24,
-        description: "Repo-specific extension or skill candidates rendered deterministically.",
-    }),
-    scaffold_runtime: Type.Optional(ScaffoldRuntimeIntentSchema),
-});
-
-export type ArtifactIntents = Static<typeof ArtifactIntentsSchema>;
-export type FeatureAgentIntent = Static<typeof FeatureAgentIntentSchema>;
+export {
+    AlwaysOnDocsIntentSchema,
+    ArtifactIntentsSchema,
+    CustomizationEvidenceSchema,
+    ExpertEvidenceSchema,
+    ExpertIntentSchema,
+    ExtensionCandidateIntentSchema,
+    FeatureAgentIntentSchema,
+    PromptTemplateIntentSchema,
+    ScaffoldRuntimeIntentSchema,
+};
+export type { ArtifactIntents, FeatureAgentIntent } from "./schema/artifact-intents.ts";
+export type { CustomizationEvidence, ExpertEvidence } from "./schema/evidence.ts";
 
 // ============================================================================
 // The full CodebaseMap (the contract)
