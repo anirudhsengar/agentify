@@ -38,10 +38,12 @@ missing and verifies representative files after copying.
 
 Code that needs the installed package root must use
 `src/core/package-root.ts`. It walks upward to the nearest `package.json` whose
-name is `agentify`, so the same code works when executed from source and from the
+name is `@anirudhsengar/agentify`, so the same code works when executed from source and from the
 bundled `dist/cli.js` location.
 
 ## Published boundary
+
+The official npm package identity is `@anirudhsengar/agentify`. Its `bin` map still exposes the installed command as `agentify`.
 
 The npm `files` allowlist includes:
 

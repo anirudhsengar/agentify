@@ -9,6 +9,7 @@ import * as path from "node:path";
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const nodeCommand = process.execPath;
+const packageName = "@anirudhsengar/agentify";
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -31,6 +32,9 @@ function run(command, args, options = {}) {
 }
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
+assert.equal(packageJson.name, packageName, "release package must use the official npm scope");
+assert.equal(packageJson.version, "0.2.1", "release package version must remain 0.2.1");
+assert.deepEqual(packageJson.bin, { agentify: "./bin/agentify.js" }, "scoping must not rename the CLI command");
 const installRoot = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-package-smoke-"));
 const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-package-home-"));
 const priorVersionRepo = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-prior-version-repo-"));
@@ -42,8 +46,11 @@ try {
   const packResult = JSON.parse(packed.stdout);
   assert.ok(Array.isArray(packResult) && packResult.length === 1, "npm pack must return one artifact");
   const artifact = packResult[0];
+  assert.equal(artifact?.name, packageName, "npm pack must report the scoped package identity");
+  assert.equal(artifact?.version, packageJson.version, "npm pack version must match package.json");
   const filename = artifact?.filename;
   assert.equal(typeof filename, "string", "npm pack result must include filename");
+  assert.ok(filename.length > 0, "npm pack filename must not be empty");
   tarballPath = path.join(repoRoot, filename);
   assert.ok(fs.existsSync(tarballPath), `packed tarball missing: ${tarballPath}`);
 
@@ -73,6 +80,19 @@ try {
   );
   assert.ok(![...packedPaths].some((entry) => entry.startsWith("src/")), "tarball must not publish raw src/");
   assert.ok(![...packedPaths].some((entry) => entry.includes("jiti")), "tarball must not publish jiti runtime files");
+  for (const forbidden of [
+    "pack-result.json",
+    "package-inventory.json",
+    "release-artifact/",
+    ".tmp",
+    "tmp/",
+  ]) {
+    assert.ok(
+      ![...packedPaths].some((entry) => entry === forbidden || entry.startsWith(forbidden) || entry.includes(forbidden)),
+      `tarball must not publish temporary or release-only files matching ${forbidden}`,
+    );
+  }
+  assert.ok(![...packedPaths].some((entry) => entry.endsWith(".tgz")), "tarball must not contain nested package archives");
   for (const forbiddenPrefix of [
     "dist/webhook/",
     "dist/aiw/",
@@ -87,6 +107,19 @@ try {
 
   run(npmCommand, ["init", "--yes"], { cwd: installRoot });
   run(npmCommand, ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarballPath], { cwd: installRoot });
+
+  const installedPackageJsonPath = path.join(
+    installRoot,
+    "node_modules",
+    "@anirudhsengar",
+    "agentify",
+    "package.json",
+  );
+  assert.ok(fs.existsSync(installedPackageJsonPath), "scoped package must install under node_modules/@anirudhsengar/agentify");
+  const installedPackageJson = JSON.parse(fs.readFileSync(installedPackageJsonPath, "utf-8"));
+  assert.equal(installedPackageJson.name, packageName);
+  assert.equal(installedPackageJson.version, packageJson.version);
+  assert.deepEqual(installedPackageJson.bin, { agentify: "./bin/agentify.js" });
 
   const bin = path.join(
     installRoot,
@@ -152,7 +185,7 @@ try {
   ]) {
     const deepImport = run(
       nodeCommand,
-      ["--input-type=module", "--eval", `import('agentify/src/core/${internalPath}')`],
+      ["--input-type=module", "--eval", `import('@anirudhsengar/agentify/src/core/${internalPath}')`],
       { cwd: installRoot, env, timeout: 30_000, expectFailure: true },
     );
     assert.match(

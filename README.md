@@ -1,8 +1,8 @@
 # agentify
 
-[![npm](https://img.shields.io/npm/v/agentify)](https://www.npmjs.com/package/agentify)
-[![license](https://img.shields.io/npm/l/agentify)](https://github.com/anirudhsengar/agentify/blob/main/LICENSE)
-[![node](https://img.shields.io/node/v/agentify)](https://github.com/anirudhsengar/agentify/blob/main/package.json)
+[![npm](https://img.shields.io/npm/v/%40anirudhsengar%2Fagentify)](https://www.npmjs.com/package/@anirudhsengar/agentify)
+[![license](https://img.shields.io/npm/l/%40anirudhsengar%2Fagentify)](https://github.com/anirudhsengar/agentify/blob/main/LICENSE)
+[![node](https://img.shields.io/node/v/%40anirudhsengar%2Fagentify)](https://github.com/anirudhsengar/agentify/blob/main/package.json)
 [![ci](https://img.shields.io/github/actions/workflow/status/anirudhsengar/agentify/ci.yml?branch=main)](https://github.com/anirudhsengar/agentify/actions/workflows/ci.yml)
 [![codeql](https://img.shields.io/github/actions/workflow/status/anirudhsengar/agentify/codeql.yml?branch=main&label=codeql)](https://github.com/anirudhsengar/agentify/actions/workflows/codeql.yml)
 
@@ -19,9 +19,9 @@ comments, and PRs drive agentic work.
 Requires Node `>=22.19.0`.
 
 ```bash
-npm install -g agentify
+npm install -g @anirudhsengar/agentify
 # or run without installing:
-npx agentify
+npx @anirudhsengar/agentify
 ```
 
 On first run, agentify asks for an LLM provider and API key (or reads
@@ -221,7 +221,7 @@ that don't fit.
 #### Manual opt-in (never auto-installed)
 
 These two are *always* opt-in — the agentify README is the only place
-they're listed. Copy by hand from `node_modules/agentify/packaged/skills/<name>`
+they're listed. Copy by hand from `node_modules/@anirudhsengar/agentify/packaged/skills/<name>`
 (or your `agentify` checkout) into `.claude/skills/` (and any other
 dotfolder you target):
 

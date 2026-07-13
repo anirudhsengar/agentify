@@ -1,7 +1,9 @@
 # Release process
 
-Agentify releases are tag-driven. Manual workflow dispatch is always a
-verification run and can never publish to npm or create a GitHub release.
+Agentify releases are tag-driven. The official npm package is
+`@anirudhsengar/agentify`; the installed executable remains `agentify`. Manual
+workflow dispatch is always a verification run and can never publish to npm or
+create a GitHub release.
 
 ## Release prerequisites
 
@@ -30,11 +32,11 @@ Both manual dispatch and tag pushes run the same verification job:
 1. install from the lockfile with `npm ci`;
 2. verify the tag when the event is a tag push;
 3. run typechecking and the complete test suite;
-4. create an npm tarball;
-5. install a tarball into a fresh temporary project;
-6. run the installed `agentify --help` and `agentify --version` commands;
-7. create the final release tarball;
-8. upload that tarball as a workflow artifact.
+4. create the final npm tarball with `npm pack --json --ignore-scripts`;
+5. require exactly one pack result with a non-empty filename and confirm that exact file exists;
+6. install a tarball into a fresh temporary project;
+7. run the installed `agentify --help` and `agentify --version` commands;
+8. upload the exact filename reported by `npm pack --json` as the workflow artifact.
 
 The package smoke test is available independently as:
 
@@ -53,12 +55,14 @@ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
 A manual dispatch therefore never enters either job, regardless of inputs or
 branch name.
 
-The npm job downloads and publishes the exact tarball produced by the successful
-verification job. It does not rebuild from a second checkout. npm provenance is
-requested through GitHub's OIDC token.
+The npm job downloads the verified workflow artifact, requires exactly one local
+`./release-artifact/*.tgz`, and publishes that resolved file. It does not rebuild
+or repack from a second checkout. npm provenance is requested through GitHub's
+OIDC token.
 
-The GitHub release job runs only after npm publication succeeds. It attaches the
-same verified tarball and uses GitHub-generated release notes. Release Drafter is
+The GitHub release job runs only after npm publication succeeds. It independently
+requires exactly one downloaded `./release-artifact/*.tgz`, attaches that exact
+verified tarball, and uses GitHub-generated release notes. Release Drafter is
 not invoked in the publication workflow, avoiding two competing release-note
 sources.
 
@@ -70,8 +74,10 @@ The workflow defaults to `contents: read`.
 - npm publication receives `id-token: write` and `contents: read`.
 - GitHub release publication receives `contents: write` only.
 
-The npm environment should retain required-reviewer protection and the npm token
-should be scoped only to this package.
+The npm environment should retain required-reviewer protection. The granular npm
+token must authenticate as `anirudhsengar`, have read-write package/scope access
+covering the `@anirudhsengar` user scope (including new packages), and bypass 2FA
+for direct CI publication when npm requires it.
 
 ## CI gates
 

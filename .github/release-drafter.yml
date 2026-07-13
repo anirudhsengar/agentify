@@ -56,7 +56,7 @@ template: |
   ## Install / upgrade
 
   ```bash
-  npm install -g agentify@$RESOLVED_VERSION
+  npm install -g @anirudhsengar/agentify@$RESOLVED_VERSION
   ```
 
   Requires Node `>=22.19.0`. Full release notes and prior versions are at

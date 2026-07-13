@@ -236,7 +236,7 @@ test("public documentation contains no package-internal import examples", () => 
       .filter((entry): entry is string => typeof entry === "string" && entry.endsWith(".md"))
       .map((entry) => normalizeRepoPath(path.join("docs", entry))),
   ];
-  const internalImport = /(?:from\s+|import\s*\(|require\s*\()\s*["'`]agentify\/(?:src|dist|core)\//;
+  const internalImport = /(?:from\s+|import\s*\(|require\s*\()\s*["'`](?:@anirudhsengar\/agentify|agentify)\/(?:src|dist|core)\//;
   for (const documentationFile of documentationFiles) {
     assert.doesNotMatch(
       read(documentationFile),

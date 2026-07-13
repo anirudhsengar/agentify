@@ -24,6 +24,7 @@ interface TypeScriptConfig {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "../..");
+const PACKAGE_NAME = "@anirudhsengar/agentify";
 
 function read(relativePath: string): string {
   return fs.readFileSync(path.join(REPO_ROOT, relativePath), "utf-8");
@@ -123,6 +124,8 @@ test("package guidance files referenced by shipped docs are published", () => {
   const packageJson = readPackageJson();
   const files = new Set(packageJson.files ?? []);
 
+  assert.equal(packageJson.name, PACKAGE_NAME);
+
   for (const requiredPath of [
     "bin",
     "dist",
@@ -139,6 +142,24 @@ test("package guidance files referenced by shipped docs are published", () => {
 
   assert.ok(!files.has("src"), "raw src must remain outside the npm artifact");
   assert.deepEqual(packageJson.exports, { "./package.json": "./package.json" });
+});
+
+test("installation documentation uses the scoped package while preserving the CLI", () => {
+  const readme = read("README.md");
+  const releaseDrafter = read(".github/release-drafter.yml");
+  const buildDocumentation = read("docs/build-and-package.md");
+  const releaseDocumentation = read("docs/release-process.md");
+
+  assert.match(readme, /npm install -g @anirudhsengar\/agentify/);
+  assert.match(readme, /npx @anirudhsengar\/agentify/);
+  assert.match(readme, /npmjs\.com\/package\/@anirudhsengar\/agentify/);
+  assert.match(readme, /node_modules\/@anirudhsengar\/agentify\/packaged\/skills/);
+  assert.doesNotMatch(readme, /npm install -g agentify(?:@|\s|$)/);
+  assert.doesNotMatch(readme, /\bnpx agentify(?:\s|$)/);
+  assert.match(releaseDrafter, /npm install -g @anirudhsengar\/agentify@\$RESOLVED_VERSION/);
+  assert.ok(buildDocumentation.includes("`@anirudhsengar/agentify`"));
+  assert.ok(releaseDocumentation.includes("`@anirudhsengar/agentify`"));
+  assert.match(readme, /^agentify$/m, "installed executable command must remain agentify");
 });
 
 test("binary and scripts preserve the compiled package boundary", () => {

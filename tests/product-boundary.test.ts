@@ -11,9 +11,11 @@ function read(relativePath: string): string {
 
 async function testPackageExposesOnlyCliRuntime(): Promise<void> {
   const packageJson = JSON.parse(read("package.json")) as {
+    name?: string;
     bin?: Record<string, string>;
     exports?: unknown;
   };
+  assert.equal(packageJson.name, "@anirudhsengar/agentify");
   assert.deepEqual(packageJson.bin, { agentify: "./bin/agentify.js" });
   assert.deepEqual(
     packageJson.exports,

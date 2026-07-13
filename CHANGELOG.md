@@ -11,11 +11,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Fixed
 
 - `v0.2.0` was tagged, but npm publication did not complete and no GitHub release was published. The workflow passed `release-artifact/agentify-0.2.0.tgz` as an ambiguous package specification, so npm interpreted it as GitHub shorthand instead of a local tarball path.
-- The publication workflow now resolves exactly one downloaded `./release-artifact/agentify-*.tgz` file and publishes that explicit local path, failing closed when zero or multiple tarballs are present.
+- The publication workflow now parses `npm pack --json --ignore-scripts`, requires exactly one result with a non-empty filename, verifies that exact tarball exists, and uploads it without assuming an unscoped filename. Publication and GitHub release jobs each require exactly one downloaded `./release-artifact/*.tgz`.
 
 ### Changed
 
 - `0.2.1` contains the complete release contents intended for `0.2.0`, together with the corrected artifact-publication workflow.
+- The unscoped `agentify` npm name is owned by another publisher, so the official package identity is now `@anirudhsengar/agentify`.
+- Installing the scoped package still exposes the executable command as `agentify`.
 
 ## [0.2.0] - 2026-07-13
 
