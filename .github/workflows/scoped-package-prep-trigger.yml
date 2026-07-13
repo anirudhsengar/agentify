@@ -45,7 +45,32 @@ jobs:
                   break
               script_lines.append(line[10:] if line.startswith('          ') else '')
 
-          Path('/tmp/scoped-package-apply.sh').write_text('\n'.join(script_lines) + '\n')
+          script = '\n'.join(script_lines) + '\n'
+          install_marker = '\nnpm install --package-lock-only --ignore-scripts\n'
+          release_drafter_update = r'''
+node --input-type=module <<'NODE'
+import fs from "node:fs";
+const file = ".github/release-drafter.yml";
+const before = fs.readFileSync(file, "utf8");
+const oldText = "npm install -g agentify@$RESOLVED_VERSION";
+const newText = "npm install -g @anirudhsengar/agentify@$RESOLVED_VERSION";
+if (!before.includes(oldText)) {
+  throw new Error(`Missing expected unscoped install command in ${file}`);
+}
+fs.writeFileSync(file, before.replace(oldText, newText));
+NODE
+'''
+          if install_marker not in script:
+              raise SystemExit('npm lockfile update marker was not found')
+          script = script.replace(install_marker, f'\n{release_drafter_update}{install_marker}', 1)
+
+          old_grep = "if git grep -n -E 'npm install -g agentify|npx agentify|npmjs\\.com/package/agentify|node_modules/agentify|parsed\\.name === \"agentify\"|release-artifact/agentify-\\*\\.tgz|path: agentify-\\*\\.tgz|files: release-artifact/agentify-\\*\\.tgz'; then"
+          new_grep = "if git grep -n -E 'npm install -g agentify|npx agentify|npmjs\\.com/package/agentify|node_modules/agentify|parsed\\.name === \"agentify\"|release-artifact/agentify-\\*\\.tgz|path: agentify-\\*\\.tgz|files: release-artifact/agentify-\\*\\.tgz' -- ':!.github/workflows/scoped-package-prep.yml' ':!.github/workflows/scoped-package-prep-trigger.yml' ':!tests/maintenance/documentation-invariants.test.ts'; then"
+          if old_grep not in script:
+              raise SystemExit('stale-reference grep command was not found')
+          script = script.replace(old_grep, new_grep, 1)
+
+          Path('/tmp/scoped-package-apply.sh').write_text(script)
           Path('/tmp/scoped-package-env.sh').write_text(
               '\n'.join(f'export {key}={shlex.quote(value)}' for key, value in values.items()) + '\n'
           )
@@ -72,6 +97,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
+            .github/release-drafter.yml \
             .github/workflows/release-publish.yml \
             CHANGELOG.md \
             README.md \
