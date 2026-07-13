@@ -1,9 +1,9 @@
 name: Phase A diagnostics
 
 on:
-  push:
+  pull_request:
     branches:
-      - migration/32a-legacy-detection
+      - main
 
 permissions:
   contents: read
