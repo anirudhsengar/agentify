@@ -2,74 +2,20 @@ name: CI
 
 on:
   push:
-    branches: [main, master, architecture/48-orchestrator-comms]
+    branches: [main, master]
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  issue48-apply-and-validate:
-    name: Apply and validate Issue 48 relocation
-    if: github.ref == 'refs/heads/architecture/48-orchestrator-comms'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: architecture/48-orchestrator-comms
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.19.0"
-          cache: npm
-      - run: npm ci
-      - name: Apply relocation edits
-        run: python scripts/issue-48-apply.py
-      - name: Verify relocation scope
-        shell: bash
-        run: |
-          set -euo pipefail
-          git diff --check
-          git diff --exit-code origin/main -- package.json package-lock.json
-          test ! -e src/core/coms
-          test -f src/core/orchestrator/comms/server.ts
-          test -f src/core/orchestrator/comms/registry.ts
-          test -f src/core/orchestrator/comms/types.ts
-      - run: npm run typecheck
-      - run: npm run test:maintenance
-      - run: npm run test:all
-      - run: npm run test:package
-      - run: npm run test:security-redteam
-      - run: npm run test:parity
-      - name: Inspect packed inventory
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm pack --json --ignore-scripts > /tmp/issue-48-pack.json
-          cat /tmp/issue-48-pack.json
-          node --input-type=module -e 'import fs from "node:fs"; const [artifact] = JSON.parse(fs.readFileSync("/tmp/issue-48-pack.json", "utf8")); fs.rmSync(artifact.filename, { force: true });'
-      - name: Commit validated relocation and remove temporary instrumentation
-        shell: bash
-        run: |
-          set -euo pipefail
-          git checkout origin/main -- .github/workflows/ci.yml
-          rm -f .github/workflows/issue-48-workspace-export.yml
-          rm -f scripts/issue-48-apply.py
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "refactor: relocate communications under orchestrator"
-          git push origin HEAD:architecture/48-orchestrator-comms
-
   typecheck:
     name: Typecheck
-    if: github.ref != 'refs/heads/architecture/48-orchestrator-comms'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,7 +28,6 @@ jobs:
 
   tests:
     name: Tests (Node ${{ matrix.node }})
-    if: github.ref != 'refs/heads/architecture/48-orchestrator-comms'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -99,7 +44,6 @@ jobs:
 
   dependency-audit:
     name: Production dependency audit
-    if: github.ref != 'refs/heads/architecture/48-orchestrator-comms'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -112,7 +56,6 @@ jobs:
 
   package-smoke:
     name: Modernization validation and packed package smoke
-    if: github.ref != 'refs/heads/architecture/48-orchestrator-comms'
     needs: [typecheck, tests, dependency-audit]
     runs-on: ubuntu-latest
     steps:
