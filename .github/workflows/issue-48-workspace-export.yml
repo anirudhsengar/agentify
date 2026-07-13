@@ -1,0 +1,24 @@
+name: Issue 48 workspace export (temporary)
+
+on:
+  push:
+    branches:
+      - architecture/48-orchestrator-comms
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive repository workspace
+        run: tar --exclude=.git -czf issue-48-workspace.tgz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: issue-48-workspace
+          path: issue-48-workspace.tgz
+          if-no-files-found: error
