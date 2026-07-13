@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
-      - name: Commit validated release changes
+      - name: Commit validated non-workflow changes
         shell: bash
         run: |
           if [[ "$(node -p 'require("./package.json").name')" == "@anirudhsengar/agentify" ]]; then
@@ -25,8 +25,8 @@ jobs:
           fi
 
           base64 --decode .github/scoped-package.patch.gz.b64 | gzip --decompress > /tmp/scoped-package.patch
-          git apply --check /tmp/scoped-package.patch
-          git apply /tmp/scoped-package.patch
+          git apply --check --exclude=.github/workflows/release-publish.yml /tmp/scoped-package.patch
+          git apply --exclude=.github/workflows/release-publish.yml /tmp/scoped-package.patch
           git diff --check
 
           git config user.name "github-actions[bot]"
