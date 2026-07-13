@@ -207,15 +207,22 @@ export function inspectAgentifyRepoState(
   if (manifestVerification.manifest) {
     const counts = inspectManifestSurfaceCounts(cwd, manifestVerification.manifest.files);
     const latestLogPath = findLatestLogPath(cwd, configDir);
+    const expectedSurface = manifestVerification.mode === "brownfield"
+      ? [...requiredBrownfieldFiles(stateDir), ...SCAFFOLD_EXPECTED]
+      : [...REQUIRED_GREENFIELD_FILES, ...SCAFFOLD_EXPECTED];
+    const manifestUnmanaged = new Set(manifestVerification.unmanaged);
+    const unmanagedExpected = collectUnmanaged(cwd, expectedSurface)
+      .filter((entry) => !manifestUnmanaged.has(entry));
     const missing = [
       ...manifestVerification.missing,
       ...manifestVerification.unmanaged.map((entry) => `${entry} (unmanaged)`),
+      ...unmanagedExpected.map((entry) => `${entry} (unmanaged)`),
       ...manifestVerification.mismatched.map((entry) => `${entry} (hash mismatch)`),
     ];
     return {
       stateDir,
       mode: manifestVerification.mode,
-      status: manifestVerification.valid ? "ready" : "partial",
+      status: manifestVerification.valid && unmanagedExpected.length === 0 ? "ready" : "partial",
       ...counts,
       missing,
       found: manifestVerification.found,
