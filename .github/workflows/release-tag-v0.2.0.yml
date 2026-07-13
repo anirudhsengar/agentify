@@ -1,0 +1,99 @@
+name: Tag Agentify 0.2.0
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, reopened, synchronize]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  tag-release:
+    runs-on: ubuntu-24.04
+    env:
+      TARGET_SHA: 3e1f8495275b94b0ef159ef9ac3a32c378ac361d
+      GREEN_RELEASE_HEAD: e7e5d21b286d84274150ffdd9fe6dad6f1af8b60
+      RELEASE_TAG: v0.2.0
+      TEMP_BRANCH: tmp-release-verification-do-not-use
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      TAG_PUSH_TOKEN: ${{ secrets.AGENT_PAT || secrets.RELEASE_PAT || secrets.GH_PAT || secrets.PAT }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out exact merged main commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify release metadata and green tree identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          main_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')
+          test "$main_sha" = "$TARGET_SHA"
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          test "$(git rev-parse "${GREEN_RELEASE_HEAD}^{tree}")" = "$(git rev-parse "${TARGET_SHA}^{tree}")"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+          if (pkg.version !== '0.2.0') throw new Error(`package version ${pkg.version}`);
+          if (lock.version !== '0.2.0' || lock.packages?.['']?.version !== '0.2.0') throw new Error('package-lock version mismatch');
+          if (!changelog.includes('## [Unreleased]\n\n## [0.2.0] - 2026-07-13')) throw new Error('changelog release heading or empty Unreleased section missing');
+          NODE
+
+      - name: Confirm exact release tree checks are green
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" > /tmp/runs.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const payload = JSON.parse(fs.readFileSync('/tmp/runs.json', 'utf8'));
+          const required = ['CI', 'codeql', 'Phase A diagnostics', 'labeler'];
+          const candidates = payload.workflow_runs
+            .filter((run) => run.head_sha === process.env.GREEN_RELEASE_HEAD && run.event === 'pull_request')
+            .sort((a, b) => b.run_number - a.run_number);
+          const latest = new Map();
+          for (const run of candidates) if (!latest.has(run.name)) latest.set(run.name, run);
+          for (const name of required) {
+            const run = latest.get(name);
+            if (!run) throw new Error(`missing ${name} run for exact release tree`);
+            if (run.status !== 'completed' || run.conclusion !== 'success') {
+              throw new Error(`${name} was ${run.status}/${run.conclusion}: ${run.html_url}`);
+            }
+            console.log(`${name}: success (${run.html_url})`);
+          }
+          NODE
+
+      - name: Create and push annotated release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TAG_PUSH_TOKEN:-}" ]; then
+            echo 'No repository PAT secret is available for a tag push that can trigger workflows.' >&2
+            exit 1
+          fi
+          remote="https://x-access-token:${TAG_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --tags "$remote" "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Tag ${RELEASE_TAG} already exists; refusing to move or recreate it." >&2
+            exit 1
+          fi
+          git config user.name 'Agentify Release Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git tag -a "$RELEASE_TAG" "$TARGET_SHA" -m 'Agentify 0.2.0'
+          git push "$remote" "refs/tags/${RELEASE_TAG}"
+
+      - name: Remove temporary PR and verification ref
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" -f state=closed
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${TEMP_BRANCH}"
