@@ -21,7 +21,7 @@
 /src/core/audit/schema.ts       @anirudhsengar
 /src/core/audit/prompts/        @anirudhsengar
 
-# Orchestrator and AIW (internal control plane).
+# Orchestrator, its owned communications transport, and AIW control plane.
 /src/core/orchestrator/         @anirudhsengar
 /src/core/aiw/                  @anirudhsengar
 
