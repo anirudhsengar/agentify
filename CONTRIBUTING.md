@@ -25,7 +25,7 @@ agentify/
 │       ├── audit/               # evidence collection, schemas, defense
 │       ├── security/            # execution-policy capability model
 │       ├── state-transaction.ts # provider-state transaction and recovery
-│       ├── orchestrator/        # internal experimental runtime
+│       ├── orchestrator/        # experimental runtime + owned communications transport
 │       ├── aiw/                 # internal experimental runtime
 │       └── webhook/             # internal experimental runtime
 ├── scaffold/                    # GitHub runtime installed into target repos
@@ -84,9 +84,10 @@ high-severity dependency audit, packed-package smoke tests, and CodeQL.
 - **One supported runtime surface.** The installed `agentify` command is the
   supported public runtime. New public behavior must enter through documented
   CLI commands or generated GitHub surfaces.
-- **Internal means internal.** Orchestrator, AIW, webhook, communications, and
-  Agent Expert modules remain experimental and are not package APIs. Follow
-  `docs/experimental-surfaces.md` before attempting to productize one.
+- **Internal means internal.** Orchestrator (including
+  `src/core/orchestrator/comms/`), AIW, webhook, and Agent Expert modules remain
+  experimental and are not package APIs. Follow `docs/experimental-surfaces.md`
+  before attempting to productize one.
 - **Dependencies flow toward stable layers.** Supported product modules may
   import supported or explicitly neutral infrastructure; neutral modules may not
   depend on experimental composition roots. Experimental runtimes may consume
