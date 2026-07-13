@@ -29,11 +29,11 @@ Both manual dispatch and tag pushes run the same verification job:
 1. install from the lockfile with `npm ci`;
 2. verify the tag when the event is a tag push;
 3. run typechecking and the complete test suite;
-4. run `npm pack --json --ignore-scripts`, require exactly one result with a non-empty filename, and confirm that exact tarball exists;
-5. install a tarball into a fresh temporary project;
-6. run the installed `agentify --help` and `agentify --version` commands;
-7. create the final release tarball;
-8. upload that tarball as a workflow artifact.
+4. run the installed-package smoke test, which packs into a temporary artifact, installs it into a clean project, and executes `agentify --help` and `agentify --version`;
+5. run the final `npm pack --json --ignore-scripts` command;
+6. require exactly one pack result with a non-empty filename and confirm that exact tarball exists;
+7. expose the filename as a step and job output;
+8. upload that exact tarball as the workflow artifact.
 
 The package smoke test is available independently as:
 
