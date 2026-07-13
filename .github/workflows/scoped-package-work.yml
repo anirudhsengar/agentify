@@ -1,0 +1,25 @@
+name: Scoped package worktree
+
+on:
+  push:
+    branches:
+      - release/0.2.1-scoped-package
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    name: Export branch worktree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive checkout
+        shell: bash
+        run: tar --exclude=.git -czf /tmp/agentify-worktree.tgz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentify-worktree
+          path: /tmp/agentify-worktree.tgz
+          if-no-files-found: error
+          retention-days: 1
