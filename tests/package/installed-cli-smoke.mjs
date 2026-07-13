@@ -76,7 +76,6 @@ try {
     "dist/webhook/",
     "dist/aiw/",
     "dist/orchestrator/",
-    "dist/coms/",
     "dist/agent-expert",
   ]) {
     assert.ok(
@@ -146,6 +145,7 @@ try {
     "webhook/index.ts",
     "aiw/index.ts",
     "orchestrator/host.ts",
+    "orchestrator/comms/server.ts",
     "coms/server.ts",
     "agent-expert.ts",
   ]) {
