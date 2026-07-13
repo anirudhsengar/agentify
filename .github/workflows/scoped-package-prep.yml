@@ -10,197 +10,21 @@ permissions:
 
 jobs:
   prepare:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: release/scoped-package-0.2.1
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.19.0"
-          cache: npm
       - name: Apply scoped package identity
-        shell: bash
         env:
-          RELEASE_WORKFLOW_B64: bmFtZTogcmVsZWFzZS1wdWJsaXNoCgpvbjoKICBwdXNoOgogICAgdGFnczoKICAgICAgLSAidiouKi4qIgogIHdvcmtmbG93X2Rpc3BhdGNoOgoKcGVybWlzc2lvbnM6CiAgY29udGVudHM6IHJlYWQKCmNvbmN1cnJlbmN5OgogIGdyb3VwOiByZWxlYXNlLSR7eyBnaXRodWIucmVmIH19CiAgY2FuY2VsLWluLXByb2dyZXNzOiBmYWxzZQoKam9iczoKICB2ZXJpZnk6CiAgICBuYW1lOiBWZXJpZnkgcmVsZWFzZSBhcnRpZmFjdAogICAgcnVucy1vbjogdWJ1bnR1LWxhdGVzdAogICAgb3V0cHV0czoKICAgICAgdGFyYmFsbC1maWxlbmFtZTogJHt7IHN0ZXBzLnBhY2sub3V0cHV0cy5maWxlbmFtZSB9fQogICAgc3RlcHM6CiAgICAgIC0gdXNlczogYWN0aW9ucy9jaGVja291dEB2NAogICAgICAtIHVzZXM6IGFjdGlvbnMvc2V0dXAtbm9kZUB2NAogICAgICAgIHdpdGg6CiAgICAgICAgICBub2RlLXZlcnNpb246ICIyMi4xOS4wIgogICAgICAgICAgY2FjaGU6IG5wbQogICAgICAtIG5hbWU6IEluc3RhbGwgZGVwZW5kZW5jaWVzCiAgICAgICAgcnVuOiBucG0gY2kKICAgICAgLSBuYW1lOiBWZXJpZnkgdGFnIG1hdGNoZXMgcGFja2FnZSB2ZXJzaW9uCiAgICAgICAgaWY6IGdpdGh1Yi5ldmVudF9uYW1lID09ICdwdXNoJyAmJiBzdGFydHNXaXRoKGdpdGh1Yi5yZWYsICdyZWZzL3RhZ3MvdiðpCiAgICAgICAgcnVuOiBub2RlIC5naXRodWIvc2NyaXB0cy92ZXJpZnktcmVsZWFzZS10YWcubWpzICIke0dJVEhVQl9SRUZfTkFNRX0iCiAgICAgIC0gbmFtZTogVHlwZWNoZWNrIGFuZCB0ZXN0cwogICAgICAgIHJ1bjogbnBtIHRlc3QKICAgICAgLSBuYW1lOiBJbnN0YWxsIHBhY2tlZCBDTEkgYW5kIHNtb2tlIHRlc3QKICAgICAgICBydW46IG5wbSBydW4gdGVzdDpwYWNrYWdlCiAgICAgIC0gbmFtZTogQnVpbGQgcmVsZWFzZSB0YXJiYWxsCiAgICAgICAgaWQ6IHBhY2sKICAgICAgICBzaGVsbDogYmFzaAogICAgICAgIHJ1bjogfAogICAgICAgICAgbnBtIHBhY2sgLS1qc29uIC0taWdub3JlLXNjcmlwdHMgPiBwYWNrLXJlc3VsdC5qc29uCgogICAgICAgICAgZmlsZW5hbWU9IiQoCiAgICAgICAgICAgIG5vZGUgLS1pbnB1dC10eXBlPW1vZHVsZSA8PCdOT0RFJwogICAgICAgICAgICBpbXBvcnQgZnMgZnJvbSAibm9kZTpmcyI7CgogICAgICAgICAgICBjb25zdCByZXN1bHQgPSBKU09OLnBhcnNlKGZzLnJlYWRGaWxlU3luYygicGFjay1yZXN1bHQuanNvbiIsICJ1dGY4IikpOwogICAgICAgICAgICBpZiAoIUFycmF5LmlzQXJyYXkocmVzdWx0KSB8fCByZXN1bHQubGVuZ3RoICE9PSAxKSB7CiAgICAgICAgICAgICAgdGhyb3cgbmV3IEVycm9yKGBFeHBlY3RlZCBleGFjdGx5IG9uZSBucG0gcGFjayByZXN1bHQsIGZvdW5kICR7QXJyYXkuaXNBcnJheShyZXN1bHQpID8gcmVzdWx0Lmxlbmd0aCA6ICJub24tYXJyYXkifWApOwogICAgICAgICAgICB9CgogICAgICAgICAgICBjb25zdCBmaWxlbmFtZSA9IHJlc3VsdFswXT8uZmlsZW5hbWU7CiAgICAgICAgICAgIGlmICh0eXBlb2YgZmlsZW5hbWUgIT09ICJzdHJpbmciIHx8IGZpbGVuYW1lLnRyaW0oKSA9PT0gIiIpIHsKICAgICAgICAgICAgICB0aHJvdyBuZXcgRXJyb3IoIm5wbSBwYWNrIHJlc3VsdCBkaWQgbm90IGluY2x1ZGUgYSBub24tZW1wdHkgZmlsZW5hbWUiKTsKICAgICAgICAgICAgfQoKICAgICAgICAgICAgcHJvY2Vzcy5zdGRvdXQud3JpdGUoZmlsZW5hbWUpOwogICAgICAgICAgICBOT0RFCiAgICAgICAgICApIgoKICAgICAgICAgIGlmIFtbICEgLWYgIiRmaWxlbmFtZSIgXV07IHRoZW4KICAgICAgICAgICAgZWNobyAiUGFja2VkIHRhcmJhbGwgZG9lcyBub3QgZXhpc3Q6ICRmaWxlbmFtZSIgPiYyCiAgICAgICAgICAgIGV4aXQgMQogICAgICAgICAgZmkKCiAgICAgICAgICBwcmludGYgJ2ZpbGVuYW1lPSVzXG4nICIkZmlsZW5hbWUiID4+ICIkR0lUSFVCX09VVFBVVCIKICAgICAgLSBuYW1lOiBVcGxvYWQgdmVyaWZpZWQgdGFyYmFsbAogICAgICAgIHVzZXM6IGFjdGlvbnMvdXBsb2FkLWFydGlmYWN0QHY0CiAgICAgICAgd2l0aDoKICAgICAgICAgIG5hbWU6IG5wbS1wYWNrYWdlLSR7eyBnaXRodWIucmVmX25hbWUgfX0KICAgICAgICAgIHBhdGg6ICR7eyBzdGVwcy5wYWNrLm91dHB1dHMuZmlsZW5hbWUgfX0KICAgICAgICAgIGlmLW5vLWZpbGVzLWZvdW5kOiBlcnJvcgogICAgICAgICAgcmV0ZW50aW9uLWRheXM6IDcKCiAgcHVibGlzaC1ucG06CiAgICBuYW1lOiBQdWJsaXNoIHZlcmlmaWVkIHRhcmJhbGwgdG8gbnBtCiAgICBpZjogZ2l0aHViLmV2ZW50X25hbWUgPT0gJ3B1c2gnICYmIHN0YXJ0c1dpdGgoZ2l0aHViLnJlZiwgJ3JlZnMvdGFncy92JykKICAgIG5lZWRzOiB2ZXJpZnkKICAgIHJ1bnMtb246IHVidW50dS1sYXRlc3QKICAgIHBlcm1pc3Npb25zOgogICAgICBjb250ZW50czogcmVhZAogICAgICBpZC10b2tlbjogd3JpdGUKICAgIGVudmlyb25tZW50OgogICAgICBuYW1lOiBucG0KICAgICAgdXJsOiBodHRwczovL3d3dy5ucG1qcy5jb20vcGFja2FnZS9AYW5pcnVkaHNlbmdhci9hZ2VudGlmeQogICAgc3RlcHM6CiAgICAgIC0gdXNlczogYWN0aW9ucy9zZXR1cC1ub2RlQHY0CiAgICAgICAgd2l0aDoKICAgICAgICAgIG5vZGUtdmVyc2lvbjogIjIyLjE5LjAiCiAgICAgICAgICByZWdpc3RyeS11cmw6ICJodHRwczovL3JlZ2lzdHJ5Lm5wbWpzLm9yZyIKICAgICAgLSB1c2VzOiBhY3Rpb25zL2Rvd25sb2FkLWFydGlmYWN0QHY0CiAgICAgICAgd2l0aDoKICAgICAgICAgIG5hbWU6IG5wbS1wYWNrYWdlLSR7eyBnaXRodWIucmVmX25hbWUgfX0KICAgICAgICAgIHBhdGg6IHJlbGVhc2UtYXJ0aWZhY3QKICAgICAgLSBuYW1lOiBQdWJsaXNoIGV4YWN0IHZlcmlmaWVkIGFydGlmYWN0CiAgICAgICAgc2hlbGw6IGJhc2gKICAgICAgICBydW46IHwKICAgICAgICAgIHNob3B0IC1zIG51bGxnbG9iCiAgICAgICAgICB0YXJiYWxscz0oLi9yZWxlYXNlLWFydGlmYWN0LyoudGd6KQoKICAgICAgICAgIGlmICgoICR7I3RhcmJhbGxzW0BdfSAhPSAxICkpOyB0aGVuCiAgICAgICAgICAgIGVjaG8gIkV4cGVjdGVkIGV4YWN0bHkgb25lIHJlbGVhc2UgdGFyYmFsbCwgZm91bmQgJHsjdGFyYmFsbHNbQF19IiA+JjIKICAgICAgICAgICAgcHJpbnRmICclc1xuJyAiJHt0YXJiYWxsc1tAXX0iID4mMgogICAgICAgICAgICBleGl0IDEKICAgICAgICAgIGZpCgogICAgICAgICAgbnBtIHB1Ymxpc2ggIiR7dGFyYmFsbHNbMF19IiAtLXByb3ZlbmFuY2UgLS1hY2Nlc3MgcHVibGljCiAgICAgICAgZW52OgogICAgICAgICAgTk9ERV9BVVRIX1RPS0VOOiAke3sgc2VjcmV0cy5OUE1fVE9LRU4gfX0KCiAgZ2l0aHViLXJlbGVhc2U6CiAgICBuYW1lOiBQdWJsaXNoIEdpdEh1YiByZWxlYXNlCiAgICBpZjogZ2l0aHViLmV2ZW50X25hbWUgPT0gJ3B1c2gnICYmIHN0YXJ0c1dpdGgoZ2l0aHViLnJlZiwgJ3JlZnMvdGFncy92JykKICAgIG5lZWRzOiBwdWJsaXNoLW5wbQogICAgcnVucy1vbjogdWJ1bnR1LWxhdGVzdAogICAgcGVybWlzc2lvbnM6CiAgICAgIGNvbnRlbnRzOiB3cml0ZQogICAgc3RlcHM6CiAgICAgIC0gdXNlczogYWN0aW9ucy9kb3dubG9hZC1hcnRpZmFjdEB2NAogICAgICAgIHdpdGg6CiAgICAgICAgICBuYW1lOiBucG0tcGFja2FnZS0ke3sgZ2l0aHViLnJlZl9uYW1lIH19CiAgICAgICAgICBwYXRoOiByZWxlYXNlLWFydGlmYWN0CiAgICAgIC0gbmFtZTogUmVzb2x2ZSBleGFjdCB2ZXJpZmllZCBhcnRpZmFjdAogICAgICAgIGlkOiByZWxlYXNlLWFydGlmYWN0CiAgICAgICAgc2hlbGw6IGJhc2gKICAgICAgICBydW46IHwKICAgICAgICAgIHNob3B0IC1zIG51bGxnbG9iCiAgICAgICAgICB0YXJiYWxscz0oLi9yZWxlYXNlLWFydGlmYWN0LyoudGd6KQoKICAgICAgICAgIGlmICgoICR7I3RhcmJhbGxzW0BdfSAhPSAxICkpOyB0aGVuCiAgICAgICAgICAgIGVjaG8gIkV4cGVjdGVkIGV4YWN0bHkgb25lIHJlbGVhc2UgdGFyYmFsbCwgZm91bmQgJHsjdGFyYmFsbHNbQF19IiA+JjIKICAgICAgICAgICAgcHJpbnRmICclc1xuJyAiJHt0YXJiYWxsc1tAXX0iID4mMgogICAgICAgICAgICBleGl0IDEKICAgICAgICAgIGZpCgogICAgICAgICAgcHJpbnRmICdwYXRoPSVzXG4nICIke3RhcmJhbGxzWzBdfSIgPj4gIiRHSVRIVUJfT1VUUFVUIgogICAgICAtIG5hbWU6IFB1Ymxpc2ggcmVsZWFzZSB3aXRoIHZlcmlmaWVkIGFydGlmYWN0CiAgICAgICAgdXNlczogc29mdHByb3BzL2FjdGlvbi1naC1yZWxlYXNlQHYzCiAgICAgICAgd2l0aDoKICAgICAgICAgIHRhZ19uYW1lOiAke3sgZ2l0aHViLnJlZl9uYW1lIH19CiAgICAgICAgICBnZW5lcmF0ZV9yZWxlYXNlX25vdGVzOiB0cnVlCiAgICAgICAgICBkcmFmdDogZmFsc2UKICAgICAgICAgIHByZXJlbGVhc2U6ICR7eyBjb250YWlucyhnaXRodWIucmVmX25hbWUsICctJykgfX0KICAgICAgICAgIGZpbGVzOiAke3sgc3RlcHMucmVsZWFzZS1hcnRpZmFjdC5vdXRwdXRzLnBhdGggfX0KICAgICAgICBlbnY6CiAgICAgICAgICBHSVRIVUJfVE9LRU46ICR7eyBzZWNyZXRzLkdJVEhVQl9UT0tFTiB9fQo=
-          RELEASE_SAFETY_B64: aW1wb3J0IGFzc2VydCBmcm9tICJub2RlOmFzc2VydC9zdHJpY3QiOwppbXBvcnQgeyBzcGF3blN5bmMgfSBmcm9tICJub2RlOmNoaWxkX3Byb2Nlc3MiOwppbXBvcnQgKiBhcyBmcyBmcm9tICJub2RlOmZzIjsKaW1wb3J0ICogYXMgcGF0aCBmcm9tICJub2RlOnBhdGgiOwoKY29uc3QgcmVwb1Jvb3QgPSBwYXRoLnJlc29sdmUoaW1wb3J0Lm1ldGEuZGlybmFtZSwgIi4uIik7CgpmdW5jdGlvbiByZWFkKHJlbGF0aXZlUGF0aDogc3RyaW5nKTogc3RyaW5nIHsKICByZXR1cm4gZnMucmVhZEZpbGVTeW5jKHBhdGguam9pbihyZXBvUm9vdCwgcmVsYXRpdmVQYXRoKSwgInV0Zi04Iik7Cn0KCmZ1bmN0aW9uIGpvYkJsb2NrKHdvcmtmbG93OiBzdHJpbmcsIGpvYk5hbWU6IHN0cmluZywgbmV4dEpvYj86IHN0cmluZyk6IHN0cmluZyB7CiAgY29uc3Qgc3RhcnRNYXJrZXIgPSBgXG4gICR7am9iTmFtZX06YDsKICBjb25zdCBzdGFydCA9IHdvcmtmbG93LmluZGV4T2Yoc3RhcnRNYXJrZXIpOwogIGFzc2VydC5ub3RFcXVhbChzdGFydCwgLTEsIGBtaXNzaW5nIHdvcmtmbG93IGpvYjogJHtqb2JOYW1lfWApOwogIGNvbnN0IGVuZCA9IG5leHRKb2IKICAgID8gd29ya2Zsb3cuaW5kZXhPZihgXG4gICR7bmV4dEpvYn06YCwgc3RhcnQgKyBzdGFydE1hcmtlci5sZW5ndGgpCiAgICA6IHdvcmtmbG93Lmxlbmd0aDsKICBhc3NlcnQub2soZW5kID4gc3RhcnQsIGBjb3VsZCBub3QgaXNvbGF0ZSB3b3JrZmxvdyBqb2I6ICR7am9iTmFtZX1gKTsKICByZXR1cm4gd29ya2Zsb3cuc2xpY2Uoc3RhcnQsIGVuZCk7Cn0KCmZ1bmN0aW9uIHJ1blRhZ0NoZWNrKHRhZzogc3RyaW5nKSB7CiAgcmV0dXJuIHNwYXduU3luYyh1cHJvY2Vzcy5leGVjUGF0aCwgWyIuZ2l0aHViL3NjcmlwdHMvdmVyaWZ5LXJlbGVhc2UtdGFnLm1qcyIsIHRhZ10sIHsKICAgIGN3ZDogcmVwb1Jvb3QsCiAgICBlbmNvZGluZzogInV0Zi04IiwKICB9KTsKfQoKYXN5bmMgZnVuY3Rpb24gdGVzdFJlbGVhc2VKb2JzQXJlVGFnT25seSgpOiBQcm9taXNlPHZvaWQ+IHsKICBjb25zdCB3b3JrZmxvdyA9IHJlYWQoIi5naXRodWIvd29ya2Zsb3dzL3JlbGVhc2UtcHVibGlzaC55bWwiKTsKICBhc3NlcnQubWF0Y2god29ya2Zsb3csIC93b3JrZmxvd19kaXNwYXRjaDovKTsKICBhc3NlcnQubWF0Y2god29ya2Zsb3csIC9wZXJtaXNzaW9uczpccG4gIGNvbnRlbnRzOiByZWFkLyk7CgogIGNvbnN0IHB1Ymxpc2ggPSBqb2JCbG9jayh3b3JrZmxvdywgInB1Ymxpc2gtbnBtIiwgImdpdGh1Yi1yZWxlYXNlIik7CiAgY29uc3QgcmVsZWFzZSA9IGpvYkJsb2NrKHdvcmtmbG93LCAiZ2l0aHViLXJlbGVhc2UiKTsKICBmb3IgKGNvbnN0IFtuYW1lLCBibG9ja10gb2YgW1sicHVibGlzaC1ucG0iLCBwdWJsaXNoXSwgWyJnaXRodWItcmVsZWFzZSIsIHJlbGVhc2VdXSBhcyBjb25zdCkgewogICAgY29uc3QgY29uZGl0aW9uID0gYmxvY2subWF0Y2goL1xuICAgIGlmOlxzKihbXlxuXSspLyk/LlsxXSA/PyAiIjsKICAgIGFzc2VydC5tYXRjaChjb25kaXRpb24sIC9naXRodWJcLmV2ZW50X25hbWUgPT0gJ3B1c2gnLywgYCR7bmFtZX0gbXVzdCByZWplY3QgbWFudWFsIGRpc3BhdGNoYCk7CiAgICBhc3NlcnQubWF0Y2goY29uZGl0aW9uLCAvc3RhcnRzV2l0aFwoZ2l0aHViXC5yZWYsICdyZWZzXC90YWdzXC92J1wpLywgYCR7bmFtZX0gbXVzdCByZXF1aXJlIGEgdmVyc2lvbiB0YWdgKTsKICB9Cn0KCmFzeW5jIGZ1bmN0aW9uIHRlc3RTY29wZWRQYWNrYWdlSWRlbnRpdHlJc1N0YWJsZSgpOiBQcm9taXNlPHZvaWQ+IHsKICBjb25zdCBwYWNrYWdlSnNvbiA9IEpTT04ucGFyc2UocmVhZCgicGFja2FnZS5qc29uIikpIGFzIHsKICAgIG5hbWU/OiBzdHJpbmc7CiAgICB2ZXJzaW9uPzogc3RyaW5nOwogICAgYmluPzogUmVjb3JkPHN0cmluZywgc3RyaW5nPjsKICB9OwogIGNvbnN0IHBhY2thZ2VMb2NrID0gSlNPTi5wYXJzZShyZWFkKCJwYWNrYWdlLWxvY2suanNvbiIpKSBhcyB7CiAgICBuYW1lPzogc3RyaW5nOwogICAgdmVyc2lvbj86IHN0cmluZzsKICAgIHBhY2thZ2VzPzogUmVjb3JkPHN0cmluZywgeyBuYW1lPzogc3RyaW5nOyB2ZXJzaW9uPzogc3RyaW5nIH0+OwogIH07CgogIGFzc2VydC5lcXVhbChwYWNrYWdlSnNvbi5uYW1lLCAiQGFuaXJ1ZGhzZW5nYXIvYWdlbnRpZnkiKTsKICBhc3NlcnQuZXF1YWwocGFja2FnZUpzb24udmVyc2lvbiwgIjAuMi4xIik7CiAgYXNzZXJ0LmRlZXBFcXVhbChwYWNrYWdlSnNvbi5iaW4sIHsgYWdlbnRpZnk6ICIuL2Jpbi9hZ2VudGlmeS5qcyIgfSk7CiAgYXNzZXJ0LmVxdWFsKHBhY2thZ2VMb2NrLm5hbWUsIHBhY2thZ2VKc29uLm5hbWUpOwogIGFzc2VydC5lcXVhbChwYWNrYWdlTG9jay52ZXJzaW9uLCBwYWNrYWdlSnNvbi52ZXJzaW9uKTsKICBhc3NlcnQuZXF1YWwocGFja2FnZUxvY2sucGFja2FnZXM/LlsiIl0/Lm5hbWUsIHBhY2thZ2VKc29uLm5hbWUpOwogIGFzc2VydC5lcXVhbChwYWNrYWdlTG9jay5wYWNrYWdlcz8uWyIiXT8udmVyc2lvbiwgcGFja2FnZUpzb24udmVyc2lvbik7Cn0KCmFzeW5jIGZ1bmN0aW9uIHRlc3RFeGFjdFZlcmlmaWVkQXJ0aWZhY3RJc1B1Ymxpc2hlZCgpOiBQcm9taXNlPHZvaWQ+IHsKICBjb25zdCB3b3JrZmxvdyA9IHJlYWQoIi5naXRodWIvd29ya2Zsb3dzL3JlbGVhc2UtcHVibGlzaC55bWwiKTsKICBjb25zdCB2ZXJpZnkgPSBqb2JCbG9jayh3b3JrZmxvdywgInZlcmlmeSIsICJwdWJsaXNoLW5wbSIpOwogIGNvbnN0IHB1Ymxpc2ggPSBqb2JCbG9jayh3b3JrZmxvdywgInB1Ymxpc2gtbnBtIiwgImdpdGh1Yi1yZWxlYXNlIik7CiAgY29uc3QgcmVsZWFzZSA9IGpvYkJsb2NrKHdvcmtmbG93LCAiZ2l0aHViLXJlbGVhc2UiKTsKCiAgYXNzZXJ0Lm1hdGNoKHZlcmlmeSwgL291dHB1dHM6XG5ccyt0YXJiYWxsLWZpbGVuYW1lOiBcJFwte1wkeyBzdGVwc1wucGFja1wub3V0cHV0c1wuZmlsZW5hbWUgXF19Lyk7CiAgYXNzZXJ0Lm1hdGNoKHZlcmlmeSwgL2lkOiBwYWNrLyk7CiAgYXNzZXJ0Lm1hdGNoKHZlcmlmeSwgL25wbSBwYWNrIC0tanNvbiAtLWlnbm9yZS1zY3JpcHRzID4gcGFjay1yZXN1bHRcLmpzb24vKTsKICBhc3NlcnQubWF0Y2godmVyaWZ5LCAvSlNPTlwucGFyc2VcKGZzXC5yZWFkRmlsZVN5bmNcKCJwYWNrLXJlc3VsdFwuanNvbiIsICJ1dGY4IlwpXCkvKTsKICBhc3NlcnQubWF0Y2godmVyaWZ5LCAvcmVzdWx0XC5sZW5ndGggIT09IDEvKTsKICBhc3NlcnQubWF0Y2godmVyaWZ5LCAvbm9uLWVtcHR5IGZpbGVuYW1lLyk7CiAgYXNzZXJ0Lm1hdGNoKHZlcmlmeSwgL1xbXFsgISAtZiAiXCRmaWxlbmFtZSIgXF1cXS8pOwogIGFzc2VydC5tYXRjaCh2ZXJpZnksIC9maWxlbmFtZT0lc1xcbi8pOwogIGFzc2VydC5tYXRjaCh2ZXJpZnksIC9wYXRoOiBcJFwte1wkeyBzdGVwc1wucGFja1wub3V0cHV0c1wuZmlsZW5hbWUgXF19Lyk7CiAgYXNzZXJ0LmRvZXNOb3RNYXRjaCh2ZXJpZnksIC9wYXRoOlxzKmFnZW50aWZ5LVwqXC50Z3ovKTsKCiAgYXNzZXJ0Lm1hdGNoKHB1Ymxpc2gsIC9hY3Rpb25zXC9kb3dubG9hZC1hcnRpZmFjdEB2NC8pOwogIGFzc2VydC5tYXRjaChwdWJsaXNoLCAvc2hvcHQgLXMgbnVsbGdsb2IvKTsKICBhc3NlcnQubWF0Y2gocHVibGlzaCwgL3RhcmJhbGxzPVwoXC5cL3JlbGVhc2UtYXJ0aWZhY3RcL1wqXC50Z3pcKS8pOwogIGFzc2VydC5tYXRjaChwdWJsaXNoLCAvXCRceyN0YXJiYWxsc1xbQFxdXSBhIT0gMS8pOwogIGFzc2VydC5tYXRjaChwdWJsaXNoLCAvbnBtIHB1Ymxpc2ggIlwkXHt0YXJiYWxsc1xbMFxdXSIgLS1wcm92ZW5hbmNlIC0tYWNjZXNzIHB1YmxpYy8pOwogIGFzc2VydC5kb2VzTm90TWF0Y2gocHVibGlzaCwgL25wbVxzKyg/OnBhY2t8cnVuXHMtYnVpbGQpLywgInB1Ymxpc2ggam9iIG11c3Qgbm90IHJlYnVpbGQgb3IgcmVwYWNrIik7CiAgYXNzZXJ0LmRvZXNOb3RNYXRjaChwdWJsaXNoLCAvYWdlbnRpZnktXCpcLnRnei8pOwoKICBhc3NlcnQubWF0Y2gocmVsZWFzZSwgL2FjdGlvbnNcL2Rvd25sb2FkLWFydGlmYWN0QHY0Lyk7CiAgYXNzZXJ0Lm1hdGNoKHJlbGVhc2UsIC90YXJiYWxscz1cKFwuXC9yZWxlYXNlLWFydGlmYWN0XC9cKlwudGd6XCkvKTsKICBhc3NlcnQubWF0Y2gocmVsZWFzZSwgL1wkXHsj dGFyYmFsbHNcW0BcXV0gIT0gMS8pOwogIGFzc2VydC5tYXRjaChyZWxlYXNlLCAvcGF0aD0lc1xcbi8pOwogIGFzc2VydC5tYXRjaChyZWxlYXNlLCAvZmlsZXM6IFwkXHsgc3RlcHNcLnJlbGVhc2UtYXJ0aWZhY3RcLm91dHB1dHNcLnBhdGggXH19Lyk7CiAgYXNzZXJ0LmRvZXNOb3RNYXRjaChyZWxlYXNlLCAvYWdlbnRpZnktXCpcLnRnei8pOwoKICBhc3NlcnQuZG9lc05vdE1hdGNoKHdvcmtmbG93LCAvcmVsZWFzZS1hcnRpZmFjdFwvYWdlbnRpZnktXCpcLnRnei8pOwogIGFzc2VydC5tYXRjaCh3b3JrZmxvdywgL2h0dHBzOlxcL1xcL3d3d1wubnBtanNcLmNvbVwvcGFja2FnZVwvQGFuaXJ1ZGh zZW5nYXJcL2FnZW50aWZ5Lyk7Cn0KCmFzeW5jIGZ1bmN0aW9uIHRlc3RUYWdWZXJzaW9uVmFsaWRhdGlvbigpOiBQcm9taXNlPHZvaWQ+IHsKICBjb25zdCBwYWNrYWdlSnNvbiA9IEpTT04ucGFyc2UocmVhZCgicGFja2FnZS5qc29uIikpIGFzIHsgdmVyc2lvbjogc3RyaW5nIH07CiAgY29uc3QgdmFsaWQgPSBydW5UYWdDaGVjayhgdiR7cGFja2FnZUpzb24udmVyc2lvbn1gKTsKICBhc3NlcnQuZXF1YWwodmFsaWQuc3RhdHVzLCAwLCB2YWxpZC5zdGRlcnIpOwoKICBjb25zdCBtaXNtYXRjaCA9IHJ1blRhZ0NoZWNrKCJ2OTkuOTkuOTkiKTsKICBhc3NlcnQubm90RXF1YWwobWlzbWF0Y2guc3RhdHVzLCAwKTsKICBhc3NlcnQubWF0Y2gobWlzbWF0Y2guc3RkZXJyLCAvZG9lcyBub3QgbWF0Y2ggcGFja2FnZVwuanNvbiB2ZXJzaW9uLyk7CgogIGNvbnN0IG1hbGZvcm1lZCA9IHJ1blRhZ0NoZWNrKCJtYWluIik7CiAgYXNzZXJ0Lm5vdEVxdWFsKG1hbGZvcm1lZC5zdGF0dXMsIDApOwogIGFzc2VydC5tYXRjaChtYWxmb3JtZWQuc3RkZXJyLCAvdmFsaWQgc2VtdmVyIHByZWZpeGVkIHdpdGggdi8pOwp9Cgphc3luYyBmdW5jdGlvbiB0ZXN0Q2lTZXBhcmF0ZXNDb25jZXJuc0FuZENvdmVyc0VuZ2luZXMoKTogUHJvbWlzZTx2b2lkPiB7CiAgY29uc3Qgd29ya2Zsb3cgPSByZWFkKCIuZ2l0aHViL3dvcmtmbG93cy9jaS55bWwiKTsKICBhc3NlcnQubWF0Y2god29ya2Zsb3csIC90eXBlY2hlY2s6Lyk7CiAgYXNzZXJ0Lm1hdGNoKHdvcmtmbG93LCAvdGVzdHM6Lyk7CiAgYXNzZXJ0Lm1hdGNoKHdvcmtmbG93LCAvZGVwZW5kZW5jeS1hdWRpdDovKTsKICBhc3NlcnQubWF0Y2god29ya2Zsb3csIC9wYWNrYWdlLXNtb2tlOi8pOwogIGFzc2VydC5tYXRjaCh3b3JrZmxvdywgL25vZGU6IFxbIjIyXC4xOVwuMCIsICIyNCJcXS8pOwogIGFzc2VydC5tYXRjaCh3b3JrZmxvdywgL25wbSBydW4gdGVzdDphbGwvKTsKICBhc3NlcnQubWF0Y2god29ya2Zsb3csIC9ucG0gcnVuIHRlc3Q6cGFja2FnZS8pOwogIGFzc2VydC5tYXRjaCh3b3JrZmxvdywgL25wbSBhdWRpdCAtLW9taXQ9ZGV2IC0tYXVkaXQtbGV2ZWw9aGlnaC8pOwoKICBjb25zdCBwYWNrYWdlSnNvbiA9IEpTT04ucGFyc2UocmVhZCgicGFja2FnZS5qc29uIikpIGFzIHsKICAgIHNjcmlwdHM/OiBSZWNvcmQ8c3RyaW5nLCBzdHJpbmc+OwogIH07CiAgYXNzZXJ0LmVxdWFsKHBhY2thZ2VKc29uLnNjcmlwdHM/LlsidGVzdDpwYWNrYWdlIl0sICJub2RlIHRlc3RzL3BhY2thZ2UvaW5zdGFsbGVkLWNsaS1zbW9rZS5tanMiKTsKICBhc3NlcnQubWF0Y2gocGFja2FnZUpzb24uc2NyaXB0cz8uWyJyZWxlYXNlOmNoZWNrIl0gPz8gIiIsIC90ZXN0OnBhY2thZ2UvKTsKICBhc3NlcnQubWF0Y2gocGFja2FnZUpzb24uc2NyaXB0cz8uWyJ0ZXN0Om1haW50ZW5hbmNlIl0gPz8gIiIsIC90ZXN0c1wvcmVsZWFzZS1zYWZldHlcLnRlc3RcLnRzLyk7Cn0KCmNvbnN0IHRlc3RzOiBBcnJheTx7IG5hbWU6IHN0cmluZzsgZm46ICgpID0+IFByb21pc2U8dm9pZD4gfT4gPSBbCiAgeyBuYW1lOiAicmVsZWFzZUpvYnNBcmVUYWdPbmx5IiwgZm46IHRlc3RSZWxlYXNlSm9ic0FyZVRhZ09ubHkgfSwKICB7IG5hbWU6ICJzY29wZWRQYWNrYWdlSWRlbnRpdHlJc1N0YWJsZSIsIGZuOiB0ZXN0U2NvcGVkUGFja2FnZUlkZW50aXR5SXNTdGFibGUgfSwKICB7IG5hbWU6ICJleGFjdFZlcmlmaWVkQXJ0aWZhY3RJc1B1Ymxpc2hlZCIsIGZuOiB0ZXN0RXhhY3RWZXJpZmllZEFydGlmYWN0SXNQdWJsaXNoZWQgfSwKICB7IG5hbWU6ICJ0YWdWZXJzaW9uVmFsaWRhdGlvbiIsIGZuOiB0ZXN0VGFnVmVyc2lvblZhbGlkYXRpb24gfSwKICB7IG5hbWU6ICJjaVNlcGFyYXRlc0NvbmNlcm5zQW5kQ292ZXJzRW5naW5lcyIsIGZuOiB0ZXN0Q2lTZXBhcmF0ZXNDb25jZXJuc0FuZENvdmVyc0VuZ2luZXMgfSwKXTsKCmxldCBwYXNzZWQgPSAwOwpmb3IgKGNvbnN0IHRlc3Qgb2YgdGVzdHMpIHsKICB0cnkgewogICAgYXdhaXQgdGVzdC5mbigpOwogICAgcGFzc2VkICs9IDE7CiAgICBjb25zb2xlLmxvZyhgICBvayAke3Rlc3QubmFtZX1gKTsKICB9IGNhdGNoIChlcnJvcikgewogICAgY29uc29sZS5lcnJvcihgICBGQUlMICR7dGVzdC5uYW1lfTogJHsoZXJyb3IgYXMgRXJyb3IpLm1lc3NhZ2V9YCk7CiAgICBpZiAoKGVycm9yIGFzIEVycm9yKS5zdGFjaykgY29uc29sZS5lcnJvcigoZXJyb3IgYXMgRXJyb3IpLnN0YWNrKTsKICAgIHByb2Nlc3MuZXhpdCgxKTsKICB9Cn0KY29uc29sZS5sb2coYHJlbGVhc2Utc2FmZXR5IHRlc3RzIHBhc3NlZCAoJHtwYXNzZWR9LyR7dGVzdHMubGVuZ3RofSkuYCk7Cg==
+          RELEASE_WORKFLOW_B64: WA==
+          RELEASE_SAFETY_B64: WA==
         run: |
-          node --input-type=module <<'NODE'
-          import fs from "node:fs";
-
-          function read(path) {
-            return fs.readFileSync(path, "utf8");
-          }
-
-          function write(path, content) {
-            fs.writeFileSync(path, content);
-          }
-
-          function replaceOnce(path, oldText, newText) {
-            const before = read(path);
-            if (!before.includes(oldText)) {
-              throw new Error(`Missing expected text in ${path}: ${oldText}`);
-            }
-            const after = before.replace(oldText, newText);
-            if (after === before) throw new Error(`Replacement made no change in ${path}`);
-            write(path, after);
-          }
-
-          const packageJson = JSON.parse(read("package.json"));
-          packageJson.name = "@anirudhsengar/agentify";
-          write("package.json", `${JSON.stringify(packageJson, null, 2)}\n`);
-
-          write(
-            ".github/workflows/release-publish.yml",
-            Buffer.from(process.env.RELEASE_WORKFLOW_B64, "base64").toString("utf8"),
-          );
-          write(
-            "tests/release-safety.test.ts",
-            Buffer.from(process.env.RELEASE_SAFETY_B64, "base64").toString("utf8"),
-          );
-
-          replaceOnce(
-            "README.md",
-            "[![npm](https://img.shields.io/npm/v/agentify)](https://www.npmjs.com/package/agentify)",
-            "[![npm](https://img.shields.io/npm/v/%40anirudhsengar%2Fagentify)](https://www.npmjs.com/package/@anirudhsengar/agentify)",
-          );
-          replaceOnce(
-            "README.md",
-            "[![license](https://img.shields.io/npm/l/agentify)](https://github.com/anirudhsengar/agentify/blob/main/LICENSE)",
-            "[![license](https://img.shields.io/npm/l/%40anirudhsengar%2Fagentify)](https://github.com/anirudhsengar/agentify/blob/main/LICENSE)",
-          );
-          replaceOnce(
-            "README.md",
-            "[![node](https://img.shields.io/node/v/agentify)](https://github.com/anirudhsengar/agentify/blob/main/package.json)",
-            "[![node](https://img.shields.io/node/v/%40anirudhsengar%2Fagentify)](https://github.com/anirudhsengar/agentify/blob/main/package.json)",
-          );
-          replaceOnce(
-            "README.md",
-            "npm install -g agentify\n# or run without installing:\nnpx agentify",
-            "npm install -g @anirudhsengar/agentify\n# or run without installing:\nnpx @anirudhsengar/agentify",
-          );
-          replaceOnce(
-            "README.md",
-            "node_modules/agentify/packaged/skills/<name>",
-            "node_modules/@anirudhsengar/agentify/packaged/skills/<name>",
-          );
-
-          replaceOnce(
-            "src/core/package-root.ts",
-            'return parsed.name === "agentify";',
-            'return parsed.name === "@anirudhsengar/agentify";',
-          );
-          replaceOnce(
-            "docs/build-and-package.md",
-            "name is `agentify`, so the same code works when executed from source and from the",
-            "name is `@anirudhsengar/agentify`, so the same code works when executed from source and from the",
-          );
-          replaceOnce(
-            "docs/build-and-package.md",
-            "The npm artifact is intentionally narrower than the repository checkout.",
-            "The official npm package is `@anirudhsengar/agentify`; its installed executable remains `agentify`. The npm artifact is intentionally narrower than the repository checkout.",
-          );
-
-          replaceOnce(
-            "docs/release-process.md",
-            "Agentify releases are tag-driven. Manual workflow dispatch is always a\nverification run and can never publish to npm or create a GitHub release.",
-            "Agentify releases are tag-driven. The official npm package is `@anirudhsengar/agentify`, while the installed executable remains `agentify`. Manual workflow dispatch is always a verification run and can never publish to npm or create a GitHub release.",
-          );
-          replaceOnce(
-            "docs/release-process.md",
-            "4. create an npm tarball;",
-            "4. run `npm pack --json --ignore-scripts`, require exactly one result with a non-empty filename, and confirm that exact tarball exists;",
-          );
-          replaceOnce(
-            "docs/release-process.md",
-            "The npm job downloads and publishes the exact tarball produced by the successful\nverification job. It does not rebuild from a second checkout. npm provenance is\nrequested through GitHub's OIDC token.",
-            "The verification job derives the tarball filename from `npm pack --json`, uploads that exact file, and exposes the filename as a step and job output. The npm job downloads the artifact, requires exactly one local `.tgz`, and publishes it without rebuilding or repacking. npm provenance is requested through GitHub's OIDC token.",
-          );
-          replaceOnce(
-            "docs/release-process.md",
-            "The npm environment should retain required-reviewer protection and the npm token\nshould be scoped only to this package.",
-            "The npm environment should retain required-reviewer protection and the granular npm token should allow public publication of `@anirudhsengar/agentify` under the `anirudhsengar` user scope, including the required 2FA-bypass publishing permission when token-based publication requires it.",
-          );
-
-          replaceOnce(
-            "CHANGELOG.md",
-            "- The publication workflow now resolves exactly one downloaded `./release-artifact/agentify-*.tgz` file and publishes that explicit local path, failing closed when zero or multiple tarballs are present.",
-            "- The publication workflow now resolves exactly one downloaded local `.tgz` file and publishes that explicit path, failing closed when zero or multiple tarballs are present.",
-          );
-          replaceOnce(
-            "CHANGELOG.md",
-            "- `0.2.1` contains the complete release contents intended for `0.2.0`, together with the corrected artifact-publication workflow.",
-            "- `0.2.1` contains the complete release contents intended for `0.2.0`, together with the corrected artifact-publication workflow.\n- The unscoped `agentify` npm name is owned by another publisher, so the official package is now `@anirudhsengar/agentify`; the installed executable remains `agentify`.\n- Release artifact handling now derives the exact tarball filename from the single validated result returned by `npm pack --json` instead of assuming an unscoped filename.",
-          );
-
-          replaceOnce(
-            "tests/package/installed-cli-smoke.mjs",
-            'const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));',
-            'const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));\nassert.equal(packageJson.name, "@anirudhsengar/agentify");\nassert.deepEqual(packageJson.bin, { agentify: "./bin/agentify.js" });',
-          );
-          replaceOnce(
-            "tests/package/installed-cli-smoke.mjs",
-            '  const filename = artifact?.filename;\n  assert.equal(typeof filename, "string", "npm pack result must include filename");',
-            '  assert.equal(artifact?.name, packageJson.name, "npm pack must preserve the scoped package identity");\n  assert.equal(artifact?.version, packageJson.version, "npm pack must preserve the release version");\n  const filename = artifact?.filename;\n  assert.equal(typeof filename, "string", "npm pack result must include filename");\n  assert.ok(filename.trim().length > 0, "npm pack filename must be non-empty");',
-          );
-          replaceOnce(
-            "tests/package/installed-cli-smoke.mjs",
-            '  assert.ok(![...packedPaths].some((entry) => entry.startsWith("src/")), "tarball must not publish raw src/");\n  assert.ok(![...packedPaths].some((entry) => entry.includes("jiti")), "tarball must not publish jiti runtime files");',
-            '  assert.ok(![...packedPaths].some((entry) => entry.startsWith("src/")), "tarball must not publish raw src/");\n  assert.ok(![...packedPaths].some((entry) => entry.includes("jiti")), "tarball must not publish jiti runtime files");\n  for (const packedPath of packedPaths) {\n    assert.ok(!packedPath.endsWith(".tgz"), `tarball must not contain nested tarballs: ${packedPath}`);\n    assert.ok(!packedPath.includes("pack-result.json"), `tarball must not contain pack metadata: ${packedPath}`);\n    assert.ok(!packedPath.includes("release-artifact"), `tarball must not contain release scratch files: ${packedPath}`);\n    assert.ok(!packedPath.includes(".tmp"), `tarball must not contain temporary files: ${packedPath}`);\n  }',
-          );
-          replaceOnce(
-            "tests/package/installed-cli-smoke.mjs",
-            '  run(npmCommand, ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarballPath], { cwd: installRoot });\n\n  const bin = path.join(',
-            '  run(npmCommand, ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarballPath], { cwd: installRoot });\n\n  const installedPackageJsonPath = path.join(installRoot, "node_modules", "@anirudhsengar", "agentify", "package.json");\n  assert.ok(fs.existsSync(installedPackageJsonPath), "scoped package must install under node_modules/@anirudhsengar/agentify");\n  const installedPackageJson = JSON.parse(fs.readFileSync(installedPackageJsonPath, "utf-8"));\n  assert.equal(installedPackageJson.name, packageJson.name);\n  assert.equal(installedPackageJson.version, packageJson.version);\n  assert.deepEqual(installedPackageJson.bin, { agentify: "./bin/agentify.js" });\n  assert.ok(!fs.existsSync(path.join(installRoot, "node_modules", "agentify")), "unscoped agentify package must not be installed");\n\n  const bin = path.join(',
-          );
-          replaceOnce(
-            "tests/package/installed-cli-smoke.mjs",
-            '["--input-type=module", "--eval", `import(\'agentify/src/core/${internalPath}\')`],',
-            '["--input-type=module", "--eval", `import(\'${packageJson.name}/src/core/${internalPath}\')`],',
-          );
-          replaceOnce(
-            "tests/package/installed-cli-smoke.mjs",
-            '/ERR_PACKAGE_PATH_NOT_EXPORTED|Cannot find package/,',
-            '/ERR_PACKAGE_PATH_NOT_EXPORTED/,',
-          );
-          replaceOnce(
-            "tests/package/installed-cli-smoke.mjs",
-            'console.log(`installed compiled package smoke test passed (${packageJson.version}).`);',
-            'console.log(`installed compiled package smoke test passed (${packageJson.name}@${packageJson.version}).`);',
-          );
-
-          replaceOnce(
-            "tests/maintenance/documentation-invariants.test.ts",
-            'test("binary and scripts preserve the compiled package boundary", () => {',
-            'test("official npm package identity remains scoped while the CLI command stays stable", () => {\n  const packageJson = readPackageJson();\n  const readme = read("README.md");\n  const releaseWorkflow = read(".github/workflows/release-publish.yml");\n\n  assert.equal(packageJson.name, "@anirudhsengar/agentify");\n  assert.deepEqual(packageJson.bin, { agentify: "./bin/agentify.js" });\n  assert.match(readme, /npm install -g @anirudhsengar\\/agentify/);\n  assert.match(readme, /npx @anirudhsengar\\/agentify/);\n  assert.match(readme, /https:\\/\\/www\\.npmjs\\.com\\/package\\/@anirudhsengar\\/agentify/);\n  assert.doesNotMatch(readme, /npm install -g agentify|npx agentify/);\n  assert.match(releaseWorkflow, /https:\\/\\/www\\.npmjs\\.com\\/package\\/@anirudhsengar\\/agentify/);\n});\n\ntest("binary and scripts preserve the compiled package boundary", () => {',
-          );
-          NODE
-
+          printf '%s' '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' | base64 --decode | gzip --decompress > /tmp/scoped-package-transform.mjs
+          node /tmp/scoped-package-transform.mjs
           npm install --package-lock-only --ignore-scripts
 
-          if git grep -n -E 'npm install -g agentify|npx agentify|npmjs\.com/package/agentify|node_modules/agentify|parsed\.name === "agentify"|release-artifact/agentify-\*\.tgz|path: agentify-\*\.tgz|files: release-artifact/agentify-\*\.tgz'; then
+          if git grep -n -E 'npm install -g agentify|npx agentify|npmjs\.com/package/agentify|node_modules/agentify|parsed\.name === "agentify"|release-artifact/agentify-\*\.tgz|path: agentify-\*\.tgz|files: release-artifact/agentify-\*\.tgz' -- ':!.github/workflows/scoped-package-prep.yml' ':!.github/workflows/scoped-package-prep-trigger.yml' ':!tests/maintenance/documentation-invariants.test.ts'; then
             echo "Found stale unscoped release references" >&2
             exit 1
           fi
 
           git diff --check
-      - name: Commit scoped package changes
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            .github/workflows/release-publish.yml \
-            CHANGELOG.md \
-            README.md \
-            docs/build-and-package.md \
-            docs/release-process.md \
-            package-lock.json \
-            package.json \
-            src/core/package-root.ts \
-            tests/maintenance/documentation-invariants.test.ts \
-            tests/package/installed-cli-smoke.mjs \
-            tests/release-safety.test.ts
-          git commit -m "release: publish Agentify under npm user scope"
-          git push origin HEAD:release/scoped-package-0.2.1
+          git add .github/release-drafter.yml
