@@ -27,7 +27,7 @@ normal canonical readers never probe that retained tree. Two unstamped divergent
 trees remain a conflict and are never selected by timestamps or provider
 priority.
 
-## Phase B migration policy
+## 0.2.0 migration policy
 
 | Layout | Behavior |
 | --- | --- |
@@ -93,9 +93,14 @@ the older destructive cross-directory move path is rejected.
 - scaffold scripts require one explicit manifest authority, accept one unstamped legacy manifest only as upgrade input, and fail on ambiguity or mismatch.
 
 Deprecated singleton write-map tools, renderer setters, and legacy manifest and
-greenfield wrappers remain only for Phase C compatibility gates.
+greenfield wrappers remain available in 0.2.0 for compatibility. This release does
+not remove them; removal remains gated by Phase C evidence and maintainer approval.
 
 ## Manifest compatibility
+
+Provider-switch manifest reads use one no-follow descriptor, validate that opened
+file with `fstat`, and read from the same descriptor. Symlink refusal and existing
+manifest validation remain unchanged.
 
 Old v1 manifests and manifests without `state_dir` remain readable as legacy
 upgrade input. A mismatched `state_dir` is a conflict, never a redirect. After a

@@ -12,8 +12,8 @@ so security reports receive priority.
 
 | Version | Supported        |
 | ------- | ---------------- |
-| 0.1.x   | Yes (active dev) |
-| < 0.1.0 | No (pre-release) |
+| 0.2.x   | Yes (active)     |
+| < 0.2.0 | No               |
 
 Until 1.0.0 the API and CLI surface are subject to change without strict
 semver. Security fixes may ship in a patch release.

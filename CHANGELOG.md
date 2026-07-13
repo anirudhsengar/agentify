@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-13
+
 ### Added
 
 - A compatibility-first design and characterization fixture for retiring cross-provider `.pi/agentify` fallbacks and deprecated state/write-map APIs without deleting or silently selecting user state.
@@ -24,9 +26,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- Legacy state now migrates with a retained-source, journaled copy → verify → atomic-install transaction; explicit provider switches require `--targets` plus `--migrate-state`, recovery is phase-driven, and canonical readers/scaffold scripts no longer probe cross-provider fallbacks.
+- Legacy state now migrates with a retained-source, journaled copy → verify → atomic-install transaction; the original legacy tree is retained and never silently deleted, explicit provider switches require `--targets` plus `--migrate-state`, recovery is phase-driven, and canonical readers/scaffold scripts no longer probe cross-provider fallbacks.
+- Deprecated callable state, manifest, renderer, greenfield, and write-map compatibility APIs remain available in 0.2.0; this release does not perform Phase C removal.
 - Relocated the internal communications registry, protocol types, and Unix-socket peer server beneath `src/core/orchestrator/comms/` without changing protocol, state, CLI, build, package, or support behavior.
-- Legacy `.pi/agentify` compatibility use is now classified safely and reported once per command with the exact source and provider-selected destination; compatibility remains active and Phase A does not move or delete state.
+- Legacy `.pi/agentify` compatibility use is classified deterministically and reported once per command with the exact source and provider-selected destination, providing deprecation guidance before any eligible migration.
 - Enforced supported, neutral, and experimental source boundaries across imports, CLI registration, build assets, package contents, and documentation.
 - Audit TypeBox declarations remain centralized in `schema.ts`, while coverage assessment, map defaults, and legacy-field interpretation now have focused internal owners behind stable re-exports.
 - Structured write-map storage, input loading, validation, coverage formatting, delta merging, observability, tool construction, and legacy compatibility now have dedicated internal owners behind the stable façade.
@@ -57,6 +60,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Security
 
+- Provider-switch manifests are opened once with no-follow semantics, validated with `fstat`, and read from the same descriptor, removing the check-to-read race without weakening symlink refusal.
 - Root confinement checks both lexical and symlink-resolved paths.
 - Unrestricted shell tools were removed from brownfield audit sessions.
 - Reload management is disabled by default and requires loopback plus constant-time token authentication.

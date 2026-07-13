@@ -49,7 +49,7 @@ See [docs/README.md](docs/README.md) for the documentation index.
 ## What It Does
 
 The installed `agentify` command is the only supported public runtime surface
-in 0.1.x. Internal runtime modules are experimental implementation details, not
+in 0.2.x. Internal runtime modules are experimental implementation details, not
 package APIs or hidden command families. See
 [docs/experimental-surfaces.md](docs/experimental-surfaces.md).
 
@@ -138,12 +138,9 @@ The per-harness output dirs (`.claude/agents/`, `.codex/agents/`,
 `.pi/skills/`, `.agents/skills/`, etc.) are unchanged — they
 remain the registry-driven fan-out destinations.
 
-**Migration**: repos that already have a legacy `.pi/agentify/`
-directory are detected on the next run. The audit logs
-`agentify: detected legacy state at .pi/agentify/; future
-runs will use <chosen-state-dir>` and writes continue there.
-Users reclaim disk space manually when ready:
-`mv .pi/agentify <newStateDir>` (or `rm -rf .pi/agentify`).
+**Migration**: repos with safe pre-provider-scoping state at `.pi/agentify/` are detected deterministically and receive exact source/destination guidance. For a non-Pi target, agentify copies the complete legacy tree into transaction-owned storage, verifies source and candidate fingerprints, and atomically installs the provider-scoped destination. The original legacy tree is retained unchanged and is never silently deleted. Interrupted migrations recover from the durable journal before attach, status, revert, brownfield, or greenfield work continues.
+
+Provider switching is separate from automatic legacy upgrade. Switching among Claude, Codex, and Pi requires an explicit `--targets` selection together with `--migrate-state`; ambiguous, divergent, occupied, unreadable, user-owned, or symlinked layouts stop before writes. Canonical readers use only the authoritative provider-scoped state and do not probe retained cross-provider trees.
 
 ## What Gets Written
 
@@ -156,7 +153,7 @@ On a successful **brownfield** audit, agentify writes into your repo:
 | `.pi/agents/<feature>.md` | Generated feature specialists, summarized into GitHub implement/review prompts as routing context |
 | `.pi/prompts/`, `.pi/workflows/`, `.pi/extensions/`, `.pi/skills/` | Deterministically rendered prompt templates, orchestrator workflow specs that are summarized into GitHub implement prompts, expert directories summarized into implement/review prompts, extension candidates, and repo-specific skill candidates when warranted |
 | `app_review/`, `app_docs/`, `app_fix_reports/`, `.pi/conditional_docs.md` | Feedback-loop storage used by the shipped review, document, fix, and implementation skills |
-| `.pi/agentify/codebase_map.json`, `.pi/agentify/manifest.json` | The validated audit map and managed-file manifest |
+| `<stateDir>/codebase_map.json`, `<stateDir>/manifest.json` | The validated audit map and managed-file manifest |
 | `.agents/skills/`, `.claude/`, `.codex/`, `CLAUDE.md` | Harness exports — only to the targets you picked in the picker (or via `--targets`) |
 | `SETUP.md`, `.github/workflows/*`, `.github/scripts/*` | GitHub runtime scaffold |
 
