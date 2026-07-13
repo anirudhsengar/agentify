@@ -46,14 +46,12 @@ export async function runGreenfield(context: RunContext): Promise<void> {
   const options = context;
   const config = context.config;
   options.ui.status("agentify: starting greenfield chat");
-  const stateDir = resolveCanonicalStateDir(
+  const stateResolution = resolveCanonicalStateDir(
     options.cwd, options.targets, options.additionalAgents,
-  ).relativeDir;
+  );
+  const stateDir = stateResolution.relativeDir;
   const artifactSnapshot: RunArtifactSnapshot = collectAuditArtifactSnapshot(options.cwd);
   setThinkingLevel(config.thinkingLevel ?? "high");
-  // Activate the defense hook for the greenfield session too. Without
-  // this, the hook is inert (state.ts) and the greenfield session runs
-  // bash/write unguarded, unlike the hardened brownfield session.
   const sessionId = getOrCreateSessionId();
   setAgentifySessionActive(sessionId, true);
   let result: Awaited<ReturnType<typeof options.runtime.runGreenfield>>;
@@ -62,6 +60,7 @@ export async function runGreenfield(context: RunContext): Promise<void> {
       cwd: options.cwd,
       configDir: defaultConfigDir(),
       config,
+      stateDir,
       signal: options.signal,
     });
   } finally {
@@ -105,7 +104,6 @@ export async function runGreenfield(context: RunContext): Promise<void> {
               packageRoot: packageRoot(),
             });
             addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata);
-            // Persist the pre-run snapshot for `agentify revert`.
             const runId = crypto.randomUUID();
             const previousManifest = readManifestAt(options.cwd, stateDir);
             persistRunArtifacts({
@@ -125,6 +123,7 @@ export async function runGreenfield(context: RunContext): Promise<void> {
               policy: resolveApplyPolicy(options.cwd, stateDir),
               runId,
               stateDir,
+              manifestStateDir: stateResolution.layout.fallback ? null : stateDir,
             });
             const conflicts = applyResult.writes.filter((write) => write.action === "conflict");
             scaffoldInstalled = applyResult.writes
@@ -136,8 +135,8 @@ export async function runGreenfield(context: RunContext): Promise<void> {
               .length;
             scaffoldConflicts = conflicts.length;
             for (const line of formatApplyReport(applyResult.writes, options.cwd)) {
-                options.ui.info(line);
-              }
+              options.ui.info(line);
+            }
             if (applyResult.requiredConflictCount > 0) {
               options.ui.error(
                 "agentify: required greenfield generated file conflict(s) blocked apply; no bundle files were written.",
@@ -195,11 +194,7 @@ export async function runGreenfield(context: RunContext): Promise<void> {
   );
   if (!result.aborted && artifactsValid) {
     reportGitHubReadiness(options);
-    // Derive repoStatus from the actual filesystem signals so the
-    // persisted state agrees with what the next run's detection sees
-    // (a greenfield session that only installed scaffold, with no
-    // GOALS.md / docs planning artifacts, is not "ready").
-    const repoState = inspectAgentifyRepoState(options.cwd, defaultConfigDir());
+    const repoState = inspectAgentifyRepoState(options.cwd, defaultConfigDir(), stateDir);
     persistProjectState(options, {
       projectKind: "greenfield",
       runStatus: "success",

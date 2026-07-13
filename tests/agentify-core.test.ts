@@ -15,7 +15,7 @@ import {
   exportAgenticSurface,
 } from "../src/core/artifact-exporters.ts";
 import { ProjectClassifier } from "../src/core/project-classifier.ts";
-import { writeGreenfieldFormation } from "../src/core/greenfield-artifacts.ts";
+import { writeGreenfieldFormationAt } from "../src/core/greenfield-artifacts.ts";
 import { readGreenfieldStateAt } from "../src/core/greenfield-state.ts";
 import { readManifestAt } from "../src/core/manifest.ts";
 import { resolveCanonicalStateDir } from "../src/core/state-dir.ts";
@@ -84,9 +84,10 @@ class BrownfieldFakeRuntime implements AgentRuntime {
     fs.mkdirSync(path.join(options.cwd, "specs"), { recursive: true });
     fs.mkdirSync(path.join(options.cwd, "ai_docs"), { recursive: true });
     fs.mkdirSync(path.join(options.cwd, ".pi", "agents"), { recursive: true });
-    fs.mkdirSync(path.join(options.cwd, ".pi", "agentify"), { recursive: true });
+    const stateDir = options.spawnExplorerStateDir ?? ".pi/agentify";
+    fs.mkdirSync(path.join(options.cwd, stateDir), { recursive: true });
     fs.writeFileSync(
-      path.join(options.cwd, ".pi", "agentify", "codebase_map.json"),
+      path.join(options.cwd, stateDir, "codebase_map.json"),
       JSON.stringify(makeValidCodebaseMap(), null, 2),
     );
     fs.writeFileSync(path.join(options.cwd, "AGENTS.md"), "# Agentified\n");
@@ -112,12 +113,9 @@ class GreenfieldFakeRuntime implements AgentRuntime {
 
   async runGreenfield(options: {
     cwd: string;
+    stateDir: string;
   }): Promise<AgentRuntimeResult> {
-    // Write the formation to the legacy path (the runtime doesn't
-    // know the resolved state dir; the greenfield run reads via
-    // `readGreenfieldFormationAt` which falls back to the legacy
-    // path when the resolved state dir is `.pi/agentify/`).
-    writeGreenfieldFormation(options.cwd, makeGreenfieldFormation());
+    writeGreenfieldFormationAt(options.cwd, makeGreenfieldFormation(), options.stateDir);
     return { turns: 2, costUsd: null, aborted: false };
   }
 }
@@ -238,8 +236,6 @@ async function testAuthPromptAnd0600Write(): Promise<void> {
   await withNoProviderEnv(async () => {
     const configDir = tempDir("auth");
     const ui = new TestUi(["openai"], ["sk-test"]);
-    // Skip the first-run model-strategy picker; this test only cares
-    // about the auth gate and the 0600 file permissions.
     const config = await ensureAgentifyConfig(configDir, ui, { modelStrategy: "skip" });
     assert.equal(config.provider, "openai");
     assert.equal(config.thinkingLevel, "high");
@@ -272,10 +268,6 @@ async function testArtifactExporter(): Promise<void> {
   assert.ok(fs.existsSync(path.join(cwd, ".codex", "agents", "payments.toml")));
   assert.ok(fs.existsSync(path.join(cwd, ".claude", "agents", "payments.md")));
   assert.ok(fs.existsSync(path.join(cwd, "CLAUDE.md")));
-
-  // The dual-skill-discovery mirror at .claude/skills/ is generated
-  // into the target repo by the installer; the maintainer-side repo
-  // does not carry it.
   assert.ok(fs.existsSync(path.join(cwd, ".claude", "skills", "demo", "SKILL.md")));
 
   const exportedSkill = fs.readFileSync(
@@ -290,7 +282,6 @@ async function testArtifactExporter(): Promise<void> {
     .flatMap((result) => result.writes)
     .find((write) => write.path.endsWith(path.join(".codex", "agents", "payments.toml")));
   assert.equal(alongsideCodex?.action, "alongside");
-  // User's file is preserved, agentify's version saved alongside.
   assert.equal(
     fs.readFileSync(path.join(cwd, ".codex", "agents", "payments.toml"), "utf-8"),
     "user-owned = true\n",
@@ -306,8 +297,6 @@ async function testArtifactExporter(): Promise<void> {
     .flatMap((result) => result.writes)
     .find((write) => write.path.endsWith("CLAUDE.md"));
   assert.equal(alongsideClaude?.action, "alongside");
-  // CLAUDE.md itself is not written when the source AGENTS.md is
-  // user-owned; the derived content is saved alongside.
   assert.ok(!fs.existsSync(path.join(cwd, "CLAUDE.md")));
   assert.ok(
     fs.existsSync(path.join(cwd, "CLAUDE.agentify.md")),
@@ -378,8 +367,9 @@ async function testGreenfieldRunWithFakeRuntime(): Promise<void> {
       fs.readFileSync(path.join(cwd, "GOALS.md"), "utf-8")
         .includes(AGENTIFY_MANAGED_MARKERS.markdown),
     );
-    assert.ok(fs.existsSync(path.join(cwd, resolveCanonicalStateDir(cwd, ["codex", "claude", "pi"]).relativeDir, "greenfield-state.json")));
-    const greenfieldState = readGreenfieldStateAt(cwd, resolveCanonicalStateDir(cwd, ["codex", "claude", "pi"]).relativeDir);
+    const stateDir = resolveCanonicalStateDir(cwd, ["codex", "claude", "pi"]).relativeDir;
+    assert.ok(fs.existsSync(path.join(cwd, stateDir, "greenfield-state.json")));
+    const greenfieldState = readGreenfieldStateAt(cwd, stateDir);
     assert.equal(greenfieldState?.checkpoint, "spec");
     assert.equal(greenfieldState?.artifact_validation.ok, true);
     assert.equal(greenfieldState?.resume.source, "formation");
@@ -390,7 +380,7 @@ async function testGreenfieldRunWithFakeRuntime(): Promise<void> {
     assert.deepEqual(greenfieldState?.github_handoff.labels, ["agent:queued", "agent:implement"]);
     assert.ok(greenfieldState?.github_handoff.body.includes("specs/feature-first.md"));
     assert.ok(greenfieldState?.next_actions.some((action) => action.includes("/implement")));
-    const manifest = readManifestAt(cwd, resolveCanonicalStateDir(cwd, ["codex", "claude", "pi"]).relativeDir);
+    const manifest = readManifestAt(cwd, stateDir);
     assert.equal(manifest?.mode, "greenfield");
     assert.ok(manifest?.files.some((file) => file.path === "GOALS.md" && file.required));
     assert.ok(fs.existsSync(path.join(cwd, ".github", "workflows", "agent-implement.yml")));

@@ -3,7 +3,9 @@
   "cases": [
     {
       "name": "fresh Claude repository",
-      "targets": ["claude"],
+      "targets": [
+        "claude"
+      ],
       "additional_agents": [],
       "layout": "empty",
       "legacy_content": null,
@@ -15,7 +17,9 @@
     },
     {
       "name": "legacy-only state selected for Claude",
-      "targets": ["claude"],
+      "targets": [
+        "claude"
+      ],
       "additional_agents": [],
       "layout": "legacy_only",
       "legacy_content": "same",
@@ -27,7 +31,9 @@
     },
     {
       "name": "legacy-only state selected for Codex",
-      "targets": ["codex"],
+      "targets": [
+        "codex"
+      ],
       "additional_agents": [],
       "layout": "legacy_only",
       "legacy_content": "same",
@@ -40,7 +46,9 @@
     {
       "name": "legacy-only state selected for a non-premium target",
       "targets": [],
-      "additional_agents": ["cursor"],
+      "additional_agents": [
+        "cursor"
+      ],
       "layout": "legacy_only",
       "legacy_content": "same",
       "canonical_content": null,
@@ -51,9 +59,11 @@
     },
     {
       "name": "Pi state is canonical rather than a fallback",
-      "targets": ["pi"],
+      "targets": [
+        "pi"
+      ],
       "additional_agents": [],
-      "layout": "legacy_only",
+      "layout": "canonical_only",
       "legacy_content": "same",
       "canonical_content": null,
       "expected_provider": "pi",
@@ -63,7 +73,9 @@
     },
     {
       "name": "canonical-only Claude state",
-      "targets": ["claude"],
+      "targets": [
+        "claude"
+      ],
       "additional_agents": [],
       "layout": "canonical_only",
       "legacy_content": null,
@@ -74,8 +86,10 @@
       "expected_legacy_flag": false
     },
     {
-      "name": "identical dual state prefers canonical without comparison",
-      "targets": ["claude"],
+      "name": "identical dual state uses canonical and retains legacy",
+      "targets": [
+        "claude"
+      ],
       "additional_agents": [],
       "layout": "dual_identical",
       "legacy_content": "same",
@@ -86,8 +100,10 @@
       "expected_legacy_flag": false
     },
     {
-      "name": "divergent dual state also prefers canonical without comparison",
-      "targets": ["claude"],
+      "name": "divergent dual state is rejected before writes",
+      "targets": [
+        "claude"
+      ],
       "additional_agents": [],
       "layout": "dual_divergent",
       "legacy_content": "legacy",

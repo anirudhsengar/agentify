@@ -179,6 +179,7 @@ export class PiSdkRuntime implements AgentRuntime {
     cwd: string;
     configDir: string;
     config: AgentifyConfig;
+    stateDir: string;
     signal?: AbortSignal;
     onEvent?: (event: AgentSessionEvent) => void;
   }): Promise<AgentRuntimeResult> {
@@ -212,7 +213,7 @@ export class PiSdkRuntime implements AgentRuntime {
       }),
       signal: options.signal,
       onEvent: options.onEvent,
-      customTools: [createWriteGreenfieldArtifactsTool()],
+      customTools: [createWriteGreenfieldArtifactsTool({ stateDir: options.stateDir })],
       additionalSkillPaths: [SHIPPED_SKILLS_DIR],
     });
   }

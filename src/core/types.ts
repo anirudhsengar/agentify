@@ -167,6 +167,8 @@ export interface AgentRuntime {
     cwd: string;
     configDir: string;
     config: AgentifyConfig;
+    /** Captured state directory used by all greenfield tools and checkpoints. */
+    stateDir: string;
     signal?: AbortSignal;
     onEvent?: (event: AgentSessionEvent) => void;
   }): Promise<AgentRuntimeResult>;

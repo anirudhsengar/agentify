@@ -21,10 +21,7 @@ import {
   type ManagedManifest,
   type ManagedManifestFile,
 } from "../manifest.ts";
-import {
-  LEGACY_PI_STATE_RELATIVE_DIR,
-  resolveCanonicalStateDir,
-} from "../state-dir.ts";
+import { resolveCanonicalStateDir } from "../state-dir.ts";
 import type { AgentifyTarget } from "../types.ts";
 import { AgentifyLog } from "../audit/log.ts";
 import { loadBuilderPrompt } from "../audit/prompt.ts";
@@ -106,7 +103,6 @@ type FinalAuditState = {
   alwaysOnWritten: number;
   alwaysOnTotal: number;
   featureAgentsWritten: number;
-  /** Why the audit did not reach `success`, when applicable. */
   gapReasons: string[];
 };
 
@@ -115,18 +111,6 @@ const ALWAYS_ON_ARTIFACTS = [
   "ai_docs/README.md",
 ] as const;
 
-// Provider-scoped state is resolved once at run entry and threaded through
-// structured writers, renderers, cleanup, persistence, and transactions.
-
-// Remove only the transient draft/history transport, preserving the
-// canonical codebase_map.json. Run at the END of a run so the map
-// survives as a managed audit artifact: AGENTS.md points to it,
-// and partial/aborted runs keep their progress for inspection.
-
-/**
- * State-dir-aware transient cleanup. Mirrors
- * `cleanupTransientScaffolding` but targets the resolved state dir.
- */
 function cleanupTransientScaffoldingAt(cwd: string, stateDir: string): void {
   const transient = [
     path.join(cwd, stateDir, ".agentify"),
@@ -159,16 +143,6 @@ function toRel(cwd: string, filePath: string): string {
   return normalizeArtifactPath(path.relative(cwd, filePath));
 }
 
-/**
- * Diff the previous manifest's skill paths against the new shipped
- * set, and delete any skill file that was previously installed but
- * is no longer in the current tier. Only touches files that carry the
- * `<!-- agentify:managed -->` marker — user-authored skill files in
- * `.claude/skills/` are left alone.
- *
- * Skill dotfolders shipped to: see the three premium exporters in
- * `artifact-exporters.ts`. The set below mirrors those literals.
- */
 const SKILL_DIRS = [".agents/skills", ".claude/skills", ".pi/skills"] as const;
 
 function removeStaleSkills(
@@ -177,17 +151,14 @@ function removeStaleSkills(
   shippedSkills: ReadonlySet<string>,
   log: (msg: string) => void,
 ): void {
-  if (!previousManifest) return; // First run — nothing to remove.
-
+  if (!previousManifest) return;
   const prevSkillPaths = new Set(
     previousManifest.files
-      .filter((f) => f.kind === "skill")
-      .map((f) => f.path),
+      .filter((file) => file.kind === "skill")
+      .map((file) => file.path),
   );
   if (prevSkillPaths.size === 0) return;
 
-  // Compute what the new run wrote (skill SKILL.md files, since
-  // copyDirManaged only writes the skill directory's contents).
   const newSkillPaths = new Set<string>();
   for (const name of shippedSkills) {
     for (const dir of SKILL_DIRS) {
@@ -198,14 +169,11 @@ function removeStaleSkills(
   const stale: string[] = [];
   for (const rel of prevSkillPaths) {
     if (newSkillPaths.has(rel)) continue;
-    const abs = path.join(cwd, rel);
-    if (!fs.existsSync(abs)) continue;
-    // Only delete agentify-managed files. A user-owned file at the
-    // same path would not be in the previous manifest anyway, but
-    // belt-and-braces against manifest corruption.
-    const head = fs.readFileSync(abs, "utf-8").slice(0, 64);
+    const absolute = path.join(cwd, rel);
+    if (!fs.existsSync(absolute)) continue;
+    const head = fs.readFileSync(absolute, "utf-8").slice(0, 64);
     if (!head.includes("<!-- agentify:managed -->")) continue;
-    fs.rmSync(abs, { force: true });
+    fs.rmSync(absolute, { force: true });
     stale.push(rel);
   }
 
@@ -242,9 +210,6 @@ function extractWriteMapResult(result: WriteMapResult | undefined): {
   };
 }
 
-// Decide audit success from the validated structured state, not from
-// user-facing files. Renderers own AGENTS.md and always-on docs after
-// the map closes, so the builder can complete without writing them.
 function readFinalAuditState(cwd: string, stateDir: string): FinalAuditState {
   const agentsMdPath = path.join(cwd, AGENTS_MD_PATH);
   const agentsMdExists = fs.existsSync(agentsMdPath);
@@ -257,31 +222,26 @@ function readFinalAuditState(cwd: string, stateDir: string): FinalAuditState {
   const agentsDir = path.join(cwd, ".pi", "agents");
   if (fs.existsSync(agentsDir)) {
     for (const entry of fs.readdirSync(agentsDir)) {
-      if (isFeatureAgentFilename(entry)) {
-        featureAgentsWritten += 1;
-      }
+      if (isFeatureAgentFilename(entry)) featureAgentsWritten += 1;
     }
   }
 
   const total = COVERAGE_DIMENSIONS.length;
   const gapReasons: string[] = [];
   const map = loadCanonicalMapAt(cwd, stateDir);
-
   if (!map) {
     gapReasons.push(
       `no valid codebase map at ${stateDir}/codebase_map.json (write_map was never completed or failed schema validation)`,
     );
   }
-
   const closure = map
     ? assessCoverageClosure(map)
     : { closed: [], unresolved: [...COVERAGE_DIMENSIONS], reasons: {} as Record<string, string> };
   if (map) {
-    for (const dim of closure.unresolved) {
-      gapReasons.push(`${dim}: ${closure.reasons[dim] ?? "not closed"}`);
+    for (const dimension of closure.unresolved) {
+      gapReasons.push(`${dimension}: ${closure.reasons[dimension] ?? "not closed"}`);
     }
   }
-
   if (agentsMdExists) {
     const lines = countFileLines(agentsMdPath);
     if (lines > AGENTS_MD_MAX_LINES) {
@@ -329,15 +289,8 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
     options.cwd, options.targets, options.additionalAgents,
   );
   const stateDir = stateDirResolved.relativeDir;
-  const sourceStateDir = toRel(options.cwd, stateDirResolved.absoluteDir);
+  const sourceStateDir = stateDirResolved.sourceRelativeDir;
   const previousManifest = readManifestAt(options.cwd, sourceStateDir);
-  if (stateDirResolved.legacy) {
-    options.ui.info(
-      `agentify: detected legacy state at ${LEGACY_PI_STATE_RELATIVE_DIR}/; future runs will use ${stateDir}`,
-    );
-  }
-  // Capture the resolved state directory in run-owned tools and rendering context.
-  // Deprecated mutable adapters remain available only for direct legacy callers.
   const mapTools = createWriteMapTools({ stateDir });
   const promptContent = loadBuilderPrompt(stateDir);
   const promptSha = crypto.createHash("sha256").update(promptContent).digest("hex");
@@ -350,17 +303,16 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
     cwd: options.cwd,
     sourceRelativeDir: sourceStateDir,
     destinationRelativeDir: stateDir,
+    preserveExistingSource: stateDirResolved.layout.fallback,
   });
   let commitState = false;
   let artifactSnapshotForRollback: RunArtifactSnapshot | null = null;
   try {
     const artifactSnapshot = collectAuditArtifactSnapshot(options.cwd);
     artifactSnapshotForRollback = artifactSnapshot;
-    // Absolute paths of pre-existing user-owned artifacts the builder
-    // must not overwrite mid-session (B4 / defense repo protection).
     const protectedPaths = [...artifactSnapshot.entries()]
       .filter(([, entry]) => entry.ownership === "unmanaged")
-      .map(([rel]) => path.resolve(options.cwd, rel));
+      .map(([relative]) => path.resolve(options.cwd, relative));
 
     log.runStart({
       cwd: options.cwd,
@@ -394,9 +346,6 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
       customTools: [
         mapTools.writeMapTool,
         mapTools.writeMapDeltaTool,
-        // spawn_explorer is created inside PiSdkRuntime.runSession so it
-        // can use the same ModelRegistry + explorer slot the rest of
-        // the session uses.
       ],
       spawnExplorerAgentDir: defaultConfigDir(),
       spawnExplorerStateDir: stateDir,
@@ -450,25 +399,8 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
         }
       : readFinalAuditState(options.cwd, stateDir);
 
-    // Preserve the canonical codebase map; remove only the
-    // transient draft/history/logs transport.
     cleanupTransientScaffoldingAt(options.cwd, stateDir);
-    // Capture session-written feature agents BEFORE the rollback
-    // below wipes `.pi/agents/` (it's in GENERATED_SURFACE_PATHS
-    // and any file not in the pre-run snapshot gets removed). The
-    // harness exporters read from a separate `stagingRoot` built
-    // later in this function, so they need the runtime's agent
-    // files mirrored across. The temp dir is cleaned up after
-    // apply.
     const sessionAgentsSnapshotDir = captureSessionAgentFiles(options.cwd);
-    // User-owned AGENTS.md: if the user already had an unmanaged
-    // AGENTS.md in the target repo before this run, agentify
-    // must not silently overwrite it. The renderer still emits a
-    // managed AGENTS.md into staging; the apply step needs to
-    // recognize the conflict and abort (which fires the existing
-    // "required generated file conflict" UI error), and the
-    // exporter needs to skip CLAUDE.md so we don't write a
-    // derived file that contradicts the user's own AGENTS.md.
     const userOwnedAgentsMdEntry = artifactSnapshot.get("AGENTS.md");
     const userOwnedAgentsMd = userOwnedAgentsMdEntry?.ownership === "unmanaged";
     let reportedStatus = finalState.status;
@@ -507,16 +439,7 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
           const metadata = new Map<string, ManagedManifestFile>();
           writeRenderedArtifactsToStaging(stagingRoot, renderResult.artifacts, metadata);
           copyCanonicalMapToStaging(options.cwd, stagingRoot, stateDir, metadata);
-          // Mirror the runtime's `.pi/agents/*.md` writes (captured
-          // before the rollback above wiped them from `options.cwd`)
-          // into the staging tree so the exporters can find them.
           mirrorSessionOutputToStaging(sessionAgentsSnapshotDir, stagingRoot);
-          // Skill curation: classify the project and decide which
-          // skills ship. The set is passed to the exporter so tier-
-          // excluded skills never reach the staging tree. After
-          // the apply, `removeStaleSkills` (below) deletes any
-          // previously-installed skills that dropped out of tier
-          // since the last run.
           const classification = ProjectClassifier.classify(options.cwd);
           const skillTiers = readPackagedSkillTiers(packageRoot());
           const { shipped: shippedSkills } = skillsForClassification(classification, skillTiers);
@@ -537,10 +460,6 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
           });
           addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata);
 
-          // Persist the pre-run snapshot so `agentify revert` can
-          // restore the user's originals. Uses the same runId
-          // that the manifest will carry. The previous manifest is
-          // also read for the stale-skill removal step (see below).
           const runId = crypto.randomUUID();
           persistRunArtifacts({
             cwd: options.cwd,
@@ -562,14 +481,15 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
               : resolveApplyPolicy(options.cwd, stateDir),
             runId,
             stateDir,
+            manifestStateDir: stateDirResolved.layout.fallback ? null : stateDir,
           });
           cleanupSessionAgentSnapshot(sessionAgentsSnapshotDir);
           const conflicts = applyResult.writes.filter((write) => write.action === "conflict");
           const scaffoldInstalled = applyResult.writes
             .filter((write) => write.action === "written")
             .filter((write) => {
-              const rel = toRel(options.cwd, write.path);
-              return rel === "SETUP.md" || rel.startsWith(".github/");
+              const relative = toRel(options.cwd, write.path);
+              return relative === "SETUP.md" || relative.startsWith(".github/");
             })
             .length;
 
@@ -577,7 +497,7 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
             reportedStatus = "partial";
             stateTransaction.rollback();
             options.ui.error(
-              `agentify: required generated file conflict(s) blocked apply; no bundle files were written.`,
+              "agentify: required generated file conflict(s) blocked apply; no bundle files were written.",
             );
             for (const conflict of conflicts.slice(0, 8)) {
               options.ui.error(`agentify:   - ${toRel(options.cwd, conflict.path)}: ${conflict.reason ?? "conflict"}`);
@@ -591,10 +511,8 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
               latestLogPath: log.logPath,
             });
           } else {
-            const repoState = inspectAgentifyRepoState(options.cwd, defaultConfigDir());
+            const repoState = inspectAgentifyRepoState(options.cwd, defaultConfigDir(), stateDir);
             reportedStatus = repoState.status === "ready" ? "success" : "partial";
-            // Tier-down: delete any previously-installed skill that
-            // the new classifier / tier frontmatter no longer ships.
             removeStaleSkills(options.cwd, previousManifest, shippedSkills, options.ui.info);
             options.ui.info(
               `agentify: audit complete. ${repoState.featureAgentCount} feature agent(s), ` +
@@ -665,15 +583,15 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
     options.ui.info(`agentify: log written to ${log.logPath}`);
     if (commitState) stateTransaction.commit();
     else stateTransaction.rollback();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     if (artifactSnapshotForRollback) {
       rollbackGeneratedSurface(options.cwd, artifactSnapshotForRollback);
     }
     stateTransaction.rollback();
     log.runEnd({ exit_code: -1, status: "error", error_message: message });
     options.ui.error(`agentify: ${message}`);
-    throw err;
+    throw error;
   } finally {
     setAgentifySessionActive(sessionId, false);
     await log.close();

@@ -5,6 +5,7 @@ import {
   normalizeArtifactPath,
 } from "../artifacts/generated-surface.ts";
 import { markerForPath } from "../manifest.ts";
+import { KNOWN_STATE_RELATIVE_DIRS } from "../state-dir.ts";
 
 export type AuditSnapshotEntry = {
   ownership: "managed" | "unmanaged";
@@ -38,11 +39,18 @@ function listFilesRecursively(root: string): string[] {
   return files;
 }
 
+function isStateFile(cwd: string, filePath: string): boolean {
+  const relativePath = toRel(cwd, filePath);
+  return KNOWN_STATE_RELATIVE_DIRS.some((stateDir) =>
+    relativePath === stateDir || relativePath.startsWith(`${stateDir}/`)
+  );
+}
+
 function listGeneratedSurfaceFiles(cwd: string): string[] {
   const files = new Set<string>();
   for (const rel of GENERATED_SURFACE_PATHS) {
     for (const filePath of listFilesRecursively(path.join(cwd, rel))) {
-      files.add(filePath);
+      if (!isStateFile(cwd, filePath)) files.add(filePath);
     }
   }
   return [...files];

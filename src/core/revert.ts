@@ -8,6 +8,7 @@ import {
   writeManifestAt,
   type ManagedManifest,
 } from "./manifest.ts";
+import { discoverExistingStateDir } from "./state-dir.ts";
 
 /**
  * Result of a `revert` operation. Three buckets:
@@ -86,10 +87,13 @@ export async function revertLastRun(options: RevertOptions): Promise<RevertResul
     errors: [],
   };
 
-  const manifest = readManifestAt(options.cwd, options.stateDir);
+  const discovered = discoverExistingStateDir(options.cwd);
+  const stateDir = discovered?.relativeDir ?? options.stateDir;
+  options.ui.info(`agentify: revert: inspecting state at ${stateDir}`);
+  const manifest = readManifestAt(options.cwd, stateDir);
   if (!manifest) {
     options.ui.error(
-      `agentify: revert: no manifest at <stateDir>/manifest.json — nothing to revert`,
+      `agentify: revert: no manifest at ${stateDir}/manifest.json — nothing to revert`,
     );
     result.errors.push("no manifest");
     return result;
@@ -104,7 +108,7 @@ export async function revertLastRun(options: RevertOptions): Promise<RevertResul
   }
 
   const runId = options.runId ?? manifest.run_id;
-  const runDir = path.join(options.cwd, options.stateDir, "runs", runId);
+  const runDir = path.join(options.cwd, stateDir, "runs", runId);
   const snapshotPath = path.join(runDir, "snapshot.json");
   const previousManifestPath = path.join(runDir, "manifest.previous.json");
 
@@ -131,8 +135,6 @@ export async function revertLastRun(options: RevertOptions): Promise<RevertResul
     const filePath = path.join(options.cwd, file.path);
 
     if (file.alongsidePath) {
-      // User's file is the canonical. Only the alongside file
-      // needs cleaning up.
       if (!includeAlongside) {
         result.kept.push(file.path);
         continue;
@@ -152,7 +154,6 @@ export async function revertLastRun(options: RevertOptions): Promise<RevertResul
 
     const snap = snapshot[file.path];
     if (snap) {
-      // Pre-existing user file — restore from snapshot.
       try {
         const content = Buffer.from(snap.content, "base64");
         fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -170,8 +171,6 @@ export async function revertLastRun(options: RevertOptions): Promise<RevertResul
       continue;
     }
 
-    // No snapshot entry — agentify created this file from scratch.
-    // Remove it.
     if (fs.existsSync(filePath)) {
       try {
         fs.rmSync(filePath, { force: true });
@@ -183,19 +182,17 @@ export async function revertLastRun(options: RevertOptions): Promise<RevertResul
     }
   }
 
-  // Roll back the manifest itself. If there was a previous
-  // manifest, restore it. Otherwise, remove the current one.
   if (fs.existsSync(previousManifestPath)) {
     try {
       const previousRaw = fs.readFileSync(previousManifestPath, "utf-8");
       const previous = JSON.parse(previousRaw) as ManagedManifest;
-      writeManifestAt(options.cwd, previous, options.stateDir);
+      writeManifestAt(options.cwd, previous, stateDir);
     } catch {
       // Best effort — if the previous manifest is corrupt, leave
       // the current one in place rather than deleting it.
     }
   } else {
-    const manifestPath = path.join(options.cwd, options.stateDir, "manifest.json");
+    const manifestPath = path.join(options.cwd, stateDir, "manifest.json");
     if (fs.existsSync(manifestPath)) {
       try {
         fs.rmSync(manifestPath, { force: true });
@@ -215,8 +212,7 @@ export async function revertLastRun(options: RevertOptions): Promise<RevertResul
  *
  * 1. `<stateDir>/runs/<run-id>/snapshot.json` — the pre-run
  *    snapshot of every file in the generated surface, base64-
- *    encoded. On a 50-file surface this is ~50KB; on a 500-file
- *    surface ~500KB. Acceptable.
+ *    encoded.
  * 2. `<stateDir>/runs/<run-id>/manifest.previous.json` — a copy
  *    of the pre-existing manifest (if any), so `revert` can
  *    restore the manifest itself. Omitted on first-run.
@@ -255,11 +251,6 @@ export function persistRunArtifacts(params: {
   }
 }
 
-/**
- * Generate a run id for the pre-run snapshot. Exported so
- * `applyStagedBundle` and `persistRunArtifacts` use the same
- * generation strategy.
- */
 export function newRunId(): string {
   return crypto.randomUUID();
 }

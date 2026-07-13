@@ -2,11 +2,10 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import {
-  loadCanonicalMapAt,
-} from "../../src/core/audit/write-map-tool.ts";
+import { loadCanonicalMapAt } from "../../src/core/audit/write-map-tool.ts";
 import {
   LEGACY_PI_STATE_RELATIVE_DIR,
+  StateLayoutError,
   resolveCanonicalStateDir,
 } from "../../src/core/state-dir.ts";
 import type { AgentifyTarget } from "../../src/core/types.ts";
@@ -72,7 +71,6 @@ function readFixture(): LayoutFixture {
 
   const cases: LayoutCase[] = parsed.cases.map((entry) => {
     assert.ok(isRecord(entry));
-
     const name = entry.name;
     const rawTargets = entry.targets;
     const additionalAgents = entry.additional_agents;
@@ -119,9 +117,9 @@ function tempDir(prefix: string): string {
 }
 
 function writeMarker(cwd: string, stateDir: string, content: string): void {
-  const filePath = path.join(cwd, stateDir, "layout-marker.txt");
+  const filePath = path.join(cwd, stateDir, "codebase_map.json");
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${content}\n`);
+  fs.writeFileSync(filePath, `${JSON.stringify({ content })}\n`);
 }
 
 function relative(cwd: string, absolutePath: string): string {
@@ -143,15 +141,32 @@ function characterizeResolverMatrix(): void {
         writeMarker(cwd, scenario.expected_relative_dir, scenario.canonical_content);
       }
 
+      if (scenario.layout === "dual_divergent") {
+        assert.throws(
+          () => resolveCanonicalStateDir(
+            cwd,
+            scenario.targets,
+            scenario.additional_agents,
+          ),
+          (error: unknown) => error instanceof StateLayoutError
+            && error.code === "dual_divergent"
+            && /no files were changed/.test(error.message),
+          scenario.name,
+        );
+        continue;
+      }
+
       const resolved = resolveCanonicalStateDir(
         cwd,
         scenario.targets,
         scenario.additional_agents,
       );
       assert.equal(resolved.provider, scenario.expected_provider, scenario.name);
-      assert.equal(resolved.relativeDir, scenario.expected_relative_dir, scenario.name);
+      assert.equal(resolved.destinationRelativeDir, scenario.expected_relative_dir, scenario.name);
+      assert.equal(resolved.relativeDir, scenario.expected_current_source, scenario.name);
       assert.equal(relative(cwd, resolved.absoluteDir), scenario.expected_current_source, scenario.name);
-      assert.equal(resolved.legacy, scenario.expected_legacy_flag, scenario.name);
+      assert.equal(resolved.layout.fallback, scenario.expected_legacy_flag, scenario.name);
+      assert.equal(resolved.layout.kind, scenario.layout, scenario.name);
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
     }

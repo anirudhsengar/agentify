@@ -33,6 +33,7 @@ function run(command, args, options = {}) {
 const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
 const installRoot = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-package-smoke-"));
 const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-package-home-"));
+const priorVersionRepo = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-prior-version-repo-"));
 let tarballPath = null;
 
 try {
@@ -160,9 +161,33 @@ try {
     );
   }
 
+  const legacyStateDir = path.join(priorVersionRepo, ".pi", "agentify");
+  fs.mkdirSync(legacyStateDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(legacyStateDir, "manifest.json"),
+    `${JSON.stringify({
+      schema_version: "1",
+      agentify_version: "0.1.0",
+      generated_at: "2026-01-01T00:00:00.000Z",
+      mode: "brownfield",
+      files: [],
+    }, null, 2)}\n`,
+  );
+  const legacyAttach = run(bin, [], {
+    cwd: priorVersionRepo,
+    env,
+    timeout: 30_000,
+  });
+  assert.equal(legacyAttach.stderr, "");
+  assert.match(legacyAttach.stdout, /attached to initialized brownfield repo/);
+  assert.match(legacyAttach.stdout, /inspecting state at \.pi\/agentify/);
+  assert.ok(!fs.existsSync(path.join(priorVersionRepo, ".claude", "agentify")));
+  assert.ok(!fs.existsSync(path.join(priorVersionRepo, ".agents", "agentify")));
+
   console.log(`installed compiled package smoke test passed (${packageJson.version}).`);
 } finally {
   if (tarballPath) fs.rmSync(tarballPath, { force: true });
   fs.rmSync(installRoot, { recursive: true, force: true });
   fs.rmSync(fakeHome, { recursive: true, force: true });
+  fs.rmSync(priorVersionRepo, { recursive: true, force: true });
 }

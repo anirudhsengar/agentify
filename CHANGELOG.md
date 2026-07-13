@@ -25,6 +25,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - Relocated the internal communications registry, protocol types, and Unix-socket peer server beneath `src/core/orchestrator/comms/` without changing protocol, state, CLI, build, package, or support behavior.
+- Legacy `.pi/agentify` compatibility use is now classified safely and reported once per command with the exact source and provider-selected destination; compatibility remains active and Phase A does not move or delete state.
 - Enforced supported, neutral, and experimental source boundaries across imports, CLI registration, build assets, package contents, and documentation.
 - Audit TypeBox declarations remain centralized in `schema.ts`, while coverage assessment, map defaults, and legacy-field interpretation now have focused internal owners behind stable re-exports.
 - Structured write-map storage, input loading, validation, coverage formatting, delta merging, observability, tool construction, and legacy compatibility now have dedicated internal owners behind the stable façade.
