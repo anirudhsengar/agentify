@@ -42,7 +42,8 @@ and implementation constraints.
 - Build logic lives in `scripts/build.mjs`; workflows call it rather than
   duplicating packaging behavior.
 - Package-root discovery must use `src/core/package-root.ts`.
-- Orchestrator, AIW, webhook, communications, and Agent Expert modules are
+- Orchestrator—including its owned communications transport under
+  `src/core/orchestrator/comms/`—AIW, webhook, and Agent Expert modules are
   internal experimental surfaces. Do not expose them through package exports or
   CLI commands without satisfying `docs/experimental-surfaces.md`.
 - Supported code may depend on supported or explicitly neutral modules only.
