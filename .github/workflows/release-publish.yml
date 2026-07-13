@@ -33,12 +33,50 @@ jobs:
       - name: Install packed CLI and smoke test
         run: npm run test:package
       - name: Build release tarball
-        run: npm pack --ignore-scripts
+        id: pack
+        shell: bash
+        run: |
+          npm pack --json --ignore-scripts > pack-result.json
+
+          filename="$(
+            node --input-type=module <<'NODE'
+            import fs from "node:fs";
+
+            let results;
+            try {
+              results = JSON.parse(fs.readFileSync("pack-result.json", "utf8"));
+            } catch (error) {
+              console.error(`Could not parse npm pack JSON: ${error instanceof Error ? error.message : String(error)}`);
+              process.exit(1);
+            }
+
+            if (!Array.isArray(results) || results.length !== 1) {
+              console.error(`Expected exactly one npm pack result, found ${Array.isArray(results) ? results.length : "non-array JSON"}`);
+              process.exit(1);
+            }
+
+            const filename = results[0]?.filename;
+            if (typeof filename !== "string" || filename.trim() === "") {
+              console.error("npm pack result did not include a non-empty filename");
+              process.exit(1);
+            }
+
+            process.stdout.write(filename);
+            NODE
+          )"
+
+          if [[ ! -f "$filename" ]]; then
+            echo "npm pack reported missing tarball: $filename" >&2
+            exit 1
+          fi
+
+          printf 'filename=%s\n' "$filename" >> "$GITHUB_OUTPUT"
+          rm -f pack-result.json
       - name: Upload verified tarball
         uses: actions/upload-artifact@v4
         with:
           name: npm-package-${{ github.ref_name }}
-          path: agentify-*.tgz
+          path: ${{ steps.pack.outputs.filename }}
           if-no-files-found: error
           retention-days: 7
 
@@ -52,7 +90,7 @@ jobs:
       id-token: write
     environment:
       name: npm
-      url: https://www.npmjs.com/package/agentify
+      url: https://www.npmjs.com/package/@anirudhsengar/agentify
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -66,7 +104,7 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          tarballs=(./release-artifact/agentify-*.tgz)
+          tarballs=(./release-artifact/*.tgz)
 
           if (( ${#tarballs[@]} != 1 )); then
             echo "Expected exactly one release tarball, found ${#tarballs[@]}" >&2
@@ -90,6 +128,20 @@ jobs:
         with:
           name: npm-package-${{ github.ref_name }}
           path: release-artifact
+      - name: Resolve exact verified artifact
+        id: release-artifact
+        shell: bash
+        run: |
+          shopt -s nullglob
+          tarballs=(./release-artifact/*.tgz)
+
+          if (( ${#tarballs[@]} != 1 )); then
+            echo "Expected exactly one release tarball, found ${#tarballs[@]}" >&2
+            printf '%s\n' "${tarballs[@]}" >&2
+            exit 1
+          fi
+
+          printf 'filename=%s\n' "${tarballs[0]}" >> "$GITHUB_OUTPUT"
       - name: Publish release with verified artifact
         uses: softprops/action-gh-release@v3
         with:
@@ -97,6 +149,7 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
-          files: release-artifact/agentify-*.tgz
+          files: ${{ steps.release-artifact.outputs.filename }}
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
