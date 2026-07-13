@@ -8,11 +8,10 @@ contributors do not infer a stable library API from source layout, test coverage
 or internal composition roots.
 
 The evidence-based lifecycle decision for every experimental subsystem is recorded
-in `docs/architecture/experimental-runtime-decisions.md`. That record retains
-webhook, AIW, orchestrator, and Agent Expert in place and approves a separate,
-behavior-preserving relocation of communications beneath the orchestrator boundary
-through Issue #48. Until that implementation merges, the source table below remains
-the current physical layout.
+in `docs/architecture/experimental-runtime-decisions.md`. Webhook, AIW,
+orchestrator, and Agent Expert remain internal. Issue #48 implements the approved
+behavior-preserving communications relocation, so the local peer transport is now
+owned physically and architecturally by the orchestrator subtree.
 
 ## Supported public surface
 
@@ -38,14 +37,14 @@ The following source areas are internal experimental implementation details:
 | --- | --- | --- |
 | Webhook server and worker | `src/core/webhook/` | Signed HTTP intake and queued task dispatch |
 | AIW runtime | `src/core/aiw/` | Plan/build/review/fix workflow execution |
-| Orchestrator | `src/core/orchestrator/` | Multi-agent delegation and domain locks |
-| Communications runtime | `src/core/coms/` | Internal agent communication registry and server |
+| Orchestrator and communications transport | `src/core/orchestrator/` including `comms/` | Multi-agent delegation, domain locks, and local Unix-socket peer messaging |
 | Agent Expert runtime | `src/core/agent-expert.ts` and related modules | Expert evidence and outcomes |
 
 The pure `src/core/orchestrator/workflow-spec.ts` contract and declarative
 `src/core/orchestrator/workflows/` JSON assets are classified as neutral shared
 infrastructure. They support deterministic artifact rendering but do not expose
-the orchestrator runtime, host, worker, tools, or state machine.
+the orchestrator runtime, host, worker, tools, state machine, or communications
+transport.
 
 These modules:
 
@@ -63,17 +62,17 @@ not by itself graduate that subsystem into a supported product surface.
 ## Why the code remains in the repository
 
 The experimental runtimes are retained because they support internal development,
-validate future architecture, and are used by contract and security tests. Moving
-or deleting them during the security remediation would combine product-boundary
-work with broad file-path churn and make review less reliable.
+validate future architecture, and are used by contract and security tests. The
+communications move changes only internal ownership and physical layout; it does
+not alter runtime support status.
 
 The restrictive npm `exports` map, documentation, CLI parser, and
 product-boundary tests enforce this boundary. The maintenance boundary scanner
 also resolves static imports, type-only imports, re-exports, and dynamic imports
 from the supported CLI entry point; it rejects experimental reachability and
 reverse dependencies from explicitly neutral modules. Standard package imports into raw
-source paths are rejected. The compiled-artifact packaging phase will additionally
-remove raw TypeScript source from the published tarball.
+source paths are rejected. The compiled-artifact packaging phase additionally
+removes raw TypeScript source from the published tarball.
 
 ## Graduation requirements
 
