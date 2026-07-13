@@ -47,10 +47,25 @@ function snapshot(cwd: string, relativeDir: string): Map<string, { content: Buff
     for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       const absolute = path.join(directory, entry.name);
       const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-      const stat = fs.lstatSync(absolute);
-      assert.equal(stat.isSymbolicLink(), false);
-      if (stat.isDirectory()) walk(absolute, relative);
-      else result.set(relative, { content: fs.readFileSync(absolute), mode: stat.mode & 0o777 });
+      assert.equal(entry.isSymbolicLink(), false, relative);
+      if (entry.isDirectory()) {
+        walk(absolute, relative);
+        continue;
+      }
+      const descriptor = fs.openSync(
+        absolute,
+        fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+      );
+      try {
+        const stat = fs.fstatSync(descriptor);
+        assert.equal(stat.isFile(), true, relative);
+        result.set(relative, {
+          content: fs.readFileSync(descriptor),
+          mode: stat.mode & 0o777,
+        });
+      } finally {
+        fs.closeSync(descriptor);
+      }
     }
   };
   walk(root, "");
