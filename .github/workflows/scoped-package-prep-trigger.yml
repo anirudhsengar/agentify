@@ -1,0 +1,22 @@
+name: Scoped package preparation trigger
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  trigger:
+    if: github.event.pull_request.head.ref == 'release/scoped-package-0.2.1' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/scoped-package-0.2.1
+      - name: Trigger preparation workflow contents
+        shell: bash
+        run: |
+          git commit --allow-empty -m "trigger scoped package preparation"
+          git push origin HEAD:release/scoped-package-0.2.1
