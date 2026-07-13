@@ -22,6 +22,8 @@ export interface RunAgentifyAppOptions
   args: ReadonlyArray<string>;
   targets?: ReadonlyArray<AgentifyTarget>;
   targetsOverride?: ReadonlyArray<string>;
+  /** Explicit approval for a retained-source provider switch migration. */
+  migrateState?: boolean;
 }
 
 function reportGitHubReadiness(options: RunAgentifyAppOptions): void {
@@ -109,42 +111,37 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
   }
 
   const configDir = defaultConfigDir();
-  const hasExplicitTargetSelection = options.targets !== undefined
+  const resolved = await resolveTargets(options);
+  const hasExplicitTargets = options.targets !== undefined
     || options.targetsOverride !== undefined;
-  let repoState: AgentifyRepoState | null = null;
-
-  if (!hasExplicitTargetSelection) {
+  if (!hasExplicitTargets && !input.isTTY) {
     const discovered = discoverExistingStateDir(options.cwd);
     if (discovered) {
-      repoState = inspectAgentifyRepoState(options.cwd, configDir, discovered.relativeDir);
-      if (discovered.duplicateLegacyDir) {
-        options.ui.info(
-          `agentify: canonical and legacy state are identical; inspecting ${discovered.relativeDir} and retaining ${discovered.duplicateLegacyDir}.`,
-        );
-      }
-      if (repoState.status === "ready") {
-        attachToInitializedRepo(options, repoState);
+      const discoveredState = inspectAgentifyRepoState(
+        options.cwd,
+        configDir,
+        discovered.relativeDir,
+      );
+      if (discoveredState.status === "ready") {
+        attachToInitializedRepo(options, discoveredState);
         return;
       }
     }
   }
-
-  const resolved = await resolveTargets(options);
   const stateResolution = resolveCanonicalStateDir(
     options.cwd,
     resolved.targets,
     resolved.additionalAgents,
+    { allowProviderSwitchMigration: options.migrateState === true && hasExplicitTargets },
   );
   for (const message of stateResolution.guidance) {
     options.ui.info(message);
   }
-  if (repoState === null || repoState.stateDir !== stateResolution.sourceRelativeDir) {
-    repoState = inspectAgentifyRepoState(
-      options.cwd,
-      configDir,
-      stateResolution.sourceRelativeDir,
-    );
-  }
+  const repoState = inspectAgentifyRepoState(
+    options.cwd,
+    configDir,
+    stateResolution.relativeDir,
+  );
 
   if (repoState.status === "ready") {
     attachToInitializedRepo(options, repoState);

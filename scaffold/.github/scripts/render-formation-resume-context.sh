@@ -8,8 +8,10 @@ if [ -z "$state_name" ]; then
   state_name="green"
   state_name="${state_name}field-state.json"
 fi
-state_file="$repo_root/.pi/agentify/$state_name"
-state_label=".pi/agentify/$state_name"
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+state_dir=$("$script_dir/resolve-state-dir.sh" "$repo_root")
+state_file="$repo_root/$state_dir/$state_name"
+state_label="$state_dir/$state_name"
 
 if [ ! -f "$state_file" ]; then
   cat <<EOF

@@ -82,14 +82,19 @@ test("brownfield orchestration captures state in factories and renderer contexts
 
 test("attach, status, recovery, and revert pass or discover explicit state directories", () => {
   const app = read("src/core/agentify-app.ts");
-  assert.match(app, /discoverExistingStateDir\(options\.cwd\)/);
-  assert.match(app, /inspectAgentifyRepoState\([\s\S]*?stateResolution\.sourceRelativeDir/);
+  assert.match(app, /const resolved = await resolveTargets\(options\)/);
+  assert.match(app, /resolveCanonicalStateDir\([\s\S]*?resolved\.targets/);
+  assert.match(app, /inspectAgentifyRepoState\([\s\S]*?stateResolution\.relativeDir/);
 
   const status = read("src/core/repo-status.ts");
   assert.match(status, /verifyManifestAt\(cwd,\s*stateDir\)/);
   assert.match(status, /requiredBrownfieldFiles\(stateDir\)/);
 
+  const commands = read("src/core/cli-commands.ts");
+  assert.match(commands, /recoverInterruptedStateTransactions\(ctx\.cwd\)/);
+  assert.match(commands, /discoverExistingStateDir\(ctx\.cwd\)/);
+
   const revert = read("src/core/revert.ts");
-  assert.match(revert, /discoverExistingStateDir\(options\.cwd\)/);
+  assert.match(revert, /const stateDir = options\.stateDir/);
   assert.match(revert, /readManifestAt\(options\.cwd,\s*stateDir\)/);
 });

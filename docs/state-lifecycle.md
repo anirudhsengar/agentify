@@ -1,131 +1,106 @@
 # Agentify state lifecycle
 
-Agentify selects an audit-state destination from the user's current harness targets:
+Agentify selects canonical audit state from the current harness targets:
 
 - Claude Code: `.claude/agentify/`
-- Codex and universal targets: `.agents/agentify/`
+- Codex and non-premium/universal targets: `.agents/agentify/`
 - Pi: `.pi/agentify/`
 
-The historical location is `.pi/agentify/`. It remains Pi's canonical state
-directory when Pi is selected. For non-Pi selections, Phase A detects old state
-whose manifest predates provider-scoped `state_dir` metadata and keeps using that
-legacy tree temporarily. It reports the exact compatibility source and the
-provider-selected future destination once per command. Phase A does not move,
-merge, overwrite, or delete either tree.
+The historical `.pi/agentify/` path remains Pi canonical state. For a non-Pi
+selection, a safe pre-provider-scoping legacy tree is upgraded with a retained-
+source copy → verify → atomic-install transaction. The original legacy tree is
+never deleted or overwritten.
 
-The complete retirement and migration contract is in
+The complete retirement contract is in
 `docs/migrations/legacy-state-retirement.md`.
 
-## Read-only layout detection
+## Detection and authority
 
-Before attach, recovery, status, revert, brownfield, or greenfield work uses
-state, Agentify inspects the known state directories without writing:
+Before attach, recovery, status, revert, brownfield, or greenfield work,
+Agentify recovers interrupted transactions and safely inspects all known state
+roots with `lstat`. Symlinked ancestors, unreadable paths, user-owned files,
+malformed state, partial sources, and occupied destinations stop before writes.
 
-- `.claude/agentify/`
-- `.agents/agentify/`
-- `.pi/agentify/`
+A provider-scoped manifest whose `state_dir` matches its physical directory is
+authoritative. A retained legacy tree may remain beside it and may later differ;
+normal canonical readers never probe that retained tree. Two unstamped divergent
+trees remain a conflict and are never selected by timestamps or provider
+priority.
 
-The classifier uses `lstat`, does not follow symlinks, and distinguishes empty,
-legacy-only, canonical-only, identical dual, divergent dual, partial,
-unreadable, permission-denied, user-owned, and symlink-unsafe layouts. Tree
-fingerprints are deterministic and exclude volatile metadata such as mtime and
-inode numbers.
+## Phase B migration policy
 
-Unsafe, unreadable, permission-denied, and user-owned paths stop the command.
-Divergent legacy and canonical trees also stop before state or repository
-writes. Agentify never chooses between divergent trees by timestamp, provider
-priority, or directory enumeration order.
-
-## Phase A compatibility rules
-
-| Layout | Phase A behavior |
+| Layout | Behavior |
 | --- | --- |
-| no state | Use the provider-selected destination. |
-| Pi selected with `.pi/agentify` | Treat `.pi/agentify` as Pi canonical state; do not call it legacy. |
-| legacy-only for a non-Pi selection | Continue reading and writing the legacy source, name the future destination, and state that nothing was moved or deleted. |
-| canonical-only | Use canonical state and do not fall back to another provider tree. |
-| identical legacy and canonical | Use canonical, retain legacy, and report the duplicate once. |
-| divergent legacy and canonical | Stop before writes and require explicit user resolution. |
-| partial state | Name the exact tree and continue only through the existing compatibility/recovery path. |
-| unsafe or unreadable state | Stop without treating the path as absent. |
+| no state | Use the selected canonical destination. |
+| Pi selected with `.pi/agentify` | Use it as Pi canonical state; no migration. |
+| safe unstamped legacy-only state with non-Pi destination absent | Automatically migrate to the selected destination and retain legacy unchanged. |
+| canonical-only | Use canonical; do not probe legacy. |
+| identical unstamped legacy/canonical pair | Use canonical and retain legacy. |
+| explicit canonical plus retained legacy | Use the manifest-declared canonical tree even after it changes. |
+| divergent unstamped trees | Stop before writes. |
+| partial, unreadable, permission-denied, user-owned, or symlinked path | Stop with the exact path and operation. |
 
-A manifest at `.pi/agentify/` whose `state_dir` explicitly identifies
-`.pi/agentify` is Pi canonical state. Selecting Claude or Codex does not
-reinterpret it as pre-provider-scoping legacy state. Provider switches use the
-newly selected destination and report other occupied provider trees rather than
-reading them as fallback.
+Provider switching is separate from automatic legacy upgrade. Claude → Codex,
+Codex → Pi, and Pi → Claude require an explicit target plus `--migrate-state`.
+The source must be the only safe prior provider tree, its manifest must identify
+its physical location, and the new destination must be absent. Non-premium
+targets share `.agents/agentify` with Codex and do not require a switch.
 
-## Command ownership
+## Retained-source transaction
 
-Supported command paths carry an explicit state directory:
-
-- attach and partial recovery inspect the discovered or selected tree;
-- repository status verifies the manifest at that exact path;
-- revert discovers the tree containing the manifest and run snapshots;
-- brownfield write-map factories, explorer logs, renderers, staging, manifests,
-  and transactions share one captured state context;
-- greenfield formation, state, manifests, and readiness inspection share one
-  captured state context.
-
-Deprecated singleton write-map tools, renderer setters, and legacy manifest
-wrappers remain available only for compatibility. Maintenance tests prevent
-supported production orchestration from depending on them.
-
-## Transaction boundary
-
-Normal provider-scoped brownfield runs use a repository-local transaction under:
-
-```text
-.agentify/state-transactions/<run-id>/
-├── journal.json
-└── backup/
-```
-
-The journal is written atomically with mode `0600` and records the source,
-destination, prior-state presence, run ID, and lifecycle phase:
+Migration uses `.agentify/state-transactions/<run-id>/` and a schema-versioned
+`0600` journal. The durable phases are:
 
 ```text
 prepared
-  → backup_created
-  → destination_ready
+  → candidate_copy_started
+  → candidate_copy_complete
+  → candidate_verified
+  → destination_installed
   → committed
+  → cleanup_complete
 ```
 
-For Phase A legacy fallback, source and active destination are both the existing
-`.pi/agentify/` tree. Agentify copies that tree to transaction-owned backup
-storage for rollback while leaving the active source in place. A failed or
-interrupted run restores the backup; a successful run keeps the updated legacy
-tree. This is rollback protection, not provider migration.
+The complete source tree is copied without following symlinks into a
+transaction-owned candidate. File contents, relevant mode bits, manifests,
+`runs/` revert snapshots, previous manifests, history, and unknown regular files
+are retained. Source and candidate fingerprints must match before install. The
+destination and all ancestors are rechecked, then the candidate is atomically
+renamed into place.
 
-The cross-provider copy → verify → atomic-install migration is intentionally
-deferred to Phase B. Phase A never invokes the older destructive
-legacy-to-provider move path.
+When a copied manifest exists, the installed canonical copy records the new
+`state_dir` and rewrites state-file manifest paths from the old root to the new
+root. The source manifest remains byte-for-byte unchanged. The journal records
+both the verified-copy fingerprint and the installed canonical fingerprint.
 
-## Commit and rollback
+Recovery is phase-driven and idempotent. Before commit, rollback removes only
+transaction-owned candidate or destination data whose fingerprint matches the
+journal. It never removes or rewrites the source. After commit, recovery keeps
+both trees and finishes cleanup. Malformed or mismatched journals stop for manual
+recovery instead of guessing.
 
-Agentify commits state only after schema and coverage validation, deterministic
-rendering, required-file conflict preflight, staged apply, manifest write, and
-repository/project status persistence succeed.
+Normal same-directory brownfield updates continue to use rollback transactions;
+the older destructive cross-directory move path is rejected.
 
-Before the durable commit point, rollback restores the complete prior active
-state tree, including maps, manifests, history, logs, snapshots, and unknown
-regular files. Repository-facing generated artifacts use a separate ownership
-snapshot so user-owned files are not restored from Agentify state.
+## Command ownership
 
-An interrupted transaction is recovered before a new one begins. Missing,
-malformed, or mismatched journals stop execution rather than triggering guessed
-cleanup. Recovery is deterministic by run ID and is idempotent.
+- attach resolves targets/state before readiness and inspects the exact canonical tree;
+- partial recovery reports the exact tree;
+- repository status verifies only the explicit manifest path;
+- revert recovers transactions, discovers the exact authoritative manifest and snapshots, then passes that path explicitly;
+- brownfield and greenfield share the same resolver and recovery entry point;
+- canonical map and greenfield-formation readers no longer fall back across providers;
+- scaffold scripts require one explicit manifest authority, accept one unstamped legacy manifest only as upgrade input, and fail on ambiguity or mismatch.
+
+Deprecated singleton write-map tools, renderer setters, and legacy manifest and
+greenfield wrappers remain only for Phase C compatibility gates.
 
 ## Manifest compatibility
 
-A Phase A run that continues at pre-provider-scoping `.pi/agentify/` writes its
-manifest without claiming that path as newly selected Pi state. This keeps the
-legacy classification stable until Phase B can migrate safely. Normal canonical
-runs record their exact provider-scoped `state_dir`.
-
-Old v1 manifests and v2 manifests without `state_dir` remain readable upgrade
-inputs. A manifest whose `state_dir` disagrees with its physical location is not
-used to silently redirect the command.
+Old v1 manifests and manifests without `state_dir` remain readable as legacy
+upgrade input. A mismatched `state_dir` is a conflict, never a redirect. After a
+migration, the canonical manifest names the provider-scoped destination while
+the retained source manifest is unchanged.
 
 ## Draft transport
 

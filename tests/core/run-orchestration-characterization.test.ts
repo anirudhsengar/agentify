@@ -3,14 +3,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-import { authPath, saveAgentifyConfig } from "../../src/core/agentify-config.ts";
+import { authPath, defaultConfigDir, saveAgentifyConfig } from "../../src/core/agentify-config.ts";
 import { writeGreenfieldFormationAt } from "../../src/core/greenfield-artifacts.ts";
 import { runAgentify } from "../../src/core/run-agentify.ts";
 import { makeGreenfieldFormation } from "../fixtures/greenfield-formation.ts";
 import type {
   AgentRuntime,
   AgentRuntimeResult,
-  AgentRuntimeSessionOptions,
   AgentifyUi,
 } from "../../src/core/types.ts";
 
@@ -100,7 +99,7 @@ function withConfigHome<T>(run: (configDir: string) => Promise<T>): Promise<T> {
   const previousHome = process.env["HOME"];
   const home = tempDir("agentify-run-orchestration-home-");
   process.env["HOME"] = home;
-  const configDir = path.join(home, ".config", "agentify");
+  const configDir = defaultConfigDir();
   return run(configDir).finally(() => {
     if (previousHome === undefined) delete process.env["HOME"];
     else process.env["HOME"] = previousHome;
@@ -134,18 +133,18 @@ async function testAmbiguousPromptWithoutOverride(): Promise<void> {
           runtime: new NoopRuntime(),
           targets: ["codex"],
         }),
-        /project classification is ambiguous/i,
+        /No promptSelect answer queued.*This repository is ambiguous/i,
       );
       assert.equal(ui.prompts.length, 1);
-      assert.match(ui.prompts[0] ?? "", /Could not confidently detect project kind/);
-      assert.deepEqual(ui.statuses, ["agentify: inspecting project"]);
+      assert.match(ui.prompts[0] ?? "", /This repository is ambiguous/);
+      assert.deepEqual(ui.statuses, []);
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
     }
   });
 }
 
-async function testInvalidModeOverrideRejected(): Promise<void> {
+async function testTypedModeOverrideDelegatesDirectly(): Promise<void> {
   await withConfigHome(async (configDir) => {
     seedAuth(configDir);
     const cwd = tempDir("agentify-run-orchestration-invalid-mode-");
@@ -158,7 +157,7 @@ async function testInvalidModeOverrideRejected(): Promise<void> {
           targets: ["codex"],
           mode: "invalid" as "brownfield",
         }),
-        /invalid --mode value/i,
+        /runSession should not be called/i,
       );
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
@@ -187,15 +186,17 @@ async function testGreenfieldDelegationCharacterization(): Promise<void> {
       assert.deepEqual(runtime.observed, {
         cwd,
         configDir,
-        config: { provider: "openai", model: "fixture", thinkingLevel: "medium" },
+        config: {
+          provider: "openai",
+          model: "fixture",
+          thinkingLevel: "medium",
+          modelsByRole: undefined,
+          targets: undefined,
+        },
         stateDir: ".agents/agentify",
         signal: controller.signal,
       });
-      assert.deepEqual(ui.statuses, [
-        "agentify: inspecting project",
-        "agentify: starting greenfield chat",
-      ]);
-      assert.ok(ui.infos.some((message) => message.includes("agentify: detected greenfield project")));
+      assert.deepEqual(ui.statuses, ["agentify: starting greenfield chat"]);
       assert.ok(ui.infos.some((message) => message.includes("greenfield session complete (4 turn(s), $0.1250")));
       assert.equal(ui.errors.length, 0);
     } finally {
@@ -205,7 +206,7 @@ async function testGreenfieldDelegationCharacterization(): Promise<void> {
 }
 
 await testAmbiguousPromptWithoutOverride();
-await testInvalidModeOverrideRejected();
+await testTypedModeOverrideDelegatesDirectly();
 await testGreenfieldDelegationCharacterization();
 
 console.log("run orchestration characterization tests passed");

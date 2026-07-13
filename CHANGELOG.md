@@ -24,6 +24,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Legacy state now migrates with a retained-source, journaled copy → verify → atomic-install transaction; explicit provider switches require `--targets` plus `--migrate-state`, recovery is phase-driven, and canonical readers/scaffold scripts no longer probe cross-provider fallbacks.
 - Relocated the internal communications registry, protocol types, and Unix-socket peer server beneath `src/core/orchestrator/comms/` without changing protocol, state, CLI, build, package, or support behavior.
 - Legacy `.pi/agentify` compatibility use is now classified safely and reported once per command with the exact source and provider-selected destination; compatibility remains active and Phase A does not move or delete state.
 - Enforced supported, neutral, and experimental source boundaries across imports, CLI registration, build assets, package contents, and documentation.

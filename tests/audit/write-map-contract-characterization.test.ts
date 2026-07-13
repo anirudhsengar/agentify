@@ -458,7 +458,7 @@ async function testObservabilityFactoryAndLegacyContract(): Promise<void> {
   fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
   fs.writeFileSync(legacyPath, `\ufeff${JSON.stringify(cloneMap())}`);
   assert.ok(loadCanonicalMap(legacyCwd));
-  assert.ok(loadCanonicalMapAt(legacyCwd, ".agents/agentify"));
+  assert.equal(loadCanonicalMapAt(legacyCwd, ".agents/agentify"), null);
 
   assert.equal(normalize(DRAFT_PATH), ".pi/agentify/.agentify/draft.json");
 }

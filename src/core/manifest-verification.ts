@@ -32,6 +32,12 @@ export function verifyManifestAt(cwd: string, stateDir: string): ManifestVerific
   const mismatched: string[] = [];
   const unmanaged: string[] = [];
 
+  if (manifest.state_dir !== undefined && manifest.state_dir !== stateDir) {
+    mismatched.push(
+      `manifest.json (state_dir=${manifest.state_dir}, expected ${stateDir})`,
+    );
+  }
+
   for (const file of manifest.files) {
     if (!file.required || file.alongsidePath) continue;
     const filePath = path.join(cwd, file.path);

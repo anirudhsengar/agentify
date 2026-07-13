@@ -21,13 +21,13 @@
         "claude"
       ],
       "additional_agents": [],
-      "layout": "legacy_only",
+      "layout": "dual_identical",
       "legacy_content": "same",
       "canonical_content": null,
       "expected_provider": "claude",
       "expected_relative_dir": ".claude/agentify",
-      "expected_current_source": ".pi/agentify",
-      "expected_legacy_flag": true
+      "expected_current_source": ".claude/agentify",
+      "expected_legacy_flag": false
     },
     {
       "name": "legacy-only state selected for Codex",
@@ -35,13 +35,13 @@
         "codex"
       ],
       "additional_agents": [],
-      "layout": "legacy_only",
+      "layout": "dual_identical",
       "legacy_content": "same",
       "canonical_content": null,
       "expected_provider": "codex",
       "expected_relative_dir": ".agents/agentify",
-      "expected_current_source": ".pi/agentify",
-      "expected_legacy_flag": true
+      "expected_current_source": ".agents/agentify",
+      "expected_legacy_flag": false
     },
     {
       "name": "legacy-only state selected for a non-premium target",
@@ -49,13 +49,13 @@
       "additional_agents": [
         "cursor"
       ],
-      "layout": "legacy_only",
+      "layout": "dual_identical",
       "legacy_content": "same",
       "canonical_content": null,
       "expected_provider": "universal",
       "expected_relative_dir": ".agents/agentify",
-      "expected_current_source": ".pi/agentify",
-      "expected_legacy_flag": true
+      "expected_current_source": ".agents/agentify",
+      "expected_legacy_flag": false
     },
     {
       "name": "Pi state is canonical rather than a fallback",

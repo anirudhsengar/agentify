@@ -8,7 +8,6 @@ import {
   writeManifestAt,
   type ManagedManifest,
 } from "./manifest.ts";
-import { discoverExistingStateDir } from "./state-dir.ts";
 
 /**
  * Result of a `revert` operation. Three buckets:
@@ -87,8 +86,7 @@ export async function revertLastRun(options: RevertOptions): Promise<RevertResul
     errors: [],
   };
 
-  const discovered = discoverExistingStateDir(options.cwd);
-  const stateDir = discovered?.relativeDir ?? options.stateDir;
+  const stateDir = options.stateDir;
   options.ui.info(`agentify: revert: inspecting state at ${stateDir}`);
   const manifest = readManifestAt(options.cwd, stateDir);
   if (!manifest) {

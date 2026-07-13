@@ -20,6 +20,12 @@ function rmrf(target: string): void {
   fs.rmSync(target, { recursive: true, force: true });
 }
 
+function seedLegacyState(cwd: string): void {
+  const filePath = path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, "codebase_map.json");
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, '{"schema_version":"1","marker":"legacy"}\n');
+}
+
 async function testStateDirRelativePerProvider(): Promise<void> {
   assert.equal(stateDirRelative("claude"), ".claude/agentify");
   assert.equal(stateDirRelative("codex"), ".agents/agentify");
@@ -116,34 +122,38 @@ async function testResolveCanonicalPrefersExistingNewDir(): Promise<void> {
   }
 }
 
-async function testResolveCanonicalFallsBackToLegacy(): Promise<void> {
-  const cwd = tempDir("agentify-state-dir-legacy-fallback-");
+async function testResolveCanonicalMigratesLegacyToClaude(): Promise<void> {
+  const cwd = tempDir("agentify-state-dir-legacy-migration-");
   try {
-    fs.mkdirSync(path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR), { recursive: true });
-    const fallback = resolveCanonicalStateDir(cwd, ["claude"]);
-    assert.equal(fallback.absoluteDir, path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR));
-    assert.equal(fallback.relativeDir, LEGACY_PI_STATE_RELATIVE_DIR);
-    assert.equal(fallback.sourceRelativeDir, LEGACY_PI_STATE_RELATIVE_DIR);
-    assert.equal(fallback.destinationRelativeDir, ".claude/agentify");
-    assert.equal(fallback.provider, "claude");
-    assert.equal(fallback.legacy, false);
-    assert.equal(fallback.layout.fallback, true);
-    assert.equal(fallback.guidance.length, 1);
+    seedLegacyState(cwd);
+    const resolved = resolveCanonicalStateDir(cwd, ["claude"]);
+    assert.equal(resolved.absoluteDir, path.join(cwd, ".claude/agentify"));
+    assert.equal(resolved.relativeDir, ".claude/agentify");
+    assert.equal(resolved.sourceRelativeDir, ".claude/agentify");
+    assert.equal(resolved.destinationRelativeDir, ".claude/agentify");
+    assert.equal(resolved.provider, "claude");
+    assert.equal(resolved.layout.kind, "dual_identical");
+    assert.equal(resolved.layout.fallback, false);
+    assert.ok(resolved.migrationRunId);
+    assert.equal(resolved.guidance.length, 2);
+    assert.ok(fs.existsSync(path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, "codebase_map.json")));
+    assert.ok(fs.existsSync(path.join(cwd, ".claude/agentify/codebase_map.json")));
   } finally {
     rmrf(cwd);
   }
 }
 
-async function testResolveCanonicalCodexFallback(): Promise<void> {
-  const cwd = tempDir("agentify-state-dir-codex-fallback-");
+async function testResolveCanonicalMigratesLegacyToCodex(): Promise<void> {
+  const cwd = tempDir("agentify-state-dir-codex-migration-");
   try {
-    fs.mkdirSync(path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR), { recursive: true });
-    const fallback = resolveCanonicalStateDir(cwd, ["codex"]);
-    assert.equal(fallback.absoluteDir, path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR));
-    assert.equal(fallback.relativeDir, LEGACY_PI_STATE_RELATIVE_DIR);
-    assert.equal(fallback.layout.fallback, true);
-    assert.equal(fallback.destinationRelativeDir, ".agents/agentify");
-    assert.equal(fallback.provider, "codex");
+    seedLegacyState(cwd);
+    const resolved = resolveCanonicalStateDir(cwd, ["codex"]);
+    assert.equal(resolved.absoluteDir, path.join(cwd, ".agents/agentify"));
+    assert.equal(resolved.relativeDir, ".agents/agentify");
+    assert.equal(resolved.layout.kind, "dual_identical");
+    assert.equal(resolved.destinationRelativeDir, ".agents/agentify");
+    assert.equal(resolved.provider, "codex");
+    assert.ok(resolved.migrationRunId);
   } finally {
     rmrf(cwd);
   }
@@ -188,8 +198,8 @@ async function main(): Promise<void> {
   await testIsLegacyPiStateTrue();
   await testIsLegacyPiStateFalse();
   await testResolveCanonicalPrefersExistingNewDir();
-  await testResolveCanonicalFallsBackToLegacy();
-  await testResolveCanonicalCodexFallback();
+  await testResolveCanonicalMigratesLegacyToClaude();
+  await testResolveCanonicalMigratesLegacyToCodex();
   await testResolveCanonicalFreshRepo();
   await testTestBypassShape();
   await testTestBypassAllProvidersCovered();

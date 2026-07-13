@@ -57,7 +57,7 @@ function seedLegacyManifest(cwd: string, files: unknown[] = []): void {
   );
 }
 
-async function testNonPiFallbackWarnsOnceAndAttachesAtLegacyPath(): Promise<void> {
+async function testNonPiMigrationReportsSourceAndCanonicalPath(): Promise<void> {
   const cwd = tempDir("agentify-fallback-guidance-");
   try {
     seedLegacyManifest(cwd);
@@ -72,16 +72,18 @@ async function testNonPiFallbackWarnsOnceAndAttachesAtLegacyPath(): Promise<void
     });
 
     assert.equal(runtime.sessionCalls, 0);
-    const fallbackMessages = ui.infos.filter((message) => message.includes("legacy state detected"));
-    assert.equal(fallbackMessages.length, 1);
-    assert.match(fallbackMessages[0]!, /\.pi\/agentify/);
-    assert.match(fallbackMessages[0]!, /\.claude\/agentify/);
-    assert.match(fallbackMessages[0]!, /no state was moved or deleted/);
+    const migrationMessages = ui.infos.filter((message) =>
+      message.includes("migrating retained legacy state") || message.includes("state migration committed")
+    );
+    assert.equal(migrationMessages.length, 2);
+    assert.match(migrationMessages[0]!, /\.pi\/agentify.*\.claude\/agentify/);
+    assert.match(migrationMessages[1]!, /legacy state remains at \.pi\/agentify/);
     assert.equal(
-      ui.infos.filter((message) => message === "agentify: inspecting state at .pi/agentify").length,
+      ui.infos.filter((message) => message === "agentify: inspecting state at .claude/agentify").length,
       1,
     );
-    assert.ok(!fs.existsSync(path.join(cwd, ".claude/agentify")));
+    assert.ok(fs.existsSync(path.join(cwd, ".pi/agentify/manifest.json")));
+    assert.ok(fs.existsSync(path.join(cwd, ".claude/agentify/manifest.json")));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -131,7 +133,7 @@ function testRepoStatusNamesExactLegacyStateDirectory(): void {
   }
 }
 
-await testNonPiFallbackWarnsOnceAndAttachesAtLegacyPath();
+await testNonPiMigrationReportsSourceAndCanonicalPath();
 await testPiOnlyStateIsNotLabeledLegacy();
 testRepoStatusNamesExactLegacyStateDirectory();
-console.log("legacy fallback guidance tests passed");
+console.log("legacy migration guidance tests passed");

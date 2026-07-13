@@ -1,54 +1,62 @@
 #!/usr/bin/env bash
-# Resolve the agentify state dir for a target repo.
-#
-# Usage:
-#   resolve-state-dir.sh <repo_root>
-#
-# Prints the posix-style relative path of the agentify state dir
-# for the supplied repository. Reads the canonical `.pi/agentify/`,
-# `.agents/agentify/`, or `.claude/agentify/` `manifest.json` and
-# honors the `state_dir` field it records. When the new-style
-# manifest is missing, falls back to inspecting the filesystem for
-# which state dir contains the manifest; if no manifest exists,
-# defaults to `.pi/agentify/` for backward compatibility.
-#
-# The output is intended for use by other scaffold scripts:
-#
-#   state_dir=$(./resolve-state-dir.sh "$repo_root")
-#   state_file="$repo_root/$state_dir/$file_name"
+# Resolve one authoritative Agentify state directory from repository manifests.
+# Canonical manifests must record their own state_dir. A single legacy manifest
+# without state_dir remains readable as upgrade input. Multiple unstamped trees
+# are ambiguous and fail instead of applying an independent precedence rule.
 
 set -euo pipefail
+repo_root=${1:?'repo_root required'}
 
-repo_root=${1:?"repo_root required"}
-
-# Candidate state-dir roots, in priority order: codex → claude → pi.
-# (Universal-agent `additionalAgents` resolve to `.agents/agentify/`
-# at audit time, which the first entry already covers.)
 candidate_bases=(
   ".agents/agentify"
   ".claude/agentify"
   ".pi/agentify"
 )
 
+manifests=()
+explicit=()
+legacy_unstamped=()
 for base in "${candidate_bases[@]}"; do
   manifest="$repo_root/$base/manifest.json"
-  if [ -f "$manifest" ]; then
-    if command -v jq >/dev/null 2>&1; then
-      recorded=$(jq -r '.state_dir // empty' "$manifest" 2>/dev/null || true)
-      if [ -n "$recorded" ] && [ "$recorded" != "null" ]; then
-        printf '%s\n' "$recorded"
-        exit 0
-      fi
+  [ -f "$manifest" ] || continue
+  manifests+=("$base")
+  recorded=$(node -e '
+    const fs = require("fs");
+    try {
+      const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+      if (value && typeof value.state_dir === "string") process.stdout.write(value.state_dir);
+    } catch { process.exit(2); }
+  ' "$manifest") || {
+    printf 'agentify: invalid manifest at %s; state directory cannot be resolved safely\n' "$base/manifest.json" >&2
+    exit 1
+  }
+  if [ -n "$recorded" ]; then
+    if [ "$recorded" != "$base" ]; then
+      printf 'agentify: manifest state_dir mismatch at %s: recorded %s; no fallback was attempted\n' "$base/manifest.json" "$recorded" >&2
+      exit 1
     fi
-    # Manifest has no `state_dir` field yet — assume the dir the
-    # manifest lives in is the right state dir (legacy `.pi/agentify`
-    # repos with new code that hasn't been re-written keep working).
-    printf '%s\n' "$base"
-    exit 0
+    explicit+=("$base")
+  else
+    legacy_unstamped+=("$base")
   fi
 done
 
-# Default fallback when no manifest is present. Matches the
-# legacy-pi default so existing repos that just got their first
-# audit land in the historical location.
-printf '%s\n' ".pi/agentify"
+if [ "${#explicit[@]}" -eq 1 ]; then
+  printf '%s\n' "${explicit[0]}"
+  exit 0
+fi
+if [ "${#explicit[@]}" -gt 1 ]; then
+  printf 'agentify: multiple explicit state manifests found: %s; resolve the provider conflict before continuing\n' "${explicit[*]}" >&2
+  exit 1
+fi
+if [ "${#legacy_unstamped[@]}" -eq 1 ]; then
+  printf '%s\n' "${legacy_unstamped[0]}"
+  exit 0
+fi
+if [ "${#legacy_unstamped[@]}" -gt 1 ]; then
+  printf 'agentify: multiple unstamped state manifests found: %s; run agentify with the owning provider to complete migration\n' "${legacy_unstamped[*]}" >&2
+  exit 1
+fi
+
+printf 'agentify: no Agentify manifest found; run agentify before invoking scaffold state tooling\n' >&2
+exit 1
