@@ -8,23 +8,130 @@ permissions:
   contents: read
 
 jobs:
-  npm-access:
-    name: Inspect scoped npm publication access
+  validate:
+    name: Scoped release validation (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
-    environment:
-      name: npm
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22.19.0", "24"]
     steps:
+      - uses: actions/checkout@v4
+      - name: Apply proposed release patch
+        shell: bash
+        run: |
+          base64 --decode .github/scoped-package.patch.gz.b64 | gzip --decompress > /tmp/scoped-package.patch
+          git apply --check /tmp/scoped-package.patch
+          git apply /tmp/scoped-package.patch
+          git diff --check
       - uses: actions/setup-node@v4
         with:
-          node-version: "22.19.0"
-          registry-url: "https://registry.npmjs.org"
-      - name: Verify npm identity, availability, and token metadata
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run release:check
+      - run: npm run test:parity
+      - run: npm run test:maintenance
+      - run: npm run test:generated-output
+      - run: npm run test:security-redteam
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Pack and verify scoped package inventory
         shell: bash
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          account="$(npm whoami)"; echo "Authenticated npm account: $account"; test "$account" = "anirudhsengar"
-          set +e; npm view @anirudhsengar/agentify name version owners >/tmp/view.out 2>/tmp/view.err; status=$?; set -e
-          test "$status" -ne 0; grep -Eq 'E404|404 Not Found' /tmp/view.err; echo "Scoped package availability: unpublished (expected E404)"
-          npm token list --json >/tmp/tokens.json
-          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("/tmp/tokens.json","utf8")); const a=Array.isArray(p)?p:Object.values(p??{}); const scrub=v=>Array.isArray(v)?v.map(scrub):v&&typeof v==="object"?Object.fromEntries(Object.entries(v).filter(([k])=>!/token|secret|credential|password|auth|key/i.test(k)).map(([k,x])=>[k,scrub(x)])):v; console.log("SAFE_TOKEN_METADATA="+JSON.stringify(a.map(scrub)))'
+          npm pack --json --ignore-scripts > pack-result.json
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+
+          const results = JSON.parse(fs.readFileSync("pack-result.json", "utf8"));
+          if (!Array.isArray(results) || results.length !== 1) throw new Error("npm pack must return exactly one result");
+          const pack = results[0];
+          if (pack.name !== "@anirudhsengar/agentify") throw new Error(`unexpected package name: ${pack.name}`);
+          if (pack.version !== "0.2.1") throw new Error(`unexpected package version: ${pack.version}`);
+          if (typeof pack.filename !== "string" || pack.filename.length === 0) throw new Error("missing pack filename");
+          if (!fs.existsSync(pack.filename)) throw new Error(`missing tarball: ${pack.filename}`);
+
+          const paths = (pack.files ?? []).map((file) => file.path);
+          const forbidden = paths.filter((file) =>
+            file === "src" ||
+            file.startsWith("src/") ||
+            file.endsWith(".tgz") ||
+            file === "pack-result.json" ||
+            file === "package-inventory.json" ||
+            file.includes("release-artifact") ||
+            file.includes("publication") ||
+            file.includes(".tmp") ||
+            file.includes("tmp/")
+          );
+          if (forbidden.length > 0) throw new Error(`forbidden packaged files: ${forbidden.join(", ")}`);
+
+          const inventory = {
+            name: pack.name,
+            version: pack.version,
+            filename: pack.filename,
+            size: pack.size,
+            unpackedSize: pack.unpackedSize,
+            shasum: pack.shasum,
+            integrity: pack.integrity,
+            fileCount: paths.length,
+            paths,
+          };
+          fs.writeFileSync("package-inventory.json", JSON.stringify(inventory, null, 2));
+          console.log(JSON.stringify(inventory, null, 2));
+          NODE
+      - name: Install generated tarball and verify public surface
+        shell: bash
+        run: |
+          tarball="$(node -e 'const [p]=require("./pack-result.json"); process.stdout.write(p.filename)')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir"' EXIT
+          cd "$install_dir"
+          npm init --yes >/dev/null
+          npm install "$GITHUB_WORKSPACE/$tarball" --ignore-scripts --no-audit --no-fund >/dev/null
+          node -e 'const p=require("./node_modules/@anirudhsengar/agentify/package.json"); if(p.name!=="@anirudhsengar/agentify"||p.version!=="0.2.1"||p.bin.agentify!=="./bin/agentify.js") process.exit(1)'
+          test "$(./node_modules/.bin/agentify --version)" = "0.2.1"
+          ./node_modules/.bin/agentify --help >/dev/null
+          node --input-type=module <<'NODE'
+          try {
+            await import("@anirudhsengar/agentify/dist/cli.js");
+            throw new Error("deep import unexpectedly succeeded");
+          } catch (error) {
+            if (error?.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") throw error;
+            console.log("deep import rejected with ERR_PACKAGE_PATH_NOT_EXPORTED");
+          }
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scoped-release-inventory-node-${{ matrix.node }}
+          path: |
+            pack-result.json
+            package-inventory.json
+            *.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  apply:
+    name: Apply validated scoped package patch
+    needs: validate
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Apply validated patch and remove temporary validation files
+        shell: bash
+        run: |
+          base64 --decode .github/scoped-package.patch.gz.b64 | gzip --decompress > /tmp/scoped-package.patch
+          git apply --check /tmp/scoped-package.patch
+          git apply /tmp/scoped-package.patch
+          rm .github/scoped-package.patch.gz.b64 .github/workflows/scoped-package-work.yml
+          git diff --check
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: publish 0.2.1 under the npm user scope"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
