@@ -216,9 +216,9 @@ The post-refactor source tree is divided into three dependency categories:
   is an intentional neutral exception inside an otherwise experimental directory;
   its declarative workflow JSON assets are copied to `dist/workflows/` for the
   supported deterministic renderer.
-- **Experimental composition and runtime:** webhook, AIW, orchestrator runtime,
-  communications, Agent Expert, and maintainer-only expert outcome/qualification
-  modules. Their tests do not make them supported APIs.
+- **Experimental composition and runtime:** webhook, AIW, the orchestrator runtime
+  and its owned communications transport, Agent Expert, and maintainer-only expert
+  outcome/qualification modules. Their tests do not make them supported APIs.
 
 Allowed dependency direction is explicit: supported modules may depend only on
 other supported modules or neutral infrastructure; neutral modules must not
@@ -233,6 +233,20 @@ maintenance-test update. Moving a runtime out of the experimental category
 requires the graduation process in `docs/experimental-surfaces.md`; a source
 import, build copy, or documentation example cannot perform that graduation.
 
+## Orchestrator communications ownership
+
+The orchestrator owns its local peer transport under
+`src/core/orchestrator/comms/`. `src/core/orchestrator/worker.ts` is the only
+production source consumer outside the transport modules themselves. Relocating
+the source changes no protocol bytes, envelope fields, error codes, hop limits,
+timeout defaults, registry records, socket locations, or operator state under
+`~/.pi/coms`.
+
+The transport remains local Unix-domain-socket infrastructure for the experimental
+orchestrator. It does not grant repository capabilities, add a network listener,
+create a package export, or graduate the orchestrator into the supported product
+surface.
+
 ## Webhook boundary
 
 Webhook intake verifies body size and HMAC before consuming authenticated
@@ -242,9 +256,9 @@ write roots, credentials, or command policy. Public task status is redacted,
 and management reload is disabled unless explicitly enabled on loopback with an
 administrator token.
 
-Webhook, AIW, orchestrator, communications, and Agent Expert code remain
-internal experimental modules. Their source presence does not make them package
-APIs. See `docs/experimental-surfaces.md`.
+Webhook, AIW, orchestrator (including its communications transport), and Agent
+Expert code remain internal experimental modules. Their source presence does not
+make them package APIs. See `docs/experimental-surfaces.md`.
 
 ## Build and release boundary
 
