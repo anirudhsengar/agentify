@@ -28,3 +28,20 @@ jobs:
 
           git diff --check
           git add .github/release-drafter.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            .github/release-drafter.yml \
+            .github/workflows/release-publish.yml \
+            CHANGELOG.md \
+            README.md \
+            docs/build-and-package.md \
+            docs/release-process.md \
+            package-lock.json \
+            package.json \
+            src/core/package-root.ts \
+            tests/maintenance/documentation-invariants.test.ts \
+            tests/package/installed-cli-smoke.mjs \
+            tests/release-safety.test.ts
+          git commit -m "release: publish Agentify under npm user scope"
+          git push origin HEAD:release/scoped-package-0.2.1
