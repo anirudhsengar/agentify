@@ -1,0 +1,115 @@
+name: Create Agentify 0.2.0 annotated tag
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, reopened, synchronize]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-tag:
+    runs-on: ubuntu-24.04
+    env:
+      TARGET_SHA: 3e1f8495275b94b0ef159ef9ac3a32c378ac361d
+      GREEN_RELEASE_HEAD: e7e5d21b286d84274150ffdd9fe6dad6f1af8b60
+      RELEASE_TAG: v0.2.0
+      TEMP_BRANCH: tmp-release-rest-tag
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      TAG_API_TOKEN: ${{ secrets.AGENT_PAT }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out exact merged main commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact release target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')" = "$TARGET_SHA"
+          test "$(git rev-parse "${GREEN_RELEASE_HEAD}^{tree}")" = "$(git rev-parse "${TARGET_SHA}^{tree}")"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+          if (pkg.version !== '0.2.0') throw new Error(`package version ${pkg.version}`);
+          if (lock.version !== '0.2.0' || lock.packages?.['']?.version !== '0.2.0') throw new Error('package-lock version mismatch');
+          if (!changelog.includes('## [Unreleased]\n\n## [0.2.0] - 2026-07-13')) throw new Error('changelog release heading or empty Unreleased section missing');
+          NODE
+
+      - name: Create annotated tag object and protected ref
+        id: tag
+        shell: bash
+        run: |
+          set -u
+          : > tag-api-result.txt
+          status=1
+          if [ -z "${TAG_API_TOKEN:-}" ]; then
+            echo 'AGENT_PAT is absent.' >> tag-api-result.txt
+          else
+            auth=(-H 'Accept: application/vnd.github+json' -H "Authorization: Bearer ${TAG_API_TOKEN}" -H 'X-GitHub-Api-Version: 2022-11-28')
+            existing_code=$(curl -sS -o existing-ref.json -w '%{http_code}' "${auth[@]}" "https://api.github.com/repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" || true)
+            echo "existing_ref_http=${existing_code}" >> tag-api-result.txt
+            if [ "$existing_code" = 200 ]; then
+              echo "Tag ${RELEASE_TAG} already exists; refusing to move or recreate it." >> tag-api-result.txt
+            elif [ "$existing_code" != 404 ]; then
+              cat existing-ref.json >> tag-api-result.txt
+            else
+              jq -n --arg tag "$RELEASE_TAG" --arg object "$TARGET_SHA" '{tag:$tag,message:"Agentify 0.2.0",object:$object,type:"commit"}' > tag-object-request.json
+              tag_code=$(curl -sS -o tag-object-response.json -w '%{http_code}' -X POST "${auth[@]}" -H 'Content-Type: application/json' --data-binary @tag-object-request.json "https://api.github.com/repos/${GITHUB_REPOSITORY}/git/tags" || true)
+              echo "tag_object_http=${tag_code}" >> tag-api-result.txt
+              if [ "$tag_code" = 201 ]; then
+                tag_sha=$(jq -r '.sha' tag-object-response.json)
+                echo "tag_object_sha=${tag_sha}" >> tag-api-result.txt
+                jq -n --arg ref "refs/tags/${RELEASE_TAG}" --arg sha "$tag_sha" '{ref:$ref,sha:$sha}' > tag-ref-request.json
+                ref_code=$(curl -sS -o tag-ref-response.json -w '%{http_code}' -X POST "${auth[@]}" -H 'Content-Type: application/json' --data-binary @tag-ref-request.json "https://api.github.com/repos/${GITHUB_REPOSITORY}/git/refs" || true)
+                echo "tag_ref_http=${ref_code}" >> tag-api-result.txt
+                if [ "$ref_code" = 201 ]; then
+                  created_ref=$(jq -r '.ref' tag-ref-response.json)
+                  created_sha=$(jq -r '.object.sha' tag-ref-response.json)
+                  echo "created_ref=${created_ref}" >> tag-api-result.txt
+                  echo "created_tag_object_sha=${created_sha}" >> tag-api-result.txt
+                  if [ "$created_ref" = "refs/tags/${RELEASE_TAG}" ] && [ "$created_sha" = "$tag_sha" ]; then
+                    status=0
+                  fi
+                else
+                  cat tag-ref-response.json >> tag-api-result.txt
+                fi
+              else
+                cat tag-object-response.json >> tag-api-result.txt
+              fi
+            fi
+          fi
+          echo "exit_status=${status}" >> tag-api-result.txt
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          cat tag-api-result.txt
+
+      - name: Upload tag API result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentify-0.2.0-tag-api-result
+          path: tag-api-result.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Fail when tag creation failed
+        if: steps.tag.outputs.status != '0'
+        run: exit 1
+
+      - name: Remove temporary PR and verification ref
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" -f state=closed
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${TEMP_BRANCH}"
