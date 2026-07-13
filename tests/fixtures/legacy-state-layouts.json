@@ -1,0 +1,101 @@
+{
+  "schema_version": "1",
+  "cases": [
+    {
+      "name": "fresh Claude repository",
+      "targets": ["claude"],
+      "additional_agents": [],
+      "layout": "empty",
+      "legacy_content": null,
+      "canonical_content": null,
+      "expected_provider": "claude",
+      "expected_relative_dir": ".claude/agentify",
+      "expected_current_source": ".claude/agentify",
+      "expected_legacy_flag": false
+    },
+    {
+      "name": "legacy-only state selected for Claude",
+      "targets": ["claude"],
+      "additional_agents": [],
+      "layout": "legacy_only",
+      "legacy_content": "same",
+      "canonical_content": null,
+      "expected_provider": "claude",
+      "expected_relative_dir": ".claude/agentify",
+      "expected_current_source": ".pi/agentify",
+      "expected_legacy_flag": true
+    },
+    {
+      "name": "legacy-only state selected for Codex",
+      "targets": ["codex"],
+      "additional_agents": [],
+      "layout": "legacy_only",
+      "legacy_content": "same",
+      "canonical_content": null,
+      "expected_provider": "codex",
+      "expected_relative_dir": ".agents/agentify",
+      "expected_current_source": ".pi/agentify",
+      "expected_legacy_flag": true
+    },
+    {
+      "name": "legacy-only state selected for a non-premium target",
+      "targets": [],
+      "additional_agents": ["cursor"],
+      "layout": "legacy_only",
+      "legacy_content": "same",
+      "canonical_content": null,
+      "expected_provider": "universal",
+      "expected_relative_dir": ".agents/agentify",
+      "expected_current_source": ".pi/agentify",
+      "expected_legacy_flag": true
+    },
+    {
+      "name": "Pi state is canonical rather than a fallback",
+      "targets": ["pi"],
+      "additional_agents": [],
+      "layout": "legacy_only",
+      "legacy_content": "same",
+      "canonical_content": null,
+      "expected_provider": "pi",
+      "expected_relative_dir": ".pi/agentify",
+      "expected_current_source": ".pi/agentify",
+      "expected_legacy_flag": false
+    },
+    {
+      "name": "canonical-only Claude state",
+      "targets": ["claude"],
+      "additional_agents": [],
+      "layout": "canonical_only",
+      "legacy_content": null,
+      "canonical_content": "same",
+      "expected_provider": "claude",
+      "expected_relative_dir": ".claude/agentify",
+      "expected_current_source": ".claude/agentify",
+      "expected_legacy_flag": false
+    },
+    {
+      "name": "identical dual state prefers canonical without comparison",
+      "targets": ["claude"],
+      "additional_agents": [],
+      "layout": "dual_identical",
+      "legacy_content": "same",
+      "canonical_content": "same",
+      "expected_provider": "claude",
+      "expected_relative_dir": ".claude/agentify",
+      "expected_current_source": ".claude/agentify",
+      "expected_legacy_flag": false
+    },
+    {
+      "name": "divergent dual state also prefers canonical without comparison",
+      "targets": ["claude"],
+      "additional_agents": [],
+      "layout": "dual_divergent",
+      "legacy_content": "legacy",
+      "canonical_content": "canonical",
+      "expected_provider": "claude",
+      "expected_relative_dir": ".claude/agentify",
+      "expected_current_source": ".claude/agentify",
+      "expected_legacy_flag": false
+    }
+  ]
+}
