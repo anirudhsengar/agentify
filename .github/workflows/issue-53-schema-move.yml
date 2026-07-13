@@ -1,0 +1,156 @@
+name: issue-53-schema-move
+
+on:
+  push:
+    branches:
+      - migration/53-evidence-artifact-coverage-schemas
+
+permissions:
+  contents: write
+
+jobs:
+  move-schema-domains:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: migration/53-evidence-artifact-coverage-schemas
+          fetch-depth: 0
+      - name: Extract evidence, artifact-intent, and coverage schemas
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          schema_path = Path("src/core/audit/schema.ts")
+          source = schema_path.read_text()
+
+          evidence_marker = (
+              "// ============================================================================\n"
+              "// Custom-tool and skill candidate derivation\n"
+              "// ============================================================================\n"
+          )
+          coverage_marker = (
+              "// ============================================================================\n"
+              "// Coverage matrix (the gate)\n"
+              "// ============================================================================\n"
+          )
+          artifact_marker = (
+              "// ============================================================================\n"
+              "// Artifact intents\n"
+              "// ============================================================================\n"
+          )
+          map_marker = (
+              "// ============================================================================\n"
+              "// The full CodebaseMap (the contract)\n"
+              "// ============================================================================\n"
+          )
+
+          def extract_block(text: str, start_marker: str, end_marker: str) -> tuple[str, str]:
+              start = text.find(start_marker)
+              end = text.find(end_marker)
+              if start == -1 or end == -1 or end <= start:
+                  raise SystemExit(f"schema block markers not found: {start_marker!r} -> {end_marker!r}")
+              return text[start:end], text[:start] + text[end:]
+
+          evidence_block, source = extract_block(source, evidence_marker, coverage_marker)
+          coverage_block, source = extract_block(source, coverage_marker, artifact_marker)
+          artifact_block, source = extract_block(source, artifact_marker, map_marker)
+
+          evidence_module = (
+              'import { StringEnum } from "@earendil-works/pi-ai";\n'
+              'import { Type, type Static } from "typebox";\n\n'
+              + evidence_block
+          )
+
+          coverage_block = coverage_block.replace(
+              "const CoverageMatrixSchema =",
+              "export const CoverageMatrixSchema =",
+              1,
+          ).replace(
+              "const OpenQuestionsSchema =",
+              "export const OpenQuestionsSchema =",
+              1,
+          ).replace(
+              "const ExplorationLogEntrySchema =",
+              "export const ExplorationLogEntrySchema =",
+              1,
+          ).replace(
+              "const ExplorationLogSchema =",
+              "export const ExplorationLogSchema =",
+              1,
+          )
+          coverage_module = (
+              'import { Type } from "typebox";\n'
+              'import { DimensionStatusSchema } from "./primitives.ts";\n\n'
+              + coverage_block
+          )
+
+          artifact_module = (
+              'import { Type, type Static } from "typebox";\n'
+              'import { KebabNameSchema, SafeRelativePathSchema } from "./primitives.ts";\n\n'
+              + artifact_block
+          )
+
+          Path("src/core/audit/schema/evidence.ts").write_text(evidence_module)
+          Path("src/core/audit/schema/coverage.ts").write_text(coverage_module)
+          Path("src/core/audit/schema/artifact-intents.ts").write_text(artifact_module)
+
+          source = source.replace(
+              "    KebabNameSchema,\n    SafeRelativePathSchema,\n",
+              "",
+              1,
+          )
+
+          import_anchor = 'import { ValidationSurfaceSchema } from "./schema/validation-surface.ts";\n'
+          new_imports = import_anchor + (
+              'import {\n'
+              '    AlwaysOnDocsIntentSchema,\n'
+              '    ArtifactIntentsSchema,\n'
+              '    ExpertIntentSchema,\n'
+              '    ExtensionCandidateIntentSchema,\n'
+              '    FeatureAgentIntentSchema,\n'
+              '    PromptTemplateIntentSchema,\n'
+              '    ScaffoldRuntimeIntentSchema,\n'
+              '} from "./schema/artifact-intents.ts";\n'
+              'import {\n'
+              '    CoverageMatrixSchema,\n'
+              '    ExplorationLogEntrySchema,\n'
+              '    ExplorationLogSchema,\n'
+              '    OpenQuestionsSchema,\n'
+              '} from "./schema/coverage.ts";\n'
+              'import {\n'
+              '    CustomizationEvidenceSchema,\n'
+              '    ExpertEvidenceSchema,\n'
+              '} from "./schema/evidence.ts";\n'
+          )
+          if import_anchor not in source:
+              raise SystemExit("schema import anchor not found")
+          source = source.replace(import_anchor, new_imports, 1)
+
+          export_anchor = "export { ConfidenceSchema, CoverageStatusSchema, DimensionStatusSchema };\n"
+          export_block = export_anchor + (
+              "export {\n"
+              "    AlwaysOnDocsIntentSchema,\n"
+              "    ArtifactIntentsSchema,\n"
+              "    CustomizationEvidenceSchema,\n"
+              "    ExpertEvidenceSchema,\n"
+              "    ExpertIntentSchema,\n"
+              "    ExtensionCandidateIntentSchema,\n"
+              "    FeatureAgentIntentSchema,\n"
+              "    PromptTemplateIntentSchema,\n"
+              "    ScaffoldRuntimeIntentSchema,\n"
+              "};\n"
+              'export type { ArtifactIntents, FeatureAgentIntent } from "./schema/artifact-intents.ts";\n'
+              'export type { CustomizationEvidence, ExpertEvidence } from "./schema/evidence.ts";\n'
+          )
+          if export_anchor not in source:
+              raise SystemExit("schema export anchor not found")
+          source = source.replace(export_anchor, export_block, 1)
+
+          schema_path.write_text(source)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/core/audit/schema.ts src/core/audit/schema/evidence.ts src/core/audit/schema/coverage.ts src/core/audit/schema/artifact-intents.ts
+          git commit -m "refactor: extract audit evidence and coverage schemas"
+          git push origin HEAD:migration/53-evidence-artifact-coverage-schemas
