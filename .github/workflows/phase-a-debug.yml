@@ -1,0 +1,45 @@
+name: Phase A diagnostics
+
+on:
+  push:
+    branches:
+      - migration/32a-legacy-detection
+
+permissions:
+  contents: read
+
+jobs:
+  test-diagnostics:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - name: Run full tests and capture failure
+        id: tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          npm run test:all > test-all.log 2>&1
+          status=$?
+          {
+            echo "exit_status=$status"
+            echo "last_test=$(grep '^==>' test-all.log | tail -n 1)"
+            echo
+            tail -n 240 test-all.log
+          } > phase-a-failure.txt
+          exit "$status"
+      - name: Upload failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase-a-failure-diagnostics
+          path: phase-a-failure.txt
+          if-no-files-found: error
+      - name: Fail when tests failed
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
