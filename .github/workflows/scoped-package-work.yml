@@ -1,9 +1,8 @@
 name: Scoped package worktree
 
 on:
-  push:
-    branches:
-      - release/0.2.1-scoped-package
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
