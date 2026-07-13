@@ -51,10 +51,20 @@ async function testExactVerifiedArtifactIsPublished(): Promise<void> {
   assert.match(verify, /npm pack --ignore-scripts/);
   assert.match(verify, /actions\/upload-artifact@v4/);
   assert.match(publish, /actions\/download-artifact@v4/);
-  assert.match(publish, /npm publish release-artifact\/agentify-\*\.tgz/);
+  assert.match(publish, /shell: bash/);
+  assert.match(publish, /shopt -s nullglob/);
+  assert.match(publish, /tarballs=\(\.\/release-artifact\/agentify-\*\.tgz\)/);
+  assert.match(publish, /\$\{#tarballs\[@\]\} != 1/);
+  assert.match(publish, /Expected exactly one release tarball/);
+  assert.match(publish, /npm publish "\$\{tarballs\[0\]\}" --provenance --access public/);
+  assert.doesNotMatch(
+    publish,
+    /npm publish\s+["']?release-artifact\/agentify-\*\.tgz/,
+    "npm publish must never receive an ambiguous non-local tarball specification",
+  );
+  assert.doesNotMatch(publish, /npm\s+(?:pack|run\s+build)/, "publish job must not rebuild the verified artifact");
   assert.match(release, /actions\/download-artifact@v4/);
   assert.match(release, /files: release-artifact\/agentify-\*\.tgz/);
-  assert.doesNotMatch(publish, /npm publish --provenance/);
 }
 
 async function testTagVersionValidation(): Promise<void> {
@@ -87,6 +97,7 @@ async function testCiSeparatesConcernsAndCoversEngines(): Promise<void> {
   };
   assert.equal(packageJson.scripts?.["test:package"], "node tests/package/installed-cli-smoke.mjs");
   assert.match(packageJson.scripts?.["release:check"] ?? "", /test:package/);
+  assert.match(packageJson.scripts?.["test:maintenance"] ?? "", /tests\/release-safety\.test\.ts/);
 }
 
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [

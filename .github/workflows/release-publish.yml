@@ -63,7 +63,18 @@ jobs:
           name: npm-package-${{ github.ref_name }}
           path: release-artifact
       - name: Publish exact verified artifact
-        run: npm publish release-artifact/agentify-*.tgz --provenance --access public
+        shell: bash
+        run: |
+          shopt -s nullglob
+          tarballs=(./release-artifact/agentify-*.tgz)
+
+          if (( ${#tarballs[@]} != 1 )); then
+            echo "Expected exactly one release tarball, found ${#tarballs[@]}" >&2
+            printf '%s\n' "${tarballs[@]}" >&2
+            exit 1
+          fi
+
+          npm publish "${tarballs[0]}" --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
