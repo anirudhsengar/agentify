@@ -20,6 +20,7 @@ public product contract.
 | Compiled build, runtime assets, and npm package boundary | `docs/build-and-package.md` |
 | Execution-policy security model | `SECURITY.md` (repo root) |
 | Transactional provider-state lifecycle | `docs/state-lifecycle.md` |
+| Legacy state and deprecated API retirement design | `docs/migrations/legacy-state-retirement.md` |
 | Webhook HTTP security model | `docs/webhook-security.md` |
 | Verified artifact release process | `docs/release-process.md` |
 | Working notes for coding agents operating in this repo | `AGENTS.md` (repo root) |
