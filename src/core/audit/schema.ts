@@ -512,7 +512,7 @@ const ExpertDomainSchema = Type.Object({
     }),
     test_command: Type.Union([Type.String(), Type.Null()], {
         description:
-            "Test command specific to this domain (e.g. " +
+            "Test command specific to this domain (e.g., " +
             "'pytest tests/payments/ -q'). Falls back to the global " +
             "validation_surface.test_command when null. The " +
             "expert's self-improve.md runs this after any change.",
