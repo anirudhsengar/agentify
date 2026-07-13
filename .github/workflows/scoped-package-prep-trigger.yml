@@ -118,7 +118,8 @@ jobs:
           NODE
 
           test "$(./node_modules/.bin/agentify --version)" = "0.2.1"
-          ./node_modules/.bin/agentify --help | grep -q 'agentify \[options\]'
+          ./node_modules/.bin/agentify --help > agentify-help.txt
+          grep -q 'agentify \[options\]' agentify-help.txt
 
           node --input-type=module <<'NODE'
           try {
