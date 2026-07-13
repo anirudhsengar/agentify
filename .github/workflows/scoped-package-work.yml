@@ -8,17 +8,65 @@ permissions:
   contents: read
 
 jobs:
-  snapshot:
-    name: Export branch worktree
+  npm-access:
+    name: Inspect scoped npm publication access
     runs-on: ubuntu-latest
+    environment:
+      name: npm
     steps:
-      - uses: actions/checkout@v4
-      - name: Archive checkout
-        shell: bash
-        run: tar --exclude=.git -czf /tmp/agentify-worktree.tgz .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/setup-node@v4
         with:
-          name: agentify-worktree
-          path: /tmp/agentify-worktree.tgz
-          if-no-files-found: error
-          retention-days: 1
+          node-version: "22.19.0"
+          registry-url: "https://registry.npmjs.org"
+      - name: Verify npm identity and scoped-name availability
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          account="$(npm whoami)"
+          echo "Authenticated npm account: $account"
+          test "$account" = "anirudhsengar"
+
+          set +e
+          npm view @anirudhsengar/agentify name version owners > /tmp/scoped-view.out 2> /tmp/scoped-view.err
+          status=$?
+          set -e
+
+          if (( status == 0 )); then
+            echo "Expected @anirudhsengar/agentify to be unpublished, but npm view succeeded." >&2
+            cat /tmp/scoped-view.out >&2
+            exit 1
+          fi
+
+          if ! grep -Eq 'E404|404 Not Found' /tmp/scoped-view.err; then
+            echo "Expected npm E404 for the unpublished scoped package." >&2
+            cat /tmp/scoped-view.err >&2
+            exit 1
+          fi
+
+          echo "Scoped package availability: unpublished (expected E404)"
+      - name: Inspect granular token metadata safely
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm token list --json > /tmp/npm-token-metadata.json
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+
+          const parsed = JSON.parse(fs.readFileSync("/tmp/npm-token-metadata.json", "utf8"));
+          const tokens = Array.isArray(parsed) ? parsed : Object.values(parsed ?? {});
+          const secretKeys = /token|secret|credential|password|auth/i;
+          const sanitize = (value) => {
+            if (Array.isArray(value)) return value.map(sanitize);
+            if (!value || typeof value !== "object") return value;
+            return Object.fromEntries(
+              Object.entries(value)
+                .filter(([key]) => !secretKeys.test(key))
+                .map(([key, item]) => [key, sanitize(item)]),
+            );
+          };
+
+          console.log(`Granular token records visible to account: ${tokens.length}`);
+          console.log(JSON.stringify(tokens.map(sanitize), null, 2));
+          NODE
