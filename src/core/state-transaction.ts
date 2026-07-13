@@ -416,20 +416,45 @@ function rewriteInstalledManifestStateDir(
   destinationRelativeDir: string,
 ): void {
   const filePath = path.join(resolveRelative(cwd, destinationRelativeDir), "manifest.json");
-  if (!fs.existsSync(filePath)) {
-    throw new Error(
-      `provider-switch migration requires a manifest at ${destinationRelativeDir}/manifest.json`,
+  const manifestLabel = `${destinationRelativeDir}/manifest.json`;
+  let descriptor: number;
+  try {
+    descriptor = fs.openSync(
+      filePath,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
     );
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      throw new Error(`provider-switch migration requires a manifest at ${manifestLabel}`);
+    }
+    if (code === "ELOOP") {
+      throw new Error(`unsafe provider-switch manifest at ${manifestLabel}`);
+    }
+    throw new Error(`invalid provider-switch manifest at ${manifestLabel}`);
   }
-  const stat = fs.lstatSync(filePath);
-  if (stat.isSymbolicLink() || !stat.isFile()) {
-    throw new Error(`unsafe provider-switch manifest at ${destinationRelativeDir}/manifest.json`);
+
+  let stat: fs.Stats;
+  let payload: string;
+  try {
+    stat = fs.fstatSync(descriptor);
+    if (!stat.isFile()) {
+      throw new Error(`unsafe provider-switch manifest at ${manifestLabel}`);
+    }
+    try {
+      payload = fs.readFileSync(descriptor, "utf-8");
+    } catch {
+      throw new Error(`invalid provider-switch manifest at ${manifestLabel}`);
+    }
+  } finally {
+    fs.closeSync(descriptor);
   }
+
   let parsed: unknown;
   try {
-    parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    parsed = JSON.parse(payload);
   } catch {
-    throw new Error(`invalid provider-switch manifest at ${destinationRelativeDir}/manifest.json`);
+    throw new Error(`invalid provider-switch manifest at ${manifestLabel}`);
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error(`invalid provider-switch manifest at ${destinationRelativeDir}/manifest.json`);
