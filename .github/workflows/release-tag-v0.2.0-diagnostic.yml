@@ -1,0 +1,83 @@
+name: Diagnose Agentify 0.2.0 tag push
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, reopened, synchronize]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  tag-push:
+    runs-on: ubuntu-24.04
+    env:
+      TARGET_SHA: 3e1f8495275b94b0ef159ef9ac3a32c378ac361d
+      RELEASE_TAG: v0.2.0
+      TEMP_BRANCH: tmp-release-tag-diagnostic
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      TAG_PUSH_TOKEN: ${{ secrets.AGENT_PAT || secrets.RELEASE_PAT || secrets.GH_PAT || secrets.PAT }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out exact merged main commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Attempt annotated tag push and capture result
+        id: push
+        shell: bash
+        run: |
+          set -u
+          : > tag-push.log
+          status=1
+          if [ -z "${TAG_PUSH_TOKEN:-}" ]; then
+            echo 'No repository PAT secret is available.' >> tag-push.log
+          else
+            main_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')
+            if [ "$main_sha" != "$TARGET_SHA" ]; then
+              echo "main moved to ${main_sha}; expected ${TARGET_SHA}" >> tag-push.log
+            else
+              remote="https://x-access-token:${TAG_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+              if git ls-remote --exit-code --tags "$remote" "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+                echo "Tag ${RELEASE_TAG} already exists; refusing to move or recreate it." >> tag-push.log
+              else
+                git config user.name 'Agentify Release Bot'
+                git config user.email 'actions@users.noreply.github.com'
+                git tag -a "$RELEASE_TAG" "$TARGET_SHA" -m 'Agentify 0.2.0'
+                set +e
+                git push "$remote" "refs/tags/${RELEASE_TAG}" >> tag-push.log 2>&1
+                status=$?
+                set -e
+              fi
+            fi
+          fi
+          echo "exit_status=${status}" >> tag-push.log
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          cat tag-push.log
+
+      - name: Upload sanitized tag-push result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentify-0.2.0-tag-push-diagnostic
+          path: tag-push.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Fail when tag push failed
+        if: steps.push.outputs.status != '0'
+        run: exit 1
+
+      - name: Remove temporary PR and diagnostic ref
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" -f state=closed
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${TEMP_BRANCH}"
