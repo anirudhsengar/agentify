@@ -132,6 +132,8 @@ jobs:
   npm-access:
     name: Verify npm publication ownership
     runs-on: ubuntu-latest
+    environment:
+      name: npm
     steps:
       - uses: actions/setup-node@v4
         with:
