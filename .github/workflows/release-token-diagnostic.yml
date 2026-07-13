@@ -1,0 +1,95 @@
+name: Inspect release token permissions
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, reopened, synchronize]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    env:
+      TEMP_BRANCH: tmp-release-token-diagnostic
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      GH_TOKEN: ${{ github.token }}
+      TOKEN_AGENT_PAT: ${{ secrets.AGENT_PAT }}
+      TOKEN_RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
+      TOKEN_GH_PAT: ${{ secrets.GH_PAT }}
+      TOKEN_PAT: ${{ secrets.PAT }}
+      TOKEN_GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+      TOKEN_REPO_PAT: ${{ secrets.REPO_PAT }}
+      TOKEN_BOT_PAT: ${{ secrets.BOT_PAT }}
+      TOKEN_RELEASE_GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
+      TOKEN_GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+      TOKEN_GITHUB_RELEASE_TOKEN: ${{ secrets.GITHUB_RELEASE_TOKEN }}
+      TOKEN_PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+      TOKEN_GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_PERSONAL_ACCESS_TOKEN }}
+    steps:
+      - name: Inspect candidate GitHub tokens without exposing values
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > token-permissions.txt
+          for name in \
+            TOKEN_AGENT_PAT TOKEN_RELEASE_PAT TOKEN_GH_PAT TOKEN_PAT \
+            TOKEN_GITHUB_PAT TOKEN_REPO_PAT TOKEN_BOT_PAT \
+            TOKEN_RELEASE_GITHUB_TOKEN TOKEN_GH_RELEASE_TOKEN \
+            TOKEN_GITHUB_RELEASE_TOKEN TOKEN_PERSONAL_ACCESS_TOKEN \
+            TOKEN_GITHUB_PERSONAL_ACCESS_TOKEN
+          do
+            token="${!name:-}"
+            label="${name#TOKEN_}"
+            if [ -z "$token" ]; then
+              echo "$label absent" >> token-permissions.txt
+              continue
+            fi
+            user_file=$(mktemp)
+            repo_file=$(mktemp)
+            user_status=$(curl -sS -o "$user_file" -w '%{http_code}' \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer $token" \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              https://api.github.com/user || true)
+            repo_status=$(curl -sS -o "$repo_file" -w '%{http_code}' \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer $token" \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}" || true)
+            login=$(jq -r '.login // "unknown"' "$user_file" 2>/dev/null || echo unknown)
+            push=$(jq -r '.permissions.push // false' "$repo_file" 2>/dev/null || echo false)
+            admin=$(jq -r '.permissions.admin // false' "$repo_file" 2>/dev/null || echo false)
+            maintain=$(jq -r '.permissions.maintain // false' "$repo_file" 2>/dev/null || echo false)
+            echo "$label present login=$login user_http=$user_status repo_http=$repo_status push=$push maintain=$maintain admin=$admin" >> token-permissions.txt
+            rm -f "$user_file" "$repo_file"
+          done
+          set +e
+          gh api "repos/${GITHUB_REPOSITORY}/actions/secrets" --jq '.secrets[].name' > configured-secret-names.txt 2> configured-secret-names-error.txt
+          echo "secret_name_list_status=$?" >> token-permissions.txt
+          set -e
+          cat token-permissions.txt
+
+      - name: Upload token permission report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-token-permissions
+          path: |
+            token-permissions.txt
+            configured-secret-names.txt
+            configured-secret-names-error.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove temporary PR and diagnostic ref
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" -f state=closed
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${TEMP_BRANCH}"
