@@ -415,10 +415,51 @@ export function classifyStateLayout(
   const legacy = sameAsLegacy
     ? canonical
     : inspectStateTree(cwd, LEGACY_PI_STATE_RELATIVE_DIR);
+  const legacyManifestMismatch = !sameAsLegacy
+    && occupied(legacy)
+    && legacy.manifestStateDir !== null
+    && legacy.manifestStateDir !== LEGACY_PI_STATE_RELATIVE_DIR;
+  const canonicalManifestMismatch = occupied(canonical)
+    && canonical.manifestStateDir !== null
+    && canonical.manifestStateDir !== selectedRelativeDir;
   const legacyIsPiCanonical = !sameAsLegacy
     && occupied(legacy)
     && legacy.manifestStateDir === LEGACY_PI_STATE_RELATIVE_DIR;
   const legacyActsAsFallback = !sameAsLegacy && !legacyIsPiCanonical;
+  if (legacyManifestMismatch) {
+    const mismatch: StateTreeInspection = {
+      ...legacy,
+      status: "user_owned",
+      detail: `manifest state_dir ${legacy.manifestStateDir} does not match physical state directory ${LEGACY_PI_STATE_RELATIVE_DIR}`,
+    };
+    return classification(
+      "user_owned",
+      selectedRelativeDir,
+      selectedRelativeDir,
+      false,
+      mismatch,
+      canonical,
+      [],
+      mismatch,
+    );
+  }
+  if (canonicalManifestMismatch) {
+    const mismatch: StateTreeInspection = {
+      ...canonical,
+      status: "user_owned",
+      detail: `manifest state_dir ${canonical.manifestStateDir} does not match physical state directory ${selectedRelativeDir}`,
+    };
+    return classification(
+      "user_owned",
+      selectedRelativeDir,
+      selectedRelativeDir,
+      false,
+      legacy,
+      mismatch,
+      [],
+      mismatch,
+    );
+  }
   const other = inspectOtherProviderTrees(cwd, selectedRelativeDir, legacyActsAsFallback);
   const blocking = firstBlockingInspection(sameAsLegacy ? [canonical] : [legacy, canonical])
     ?? other.blocking;
@@ -470,6 +511,18 @@ export function classifyStateLayout(
     );
   }
   if (legacyOccupied && canonicalOccupied) {
+    if (canonical.manifestStateDir === selectedRelativeDir) {
+      return classification(
+        "canonical_only",
+        selectedRelativeDir,
+        selectedRelativeDir,
+        false,
+        legacy,
+        canonical,
+        other.dirs,
+        null,
+      );
+    }
     const identical = legacy.fingerprint !== null && legacy.fingerprint === canonical.fingerprint;
     return classification(
       identical ? "dual_identical" : "dual_divergent",
@@ -527,11 +580,19 @@ export function formatStateLayoutGuidance(layout: StateLayoutClassification): st
   const messages: string[] = [];
   if (layout.fallback) {
     messages.push(
-      `agentify: legacy state detected at ${LEGACY_PI_STATE_RELATIVE_DIR}; selected state directory is ${layout.selectedRelativeDir}. Compatibility mode remains active; no state was moved or deleted.`,
+      `agentify: legacy state detected at ${LEGACY_PI_STATE_RELATIVE_DIR}; selected state directory is ${layout.selectedRelativeDir}. Migration is required before canonical writes.`,
     );
   } else if (layout.kind === "dual_identical") {
     messages.push(
       `agentify: canonical and legacy state are identical; using ${layout.selectedRelativeDir} and retaining ${LEGACY_PI_STATE_RELATIVE_DIR}.`,
+    );
+  } else if (
+    layout.kind === "canonical_only"
+    && layout.legacy.status === "valid"
+    && layout.canonical.manifestStateDir === layout.selectedRelativeDir
+  ) {
+    messages.push(
+      `agentify: using explicit canonical state at ${layout.selectedRelativeDir}; retained legacy state remains at ${LEGACY_PI_STATE_RELATIVE_DIR}.`,
     );
   } else if (layout.kind === "partial") {
     const inspection = layout.sourceRelativeDir === LEGACY_PI_STATE_RELATIVE_DIR
@@ -578,10 +639,12 @@ export function discoverExistingStateDir(cwd: string): DiscoveredStateDir | null
     (inspection) => inspection.relativeDir === LEGACY_PI_STATE_RELATIVE_DIR,
   );
   if (
-    fingerprints.size === 1 &&
     canonicalInspections.length === 1 &&
     legacyInspection !== undefined &&
-    canonicalInspections[0]!.manifestStateDir === canonicalInspections[0]!.relativeDir
+    (
+      fingerprints.size === 1
+      || canonicalInspections[0]!.manifestStateDir === canonicalInspections[0]!.relativeDir
+    )
   ) {
     return {
       relativeDir: canonicalInspections[0]!.relativeDir,

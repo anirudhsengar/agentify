@@ -9,7 +9,10 @@ trap 'rm -rf "$tmp"' EXIT
 git -C "$tmp" init -b main >/dev/null
 git -C "$tmp" config user.name "pi-agent[bot]"
 git -C "$tmp" config user.email "pi-agent[bot]@users.noreply.github.com"
-mkdir -p "$tmp/.pi/agents" "$tmp/.pi/prompts/experts/billing" "$tmp/src"
+mkdir -p "$tmp/.pi/agentify" "$tmp/.pi/agents" "$tmp/.pi/prompts/experts/billing" "$tmp/src"
+cat > "$tmp/.pi/agentify/manifest.json" <<'EOF'
+{"schema_version":"1","files":[]}
+EOF
 cat > "$tmp/AGENTS.md" <<'EOF'
 <!-- agentify:managed -->
 # AGENTS.md

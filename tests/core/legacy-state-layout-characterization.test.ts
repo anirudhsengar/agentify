@@ -186,7 +186,7 @@ function characterizeCanonicalMapFallback(): void {
   try {
     writeMap(legacyOnly, LEGACY_PI_STATE_RELATIVE_DIR, "legacy fallback");
     const loaded = loadCanonicalMapAt(legacyOnly, ".claude/agentify");
-    assert.equal(loaded?.meta.domain_hypothesis, "legacy fallback");
+    assert.equal(loaded, null, "explicit canonical reads must not probe legacy state");
   } finally {
     fs.rmSync(legacyOnly, { recursive: true, force: true });
   }
@@ -215,4 +215,4 @@ function characterizeCanonicalMapFallback(): void {
 
 characterizeResolverMatrix();
 characterizeCanonicalMapFallback();
-console.log("legacy state layout characterization tests passed.");
+console.log("Phase B state layout characterization tests passed.");

@@ -159,6 +159,9 @@ Options:
                              agent IDs (e.g. 'claude-code,codex,cursor').
                              Skips the picker entirely for non-interactive
                              use; persisted targets are NOT respected.
+  --migrate-state            With --targets, explicitly migrate one unambiguous
+                             prior provider state tree to the selected provider.
+                             The prior tree is retained unchanged.
 
 Run agentify in the current repository. Existing repos are audited and exported to
 the coding agents you select — by default Claude Code, Codex, and Pi, prompted
@@ -202,6 +205,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     runtime: new PiSdkRuntime(),
     mode: command.mode,
     targetsOverride: command.targetsOverride,
+    migrateState: command.migrateState,
   });
 }
 

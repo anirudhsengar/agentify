@@ -636,27 +636,17 @@ export function readGreenfieldFormationAt(
   cwd: string,
   stateDir: string,
 ): GreenfieldFormation | null {
-  // Try the resolved state dir first, then fall back to the
-  // legacy `.pi/agentify/` path for backward compat with formations
-  // written by older runs and test fakes that don't know about
-  // the resolved state dir.
-  const candidates = [
-    path.join(cwd, stateDir, "greenfield-formation.json"),
-    path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, "greenfield-formation.json"),
-  ];
-  for (const filePath of candidates) {
-    if (!fs.existsSync(filePath)) continue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-    } catch {
-      return null;
-    }
-    if (Value.Check(GreenfieldFormationSchema, parsed)) {
-      return parsed as GreenfieldFormation;
-    }
+  const filePath = path.join(cwd, stateDir, "greenfield-formation.json");
+  if (!fs.existsSync(filePath)) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+  } catch {
+    return null;
   }
-  return null;
+  return Value.Check(GreenfieldFormationSchema, parsed)
+    ? parsed as GreenfieldFormation
+    : null;
 }
 
 export function createWriteGreenfieldArtifactsTool(opts?: { stateDir?: string }): ToolDefinition {

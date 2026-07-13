@@ -22,6 +22,9 @@ resolve_base() {
 }
 
 base=$(resolve_base)
+repo_root=$(pwd)
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+state_dir=$("$script_dir/resolve-state-dir.sh" "$repo_root")
 
 changed_paths() {
   {
@@ -34,13 +37,11 @@ changed_paths() {
 
 is_allowed_refresh_path() {
   local rel=$1
-  local state_dir
-  state_dir="$(dirname "$(dirname "$0")")/scripts/resolve-state-dir.sh" "$repo_root"
   case "$rel" in
-    AGENTS.md|CLAUDE.md|specs/README.md|ai_docs/README.md|"$state_dir/conditional_docs.md"|"$state_dir/manifest.json")
+    AGENTS.md|CLAUDE.md|specs/README.md|ai_docs/README.md|.pi/conditional_docs.md|"$state_dir/manifest.json")
       return 0
       ;;
-    "$state_dir"/agents/*.md|"$state_dir"/prompts/experts/*/expertise.yaml|.codex/agents/*.toml|.claude/agents/*.md)
+    .pi/agents/*.md|.pi/prompts/experts/*/expertise.yaml|.codex/agents/*.toml|.claude/agents/*.md)
       return 0
       ;;
     app_docs/*|app_review/*|app_fix_reports/*)
@@ -95,7 +96,7 @@ for rel in "${paths[@]}"; do
       require_text "$rel" '^primary_paths:' "Refresh changed expert YAML missing primary_paths: $rel"
       require_text "$rel" '^testing:' "Refresh changed expert YAML missing testing: $rel"
       ;;
-    .pi/agentify/manifest.json)
+    "$state_dir/manifest.json")
       jq -e 'type == "object" and .schema_version == "1" and (.files | type == "array")' "$rel" >/dev/null
       ;;
   esac

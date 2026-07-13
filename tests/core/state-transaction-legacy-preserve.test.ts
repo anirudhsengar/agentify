@@ -93,7 +93,7 @@ withRepo("invalid-cross-dir", (cwd) => {
       destinationRelativeDir: ".claude/agentify",
       preserveExistingSource: true,
     }),
-    /requires identical source and destination/,
+    /cross-directory state moves are retired.*migrateRetainedState/,
   );
 });
 

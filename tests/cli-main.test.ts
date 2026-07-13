@@ -56,9 +56,10 @@ class BrownfieldFakeRuntime implements AgentRuntime {
     fs.mkdirSync(path.join(options.cwd, "specs"), { recursive: true });
     fs.mkdirSync(path.join(options.cwd, "ai_docs"), { recursive: true });
     fs.mkdirSync(path.join(options.cwd, ".pi", "agents"), { recursive: true });
-    fs.mkdirSync(path.join(options.cwd, ".pi", "agentify"), { recursive: true });
+    const stateDir = options.spawnExplorerStateDir ?? ".pi/agentify";
+    fs.mkdirSync(path.join(options.cwd, stateDir), { recursive: true });
     fs.writeFileSync(
-      path.join(options.cwd, ".pi", "agentify", "codebase_map.json"),
+      path.join(options.cwd, stateDir, "codebase_map.json"),
       JSON.stringify(makeValidCodebaseMap(), null, 2),
     );
     fs.writeFileSync(path.join(options.cwd, "AGENTS.md"), "# Agentified\n");
@@ -106,7 +107,9 @@ function seedReadyRepo(cwd: string, configDir: string): void {
       : relativePath.endsWith(".md")
         ? `${AGENTIFY_MANAGED_MARKERS.markdown}\n`
         : `${AGENTIFY_MANAGED_MARKERS.toml}\n`;
-    const content = `${marker}x\n`;
+    const content = relativePath === ".pi/agentify/codebase_map.json"
+      ? `${JSON.stringify(makeValidCodebaseMap(), null, 2)}\n`
+      : `${marker}x\n`;
     fs.writeFileSync(filePath, content);
     return manifestFileFromContent({ relativePath, content, source: "test" });
   });

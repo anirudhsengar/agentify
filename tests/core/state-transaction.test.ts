@@ -72,41 +72,21 @@ async function testCommitKeepsNewProviderState(): Promise<void> {
   }
 }
 
-async function testLegacyMigrationRollback(): Promise<void> {
-  const cwd = tempDir("agentify-state-migrate-rollback-");
+async function testLegacyCrossDirectoryMovesAreRetired(): Promise<void> {
+  const cwd = tempDir("agentify-state-migrate-retired-");
   try {
     write(cwd, ".pi/agentify/codebase_map.json", "legacy-map\n");
-    const transaction = beginStateTransaction({
-      cwd,
-      sourceRelativeDir: ".pi/agentify",
-      destinationRelativeDir: ".claude/agentify",
-      runId: "migrate-rollback",
-    });
-    write(cwd, ".claude/agentify/codebase_map.json", "new-map\n");
-    transaction.rollback();
-
+    assert.throws(
+      () => beginStateTransaction({
+        cwd,
+        sourceRelativeDir: ".pi/agentify",
+        destinationRelativeDir: ".claude/agentify",
+        runId: "migrate-retired",
+      }),
+      /cross-directory state moves are retired/,
+    );
     assert.equal(read(cwd, ".pi/agentify/codebase_map.json"), "legacy-map\n");
     assert.ok(!fs.existsSync(path.join(cwd, ".claude/agentify")));
-  } finally {
-    fs.rmSync(cwd, { recursive: true, force: true });
-  }
-}
-
-async function testLegacyMigrationCommit(): Promise<void> {
-  const cwd = tempDir("agentify-state-migrate-commit-");
-  try {
-    write(cwd, ".pi/agentify/codebase_map.json", "legacy-map\n");
-    const transaction = beginStateTransaction({
-      cwd,
-      sourceRelativeDir: ".pi/agentify",
-      destinationRelativeDir: ".agents/agentify",
-      runId: "migrate-commit",
-    });
-    write(cwd, ".agents/agentify/codebase_map.json", "new-map\n");
-    transaction.commit();
-
-    assert.ok(!fs.existsSync(path.join(cwd, ".pi/agentify")));
-    assert.equal(read(cwd, ".agents/agentify/codebase_map.json"), "new-map\n");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -179,7 +159,7 @@ async function testOccupiedMigrationDestinationRejected(): Promise<void> {
         destinationRelativeDir: ".claude/agentify",
         runId: "occupied-destination",
       }),
-      /occupied destination/,
+      /cross-directory state moves are retired/,
     );
     assert.equal(read(cwd, ".pi/agentify/codebase_map.json"), "legacy\n");
     assert.equal(read(cwd, ".claude/agentify/codebase_map.json"), "occupied\n");
@@ -216,8 +196,7 @@ async function testRejectsEscapingPathsAndUnsafeRunIds(): Promise<void> {
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "rollbackRestoresProviderState", fn: testRollbackRestoresProviderState },
   { name: "commitKeepsNewProviderState", fn: testCommitKeepsNewProviderState },
-  { name: "legacyMigrationRollback", fn: testLegacyMigrationRollback },
-  { name: "legacyMigrationCommit", fn: testLegacyMigrationCommit },
+  { name: "legacyCrossDirectoryMovesAreRetired", fn: testLegacyCrossDirectoryMovesAreRetired },
   { name: "interruptedTransactionRecovery", fn: testInterruptedTransactionRecovery },
   { name: "rollbackRemovesNewStateWhenNoPreviousState", fn: testRollbackRemovesNewStateWhenNoPreviousState },
   { name: "commitMissingDestinationRestoresOldState", fn: testCommitMissingDestinationRestoresOldState },

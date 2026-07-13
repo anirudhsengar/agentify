@@ -87,30 +87,9 @@ export function loadLegacyCanonicalMap(cwd: string): CodebaseMap | null {
 }
 
 export function loadCanonicalMapAt(cwd: string, stateDir: string): CodebaseMap | null {
-    const candidates = [
+    return loadValidatedCanonicalCandidate(
         path.join(cwd, stateDir, DEFAULT_MAP_FILENAME),
-        path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, DEFAULT_MAP_FILENAME),
-    ];
-    for (const filePath of candidates) {
-        if (!fs.existsSync(filePath)) continue;
-        let raw: string;
-        try {
-            raw = fs.readFileSync(filePath, "utf-8");
-        } catch {
-            return null;
-        }
-        if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(raw);
-        } catch {
-            return null;
-        }
-        if (Value.Check(CodebaseMapSchema, parsed)) {
-            return parsed as CodebaseMap;
-        }
-    }
-    return null;
+    );
 }
 
 export function readCanonicalMap(cwd: string): CodebaseMap | null {

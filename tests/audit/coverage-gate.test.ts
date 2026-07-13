@@ -47,27 +47,32 @@ class SilentUi implements AgentifyUi {
   async promptSecret(): Promise<string> { throw new Error("no prompt"); }
 }
 
-function writeArtifacts(cwd: string, opts: { map?: unknown; agentsMdLines?: number } = {}): void {
+function writeArtifacts(
+  cwd: string,
+  stateDir: string,
+  opts: { map?: unknown; agentsMdLines?: number } = {},
+): void {
   fs.mkdirSync(path.join(cwd, "specs"), { recursive: true });
   fs.mkdirSync(path.join(cwd, "ai_docs"), { recursive: true });
   fs.mkdirSync(path.join(cwd, ".pi", "agents"), { recursive: true });
-  fs.mkdirSync(path.join(cwd, ".pi", "agentify"), { recursive: true });
+  fs.mkdirSync(path.join(cwd, stateDir), { recursive: true });
   const lines = opts.agentsMdLines ?? 5;
   fs.writeFileSync(path.join(cwd, "AGENTS.md"), Array.from({ length: lines }, (_, i) => `line ${i}`).join("\n") + "\n");
   fs.writeFileSync(path.join(cwd, "specs", "README.md"), "# Specs\n");
   fs.writeFileSync(path.join(cwd, "ai_docs", "README.md"), "# AI Docs\n");
   if (opts.map !== undefined) {
     fs.writeFileSync(
-      path.join(cwd, ".pi", "agentify", "codebase_map.json"),
+      path.join(cwd, stateDir, "codebase_map.json"),
       JSON.stringify(opts.map, null, 2),
     );
   }
 }
 
 class ScriptedRuntime implements AgentRuntime {
-  constructor(private readonly write: (cwd: string) => void) {}
+  constructor(private readonly write: (cwd: string, stateDir: string) => void) {}
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
-    this.write(options.cwd);
+    assert.ok(options.spawnExplorerStateDir);
+    this.write(options.cwd, options.spawnExplorerStateDir);
     return { turns: 1, costUsd: null, aborted: false };
   }
   async runGreenfield(): Promise<AgentRuntimeResult> {
@@ -75,7 +80,10 @@ class ScriptedRuntime implements AgentRuntime {
   }
 }
 
-async function run(cwd: string, write: (cwd: string) => void): Promise<SilentUi> {
+async function run(
+  cwd: string,
+  write: (cwd: string, stateDir: string) => void,
+): Promise<SilentUi> {
   const prevHome = process.env["HOME"];
   const tempHome = tempDir("gate-run-home");
   process.env["HOME"] = tempHome;
@@ -98,7 +106,10 @@ async function run(cwd: string, write: (cwd: string) => void): Promise<SilentUi>
   }
 }
 
-async function runWithState(cwd: string, write: (cwd: string) => void): Promise<{ ui: SilentUi; configDir: string }> {
+async function runWithState(
+  cwd: string,
+  write: (cwd: string, stateDir: string) => void,
+): Promise<{ ui: SilentUi; configDir: string }> {
   const prevHome = process.env["HOME"];
   const tempHome = tempDir("gate-state-home");
   process.env["HOME"] = tempHome;
@@ -296,7 +307,7 @@ function testLoadCanonicalMapRejectsGarbage(): void {
 
 async function testNoMapMeansPartialNoExport(): Promise<void> {
   const cwd = tempDir("gate-nomap");
-  const ui = await run(cwd, (c) => writeArtifacts(c, { /* no map */ }));
+  const ui = await run(cwd, (c, stateDir) => writeArtifacts(c, stateDir, { /* no map */ }));
   assert.ok(!fs.existsSync(path.join(cwd, ".codex")), "must not export without a map");
   assert.ok(!fs.existsSync(path.join(cwd, "AGENTS.md")), "partial audit must roll back AGENTS.md");
   assert.ok(!fs.existsSync(path.join(cwd, "specs", "README.md")), "partial audit must roll back specs README");
@@ -308,15 +319,15 @@ async function testGapMapMeansPartialNoExport(): Promise<void> {
   const cwd = tempDir("gate-gap");
   const gapMap = makeValidCodebaseMap();
   gapMap.coverage.D6_validation = { status: "gap", confidence: "low", evidence_summary: "todo" };
-  const ui = await run(cwd, (c) => writeArtifacts(c, { map: gapMap }));
+  const ui = await run(cwd, (c, stateDir) => writeArtifacts(c, stateDir, { map: gapMap }));
   assert.ok(!fs.existsSync(path.join(cwd, ".codex")), "gap map must not export");
   assert.ok(ui.errors.some((m) => m.includes("D6_validation")));
 }
 
 async function testOversizedAgentsMdMeansPartial(): Promise<void> {
   const cwd = tempDir("gate-oversize");
-  const ui = await run(cwd, (c) =>
-    writeArtifacts(c, { map: makeValidCodebaseMap(), agentsMdLines: AGENTS_MD_MAX_LINES + 5 }),
+  const ui = await run(cwd, (c, stateDir) =>
+    writeArtifacts(c, stateDir, { map: makeValidCodebaseMap(), agentsMdLines: AGENTS_MD_MAX_LINES + 5 }),
   );
   assert.ok(!fs.existsSync(path.join(cwd, ".codex")), "oversized AGENTS.md must not export");
   assert.ok(ui.errors.some((m) => m.includes("line cap")));
@@ -324,8 +335,8 @@ async function testOversizedAgentsMdMeansPartial(): Promise<void> {
 
 async function testFullyCoveredMeansSuccessAndPersistsMap(): Promise<void> {
   const cwd = tempDir("gate-ok");
-  const ui = await run(cwd, (c) => {
-    writeArtifacts(c, { map: makeValidCodebaseMap() });
+  const ui = await run(cwd, (c, stateDir) => {
+    writeArtifacts(c, stateDir, { map: makeValidCodebaseMap() });
     fs.writeFileSync(
       path.join(c, ".pi", "agents", "payments.md"),
       "---\nname: payments\ndescription: x\n---\n\nUse.\n",
@@ -333,8 +344,8 @@ async function testFullyCoveredMeansSuccessAndPersistsMap(): Promise<void> {
   });
   assert.ok(fs.existsSync(path.join(cwd, ".codex")), "covered map must export");
   assert.ok(
-    fs.existsSync(path.join(cwd, ".pi", "agentify", "codebase_map.json")),
-    "canonical map must be preserved after the run",
+    fs.existsSync(path.join(cwd, ".agents", "agentify", "codebase_map.json")),
+    "provider-scoped canonical map must be preserved after the run",
   );
   assert.ok(ui.infos.some((m) => m.includes("audit complete")));
 }
@@ -342,8 +353,8 @@ async function testFullyCoveredMeansSuccessAndPersistsMap(): Promise<void> {
 async function testUserOwnedAgentsMdBlocksClaudeExport(): Promise<void> {
   const cwd = tempDir("gate-user-agents");
   fs.writeFileSync(path.join(cwd, "AGENTS.md"), "# User owned\n");
-  const { ui, configDir } = await runWithState(cwd, (c) => {
-    writeArtifacts(c, { map: makeValidCodebaseMap() });
+  const { ui, configDir } = await runWithState(cwd, (c, stateDir) => {
+    writeArtifacts(c, stateDir, { map: makeValidCodebaseMap() });
   });
   assert.equal(fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf-8"), "# User owned\n");
   assert.ok(!fs.existsSync(path.join(cwd, "CLAUDE.md")), "must not copy user-owned AGENTS.md to CLAUDE.md");
@@ -356,8 +367,8 @@ async function testUserOwnedWorkflowConflictPersistsPartial(): Promise<void> {
   const workflow = path.join(cwd, ".github", "workflows", "agent-implement.yml");
   fs.mkdirSync(path.dirname(workflow), { recursive: true });
   fs.writeFileSync(workflow, "name: user-owned\n");
-  const { configDir } = await runWithState(cwd, (c) => {
-    writeArtifacts(c, { map: makeValidCodebaseMap() });
+  const { configDir } = await runWithState(cwd, (c, stateDir) => {
+    writeArtifacts(c, stateDir, { map: makeValidCodebaseMap() });
   });
   assert.equal(readProjectState(configDir, cwd)?.repoStatus, "partial");
   assert.equal(readProjectState(configDir, cwd)?.runStatus, "partial");

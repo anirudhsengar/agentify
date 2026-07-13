@@ -45,7 +45,7 @@ function assertBinaryRecognizesOptions(
     assert.equal(result.error, undefined, `binary failed to start: ${result.error?.message ?? "unknown"}`);
     assert.notEqual(result.status, 0, "the validation fixture must stop before runtime setup");
     const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-    assert.doesNotMatch(output, /unknown subcommand '--(?:mode|targets)'/);
+    assert.doesNotMatch(output, /unknown subcommand '--(?:mode|targets|migrate-state)'/);
     assert.match(output, expectedValidationError);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
@@ -66,6 +66,10 @@ async function testParsesRunOptions(): Promise<void> {
   assert.deepEqual(
     parseCliArgs(["--targets", "codex", "--mode", "greenfield"]),
     { kind: "run", mode: "greenfield", targetsOverride: ["codex"] },
+  );
+  assert.deepEqual(
+    parseCliArgs(["--targets", "codex", "--migrate-state"]),
+    { kind: "run", targetsOverride: ["codex"], migrateState: true },
   );
 }
 
@@ -94,6 +98,7 @@ async function testRejectsInvalidInput(): Promise<void> {
   assertThrowsMessage(() => parseCliArgs(["--mode", "bogus"]), /brownfield.*greenfield/);
   assertThrowsMessage(() => parseCliArgs(["--targets", "not-an-agent"]), /unknown agent/);
   assertThrowsMessage(() => parseCliArgs(["--mode", "brownfield", "--mode=greenfield"]), /only be specified once/);
+  assertThrowsMessage(() => parseCliArgs(["--migrate-state"]), /requires an explicit --targets/);
   assertThrowsMessage(() => parseCliArgs(["--unknown"]), /Unknown option|unknown option/i);
   assertThrowsMessage(() => parseCliArgs(["unknown-command"]), /unknown subcommand 'unknown-command'/);
 }

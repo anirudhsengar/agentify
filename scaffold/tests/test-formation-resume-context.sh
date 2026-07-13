@@ -12,10 +12,16 @@ state_path="$tmp/.pi/agentify/$state_name"
 state_ref=".pi/agentify/$state_name"
 out="$tmp/resume.md"
 
-bash "$renderer" "$tmp" > "$out"
-grep -q 'No formation state file was found' "$out"
+if bash "$renderer" "$tmp" > "$out" 2>"$tmp/err"; then
+  echo "renderer must fail when no explicit manifest exists" >&2
+  exit 1
+fi
+grep -q 'no Agentify manifest found' "$tmp/err"
 
 mkdir -p "$tmp/.pi/agentify"
+cat > "$tmp/.pi/agentify/manifest.json" <<'JSON'
+{"schema_version":"1","files":[]}
+JSON
 cat > "$state_path" <<JSON
 {
   "schema_version": "1",

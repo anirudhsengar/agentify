@@ -173,15 +173,17 @@ try {
       files: [],
     }, null, 2)}\n`,
   );
-  const legacyAttach = run(bin, [], {
+  const legacyAttach = run(bin, ["--targets", "claude-code"], {
     cwd: priorVersionRepo,
     env,
     timeout: 30_000,
   });
   assert.equal(legacyAttach.stderr, "");
   assert.match(legacyAttach.stdout, /attached to initialized brownfield repo/);
-  assert.match(legacyAttach.stdout, /inspecting state at \.pi\/agentify/);
-  assert.ok(!fs.existsSync(path.join(priorVersionRepo, ".claude", "agentify")));
+  assert.match(legacyAttach.stdout, /migrating retained legacy state \.pi\/agentify -> \.claude\/agentify/);
+  assert.match(legacyAttach.stdout, /inspecting state at \.claude\/agentify/);
+  assert.ok(fs.existsSync(path.join(priorVersionRepo, ".pi", "agentify", "manifest.json")));
+  assert.ok(fs.existsSync(path.join(priorVersionRepo, ".claude", "agentify", "manifest.json")));
   assert.ok(!fs.existsSync(path.join(priorVersionRepo, ".agents", "agentify")));
 
   console.log(`installed compiled package smoke test passed (${packageJson.version}).`);

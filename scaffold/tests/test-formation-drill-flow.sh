@@ -56,6 +56,9 @@ export PATH="$tmp/bin:$PATH"
 state_name="green"
 state_name="${state_name}field-state.json"
 mkdir -p "$tmp/.pi/agentify"
+cat > "$tmp/.pi/agentify/manifest.json" <<'JSON'
+{"schema_version":"1","files":[]}
+JSON
 
 cat > "$tmp/.pi/agentify/$state_name" <<'JSON'
 {

@@ -19,7 +19,11 @@ import {
   saveAgentifyConfig,
 } from "./agentify-config.ts";
 import { selectModelForRole } from "./models/resolver.ts";
-import { resolveCanonicalStateDir } from "./state-dir.ts";
+import {
+  LEGACY_PI_STATE_RELATIVE_DIR,
+  discoverExistingStateDir,
+} from "./state-dir.ts";
+import { recoverInterruptedStateTransactions } from "./state-transaction.ts";
 import { revertLastRun } from "./revert.ts";
 import type { AgentifyProvider, AgentifyUi, ModelRole } from "./types.ts";
 
@@ -713,7 +717,9 @@ export async function revertCommand(
     ctx.err.write(`agentify: revert: unexpected positional argument '${pos}'\n`);
     return 1;
   }
-  const stateDir = resolveCanonicalStateDir(ctx.cwd, []).relativeDir;
+  recoverInterruptedStateTransactions(ctx.cwd);
+  const stateDir = discoverExistingStateDir(ctx.cwd)?.relativeDir
+    ?? LEGACY_PI_STATE_RELATIVE_DIR;
   const includeAlongside = parsed.flags["keep-alongside"] !== true;
   const runId = typeof parsed.flags.to === "string" ? parsed.flags.to : undefined;
   const result = await revertLastRun({

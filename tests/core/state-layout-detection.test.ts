@@ -55,13 +55,15 @@ withRepo("empty", (cwd) => {
 withRepo("legacy-only", (cwd) => {
   writeMap(cwd, LEGACY_PI_STATE_RELATIVE_DIR, "legacy");
   const resolved = resolveCanonicalStateDir(cwd, ["claude"]);
-  assert.equal(resolved.relativeDir, LEGACY_PI_STATE_RELATIVE_DIR);
-  assert.equal(resolved.sourceRelativeDir, LEGACY_PI_STATE_RELATIVE_DIR);
+  assert.equal(resolved.relativeDir, ".claude/agentify");
+  assert.equal(resolved.sourceRelativeDir, ".claude/agentify");
   assert.equal(resolved.destinationRelativeDir, ".claude/agentify");
-  assert.equal(resolved.layout.kind, "legacy_only");
-  assert.equal(resolved.layout.fallback, true);
-  assert.equal(resolved.guidance.length, 1);
-  assert.match(resolved.guidance[0]!, /no state was moved or deleted/);
+  assert.equal(resolved.layout.kind, "dual_identical");
+  assert.equal(resolved.layout.fallback, false);
+  assert.ok(resolved.migrationRunId);
+  assert.equal(resolved.guidance.length, 2);
+  assert.match(resolved.guidance[0]!, /migrating retained legacy state/);
+  assert.match(resolved.guidance[1]!, /legacy state remains/);
 });
 
 withRepo("canonical-only", (cwd) => {
@@ -77,6 +79,20 @@ withRepo("dual-identical", (cwd) => {
   const layout = classifyStateLayout(cwd, ".claude/agentify");
   assert.equal(layout.kind, "dual_identical");
   assert.doesNotThrow(() => assertStateLayoutUsable(layout));
+});
+
+
+withRepo("explicit-canonical-authority-retains-stale-legacy", (cwd) => {
+  writeMap(cwd, LEGACY_PI_STATE_RELATIVE_DIR, "retained legacy");
+  writeMap(cwd, ".claude/agentify", "new canonical");
+  writeManifest(cwd, ".claude/agentify", ".claude/agentify");
+  const layout = classifyStateLayout(cwd, ".claude/agentify");
+  assert.equal(layout.kind, "canonical_only");
+  assert.equal(layout.sourceRelativeDir, ".claude/agentify");
+  assert.doesNotThrow(() => assertStateLayoutUsable(layout));
+  const discovered = discoverExistingStateDir(cwd);
+  assert.equal(discovered?.relativeDir, ".claude/agentify");
+  assert.equal(discovered?.duplicateLegacyDir, LEGACY_PI_STATE_RELATIVE_DIR);
 });
 
 withRepo("dual-divergent", (cwd) => {
@@ -157,23 +173,42 @@ withRepo("pi-canonical", (cwd) => {
   assert.equal(pi.layout.fallback, false);
   assert.equal(pi.relativeDir, LEGACY_PI_STATE_RELATIVE_DIR);
 
-  const switchToClaude = resolveCanonicalStateDir(cwd, ["claude"]);
-  assert.equal(switchToClaude.layout.fallback, false);
-  assert.equal(switchToClaude.relativeDir, ".claude/agentify");
-  assert.deepEqual(switchToClaude.layout.otherProviderStateDirs, [LEGACY_PI_STATE_RELATIVE_DIR]);
+  assert.throws(
+    () => resolveCanonicalStateDir(cwd, ["claude"]),
+    /existing provider state is present|manifest state_dir .* does not match physical state directory|unsafe state path/,
+  );
+});
+
+
+withRepo("explicit-provider-switches", (cwd) => {
+  writeManifest(cwd, ".claude/agentify", ".claude/agentify");
+  writeMap(cwd, ".claude/agentify", "claude");
+  const switched = resolveCanonicalStateDir(
+    cwd, ["codex"], [], { allowProviderSwitchMigration: true },
+  );
+  assert.equal(switched.relativeDir, ".agents/agentify");
+  assert.equal(switched.layout.kind, "canonical_only");
+  assert.ok(switched.migrationRunId);
+  assert.ok(fs.existsSync(path.join(cwd, ".claude/agentify/manifest.json")));
+  const installed = JSON.parse(
+    fs.readFileSync(path.join(cwd, ".agents/agentify/manifest.json"), "utf-8"),
+  ) as { state_dir?: string };
+  assert.equal(installed.state_dir, ".agents/agentify");
 });
 
 withRepo("provider-switches", (cwd) => {
   writeManifest(cwd, ".claude/agentify", ".claude/agentify");
-  const claudeToCodex = resolveCanonicalStateDir(cwd, ["codex"]);
-  assert.equal(claudeToCodex.relativeDir, ".agents/agentify");
-  assert.deepEqual(claudeToCodex.layout.otherProviderStateDirs, [".claude/agentify"]);
+  assert.throws(
+    () => resolveCanonicalStateDir(cwd, ["codex"]),
+    /existing provider state is present/,
+  );
 
   fs.rmSync(path.join(cwd, ".claude"), { recursive: true, force: true });
   writeManifest(cwd, ".agents/agentify", ".agents/agentify");
-  const codexToPi = resolveCanonicalStateDir(cwd, ["pi"]);
-  assert.equal(codexToPi.relativeDir, LEGACY_PI_STATE_RELATIVE_DIR);
-  assert.deepEqual(codexToPi.layout.otherProviderStateDirs, [".agents/agentify"]);
+  assert.throws(
+    () => resolveCanonicalStateDir(cwd, ["pi"]),
+    /existing provider state is present/,
+  );
 
   const shared = resolveCanonicalStateDir(cwd, [], ["cursor"]);
   assert.equal(shared.relativeDir, ".agents/agentify");
@@ -186,4 +221,4 @@ withRepo("discovery", (cwd) => {
   assert.equal(discovered?.relativeDir, ".claude/agentify");
 });
 
-console.log("Phase A state layout detection tests passed.");
+console.log("Phase B state layout detection tests passed.");

@@ -7,22 +7,35 @@ const repoRoot = path.resolve(process.argv[2] ?? ".");
 
 function resolveStateDir(repoRoot) {
   const candidates = [".agents/agentify", ".claude/agentify", ".pi/agentify"];
+  const explicit = [];
+  const unstamped = [];
   for (const base of candidates) {
     const manifestPath = path.join(repoRoot, base, "manifest.json");
-    if (fs.existsSync(manifestPath)) {
-      try {
-        const text = fs.readFileSync(manifestPath, "utf8");
-        const parsed = JSON.parse(text);
-        if (parsed && typeof parsed.state_dir === "string") {
-          return parsed.state_dir;
-        }
-      } catch {
-        // fall through to manifest-relative fallback
+    if (!fs.existsSync(manifestPath)) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    } catch {
+      throw new Error(`invalid agentify manifest at ${base}/manifest.json`);
+    }
+    if (parsed && typeof parsed.state_dir === "string") {
+      if (parsed.state_dir !== base) {
+        throw new Error(`manifest state_dir mismatch at ${base}/manifest.json: ${parsed.state_dir}`);
       }
-      return base;
+      explicit.push(base);
+    } else {
+      unstamped.push(base);
     }
   }
-  return ".pi/agentify";
+  if (explicit.length === 1) return explicit[0];
+  if (explicit.length > 1) {
+    throw new Error(`multiple explicit agentify state manifests: ${explicit.join(", ")}`);
+  }
+  if (unstamped.length === 1) return unstamped[0];
+  if (unstamped.length > 1) {
+    throw new Error(`multiple unstamped agentify state manifests: ${unstamped.join(", ")}`);
+  }
+  throw new Error("no agentify manifest found; run agentify before refreshing managed state");
 }
 
 const stateDir = resolveStateDir(repoRoot);
@@ -43,16 +56,17 @@ function markerForPath(relativePath) {
 }
 
 function kindForPath(relativePath, stateDir) {
-  if (relativePath.startsWith(".codex/") || relativePath === "CLAUDE.md") return "harness_export";
-  if (relativePath.startsWith(".claude/")) return "skill";
   if (relativePath.startsWith(`${stateDir}/prompts/experts/`)) return "expert";
   if (relativePath.startsWith(`${stateDir}/`)) return "state";
+  if (/^\.pi\/prompts\/experts\/[^/]+\//.test(relativePath)) return "expert";
+  if (relativePath.startsWith(".codex/") || relativePath === "CLAUDE.md") return "harness_export";
+  if (relativePath.startsWith(".claude/")) return "skill";
   return "audit";
 }
 
 function isRequired(relativePath, mode) {
   const formation = new Set(["GOALS.md", "CONTEXT.md", "SETUP.md", ".github/workflows/agent-implement.yml", ".github/actions/run-pi/action.yml", ".github/scripts/setup-agentify.sh"]);
-  const brownfield = new Set(["AGENTS.md", "specs/README.md", "ai_docs/README.md", ".pi/agentify/codebase_map.json", "SETUP.md", ".github/workflows/agent-implement.yml", ".github/actions/run-pi/action.yml", ".github/scripts/setup-agentify.sh"]);
+  const brownfield = new Set(["AGENTS.md", "specs/README.md", "ai_docs/README.md", `${stateDir}/codebase_map.json`, "SETUP.md", ".github/workflows/agent-implement.yml", ".github/actions/run-pi/action.yml", ".github/scripts/setup-agentify.sh"]);
   return (mode === "green" + "field" ? formation : brownfield).has(relativePath);
 }
 
