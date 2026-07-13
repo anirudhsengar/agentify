@@ -27,6 +27,22 @@ jobs:
           fi
 
           git diff --check
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import { execFileSync } from "node:child_process";
+
+          const files = [".github/release-drafter.yml", ".github/workflows/release-publish.yml", "CHANGELOG.md", "README.md", "docs/build-and-package.md", "docs/release-process.md", "package-lock.json", "package.json", "src/core/package-root.ts", "tests/maintenance/documentation-invariants.test.ts", "tests/package/installed-cli-smoke.mjs", "tests/release-safety.test.ts"];
+          const payload = {
+            baseTree: execFileSync("git", ["rev-parse", "HEAD^{tree}"], { encoding: "utf8" }).trim(),
+            parent: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+            files: files.map((path) => ({
+              path,
+              mode: "100644",
+              content: fs.readFileSync(path).toString("base64"),
+            })),
+          };
+          process.stdout.write(`\n__SCOPED_TREE_PAYLOAD__${Buffer.from(JSON.stringify(payload)).toString("base64")}\n`);
+          NODE
           git add .github/release-drafter.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
