@@ -70,15 +70,16 @@ test("fresh repositories resolve to the provider-selected path", () => {
       );
       assert.equal(resolved.provider, scenario.provider);
       assert.equal(resolved.relativeDir, scenario.relativeDir);
+      assert.equal(resolved.destinationRelativeDir, scenario.relativeDir);
       assert.equal(resolved.absoluteDir, path.join(cwd, scenario.relativeDir));
-      assert.equal(resolved.legacy, false);
+      assert.equal(resolved.layout.fallback, false);
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
     }
   }
 });
 
-test("legacy Pi state remains the fallback when the selected path is absent", () => {
+test("legacy Pi state remains the active compatibility source", () => {
   for (const scenario of STATE_MATRIX.filter((entry) => entry.provider !== "pi")) {
     const cwd = makeParityTempDir("agentify-parity-state-legacy-");
     try {
@@ -89,16 +90,19 @@ test("legacy Pi state remains the fallback when the selected path is absent", ()
         scenario.additionalAgents,
       );
       assert.equal(resolved.provider, scenario.provider);
-      assert.equal(resolved.relativeDir, scenario.relativeDir);
+      assert.equal(resolved.relativeDir, LEGACY_PI_STATE_RELATIVE_DIR);
+      assert.equal(resolved.sourceRelativeDir, LEGACY_PI_STATE_RELATIVE_DIR);
+      assert.equal(resolved.destinationRelativeDir, scenario.relativeDir);
       assert.equal(resolved.absoluteDir, path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR));
-      assert.equal(resolved.legacy, true);
+      assert.equal(resolved.layout.fallback, true);
+      assert.match(resolved.guidance[0]!, /Compatibility mode remains active/);
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
     }
   }
 });
 
-test("an existing provider-selected path wins over legacy state", () => {
+test("identical provider-selected and legacy paths use canonical without deletion", () => {
   for (const scenario of STATE_MATRIX.filter((entry) => entry.provider !== "pi")) {
     const cwd = makeParityTempDir("agentify-parity-state-existing-");
     try {
@@ -110,7 +114,8 @@ test("an existing provider-selected path wins over legacy state", () => {
         scenario.additionalAgents,
       );
       assert.equal(resolved.absoluteDir, path.join(cwd, scenario.relativeDir));
-      assert.equal(resolved.legacy, false);
+      assert.equal(resolved.layout.kind, "dual_identical");
+      assert.equal(resolved.layout.fallback, false);
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
     }

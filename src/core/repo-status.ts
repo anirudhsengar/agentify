@@ -2,20 +2,20 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
-  CODEBASE_MAP_RELATIVE_PATH,
   codebaseMapRelativePath,
   type ManagedManifestFile,
-  REQUIRED_BROWNFIELD_FILES,
   REQUIRED_GREENFIELD_FILES,
   markerForPath,
-  verifyManifest,
+  requiredBrownfieldFiles,
 } from "./manifest.ts";
+import { verifyManifestAt } from "./manifest-verification.ts";
 import { LEGACY_PI_STATE_RELATIVE_DIR } from "./state-dir.ts";
 
 export type AgentifyRepoMode = "brownfield" | "greenfield" | "unknown";
 export type AgentifyRepoStatus = "uninitialized" | "partial" | "ready";
 
 export interface AgentifyRepoState {
+  stateDir: string;
   mode: AgentifyRepoMode;
   status: AgentifyRepoStatus;
   featureAgentCount: number;
@@ -27,11 +27,10 @@ export interface AgentifyRepoState {
   latestLogPath: string | null;
 }
 
-const BROWNFIELD_EXPECTED = [
+const BROWNFIELD_EXPECTED_ROOT = [
   "AGENTS.md",
   "specs/README.md",
   "ai_docs/README.md",
-  CODEBASE_MAP_RELATIVE_PATH,
 ] as const;
 
 const SCAFFOLD_EXPECTED = [
@@ -193,12 +192,18 @@ function collectUnmanaged(cwd: string, relatives: readonly string[]): string[] {
     .filter((relativePath) => !fileCarriesExpectedMarker(cwd, relativePath));
 }
 
+/**
+ * Inspect repository readiness using one explicit state directory.
+ *
+ * The default remains only for compatibility with direct legacy callers. All
+ * supported production entry points pass a resolved state directory.
+ */
 export function inspectAgentifyRepoState(
   cwd: string,
   configDir: string,
   stateDir: string = LEGACY_PI_STATE_RELATIVE_DIR,
 ): AgentifyRepoState {
-  const manifestVerification = verifyManifest(cwd);
+  const manifestVerification = verifyManifestAt(cwd, stateDir);
   if (manifestVerification.manifest) {
     const counts = inspectManifestSurfaceCounts(cwd, manifestVerification.manifest.files);
     const latestLogPath = findLatestLogPath(cwd, configDir);
@@ -208,6 +213,7 @@ export function inspectAgentifyRepoState(
       ...manifestVerification.mismatched.map((entry) => `${entry} (hash mismatch)`),
     ];
     return {
+      stateDir,
       mode: manifestVerification.mode,
       status: manifestVerification.valid ? "ready" : "partial",
       ...counts,
@@ -217,7 +223,7 @@ export function inspectAgentifyRepoState(
     };
   }
 
-  const brownfieldFound = collectFound(cwd, BROWNFIELD_EXPECTED).concat(
+  const brownfieldFound = collectFound(cwd, BROWNFIELD_EXPECTED_ROOT).concat(
     collectFound(cwd, [codebaseMapRelativePath(stateDir)]),
   );
   const scaffoldFound = collectFound(cwd, SCAFFOLD_EXPECTED);
@@ -228,15 +234,15 @@ export function inspectAgentifyRepoState(
   const latestLogPath = findLatestLogPath(cwd, configDir);
 
   if (brownfieldFound.length > 0) {
-    const expected = [...REQUIRED_BROWNFIELD_FILES];
-    const missing = expected
-      .filter((relativePath) => !hasPath(cwd, relativePath));
+    const expected = [...requiredBrownfieldFiles(stateDir)];
+    const missing = expected.filter((relativePath) => !hasPath(cwd, relativePath));
     const unmanaged = collectUnmanaged(cwd, expected);
     return {
+      stateDir,
       mode: "brownfield",
       status: missing.length === 0 && unmanaged.length === 0 ? "ready" : "partial",
       ...counts,
-      missing: [...missing, ...unmanaged.map((entry) => `${entry} (unmanaged)`)],
+      missing: [...missing, ...unmanaged.map((entry) => `${entry} (unmanaged)`) ],
       found,
       latestLogPath,
     };
@@ -244,23 +250,24 @@ export function inspectAgentifyRepoState(
 
   if (greenfieldFound.length > 0) {
     const expected = [...REQUIRED_GREENFIELD_FILES];
-    const missing = expected
-      .filter((relativePath) => !hasPath(cwd, relativePath));
+    const missing = expected.filter((relativePath) => !hasPath(cwd, relativePath));
     const unmanaged = collectUnmanaged(cwd, expected);
     return {
+      stateDir,
       mode: "greenfield",
       status: missing.length === 0 && unmanaged.length === 0 ? "ready" : "partial",
       ...counts,
-      missing: [...missing, ...unmanaged.map((entry) => `${entry} (unmanaged)`)],
+      missing: [...missing, ...unmanaged.map((entry) => `${entry} (unmanaged)`) ],
       found,
       latestLogPath,
     };
   }
 
   if (scaffoldFound.length > 0) {
-    const missing = [...BROWNFIELD_EXPECTED, ...SCAFFOLD_EXPECTED]
-      .filter((relativePath) => !hasPath(cwd, relativePath));
+    const expected = [...BROWNFIELD_EXPECTED_ROOT, codebaseMapRelativePath(stateDir), ...SCAFFOLD_EXPECTED];
+    const missing = expected.filter((relativePath) => !hasPath(cwd, relativePath));
     return {
+      stateDir,
       mode: "unknown",
       status: "partial",
       ...counts,
@@ -271,6 +278,7 @@ export function inspectAgentifyRepoState(
   }
 
   return {
+    stateDir,
     mode: "unknown",
     status: "uninitialized",
     ...counts,

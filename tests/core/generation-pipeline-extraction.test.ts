@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { DEFAULT_APPLY_POLICY } from "../../src/core/apply-policy.ts";
+import { rollbackGeneratedSurface } from "../../src/core/generation/artifact-snapshot.ts";
 import type { RenderedArtifact } from "../../src/core/artifacts/renderers.ts";
 import {
   manifestFileFromContent,
@@ -45,11 +46,14 @@ function testSnapshotOwnershipContentAndModes(): void {
     assert.equal(snapshot.get("AGENTS.md")?.mode, 0o600);
     assert.equal(snapshot.get("specs/README.md")?.ownership, "managed");
     assert.equal(snapshot.get("specs/README.md")?.mode, 0o640);
+    assert.equal(snapshot.has(`${SNAPSHOT_STATE_DIR}/codebase_map.json`), false);
+
+    fs.writeFileSync(path.join(cwd, "AGENTS.md"), "# temporary generated\n");
+    rollbackGeneratedSurface(cwd, snapshot);
     assert.equal(
-      snapshot.get(`${SNAPSHOT_STATE_DIR}/codebase_map.json`)?.ownership,
-      "managed",
+      fs.readFileSync(path.join(cwd, SNAPSHOT_STATE_DIR, "codebase_map.json"), "utf8"),
+      "{}\n",
     );
-    assert.equal(snapshot.get(`${SNAPSHOT_STATE_DIR}/codebase_map.json`)?.mode, 0o600);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

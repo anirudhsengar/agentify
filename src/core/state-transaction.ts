@@ -5,6 +5,7 @@ import * as path from "node:path";
 const TRANSACTION_ROOT_RELATIVE = ".agentify/state-transactions";
 const JOURNAL_FILE = "journal.json";
 const BACKUP_DIR = "backup";
+const BACKUP_COPY_DIR = "backup.copying";
 const SAFE_RUN_ID = /^[A-Za-z0-9._-]+$/;
 
 interface StateTransactionJournal {
@@ -23,6 +24,12 @@ export interface BeginStateTransactionOptions {
   /** Provider-selected location where the new run writes state. */
   destinationRelativeDir: string;
   runId?: string;
+  /**
+   * Copy the existing source into the transaction backup and update it in
+   * place. Used only by Phase A legacy compatibility so the legacy path is not
+   * moved or replaced before Phase B migration exists.
+   */
+  preserveExistingSource?: boolean;
 }
 
 export interface StateTransaction {
@@ -74,6 +81,10 @@ function journalPath(cwd: string, runId: string): string {
 
 function backupPath(cwd: string, runId: string): string {
   return path.join(transactionDir(cwd, runId), BACKUP_DIR);
+}
+
+function backupCopyPath(cwd: string, runId: string): string {
+  return path.join(transactionDir(cwd, runId), BACKUP_COPY_DIR);
 }
 
 function writeJsonAtomic(filePath: string, value: unknown): void {
@@ -142,8 +153,6 @@ function restoreJournal(cwd: string, journal: StateTransactionJournal): void {
   const backup = backupPath(cwd, journal.run_id);
 
   if (journal.phase === "committed") {
-    // The durable commit marker is the commit point. Cleanup may have been
-    // interrupted, but the destination is authoritative and must survive.
     fs.rmSync(backup, { recursive: true, force: true });
     removeTransactionDirectory(cwd, journal.run_id);
     return;
@@ -159,21 +168,14 @@ function restoreJournal(cwd: string, journal: StateTransactionJournal): void {
     fs.mkdirSync(path.dirname(source), { recursive: true });
     fs.renameSync(backup, source);
   } else if (!journal.had_existing_state) {
-    // A new repository had no prior state. Any destination is partial output.
     fs.rmSync(destination, { recursive: true, force: true });
   } else if (source !== destination) {
-    // The process may have failed after preparing a migration but before the
-    // legacy source was moved. The destination cannot contain committed state.
     fs.rmSync(destination, { recursive: true, force: true });
   }
 
   removeTransactionDirectory(cwd, journal.run_id);
 }
 
-/**
- * Restore every interrupted transaction found in the repository.
- * Returns recovered run IDs in deterministic order.
- */
 export function recoverInterruptedStateTransactions(cwd: string): string[] {
   const root = transactionRoot(cwd);
   if (!fs.existsSync(root)) return [];
@@ -200,11 +202,6 @@ export function recoverInterruptedStateTransactions(cwd: string): string[] {
   return recovered;
 }
 
-/**
- * Move the previous state tree into a durable repository-local backup and
- * create a fresh provider-scoped destination for the new audit. The caller
- * must finish with exactly one of `commit()` or `rollback()`.
- */
 export function beginStateTransaction(
   options: BeginStateTransactionOptions,
 ): StateTransaction {
@@ -228,6 +225,7 @@ export function beginStateTransaction(
   const destination = resolveRelative(cwd, destinationRelativeDir);
   const transaction = transactionDir(cwd, runId);
   const backup = backupPath(cwd, runId);
+  const backupCopy = backupCopyPath(cwd, runId);
   if (fs.existsSync(transaction)) {
     throw new Error(`Agentify state transaction already exists: ${runId}`);
   }
@@ -235,6 +233,9 @@ export function beginStateTransaction(
     throw new Error(
       `cannot migrate Agentify state to occupied destination: ${destinationRelativeDir}`,
     );
+  }
+  if (options.preserveExistingSource && source !== destination) {
+    throw new Error("preserveExistingSource requires identical source and destination paths");
   }
 
   const hadExistingState = fs.existsSync(source);
@@ -250,11 +251,23 @@ export function beginStateTransaction(
 
   try {
     if (hadExistingState) {
-      fs.renameSync(source, backup);
+      if (options.preserveExistingSource) {
+        fs.cpSync(source, backupCopy, {
+          recursive: true,
+          errorOnExist: true,
+          force: false,
+          preserveTimestamps: true,
+        });
+        fs.renameSync(backupCopy, backup);
+      } else {
+        fs.renameSync(source, backup);
+      }
       journal = { ...journal, phase: "backup_created" };
       writeJsonAtomic(journalPath(cwd, runId), journal);
     }
-    fs.mkdirSync(destination, { recursive: true, mode: 0o700 });
+    if (!options.preserveExistingSource || !hadExistingState) {
+      fs.mkdirSync(destination, { recursive: true, mode: 0o700 });
+    }
     journal = { ...journal, phase: "destination_ready" };
     writeJsonAtomic(journalPath(cwd, runId), journal);
   } catch (error) {
@@ -284,8 +297,7 @@ export function beginStateTransaction(
         fs.rmSync(backup, { recursive: true, force: true });
         removeTransactionDirectory(cwd, runId);
       } catch {
-        // The committed journal is durable. Recovery will finish cleanup on
-        // the next run without rolling back the authoritative destination.
+        // The committed journal is durable. Recovery will finish cleanup.
       }
     },
     rollback(): void {

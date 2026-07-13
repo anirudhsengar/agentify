@@ -1,11 +1,15 @@
 import { runAgentify } from "./run-agentify.ts";
 import { formatGitHubReadiness, inspectGitHubReadiness } from "./github-readiness.ts";
 import { readProjectState } from "./project-state.ts";
-import { inspectAgentifyRepoState } from "./repo-status.ts";
+import { inspectAgentifyRepoState, type AgentifyRepoState } from "./repo-status.ts";
 import { defaultConfigDir } from "./agentify-config.ts";
 import { stdin as input } from "node:process";
 import { getPremiumTargets, isKnownAgent } from "./agent-registry.ts";
 import { promptTargets } from "./target-picker.ts";
+import {
+  discoverExistingStateDir,
+  resolveCanonicalStateDir,
+} from "./state-dir.ts";
 import type {
   AgentifyTarget,
   RunAgentifyOptions,
@@ -16,18 +20,7 @@ const DEFAULT_TARGETS: ReadonlyArray<AgentifyTarget> = ["codex", "claude", "pi"]
 export interface RunAgentifyAppOptions
   extends Omit<RunAgentifyOptions, "targets" | "additionalAgents" | "args"> {
   args: ReadonlyArray<string>;
-  /**
-   * Premium harness targets (Codex / Claude / Pi). When set, bypasses the
-   * picker and runs with these targets. Tests and the `--targets` CLI
-   * flag both set this. When unset, the picker drives resolution.
-   */
   targets?: ReadonlyArray<AgentifyTarget>;
-  /**
-   * Override for the full picker output — registry IDs (premium +
-   * non-premium). When set, the picker is bypassed entirely and these
-   * IDs are split into `targets` (premium subset) and `additionalAgents`
-   * (non-premium subset). Used by the `--targets` CLI flag.
-   */
   targetsOverride?: ReadonlyArray<string>;
 }
 
@@ -39,11 +32,14 @@ function reportGitHubReadiness(options: RunAgentifyAppOptions): void {
   }
 }
 
-function attachToInitializedRepo(options: RunAgentifyAppOptions): void {
+function attachToInitializedRepo(
+  options: RunAgentifyAppOptions,
+  repoState: AgentifyRepoState,
+): void {
   const configDir = defaultConfigDir();
-  const repoState = inspectAgentifyRepoState(options.cwd, configDir);
   const projectState = readProjectState(configDir, options.cwd);
   options.ui.status(`agentify: attached to initialized ${repoState.mode} repo`);
+  options.ui.info(`agentify: inspecting state at ${repoState.stateDir}`);
   options.ui.info(
     `agentify: status=ready, feature_agents=${repoState.featureAgentCount}, workflows=${repoState.workflowCount}, experts=${repoState.expertCount}, skills=${repoState.skillCount}, found=${repoState.found.length}`,
   );
@@ -59,18 +55,23 @@ function attachToInitializedRepo(options: RunAgentifyAppOptions): void {
   reportGitHubReadiness(options);
 }
 
-/**
- * Resolve which agents to target for this run. Resolution order:
- *
- * 1. `targetsOverride` (the `--targets` CLI flag) — already-validated
- *    registry IDs; bypass picker entirely.
- * 2. `targets` (programmatic caller — tests) — premium targets only.
- *    Non-premium agents default to none.
- * 3. Interactive TTY — run the picker.
- * 4. Non-interactive without override — fall back to the three premium
- *    defaults. We never fail just because stdin isn't a TTY: existing
- *    CI scripts that ran without `--targets` should keep working.
- */
+function reportPartialRepo(
+  options: RunAgentifyAppOptions,
+  repoState: AgentifyRepoState,
+): void {
+  const projectState = readProjectState(defaultConfigDir(), options.cwd);
+  options.ui.status("agentify: detected incomplete setup; recovering");
+  options.ui.info(`agentify: inspecting state at ${repoState.stateDir}`);
+  if (projectState) {
+    options.ui.info(
+      `agentify: previous run ended with ${projectState.runStatus} at ${projectState.lastRunAt}`,
+    );
+  }
+  if (repoState.missing.length > 0) {
+    options.ui.info(`agentify: missing ${repoState.missing.join(", ")}`);
+  }
+}
+
 async function resolveTargets(
   options: RunAgentifyAppOptions,
 ): Promise<{ targets: ReadonlyArray<AgentifyTarget>; additionalAgents: ReadonlyArray<string> }> {
@@ -108,25 +109,50 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
   }
 
   const configDir = defaultConfigDir();
-  const repoState = inspectAgentifyRepoState(options.cwd, configDir);
-  if (repoState.status === "ready") {
-    attachToInitializedRepo(options);
-    return;
-  }
-  if (repoState.status === "partial") {
-    const projectState = readProjectState(configDir, options.cwd);
-    options.ui.status("agentify: detected incomplete setup; recovering");
-    if (projectState) {
-      options.ui.info(
-        `agentify: previous run ended with ${projectState.runStatus} at ${projectState.lastRunAt}`,
-      );
-    }
-    if (repoState.missing.length > 0) {
-      options.ui.info(`agentify: missing ${repoState.missing.join(", ")}`);
+  const hasExplicitTargetSelection = options.targets !== undefined
+    || options.targetsOverride !== undefined;
+  let repoState: AgentifyRepoState | null = null;
+
+  if (!hasExplicitTargetSelection) {
+    const discovered = discoverExistingStateDir(options.cwd);
+    if (discovered) {
+      repoState = inspectAgentifyRepoState(options.cwd, configDir, discovered.relativeDir);
+      if (discovered.duplicateLegacyDir) {
+        options.ui.info(
+          `agentify: canonical and legacy state are identical; inspecting ${discovered.relativeDir} and retaining ${discovered.duplicateLegacyDir}.`,
+        );
+      }
+      if (repoState.status === "ready") {
+        attachToInitializedRepo(options, repoState);
+        return;
+      }
     }
   }
 
   const resolved = await resolveTargets(options);
+  const stateResolution = resolveCanonicalStateDir(
+    options.cwd,
+    resolved.targets,
+    resolved.additionalAgents,
+  );
+  for (const message of stateResolution.guidance) {
+    options.ui.info(message);
+  }
+  if (repoState === null || repoState.stateDir !== stateResolution.sourceRelativeDir) {
+    repoState = inspectAgentifyRepoState(
+      options.cwd,
+      configDir,
+      stateResolution.sourceRelativeDir,
+    );
+  }
+
+  if (repoState.status === "ready") {
+    attachToInitializedRepo(options, repoState);
+    return;
+  }
+  if (repoState.status === "partial") {
+    reportPartialRepo(options, repoState);
+  }
 
   await runAgentify({
     cwd: options.cwd,
