@@ -11,6 +11,7 @@ audit:
           - src/core/audit/schema.ts
           - src/core/audit/prompts/**
 
+# Includes the orchestrator-owned communications transport under comms/.
 orchestrator:
   - changed-files:
       - any-glob-to-any-file:
