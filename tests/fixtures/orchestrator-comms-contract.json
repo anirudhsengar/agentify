@@ -1,0 +1,36 @@
+{
+  "registry_record_fields": [
+    "name",
+    "pid",
+    "socketPath",
+    "project",
+    "cwd",
+    "purpose",
+    "color",
+    "lastHeartbeat",
+    "contextUsedPct"
+  ],
+  "defaults": {
+    "coms_root": "~/.pi/coms",
+    "max_hops": 5,
+    "socket_timeout_ms": 5000,
+    "poll_interval_ms": 200,
+    "await_timeout_ms": 1800000,
+    "heartbeat_interval_ms": 30000,
+    "stale_after_ms": 60000
+  },
+  "error_codes": [
+    "hop_limit_exceeded",
+    "unknown_sender",
+    "unknown_target",
+    "self_send",
+    "delivery_failed",
+    "timeout",
+    "invalid_envelope"
+  ],
+  "envelope_fields": {
+    "prompt": ["type", "msg_id", "sender", "target", "body", "hops", "ts"],
+    "response": ["type", "msg_id", "sender", "target", "body", "hops", "ts", "aborted"],
+    "error": ["type", "msg_id", "sender", "target", "hops", "ts", "error", "code"]
+  }
+}
