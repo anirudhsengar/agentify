@@ -23,8 +23,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A compiled ESM distribution with packaged prompt/workflow assets and raw-source exclusion.
 
 ### Changed
-- Enforced supported, neutral, and experimental source boundaries across imports, CLI registration, build assets, package contents, and documentation.
 
+- Relocated the internal communications registry, protocol types, and Unix-socket peer server beneath `src/core/orchestrator/comms/` without changing protocol, state, CLI, build, package, or support behavior.
+- Enforced supported, neutral, and experimental source boundaries across imports, CLI registration, build assets, package contents, and documentation.
 - Audit TypeBox declarations remain centralized in `schema.ts`, while coverage assessment, map defaults, and legacy-field interpretation now have focused internal owners behind stable re-exports.
 - Structured write-map storage, input loading, validation, coverage formatting, delta merging, observability, tool construction, and legacy compatibility now have dedicated internal owners behind the stable façade.
 - Deterministic brownfield artifact rendering is decomposed into pure output-family modules behind the stable renderer façade.

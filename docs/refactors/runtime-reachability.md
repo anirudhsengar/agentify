@@ -64,7 +64,7 @@ Package reachability must be checked against `npm pack --json --ignore-scripts`.
 | Shipped documentation | top-level guidance and `docs/**` | Package `files`, documentation index, package-link tests, and operator procedures. |
 | CI and release helpers | `.github/workflows/**`, `.github/scripts/**` | Direct workflow references and release-safety tests. |
 
-The npm inventory is expected to remain byte-for-byte identical except for edits to already-shipped documentation. Deleting raw-source-only files does not alter the tarball because `src/`, repository `scripts/`, and tests are excluded.
+The npm inventory is expected to remain byte-for-byte identical except for edits to already-shipped documentation. Relocating raw-source-only communications files does not alter the tarball because `src/`, repository `scripts/`, and tests are excluded.
 
 ## 3. Internal experimental composition roots
 
@@ -72,8 +72,7 @@ The following areas are retained internal composition roots when referenced by r
 
 - `src/core/webhook/`;
 - `src/core/aiw/`;
-- `src/core/orchestrator/`;
-- `src/core/coms/`;
+- `src/core/orchestrator/`, including its owned `comms/` transport;
 - `src/core/agent-expert.ts` and related expert modules.
 
 These roots are not supported package APIs and must not be promoted into CLI routes or exports. Their experimental status does not make them dead. Composition entrypoints, workflow registries, security policies, prompt assets, and test-only runtimes under these areas must be traced before any deletion.
@@ -84,8 +83,7 @@ These roots are not supported package APIs and must not be promoted into CLI rou
 | --- | --- |
 | Webhook | `tests/webhook/**`, security-redteam coverage, HTTP/signature/replay policy, and documented experimental composition. |
 | AIW | `tests/aiw/**`, orchestrator bridge paths, execution-policy tests, and workflow composition contracts. |
-| Orchestrator | `tests/orchestrator/**`, copied workflow JSON, workflow registry, domain locks, and security/contract tests. |
-| Communications | communications tests and internal agent registry/server composition. |
+| Orchestrator | `tests/orchestrator/**`, copied workflow JSON, workflow registry, domain locks, security/contract tests, and the owned `src/core/orchestrator/comms/` peer transport. |
 | Agent Expert | generated-output qualification, expert-outcome scoring, smoke evidence, and release qualification tests. |
 
 The standalone `src/core/orchestrator/scripts/seed-workflows.mjs` file was not a retained composition root: no orchestrator module, registry, test, package script, documentation page, build copy, or workflow invoked it.
@@ -166,7 +164,7 @@ The following suspicious-looking items were deliberately retained:
 | Candidate | Reason retained |
 | --- | --- |
 | Deprecated legacy state constants and path helpers in manifest/greenfield/state modules | Tests, scaffold compatibility, and legacy `.pi/agentify` behavior still consume or document them. |
-| Experimental composition entrypoints under webhook, AIW, orchestrator, communications, and Agent Expert | Contract and security tests are retained roots even without public CLI or package exports. |
+| Experimental composition entrypoints under webhook, AIW, orchestrator (including its communications transport), and Agent Expert | Contract and security tests are retained roots even without public CLI or package exports. |
 | `src/core/audit/scripts/aggregate-kpis.mjs` | It has a direct executable test consumer and therefore is test-reachable. |
 | Copied prompt and workflow directories | They are filesystem-discovered build assets; absence of a TypeScript import edge is not deletion evidence. |
 | Scaffold scripts not named by source imports | Workflows, setup documentation, unification contracts, and scaffold tests consume them by path. |

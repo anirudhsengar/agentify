@@ -29,7 +29,7 @@
 // orchestrator discovers the worker via the file registry.
 
 import { OrchestratorHost } from "./host.ts";
-import { ComsPeer } from "../coms/server.ts";
+import { ComsPeer } from "./comms/server.ts";
 import { AgentManager } from "./agent-manager.ts";
 import type { AgentRuntime } from "../types.ts";
 import { PiSdkRuntime } from "../pi-sdk-runtime.ts";
