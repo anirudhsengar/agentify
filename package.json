@@ -1,6 +1,6 @@
 {
   "name": "agentify",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "One terminal command for the full life of an agentic codebase: audit existing code, start greenfield projects, and export harness-native agent surfaces.",
   "type": "module",
   "keywords": [
