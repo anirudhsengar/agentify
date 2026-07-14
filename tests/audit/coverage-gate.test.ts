@@ -11,7 +11,7 @@ import {
   assessCoverageClosure,
   COVERAGE_DIMENSIONS,
 } from "../../src/core/audit/schema.ts";
-import { loadCanonicalMap, writeMapTool } from "../../src/core/audit/write-map-tool.ts";
+import { createWriteMapTools, loadCanonicalMapAt } from "../../src/core/audit/write-map-tool.ts";
 import { runAgentify } from "../../src/core/run-agentify.ts";
 import { authPath, defaultConfigDir, saveAgentifyConfig } from "../../src/core/agentify-config.ts";
 import { readProjectState } from "../../src/core/project-state.ts";
@@ -133,8 +133,6 @@ async function runWithState(
   }
 }
 
-// --- assessCoverageClosure -------------------------------------------------
-
 function testClosureAllCovered(): void {
   const result = assessCoverageClosure(makeValidCodebaseMap());
   assert.equal(result.unresolved.length, 0, JSON.stringify(result.reasons));
@@ -169,82 +167,16 @@ function testClosureRejectsWeakDimensionEvidence(): void {
     mutate: (map: ReturnType<typeof makeValidCodebaseMap>) => void;
     reason: RegExp;
   }> = [
-    {
-      dim: "D1_topography",
-      mutate: (map) => { map.skeleton.entry_points = []; },
-      reason: /entry point/i,
-    },
-    {
-      dim: "D2_module_boundaries",
-      mutate: (map) => {
-        map.module_graph.edges = [];
-        map.module_graph.parallelizable_subtrees = [];
-        map.module_graph.shared_abstractions = [];
-      },
-      reason: /module/i,
-    },
-    {
-      dim: "D3_type_contract",
-      mutate: (map) => {
-        map.type_contract_surface.idks = [];
-        map.type_contract_surface.typescript_interfaces = [];
-        map.type_contract_surface.pydantic_models = [];
-        map.type_contract_surface.db_models = [];
-        map.type_contract_surface.stable_types = [];
-        map.type_contract_surface.one_type_trace = null;
-      },
-      reason: /type|contract/i,
-    },
-    {
-      dim: "D4_conventions",
-      mutate: (map) => { map.conventions.naming.files = ""; },
-      reason: /convention|naming/i,
-    },
-    {
-      dim: "D5_pitfalls",
-      mutate: (map) => { map.pitfalls = []; },
-      reason: /pitfall/i,
-    },
-    {
-      dim: "D6_validation",
-      mutate: (map) => {
-        map.validation_surface.test_command = "";
-        map.validation_surface.per_change_type.chore.mandatory = [];
-        map.validation_surface.per_change_type.bug.mandatory = [];
-        map.validation_surface.per_change_type.feature.mandatory = [];
-      },
-      reason: /validation|test/i,
-    },
-    {
-      dim: "D7_operational",
-      mutate: (map) => { map.operational_surface.run.command = ""; },
-      reason: /run|operational/i,
-    },
-    {
-      dim: "D8_security",
-      mutate: (map) => {
-        map.security_surface.paths.zero_access = [];
-        map.security_surface.bash_blocked_patterns = [];
-        map.security_surface.damage_control_rules = [];
-      },
-      reason: /security|zero-access/i,
-    },
-    {
-      dim: "D9_process",
-      mutate: (map) => { map.meta.lifecycle.issue_types = []; },
-      reason: /process|issue/i,
-    },
-    {
-      dim: "D10_documentation",
-      mutate: (map) => {
-        map.meta.documentation.agents_md = null;
-        map.meta.documentation.has_ai_docs = false;
-        map.meta.documentation.has_app_docs = false;
-        map.meta.documentation.has_specs = false;
-        map.meta.documentation.readme_metrics = { present: false, line_count: 0, section_count: 0 };
-      },
-      reason: /doc/i,
-    },
+    { dim: "D1_topography", mutate: (map) => { map.skeleton.entry_points = []; }, reason: /entry point/i },
+    { dim: "D2_module_boundaries", mutate: (map) => { map.module_graph.edges = []; map.module_graph.parallelizable_subtrees = []; map.module_graph.shared_abstractions = []; }, reason: /module/i },
+    { dim: "D3_type_contract", mutate: (map) => { map.type_contract_surface.idks = []; map.type_contract_surface.typescript_interfaces = []; map.type_contract_surface.pydantic_models = []; map.type_contract_surface.db_models = []; map.type_contract_surface.stable_types = []; map.type_contract_surface.one_type_trace = null; }, reason: /type|contract/i },
+    { dim: "D4_conventions", mutate: (map) => { map.conventions.naming.files = ""; }, reason: /convention|naming/i },
+    { dim: "D5_pitfalls", mutate: (map) => { map.pitfalls = []; }, reason: /pitfall/i },
+    { dim: "D6_validation", mutate: (map) => { map.validation_surface.test_command = ""; map.validation_surface.per_change_type.chore.mandatory = []; map.validation_surface.per_change_type.bug.mandatory = []; map.validation_surface.per_change_type.feature.mandatory = []; }, reason: /validation|test/i },
+    { dim: "D7_operational", mutate: (map) => { map.operational_surface.run.command = ""; }, reason: /run|operational/i },
+    { dim: "D8_security", mutate: (map) => { map.security_surface.paths.zero_access = []; map.security_surface.bash_blocked_patterns = []; map.security_surface.damage_control_rules = []; }, reason: /security|zero-access/i },
+    { dim: "D9_process", mutate: (map) => { map.meta.lifecycle.issue_types = []; }, reason: /process|issue/i },
+    { dim: "D10_documentation", mutate: (map) => { map.meta.documentation.agents_md = null; map.meta.documentation.has_ai_docs = false; map.meta.documentation.has_app_docs = false; map.meta.documentation.has_specs = false; map.meta.documentation.readme_metrics = { present: false, line_count: 0, section_count: 0 }; }, reason: /doc/i },
   ];
 
   for (const testCase of cases) {
@@ -260,58 +192,33 @@ async function testWriteMapReturnsClosureReasons(): Promise<void> {
   const cwd = tempDir("write-map-feedback");
   const map = makeValidCodebaseMap();
   map.validation_surface.test_command = "";
-
-  const result = await writeMapTool.execute(
-    "test-write-map",
-    { map } as never,
-    undefined,
-    undefined,
-    { cwd } as never,
-  );
-
-  const text =
-    result.content?.[0]?.type === "text"
-      ? (result.content[0] as { type: "text"; text: string }).text
-      : "";
-  const details = result.details as
-    | {
-        coverage_closure?: {
-          unresolved?: string[];
-          reasons?: Record<string, string>;
-        };
-      }
-    | undefined;
-
+  const { writeMapTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
+  const result = await writeMapTool.execute("test-write-map", { map } as never, undefined, undefined, { cwd } as never);
+  const text = result.content?.[0]?.type === "text" ? (result.content[0] as { type: "text"; text: string }).text : "";
+  const details = result.details as { coverage_closure?: { unresolved?: string[]; reasons?: Record<string, string> } } | undefined;
   assert.match(text, /coverage dimensions closed/i);
   assert.ok(details?.coverage_closure?.unresolved?.includes("D6_validation"));
   assert.match(details?.coverage_closure?.reasons?.D6_validation ?? "", /validation command/i);
 }
 
-// --- loadCanonicalMap ------------------------------------------------------
-
-function testLoadCanonicalMapRejectsGarbage(): void {
+function testLoadCanonicalMapAtRejectsGarbage(): void {
   const cwd = tempDir("loadmap");
   fs.mkdirSync(path.join(cwd, ".pi", "agentify"), { recursive: true });
   fs.writeFileSync(path.join(cwd, ".pi", "agentify", "codebase_map.json"), "{ not json");
-  assert.equal(loadCanonicalMap(cwd), null);
+  assert.equal(loadCanonicalMapAt(cwd, ".pi/agentify"), null);
   fs.writeFileSync(path.join(cwd, ".pi", "agentify", "codebase_map.json"), JSON.stringify({ meta: {} }));
-  assert.equal(loadCanonicalMap(cwd), null);
-  fs.writeFileSync(
-    path.join(cwd, ".pi", "agentify", "codebase_map.json"),
-    JSON.stringify(makeValidCodebaseMap()),
-  );
-  assert.ok(loadCanonicalMap(cwd) !== null);
+  assert.equal(loadCanonicalMapAt(cwd, ".pi/agentify"), null);
+  fs.writeFileSync(path.join(cwd, ".pi", "agentify", "codebase_map.json"), JSON.stringify(makeValidCodebaseMap()));
+  assert.ok(loadCanonicalMapAt(cwd, ".pi/agentify") !== null);
 }
-
-// --- end-to-end gate through runAgentify -----------------------------------
 
 async function testNoMapMeansPartialNoExport(): Promise<void> {
   const cwd = tempDir("gate-nomap");
-  const ui = await run(cwd, (c, stateDir) => writeArtifacts(c, stateDir, { /* no map */ }));
-  assert.ok(!fs.existsSync(path.join(cwd, ".codex")), "must not export without a map");
-  assert.ok(!fs.existsSync(path.join(cwd, "AGENTS.md")), "partial audit must roll back AGENTS.md");
-  assert.ok(!fs.existsSync(path.join(cwd, "specs", "README.md")), "partial audit must roll back specs README");
-  assert.ok(!fs.existsSync(path.join(cwd, "ai_docs", "README.md")), "partial audit must roll back ai_docs README");
+  const ui = await run(cwd, (c, stateDir) => writeArtifacts(c, stateDir, {}));
+  assert.ok(!fs.existsSync(path.join(cwd, ".codex")));
+  assert.ok(!fs.existsSync(path.join(cwd, "AGENTS.md")));
+  assert.ok(!fs.existsSync(path.join(cwd, "specs", "README.md")));
+  assert.ok(!fs.existsSync(path.join(cwd, "ai_docs", "README.md")));
   assert.ok(ui.errors.some((m) => m.includes("did not complete")));
 }
 
@@ -320,16 +227,14 @@ async function testGapMapMeansPartialNoExport(): Promise<void> {
   const gapMap = makeValidCodebaseMap();
   gapMap.coverage.D6_validation = { status: "gap", confidence: "low", evidence_summary: "todo" };
   const ui = await run(cwd, (c, stateDir) => writeArtifacts(c, stateDir, { map: gapMap }));
-  assert.ok(!fs.existsSync(path.join(cwd, ".codex")), "gap map must not export");
+  assert.ok(!fs.existsSync(path.join(cwd, ".codex")));
   assert.ok(ui.errors.some((m) => m.includes("D6_validation")));
 }
 
 async function testOversizedAgentsMdMeansPartial(): Promise<void> {
   const cwd = tempDir("gate-oversize");
-  const ui = await run(cwd, (c, stateDir) =>
-    writeArtifacts(c, stateDir, { map: makeValidCodebaseMap(), agentsMdLines: AGENTS_MD_MAX_LINES + 5 }),
-  );
-  assert.ok(!fs.existsSync(path.join(cwd, ".codex")), "oversized AGENTS.md must not export");
+  const ui = await run(cwd, (c, stateDir) => writeArtifacts(c, stateDir, { map: makeValidCodebaseMap(), agentsMdLines: AGENTS_MD_MAX_LINES + 5 }));
+  assert.ok(!fs.existsSync(path.join(cwd, ".codex")));
   assert.ok(ui.errors.some((m) => m.includes("line cap")));
 }
 
@@ -337,27 +242,19 @@ async function testFullyCoveredMeansSuccessAndPersistsMap(): Promise<void> {
   const cwd = tempDir("gate-ok");
   const ui = await run(cwd, (c, stateDir) => {
     writeArtifacts(c, stateDir, { map: makeValidCodebaseMap() });
-    fs.writeFileSync(
-      path.join(c, ".pi", "agents", "payments.md"),
-      "---\nname: payments\ndescription: x\n---\n\nUse.\n",
-    );
+    fs.writeFileSync(path.join(c, ".pi", "agents", "payments.md"), "---\nname: payments\ndescription: x\n---\n\nUse.\n");
   });
-  assert.ok(fs.existsSync(path.join(cwd, ".codex")), "covered map must export");
-  assert.ok(
-    fs.existsSync(path.join(cwd, ".agents", "agentify", "codebase_map.json")),
-    "provider-scoped canonical map must be preserved after the run",
-  );
+  assert.ok(fs.existsSync(path.join(cwd, ".codex")));
+  assert.ok(fs.existsSync(path.join(cwd, ".agents", "agentify", "codebase_map.json")));
   assert.ok(ui.infos.some((m) => m.includes("audit complete")));
 }
 
 async function testUserOwnedAgentsMdBlocksClaudeExport(): Promise<void> {
   const cwd = tempDir("gate-user-agents");
   fs.writeFileSync(path.join(cwd, "AGENTS.md"), "# User owned\n");
-  const { ui, configDir } = await runWithState(cwd, (c, stateDir) => {
-    writeArtifacts(c, stateDir, { map: makeValidCodebaseMap() });
-  });
+  const { ui, configDir } = await runWithState(cwd, (c, stateDir) => writeArtifacts(c, stateDir, { map: makeValidCodebaseMap() }));
   assert.equal(fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf-8"), "# User owned\n");
-  assert.ok(!fs.existsSync(path.join(cwd, "CLAUDE.md")), "must not copy user-owned AGENTS.md to CLAUDE.md");
+  assert.ok(!fs.existsSync(path.join(cwd, "CLAUDE.md")));
   assert.ok(ui.errors.some((m) => m.includes("required generated file conflict")));
   assert.equal(readProjectState(configDir, cwd)?.repoStatus, "partial");
 }
@@ -367,9 +264,7 @@ async function testUserOwnedWorkflowConflictPersistsPartial(): Promise<void> {
   const workflow = path.join(cwd, ".github", "workflows", "agent-implement.yml");
   fs.mkdirSync(path.dirname(workflow), { recursive: true });
   fs.writeFileSync(workflow, "name: user-owned\n");
-  const { configDir } = await runWithState(cwd, (c, stateDir) => {
-    writeArtifacts(c, stateDir, { map: makeValidCodebaseMap() });
-  });
+  const { configDir } = await runWithState(cwd, (c, stateDir) => writeArtifacts(c, stateDir, { map: makeValidCodebaseMap() }));
   assert.equal(readProjectState(configDir, cwd)?.repoStatus, "partial");
   assert.equal(readProjectState(configDir, cwd)?.runStatus, "partial");
   assert.equal(fs.readFileSync(workflow, "utf-8"), "name: user-owned\n");
@@ -382,7 +277,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "closureRejectsGapStatus", fn: testClosureRejectsGapStatus },
   { name: "closureRejectsWeakDimensionEvidence", fn: testClosureRejectsWeakDimensionEvidence },
   { name: "writeMapReturnsClosureReasons", fn: testWriteMapReturnsClosureReasons },
-  { name: "loadCanonicalMapRejectsGarbage", fn: testLoadCanonicalMapRejectsGarbage },
+  { name: "loadCanonicalMapRejectsGarbage", fn: testLoadCanonicalMapAtRejectsGarbage },
   { name: "noMapMeansPartialNoExport", fn: testNoMapMeansPartialNoExport },
   { name: "gapMapMeansPartialNoExport", fn: testGapMapMeansPartialNoExport },
   { name: "oversizedAgentsMdMeansPartial", fn: testOversizedAgentsMdMeansPartial },
