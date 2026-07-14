@@ -27,7 +27,7 @@ normal canonical readers never probe that retained tree. Two unstamped divergent
 trees remain a conflict and are never selected by timestamps or provider
 priority.
 
-## 0.2.0 migration policy
+## Migration policy
 
 | Layout | Behavior |
 | --- | --- |
@@ -92,9 +92,10 @@ the older destructive cross-directory move path is rejected.
 - canonical map and greenfield-formation readers no longer fall back across providers;
 - scaffold scripts require one explicit manifest authority, accept one unstamped legacy manifest only as upgrade input, and fail on ambiguity or mismatch.
 
-Deprecated singleton write-map tools, renderer setters, and legacy manifest and
-greenfield wrappers remain available in 0.2.0 for compatibility. This release does
-not remove them; removal remains gated by Phase C evidence and maintainer approval.
+Phase C removes the deprecated callable compatibility layer. Supported runtime
+code must pass the resolved provider-scoped state directory explicitly, construct
+write-map tools with `createWriteMapTools({ stateDir })`, and pass a renderer
+context. There is no process-global mutable state and no omitted-context fallback.
 
 ## Manifest compatibility
 
@@ -102,10 +103,11 @@ Provider-switch manifest reads use one no-follow descriptor, validate that opene
 file with `fstat`, and read from the same descriptor. Symlink refusal and existing
 manifest validation remain unchanged.
 
-Old v1 manifests and manifests without `state_dir` remain readable as legacy
-upgrade input. A mismatched `state_dir` is a conflict, never a redirect. After a
-migration, the canonical manifest names the provider-scoped destination while
-the retained source manifest is unchanged.
+Old v1 manifests and manifests without `state_dir` remain readable through the
+explicit compatibility reader as legacy upgrade input. These are file-format
+compatibility contracts, not callable legacy path APIs. A mismatched `state_dir`
+is a conflict, never a redirect. After a migration, the canonical manifest names
+the provider-scoped destination while the retained source manifest is unchanged.
 
 ## Draft transport
 
@@ -115,9 +117,8 @@ Explicit per-run `write_map` factories place oversized draft transport at:
 <active-state-dir>/.agentify/draft.json
 ```
 
-The deprecated singleton and exported `DRAFT_PATH` retain historical
-`.pi/agentify/.agentify/draft.json` behavior until Phase C removal gates are
-satisfied.
+No singleton or exported legacy draft-path constant remains. Draft transport is
+owned by the factory context and cannot escape to a different provider tree.
 
 ## Implementation references
 

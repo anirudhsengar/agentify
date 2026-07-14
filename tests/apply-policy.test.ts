@@ -10,13 +10,15 @@ import {
   type ApplyPolicy,
 } from "../src/core/apply-policy.ts";
 import {
-  readManifest,
-  writeManifest,
+  readManifestAt,
+  writeManifestAt,
   sha256,
-  verifyManifest,
   type ManagedManifest,
   type ManagedManifestFile,
 } from "../src/core/manifest.ts";
+import { verifyManifestAt } from "../src/core/manifest-verification.ts";
+
+const STATE_DIR = ".pi/agentify";
 
 function tempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -179,9 +181,9 @@ async function testVerifyManifestAlongsideIsReady(): Promise<void> {
         } satisfies ManagedManifestFile,
       ],
     };
-    writeManifest(cwd, manifest);
+    writeManifestAt(cwd, manifest, STATE_DIR);
 
-    const result = verifyManifest(cwd);
+    const result = verifyManifestAt(cwd, STATE_DIR);
     assert.equal(result.valid, true,
       `expected verifyManifest to be valid for deliberate alongside; got ${JSON.stringify(result)}`);
     assert.equal(result.missing.length, 0);
@@ -216,9 +218,9 @@ async function testVerifyManifestMissingRequiredStillFails(): Promise<void> {
         },
       ],
     };
-    writeManifest(cwd, manifest);
+    writeManifestAt(cwd, manifest, STATE_DIR);
 
-    const result = verifyManifest(cwd);
+    const result = verifyManifestAt(cwd, STATE_DIR);
     assert.equal(result.valid, false);
     assert.ok(result.missing.includes("AGENTS.md"));
   } finally {
@@ -250,9 +252,9 @@ async function testReadManifestAcceptsV2WithAlongside(): Promise<void> {
         },
       ],
     };
-    writeManifest(cwd, manifest);
+    writeManifestAt(cwd, manifest, STATE_DIR);
 
-    const read = readManifest(cwd);
+    const read = readManifestAt(cwd, STATE_DIR);
     assert.ok(read !== null);
     assert.equal(read.schema_version, "2");
     assert.equal(read.run_id, "abc-123");

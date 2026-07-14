@@ -67,6 +67,7 @@ async function testRejectsWhenTotalSpawnBudgetIsExhausted(): Promise<void> {
   try {
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
+      stateDir: ".pi/agentify",
       maxTotalSpawns: 0,
       ...stubExplorerArgs(),
     });
@@ -93,6 +94,7 @@ async function testRejectsWhenConcurrentSpawnBudgetIsExhausted(): Promise<void> 
   try {
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
+      stateDir: ".pi/agentify",
       maxConcurrentSpawns: 0,
       ...stubExplorerArgs(),
     });
@@ -119,6 +121,7 @@ async function testRejectsWhenCostBudgetIsExhausted(): Promise<void> {
   try {
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
+      stateDir: ".pi/agentify",
       maxTotalCostUsd: 0.01,
       ...stubExplorerArgs(),
       createSession: async () => ({

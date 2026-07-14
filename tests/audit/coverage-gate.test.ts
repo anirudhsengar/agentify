@@ -11,7 +11,7 @@ import {
   assessCoverageClosure,
   COVERAGE_DIMENSIONS,
 } from "../../src/core/audit/schema.ts";
-import { loadCanonicalMap, writeMapTool } from "../../src/core/audit/write-map-tool.ts";
+import { createWriteMapTools, loadCanonicalMapAt } from "../../src/core/audit/write-map-tool.ts";
 import { runAgentify } from "../../src/core/run-agentify.ts";
 import { authPath, defaultConfigDir, saveAgentifyConfig } from "../../src/core/agentify-config.ts";
 import { readProjectState } from "../../src/core/project-state.ts";
@@ -261,6 +261,7 @@ async function testWriteMapReturnsClosureReasons(): Promise<void> {
   const map = makeValidCodebaseMap();
   map.validation_surface.test_command = "";
 
+  const { writeMapTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
   const result = await writeMapTool.execute(
     "test-write-map",
     { map } as never,
@@ -287,20 +288,20 @@ async function testWriteMapReturnsClosureReasons(): Promise<void> {
   assert.match(details?.coverage_closure?.reasons?.D6_validation ?? "", /validation command/i);
 }
 
-// --- loadCanonicalMap ------------------------------------------------------
+// --- explicit canonical map loading ----------------------------------------
 
-function testLoadCanonicalMapRejectsGarbage(): void {
+function testLoadCanonicalMapAtRejectsGarbage(): void {
   const cwd = tempDir("loadmap");
   fs.mkdirSync(path.join(cwd, ".pi", "agentify"), { recursive: true });
   fs.writeFileSync(path.join(cwd, ".pi", "agentify", "codebase_map.json"), "{ not json");
-  assert.equal(loadCanonicalMap(cwd), null);
+  assert.equal(loadCanonicalMapAt(cwd, ".pi/agentify"), null);
   fs.writeFileSync(path.join(cwd, ".pi", "agentify", "codebase_map.json"), JSON.stringify({ meta: {} }));
-  assert.equal(loadCanonicalMap(cwd), null);
+  assert.equal(loadCanonicalMapAt(cwd, ".pi/agentify"), null);
   fs.writeFileSync(
     path.join(cwd, ".pi", "agentify", "codebase_map.json"),
     JSON.stringify(makeValidCodebaseMap()),
   );
-  assert.ok(loadCanonicalMap(cwd) !== null);
+  assert.ok(loadCanonicalMapAt(cwd, ".pi/agentify") !== null);
 }
 
 // --- end-to-end gate through runAgentify -----------------------------------
@@ -382,7 +383,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "closureRejectsGapStatus", fn: testClosureRejectsGapStatus },
   { name: "closureRejectsWeakDimensionEvidence", fn: testClosureRejectsWeakDimensionEvidence },
   { name: "writeMapReturnsClosureReasons", fn: testWriteMapReturnsClosureReasons },
-  { name: "loadCanonicalMapRejectsGarbage", fn: testLoadCanonicalMapRejectsGarbage },
+  { name: "loadCanonicalMapRejectsGarbage", fn: testLoadCanonicalMapAtRejectsGarbage },
   { name: "noMapMeansPartialNoExport", fn: testNoMapMeansPartialNoExport },
   { name: "gapMapMeansPartialNoExport", fn: testGapMapMeansPartialNoExport },
   { name: "oversizedAgentsMdMeansPartial", fn: testOversizedAgentsMdMeansPartial },

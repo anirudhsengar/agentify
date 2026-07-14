@@ -163,7 +163,7 @@ The following suspicious-looking items were deliberately retained:
 
 | Candidate | Reason retained |
 | --- | --- |
-| Deprecated legacy state constants and path helpers in manifest/greenfield/state modules | Tests, scaffold compatibility, and legacy `.pi/agentify` behavior still consume or document them. |
+| Dedicated legacy-layout detection, retained-source migration, and old manifest/file-format readers | Installed upgrades, crash recovery, scaffold authority checks, and Pi canonical `.pi/agentify` behavior still require them. Deprecated callable constants, wrappers, setters, and singleton tools were removed in Phase C. |
 | Experimental composition entrypoints under webhook, AIW, orchestrator (including its communications transport), and Agent Expert | Contract and security tests are retained roots even without public CLI or package exports. |
 | `src/core/audit/scripts/aggregate-kpis.mjs` | It has a direct executable test consumer and therefore is test-reachable. |
 | Copied prompt and workflow directories | They are filesystem-discovered build assets; absence of a TypeScript import edge is not deletion evidence. |

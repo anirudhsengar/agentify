@@ -4,9 +4,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { AGENTIFY_MANAGED_MARKERS } from "../src/core/artifact-exporters.ts";
 import {
-  GREENFIELD_FORMATION_RELATIVE_PATH,
   createWriteGreenfieldArtifactsTool,
-  readGreenfieldFormation,
+  greenfieldFormationRelativePath,
+  readGreenfieldFormationAt,
   renderGreenfieldArtifacts,
 } from "../src/core/greenfield-artifacts.ts";
 import { validateGreenfieldArtifacts } from "../src/core/greenfield-state.ts";
@@ -117,7 +117,8 @@ function testRejectsDuplicateRenderedPaths(): void {
 async function testWriteToolPersistsStructuredFormation(): Promise<void> {
   const cwd = tempDir("greenfield-artifacts-tool");
   try {
-    const tool = createWriteGreenfieldArtifactsTool();
+    const stateDir = ".pi/agentify";
+    const tool = createWriteGreenfieldArtifactsTool({ stateDir });
     const result = await tool.execute(
       "test-greenfield-artifacts",
       makeGreenfieldFormation() as never,
@@ -128,8 +129,8 @@ async function testWriteToolPersistsStructuredFormation(): Promise<void> {
 
     assert.equal((result as { isError?: boolean }).isError, undefined);
     assert.match(textFrom(result), /Accepted greenfield formation/i);
-    assert.ok(fs.existsSync(path.join(cwd, GREENFIELD_FORMATION_RELATIVE_PATH)));
-    assert.equal(readGreenfieldFormation(cwd)?.project_name, "InvoiceFlow");
+    assert.ok(fs.existsSync(path.join(cwd, greenfieldFormationRelativePath(stateDir))));
+    assert.equal(readGreenfieldFormationAt(cwd, stateDir)?.project_name, "InvoiceFlow");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

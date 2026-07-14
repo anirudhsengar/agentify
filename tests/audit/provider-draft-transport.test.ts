@@ -2,12 +2,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import {
-  DRAFT_PATH,
-  createWriteMapTools,
-  setMapSessionStateDir,
-  writeMapTool,
-} from "../../src/core/audit/write-map-tool.ts";
+import { createWriteMapTools } from "../../src/core/audit/write-map-tool.ts";
 import { LEGACY_PI_STATE_RELATIVE_DIR } from "../../src/core/state-dir.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
@@ -75,7 +70,7 @@ async function testProviderFactoriesUseTheirConfiguredDraftPath(): Promise<void>
       assertNoAtomicTemps(path.dirname(expectedAbsolute));
 
       if (stateDir !== LEGACY_PI_STATE_RELATIVE_DIR) {
-        assert.equal(fs.existsSync(path.join(cwd, DRAFT_PATH)), false);
+        assert.equal(fs.existsSync(path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, ".agentify", "draft.json")), false);
       }
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
@@ -99,7 +94,7 @@ async function testTwoFactoriesDoNotShareDraftTransport(): Promise<void> {
     const agentsDraft = path.join(cwd, agents.draftPathRelative);
     assert.ok(JSON.parse(fs.readFileSync(claudeDraft, "utf8")).meta.domain_hypothesis.startsWith("claude:"));
     assert.ok(JSON.parse(fs.readFileSync(agentsDraft, "utf8")).meta.domain_hypothesis.startsWith("agents:"));
-    assert.equal(fs.existsSync(path.join(cwd, DRAFT_PATH)), false);
+    assert.equal(fs.existsSync(path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, ".agentify", "draft.json")), false);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -108,7 +103,7 @@ async function testTwoFactoriesDoNotShareDraftTransport(): Promise<void> {
 async function testExistingLegacyDraftIsNotReadOrOverwritten(): Promise<void> {
   const cwd = tempDir("draft-legacy-present");
   const tools = createWriteMapTools({ stateDir: ".claude/agentify" });
-  const legacyDraft = path.join(cwd, DRAFT_PATH);
+  const legacyDraft = path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, ".agentify", "draft.json");
   const legacyContent = '{"legacy":"leave untouched"}\n';
   try {
     fs.mkdirSync(path.dirname(legacyDraft), { recursive: true });
@@ -140,37 +135,16 @@ async function testValidationFailureKeepsScopedDraftAndCleansAtomicTemp(): Promi
     const draftPath = path.join(cwd, tools.draftPathRelative);
     assert.ok(fs.existsSync(draftPath));
     assert.equal(fs.existsSync(tools.canonicalMapPath(cwd)), false);
-    assert.equal(fs.existsSync(path.join(cwd, DRAFT_PATH)), false);
+    assert.equal(fs.existsSync(path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, ".agentify", "draft.json")), false);
     assertNoAtomicTemps(path.dirname(draftPath));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 }
 
-async function testLegacySingletonKeepsLegacyDraftTransport(): Promise<void> {
-  const cwd = tempDir("draft-legacy-singleton");
-  try {
-    setMapSessionStateDir(".claude/agentify");
-    const result = await writeMapTool.execute(
-      "legacy-singleton",
-      { map: oversizedMap("legacy-singleton"), mode: "auto" } as never,
-      undefined,
-      undefined,
-      { cwd } as never,
-    );
-    assert.equal(isToolError(result), false);
-    assert.equal(resultDetails(result).source_path, `auto-fallback:${path.join(cwd, DRAFT_PATH)}`);
-    assert.ok(fs.existsSync(path.join(cwd, DRAFT_PATH)));
-    assert.ok(fs.existsSync(path.join(cwd, ".claude/agentify", "codebase_map.json")));
-  } finally {
-    setMapSessionStateDir(LEGACY_PI_STATE_RELATIVE_DIR);
-    fs.rmSync(cwd, { recursive: true, force: true });
-  }
-}
 
 await testProviderFactoriesUseTheirConfiguredDraftPath();
 await testTwoFactoriesDoNotShareDraftTransport();
 await testExistingLegacyDraftIsNotReadOrOverwritten();
 await testValidationFailureKeepsScopedDraftAndCleansAtomicTemp();
-await testLegacySingletonKeepsLegacyDraftTransport();
 console.log("provider-scoped draft transport tests passed.");

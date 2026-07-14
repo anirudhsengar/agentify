@@ -88,6 +88,15 @@ no security signal. Dependency changes remain covered by the lockfile, productio
 The CI test job calls `npm run test:all`, which intentionally excludes duplicate
 typechecking. `npm test` remains the local all-in-one command.
 
+## Upgrade-compatibility gate
+
+Release verification must preserve safe upgrades from prior installed versions.
+The packed CLI is tested against retained legacy state, old manifest formats,
+interrupted migration journals, explicit provider switches, and package export
+confinement. Removed callable compatibility APIs are not public package exports;
+file-format readers required to migrate user state remain part of the CLI until
+their supported upgrade horizon is deliberately retired.
+
 ## Failure handling
 
 Do not move or recreate a failed release tag until the cause is understood.

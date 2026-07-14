@@ -3,7 +3,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { normalizeArtifactPath } from "./artifacts/generated-surface.ts";
 import { markerForArtifactPath } from "./artifacts/managed-markers.ts";
-import { LEGACY_PI_STATE_RELATIVE_DIR } from "./state-dir.ts";
 import type { AgentifyRepoMode } from "./repo-status.ts";
 import type { ManagedArtifactKind } from "./artifacts/renderers.ts";
 
@@ -22,38 +21,6 @@ export function codebaseMapRelativePath(stateDir: string): string {
 export function manifestRelativePath(stateDir: string): string {
   return path.join(stateDir, "manifest.json");
 }
-
-/**
- * @deprecated Use `manifestRelativePath(stateDir)` instead. Kept for
- * backward compatibility with existing tests and the refresh-managed
- * scaffold script. Always resolves to the legacy `.pi/agentify/`
- * path — it does NOT honor the user's selected target.
- */
-export const MANIFEST_RELATIVE_PATH = path.join(LEGACY_PI_STATE_RELATIVE_DIR, "manifest.json");
-
-/**
- * @deprecated Use `codebaseMapRelativePath(stateDir)` instead. Kept
- * for backward compatibility. Always resolves to the legacy
- * `.pi/agentify/` path.
- */
-export const CODEBASE_MAP_RELATIVE_PATH = path.join(LEGACY_PI_STATE_RELATIVE_DIR, "codebase_map.json");
-
-/**
- * @deprecated Use `requiredBrownfieldFiles(stateDir)` instead. The
- * legacy `.pi/agentify/codebase_map.json` is hardcoded here so
- * existing callers (e.g. the refresh-managed manifest script) keep
- * working without churn.
- */
-export const REQUIRED_BROWNFIELD_FILES = [
-  "AGENTS.md",
-  "specs/README.md",
-  "ai_docs/README.md",
-  CODEBASE_MAP_RELATIVE_PATH,
-  "SETUP.md",
-  ".github/workflows/agent-implement.yml",
-  ".github/actions/run-pi/action.yml",
-  ".github/scripts/setup-agentify.sh",
-] as const;
 
 /**
  * Required brownfield files for an audit that resolves to
@@ -117,8 +84,8 @@ export interface ManagedManifest {
   /**
    * Provider-scoped state directory (relative, no trailing slash)
    * recorded at apply time. New manifests always carry this;
-   * legacy manifests read without it (the read path falls back to
-   * `LEGACY_PI_STATE_RELATIVE_DIR` for backward compat).
+   * installed-upgrade manifests may omit it. Callers still supply the
+   * physical state directory explicitly to the compatibility reader.
    */
   state_dir?: string;
   /**
@@ -158,10 +125,6 @@ export function sha256(content: string | Buffer): string {
   return crypto.createHash("sha256").update(content).digest("hex");
 }
 
-export function manifestPath(cwd: string): string {
-  return path.join(cwd, MANIFEST_RELATIVE_PATH);
-}
-
 /** Absolute path of the managed manifest at the supplied state dir.
  *  Use this from any site that knows the resolved state dir. */
 export function manifestPathFor(cwd: string, stateDir: string): string {
@@ -176,19 +139,6 @@ export function codebaseMapPathFor(cwd: string, stateDir: string): string {
 
 export function markerForPath(relativePath: string): string {
   return markerForArtifactPath(relativePath);
-}
-
-export function kindForPath(relativePath: string): ManagedArtifactKind {
-  const normalized = normalizeArtifactPath(relativePath);
-  if (normalized.startsWith(".agents/") || normalized.startsWith(".claude/") || normalized.startsWith(".pi/skills/")) return "skill";
-  if (normalized.startsWith(".codex/") || normalized === "CLAUDE.md") return "harness_export";
-  if (normalized.startsWith(".github/") || normalized === "SETUP.md") return "scaffold";
-  if (normalized.startsWith(".pi/prompts/experts/")) return "expert";
-  if (normalized.startsWith(".pi/prompts/")) return "prompt";
-  if (normalized.startsWith(".pi/workflows/")) return "workflow";
-  if (normalized.startsWith(".pi/extensions/")) return "extension";
-  if (normalized.startsWith(".pi/agentify/")) return "state";
-  return "audit";
 }
 
 /**
@@ -211,21 +161,19 @@ export function dynamicKindForPath(relativePath: string, stateDir: string): Mana
   const normalized = normalizeArtifactPath(relativePath);
   const normalizedStateDir = normalizeArtifactPath(stateDir);
   const statePrefix = normalizedStateDir.endsWith("/") ? normalizedStateDir : `${normalizedStateDir}/`;
-  if (normalized.startsWith(".agents/") || normalized.startsWith(".claude/") || normalized.startsWith(".pi/skills/")) return "skill";
-  if (normalized.startsWith(".codex/") || normalized === "CLAUDE.md") return "harness_export";
-  if (normalized.startsWith(".github/") || normalized === "SETUP.md") return "scaffold";
   if (normalized.startsWith(`${statePrefix}prompts/experts/`)) return "expert";
   if (normalized.startsWith(`${statePrefix}prompts/`)) return "prompt";
   if (normalized.startsWith(`${statePrefix}workflows/`)) return "workflow";
   if (normalized.startsWith(`${statePrefix}extensions/`)) return "extension";
   if (normalized.startsWith(statePrefix)) return "state";
+  if (normalized.startsWith(".agents/") || normalized.startsWith(".claude/") || normalized.startsWith(".pi/skills/")) return "skill";
+  if (normalized.startsWith(".codex/") || normalized === "CLAUDE.md") return "harness_export";
+  if (normalized.startsWith(".github/") || normalized === "SETUP.md") return "scaffold";
+  if (normalized.startsWith(".pi/prompts/experts/")) return "expert";
+  if (normalized.startsWith(".pi/prompts/")) return "prompt";
+  if (normalized.startsWith(".pi/workflows/")) return "workflow";
+  if (normalized.startsWith(".pi/extensions/")) return "extension";
   return "audit";
-}
-
-export function isRequiredManagedPath(relativePath: string, mode: Exclude<AgentifyRepoMode, "unknown">): boolean {
-  const normalized = normalizeArtifactPath(relativePath);
-  const required = mode === "greenfield" ? REQUIRED_GREENFIELD_FILES : REQUIRED_BROWNFIELD_FILES;
-  return required.includes(normalized as never);
 }
 
 /**
@@ -249,16 +197,12 @@ export function isRequiredManagedPathFor(
 
 export function manifestFileFromContent(
   input: ManifestFileInput,
-  mode: Exclude<AgentifyRepoMode, "unknown"> = "brownfield",
-  stateDir?: string,
+  mode: Exclude<AgentifyRepoMode, "unknown">,
+  stateDir: string,
 ): ManagedManifestFile {
   const relativePath = normalizeArtifactPath(input.relativePath);
-  const kind = input.kind ?? (stateDir !== undefined
-    ? dynamicKindForPath(relativePath, stateDir)
-    : kindForPath(relativePath));
-  const required = input.required ?? (stateDir !== undefined
-    ? isRequiredManagedPathFor(relativePath, mode, stateDir)
-    : isRequiredManagedPath(relativePath, mode));
+  const kind = input.kind ?? dynamicKindForPath(relativePath, stateDir);
+  const required = input.required ?? isRequiredManagedPathFor(relativePath, mode, stateDir);
   return {
     path: relativePath,
     kind,
@@ -297,9 +241,8 @@ function isManifest(value: unknown): value is ManagedManifest {
     && typeof value.generated_at === "string"
     && (value.mode === "brownfield" || value.mode === "greenfield")
     // state_dir is optional. Absence means a legacy manifest
-    // written under .pi/agentify/ — accepted for backward
-    // compatibility; the read path falls back to
-    // LEGACY_PI_STATE_RELATIVE_DIR.
+    // accepted for installed-upgrade compatibility. The physical reader path
+    // remains explicit even when the recorded state directory is absent.
     && (value.state_dir === undefined || typeof value.state_dir === "string")
     // run_id is v2-only. Absent on v1 manifests (which are not
     // revertable but otherwise readable).
@@ -309,26 +252,8 @@ function isManifest(value: unknown): value is ManagedManifest {
 }
 
 /**
- * Read the managed manifest at the legacy `.pi/agentify/manifest.json`
- * path. Kept for backward compatibility with existing call sites
- * (e.g. `repo-status.ts`, scaffold scripts). New code should call
- * `readManifestAt(cwd, stateDir)` with the resolved state dir.
- */
-export function readManifest(cwd: string): ManagedManifest | null {
-  const filePath = manifestPath(cwd);
-  if (!fs.existsSync(filePath)) return null;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8")) as unknown;
-    return isManifest(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Read the managed manifest at `<stateDir>/manifest.json`. New
- * audit code should use this rather than the legacy
- * `readManifest(cwd)`.
+ * The physical state directory is always explicit.
  */
 export function readManifestAt(cwd: string, stateDir: string): ManagedManifest | null {
   const filePath = manifestPathFor(cwd, stateDir);
@@ -339,25 +264,6 @@ export function readManifestAt(cwd: string, stateDir: string): ManagedManifest |
   } catch {
     return null;
   }
-}
-
-/**
- * Write the managed manifest at the legacy `.pi/agentify/manifest.json`
- * path. New audit code should call `writeManifestAt(cwd, manifest,
- * stateDir)` — that variant stamps the active state dir into the
- * manifest's `state_dir` field.
- *
- * The schema_version is forced to `"2"` on write. Callers that
- * omit it (or set it to `"1"`) get a v2 manifest on disk; the
- * v2 shape is a superset of v1 plus the optional alongside /
- * preservedSha256 / run_id fields. Old v1 readers still parse
- * it fine because the new fields are optional.
- */
-export function writeManifest(cwd: string, manifest: ManagedManifest): void {
-  const stamped: ManagedManifest = { ...manifest, schema_version: "2" };
-  const filePath = manifestPath(cwd);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(stamped, null, 2)}\n`, { mode: 0o644 });
 }
 
 /**
@@ -377,66 +283,4 @@ export function writeManifestAt(
   const filePath = manifestPathFor(cwd, stateDir);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(stamped, null, 2)}\n`, { mode: 0o644 });
-}
-
-function fileCarriesMarker(content: string, marker: string): boolean {
-  return marker === "sha256" || content.includes(marker);
-}
-
-export function verifyManifest(cwd: string): ManifestVerification {
-  const manifest = readManifest(cwd);
-  if (!manifest) {
-    return {
-      manifest: null,
-      valid: false,
-      mode: "unknown",
-      found: [],
-      missing: [],
-      mismatched: [],
-      unmanaged: [],
-    };
-  }
-
-  const found: string[] = [];
-  const missing: string[] = [];
-  const mismatched: string[] = [];
-  const unmanaged: string[] = [];
-
-  for (const file of manifest.files) {
-    if (!file.required) continue;
-    const filePath = path.join(cwd, file.path);
-    // v2: when the manifest records an alongsidePath, the user's
-    // file is the canonical — agentify's version was saved next
-    // to it. The user's file deliberately doesn't carry the
-    // marker and doesn't match the agentify sha. We neither
-    // count it as found (marker/sha don't match by design) nor
-    // as missing/unmanaged/mismatched (the user owns this file
-    // and we are not clobbering it). Skip the file entirely so
-    // the repo state stays "ready" across re-runs.
-    if (file.alongsidePath) continue;
-    if (!fs.existsSync(filePath)) {
-      missing.push(file.path);
-      continue;
-    }
-    const content = fs.readFileSync(filePath);
-    const text = content.toString("utf-8");
-    found.push(file.path);
-    if (!fileCarriesMarker(text, file.marker)) {
-      unmanaged.push(file.path);
-      continue;
-    }
-    if (sha256(content) !== file.sha256) {
-      mismatched.push(file.path);
-    }
-  }
-
-  return {
-    manifest,
-    valid: missing.length === 0 && mismatched.length === 0 && unmanaged.length === 0,
-    mode: manifest.mode,
-    found,
-    missing,
-    mismatched,
-    unmanaged,
-  };
 }

@@ -4,7 +4,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { Value } from "typebox/value";
 import { CodebaseMapSchema } from "../src/core/audit/schema.ts";
-import { renderBrownfieldArtifacts, renderValidatedBrownfieldArtifacts } from "../src/core/artifacts/renderers.ts";
+import { renderBrownfieldArtifacts as renderBrownfieldWithContext, renderValidatedBrownfieldArtifacts as renderValidatedWithContext } from "../src/core/artifacts/renderers.ts";
+import type { CodebaseMap } from "../src/core/audit/schema.ts";
+
+const PI_RENDER_CONTEXT = { stateDir: ".pi" } as const;
+const renderBrownfieldArtifacts = (map: CodebaseMap) => renderBrownfieldWithContext(map, PI_RENDER_CONTEXT);
+const renderValidatedBrownfieldArtifacts = (input: unknown) => renderValidatedWithContext(input, PI_RENDER_CONTEXT);
 import { AGENTIFY_MANAGED_MARKERS } from "../src/core/artifact-exporters.ts";
 import { ExpertRegistry } from "../src/core/agent-expert.ts";
 import { WorkflowRegistry } from "../src/core/orchestrator/workflow-registry.ts";

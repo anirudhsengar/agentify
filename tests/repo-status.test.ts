@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { inspectAgentifyRepoState } from "../src/core/repo-status.ts";
 import {
   manifestFileFromContent,
-  writeManifest,
+  writeManifestAt,
   type ManagedManifestFile,
 } from "../src/core/manifest.ts";
 import { AGENTIFY_MANAGED_MARKERS } from "../src/core/artifact-exporters.ts";
@@ -20,7 +20,7 @@ function write(relativePath: string, cwd: string): void {
   fs.writeFileSync(filePath, "x\n");
 }
 
-function writeManaged(relativePath: string, cwd: string): ManagedManifestFile {
+function writeManaged(relativePath: string, cwd: string, mode: "brownfield" | "greenfield" = "brownfield"): ManagedManifestFile {
   const filePath = path.join(cwd, relativePath);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const marker = relativePath.endsWith(".json")
@@ -34,7 +34,7 @@ function writeManaged(relativePath: string, cwd: string): ManagedManifestFile {
     relativePath,
     content,
     source: "test",
-  });
+  }, mode, ".pi/agentify");
 }
 
 async function testReadyBrownfield(): Promise<void> {
@@ -55,19 +55,19 @@ async function testReadyBrownfield(): Promise<void> {
       ".github/scripts/setup-agentify.sh",
       ".pi/agents/payments.md",
     ].map((relativePath) => writeManaged(relativePath, cwd));
-    writeManifest(cwd, {
+    writeManifestAt(cwd, {
       schema_version: "1",
       agentify_version: "test",
       generated_at: "2026-07-05T00:00:00.000Z",
       mode: "brownfield",
       files,
-    });
+    }, ".pi/agentify");
     write(".pi/agents/user-extra.md", cwd);
     write(".pi/workflows/user-extra.json", cwd);
     write(".pi/prompts/experts/user-extra/expertise.yaml", cwd);
     write(".pi/skills/user-extra/SKILL.md", cwd);
 
-    const state = inspectAgentifyRepoState(cwd, configDir);
+    const state = inspectAgentifyRepoState(cwd, configDir, ".pi/agentify");
     assert.equal(state.mode, "brownfield");
     assert.equal(state.status, "ready");
     assert.equal(state.featureAgentCount, 1);
@@ -96,7 +96,7 @@ async function testUnmanagedBrownfieldIsPartial(): Promise<void> {
     ]) {
       write(relativePath, cwd);
     }
-    const state = inspectAgentifyRepoState(cwd, configDir);
+    const state = inspectAgentifyRepoState(cwd, configDir, ".pi/agentify");
     assert.equal(state.mode, "brownfield");
     assert.equal(state.status, "partial");
     assert.ok(state.missing.some((entry) => entry.includes("(unmanaged)")));
@@ -112,7 +112,7 @@ async function testPartialGreenfield(): Promise<void> {
   try {
     write("GOALS.md", cwd);
     write("CONTEXT.md", cwd);
-    const state = inspectAgentifyRepoState(cwd, configDir);
+    const state = inspectAgentifyRepoState(cwd, configDir, ".pi/agentify");
     assert.equal(state.mode, "greenfield");
     assert.equal(state.status, "partial");
     assert.ok(state.missing.includes(".github/workflows/agent-implement.yml"));
@@ -138,16 +138,16 @@ async function testReadyGreenfieldManifest(): Promise<void> {
       ".github/workflows/agent-implement.yml",
       ".github/actions/run-pi/action.yml",
       ".github/scripts/setup-agentify.sh",
-    ].map((relativePath) => writeManaged(relativePath, cwd));
-    writeManifest(cwd, {
+    ].map((relativePath) => writeManaged(relativePath, cwd, "greenfield"));
+    writeManifestAt(cwd, {
       schema_version: "1",
       agentify_version: "test",
       generated_at: "2026-07-06T00:00:00.000Z",
       mode: "greenfield",
       files,
-    });
+    }, ".pi/agentify");
 
-    const state = inspectAgentifyRepoState(cwd, configDir);
+    const state = inspectAgentifyRepoState(cwd, configDir, ".pi/agentify");
 
     assert.equal(state.mode, "greenfield");
     assert.equal(state.status, "ready");
@@ -162,7 +162,7 @@ async function testUninitializedRepo(): Promise<void> {
   const cwd = tempDir("agentify-repo-status-empty-");
   const configDir = tempDir("agentify-repo-status-config-");
   try {
-    const state = inspectAgentifyRepoState(cwd, configDir);
+    const state = inspectAgentifyRepoState(cwd, configDir, ".pi/agentify");
     assert.equal(state.mode, "unknown");
     assert.equal(state.status, "uninitialized");
   } finally {

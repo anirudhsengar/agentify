@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Supported runtime code now owns state exclusively through explicit provider-scoped contexts, write-map factories, renderer contexts, and state-directory-aware manifest and greenfield APIs.
+- Phase B retained-source migration, transaction recovery, deterministic conflict handling, provider switching, and Pi canonical `.pi/agentify` behavior remain unchanged.
+
+### Removed
+
+- Removed deprecated singleton `writeMapTool` / `writeMapDeltaTool` exports, mutable write-map and renderer state setters, omitted-context renderer behavior, and obsolete manifest, greenfield, and legacy path wrappers.
+- Removed ordinary canonical-loader fallback probes; retained legacy trees are migration sources only and are never selected by normal readers.
+
 ## [0.2.1] - 2026-07-14
 
 ### Fixed

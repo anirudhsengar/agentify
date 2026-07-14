@@ -67,6 +67,7 @@ async function spawnExplorerUsesExplorerSlotNotParentModel(): Promise<void> {
     let capturedModel: Model<Api> | undefined;
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
+      stateDir: ".pi/agentify",
       explorerModel,
       modelRegistry: registry,
       createSession: async (sessionOptions) => {
@@ -107,6 +108,7 @@ async function spawnExplorerExplicitModelLiteralMapsToRegistryModel(): Promise<v
     let capturedModel: Model<Api> | undefined;
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
+      stateDir: ".pi/agentify",
       explorerModel: haiku,
       modelRegistry: registry,
       createSession: async (sessionOptions) => {
@@ -159,6 +161,7 @@ async function spawnExplorerInheritWithoutExplorerSlotUsesParent(): Promise<void
     let capturedModel: Model<Api> | undefined;
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
+      stateDir: ".pi/agentify",
       // explorerModel defaults to parent's resolved model.
       explorerModel: resolved.model,
       modelRegistry: registry,

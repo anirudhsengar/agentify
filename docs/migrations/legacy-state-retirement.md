@@ -4,6 +4,28 @@ Status: proposed implementation contract for issue #32
 Design branch: `migration/32-legacy-state-design`  
 Scope: compatibility detection, state migration, recovery, and retirement of repository-internal deprecated APIs
 
+## Implementation status — Phase C complete
+
+Phase A detection and Phase B retained-source migration are merged. Phase C now
+removes the deprecated callable compatibility layer: singleton write-map tools,
+mutable state setters, omitted renderer context, and obsolete manifest,
+greenfield, draft, and path wrappers. Supported code uses explicit
+provider-scoped factories and contexts.
+
+The following compatibility remains intentionally:
+
+- Pi canonical `.pi/agentify` state;
+- safe legacy-layout detection and retained-source migration;
+- durable journals, crash recovery, deterministic conflicts, and explicit
+  provider switching;
+- old v1 and absent-`state_dir` manifest readers needed for installed upgrades;
+- schema, generated-output, package-export, symlink, permission, and ownership
+  contracts.
+
+Historical inventory tables below describe the pre-removal baseline and the
+review gates used to authorize Phase C. They are retained as migration design
+evidence, not as a statement that the removed APIs still exist.
+
 ## Decision summary
 
 Agentify will retire **cross-provider fallback reads and writes** involving the historical `.pi/agentify` tree. It will not retire `.pi/agentify` as Pi's provider-scoped canonical state directory.
@@ -450,7 +472,7 @@ Deprecated APIs may be removed only when all of the following are true:
 - Add failure injection for every journal phase and restart/recovery tests.
 - Integrate brownfield, greenfield, attach, recovery, and revert.
 
-### Phase C — deprecated API retirement
+### Phase C — deprecated API retirement (completed)
 
 - Remove singleton `writeMapTool`/`writeMapDeltaTool` exports and mutable map session state.
 - Remove `setRendererStateDir` and omitted-context behavior.

@@ -11,20 +11,10 @@ import {
   type CodebaseMap,
 } from "../../src/core/audit/schema.ts";
 import {
-  AGENTIFY_OUTPUT_DIR,
-  DRAFT_DIR,
-  DRAFT_PATH,
-  DRAFT_TRANSPORT_DIR,
-  HISTORY_DIR,
-  MAP_FILENAME,
-  canonicalMapPath,
   createWriteMapTools,
   getReserveCount,
-  loadCanonicalMap,
   loadCanonicalMapAt,
   resetReserveCounters,
-  writeMapDeltaTool,
-  writeMapTool,
 } from "../../src/core/audit/write-map-tool.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
@@ -33,10 +23,6 @@ const MAX_INLINE_MAP_BYTES = 100_000;
 
 function tempDir(name: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `agentify-write-map-${name}-`));
-}
-
-function normalize(value: string): string {
-  return value.replace(/\\/g, "/");
 }
 
 function cloneMap(map: CodebaseMap = makeValidCodebaseMap()): CodebaseMap {
@@ -101,6 +87,7 @@ function makeArtifactIntents(includeScaffoldRuntime: boolean): NonNullable<Codeb
 }
 
 async function testToolDefinitionContract(): Promise<void> {
+  const { writeMapTool, writeMapDeltaTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
   assert.equal(writeMapTool.name, "write_map");
   assert.equal(writeMapTool.label, "Write Codebase Map");
   assert.equal(
@@ -408,7 +395,7 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   });
 }
 
-async function testObservabilityFactoryAndLegacyContract(): Promise<void> {
+async function testObservabilityAndFactoryContract(): Promise<void> {
   resetReserveCounters();
   const cwd = tempDir("reserve");
   const tools = createWriteMapTools({
@@ -445,22 +432,18 @@ async function testObservabilityFactoryAndLegacyContract(): Promise<void> {
   resetReserveCounters();
   assert.equal(getReserveCount("D1_topography"), 0);
 
-  assert.equal(AGENTIFY_OUTPUT_DIR, path.join(".pi", "agentify"));
-  assert.equal(MAP_FILENAME, "codebase_map.json");
-  assert.equal(DRAFT_DIR, path.join(".pi", "agentify", ".agentify"));
-  assert.equal(DRAFT_TRANSPORT_DIR, DRAFT_DIR);
-  assert.equal(DRAFT_PATH, path.join(DRAFT_DIR, "draft.json"));
-  assert.equal(HISTORY_DIR, path.join(".pi", "agentify", "history"));
-  assert.equal(canonicalMapPath(cwd), path.join(cwd, ".pi", "agentify", "codebase_map.json"));
+  const piTools = createWriteMapTools({ stateDir: ".pi/agentify" });
+  assert.equal(piTools.canonicalMapRelative, ".pi/agentify/codebase_map.json");
+  assert.equal(piTools.draftDirectoryRelative, ".pi/agentify/.agentify");
+  assert.equal(piTools.draftPathRelative, ".pi/agentify/.agentify/draft.json");
+  assert.equal(piTools.historyRelative, ".pi/agentify/history");
 
-  const legacyCwd = tempDir("legacy");
-  const legacyPath = canonicalMapPath(legacyCwd);
-  fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
-  fs.writeFileSync(legacyPath, `\ufeff${JSON.stringify(cloneMap())}`);
-  assert.ok(loadCanonicalMap(legacyCwd));
-  assert.equal(loadCanonicalMapAt(legacyCwd, ".agents/agentify"), null);
-
-  assert.equal(normalize(DRAFT_PATH), ".pi/agentify/.agentify/draft.json");
+  const piCwd = tempDir("pi-explicit");
+  const piPath = piTools.canonicalMapPath(piCwd);
+  fs.mkdirSync(path.dirname(piPath), { recursive: true });
+  fs.writeFileSync(piPath, `\ufeff${JSON.stringify(cloneMap())}`);
+  assert.ok(loadCanonicalMapAt(piCwd, ".pi/agentify"));
+  assert.equal(loadCanonicalMapAt(piCwd, ".agents/agentify"), null);
 }
 
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
@@ -468,7 +451,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "inline defaults coverage and storage contract", fn: testInlineDefaultsCoverageAndStorageContract },
   { name: "input loading and draft contract", fn: testInputLoadingAndDraftContract },
   { name: "history validation coverage and merge contract", fn: testHistoryValidationCoverageAndMergeContract },
-  { name: "observability factory and legacy contract", fn: testObservabilityFactoryAndLegacyContract },
+  { name: "observability and explicit factory contract", fn: testObservabilityAndFactoryContract },
 ];
 
 let passed = 0;

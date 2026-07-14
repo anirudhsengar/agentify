@@ -8,7 +8,7 @@ import { authPath, defaultConfigDir, saveAgentifyConfig } from "../src/core/agen
 import { writeProjectState } from "../src/core/project-state.ts";
 import { runAgentifyApp } from "../src/core/agentify-app.ts";
 import { AGENTIFY_MANAGED_MARKERS } from "../src/core/artifact-exporters.ts";
-import { manifestFileFromContent, writeManifest } from "../src/core/manifest.ts";
+import { manifestFileFromContent, writeManifestAt } from "../src/core/manifest.ts";
 import { makeValidCodebaseMap } from "./fixtures/codebase-map.ts";
 import type {
   AgentRuntime,
@@ -111,15 +111,15 @@ function seedReadyRepo(cwd: string, configDir: string): void {
       ? `${JSON.stringify(makeValidCodebaseMap(), null, 2)}\n`
       : `${marker}x\n`;
     fs.writeFileSync(filePath, content);
-    return manifestFileFromContent({ relativePath, content, source: "test" });
+    return manifestFileFromContent({ relativePath, content, source: "test" }, "brownfield", ".pi/agentify");
   });
-  writeManifest(cwd, {
+  writeManifestAt(cwd, {
     schema_version: "1",
     agentify_version: "test",
     generated_at: "2026-07-05T00:00:00.000Z",
     mode: "brownfield",
     files,
-  });
+  }, ".pi/agentify");
   const logDir = path.join(configDir, "logs", "agentify");
   fs.mkdirSync(logDir, { recursive: true });
   const logPath = path.join(logDir, `2026-07-05T00-00-00-000Z-${hashCwd(cwd)}-00.jsonl`);

@@ -437,7 +437,7 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
         options.ui.info(`agentify: staging generated bundle at ${stagingRoot}`);
         try {
           const metadata = new Map<string, ManagedManifestFile>();
-          writeRenderedArtifactsToStaging(stagingRoot, renderResult.artifacts, metadata);
+          writeRenderedArtifactsToStaging(stagingRoot, renderResult.artifacts, metadata, "brownfield", stateDir);
           copyCanonicalMapToStaging(options.cwd, stagingRoot, stateDir, metadata);
           mirrorSessionOutputToStaging(sessionAgentsSnapshotDir, stagingRoot);
           const classification = ProjectClassifier.classify(options.cwd);
@@ -452,13 +452,13 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
             userOwnedAgentsMd,
           });
           for (const result of exportResults) {
-            addWriteMetadata(stagingRoot, result.writes, `harness-export:${result.target}`, metadata);
+            addWriteMetadata(stagingRoot, result.writes, `harness-export:${result.target}`, metadata, "brownfield", stateDir);
           }
           const scaffoldWrites = installScaffoldRuntime({
             cwd: stagingRoot,
             packageRoot: packageRoot(),
           });
-          addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata);
+          addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata, "brownfield", stateDir);
 
           const runId = crypto.randomUUID();
           persistRunArtifacts({

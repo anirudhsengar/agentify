@@ -136,8 +136,8 @@ the application-owned `write_map` and `write_map_delta` trust boundary. Internal
 responsibilities are separated as follows:
 
 - `map-storage.ts` owns provider-scoped canonical, draft, and history paths,
-  canonical persistence, atomic draft transport, legacy fallback reads, and
-  per-factory execution context;
+  canonical persistence, atomic draft transport, and the required per-factory
+  execution context;
 - `map-input.ts` owns relative and absolute input resolution, byte caps, BOM
   handling, JSON parsing, and stable file-read error translation;
 - `map-validation.ts` owns complete and partial TypeBox validation plus stable
@@ -149,14 +149,14 @@ responsibilities are separated as follows:
   semantics;
 - `map-observability.ts` owns per-dimension retry counters and soft-ceiling
   guidance without imposing a hard cap;
-- `write-map-tools.ts` owns the factory-created tool definitions and exact
-  model-visible protocol; and
-- `legacy-write-map.ts` owns deprecated constants and wrappers preserving
-  historical direct-call behavior.
+- `write-map-tools.ts` owns context-bound tool construction and the exact
+  model-visible protocol.
 
-The façade re-exports the same functions, types, constants, singleton tools, and
-factory API. Storage, validation, coverage, and tool modules do not redefine the
-audit TypeBox schemas or expand the package surface.
+The façade exports the factory and explicit storage helpers only. Phase C removed
+singleton tools, mutable session setters, and legacy path wrappers; normal
+runtime readers never probe a retained cross-provider tree. Storage, validation,
+coverage, and tool modules do not redefine the audit TypeBox schemas or expand
+the package surface.
 
 ## Generation pipeline ownership
 
@@ -194,12 +194,12 @@ canonical-map, history, and draft-layout information for that run; asynchronous
 tool execution is isolated from other in-process factories. Renderer helpers
 receive the same run-owned state directory through function arguments.
 
-Production orchestration does not call `setMapSessionStateDir` or
-`setRendererStateDir`. Those setters, singleton map tools, and legacy path
-constants remain deprecated compatibility adapters for older direct callers and
-tests. Legacy map fallback precedence is unchanged. Factory-bound draft
-transport reads and writes only under the configured provider state directory;
-the deprecated singleton retains the historical Pi draft path.
+Production orchestration passes the resolved state directory through explicit
+factories and renderer contexts. Setters, singleton map tools, omitted-context
+rendering, and legacy path wrappers are absent. Factory-bound canonical, history,
+and draft operations read and write only under the configured provider state
+directory. Dedicated migration readers own retained legacy state and old
+manifest formats; ordinary runtime readers never probe a cross-provider tree.
 
 ## Module categories and dependency direction
 
