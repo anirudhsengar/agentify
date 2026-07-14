@@ -41,30 +41,61 @@ async function testReleaseJobsAreTagOnly(): Promise<void> {
   }
 }
 
+async function testScopedPackageIdentityIsStable(): Promise<void> {
+  const packageJson = JSON.parse(read("package.json")) as {
+    name?: string;
+    version?: string;
+    bin?: Record<string, string>;
+  };
+  const packageLock = JSON.parse(read("package-lock.json")) as {
+    name?: string;
+    version?: string;
+    packages?: Record<string, { name?: string; version?: string }>;
+  };
+
+  assert.equal(packageJson.name, "@anirudhsengar/agentify");
+  assert.equal(packageJson.version, "0.2.1");
+  assert.deepEqual(packageJson.bin, { agentify: "./bin/agentify.js" });
+  assert.equal(packageLock.name, packageJson.name);
+  assert.equal(packageLock.version, packageJson.version);
+  assert.equal(packageLock.packages?.[""]?.name, packageJson.name);
+  assert.equal(packageLock.packages?.[""]?.version, packageJson.version);
+}
+
 async function testExactVerifiedArtifactIsPublished(): Promise<void> {
   const workflow = read(".github/workflows/release-publish.yml");
   const verify = jobBlock(workflow, "verify", "publish-npm");
   const publish = jobBlock(workflow, "publish-npm", "github-release");
   const release = jobBlock(workflow, "github-release");
 
-  assert.match(verify, /npm run test:package/);
-  assert.match(verify, /npm pack --ignore-scripts/);
-  assert.match(verify, /actions\/upload-artifact@v4/);
+  assert.match(verify, /outputs:\n\s+tarball-filename: \$\{\{ steps\.pack\.outputs\.filename \}\}/);
+  assert.match(verify, /id: pack/);
+  assert.match(verify, /npm pack --json --ignore-scripts > pack-result\.json/);
+  assert.match(verify, /JSON\.parse\(fs\.readFileSync\("pack-result\.json", "utf8"\)\)/);
+  assert.match(verify, /result\.length !== 1/);
+  assert.match(verify, /non-empty filename/);
+  assert.match(verify, /\[\[ ! -f "\$filename" \]\]/);
+  assert.match(verify, /filename=%s\\n/);
+  assert.match(verify, /path: \$\{\{ steps\.pack\.outputs\.filename \}\}/);
+  assert.doesNotMatch(verify, /agentify-\*\.tgz/);
+
   assert.match(publish, /actions\/download-artifact@v4/);
-  assert.match(publish, /shell: bash/);
   assert.match(publish, /shopt -s nullglob/);
-  assert.match(publish, /tarballs=\(\.\/release-artifact\/agentify-\*\.tgz\)/);
+  assert.match(publish, /tarballs=\(\.\/release-artifact\/\*\.tgz\)/);
   assert.match(publish, /\$\{#tarballs\[@\]\} != 1/);
-  assert.match(publish, /Expected exactly one release tarball/);
   assert.match(publish, /npm publish "\$\{tarballs\[0\]\}" --provenance --access public/);
-  assert.doesNotMatch(
-    publish,
-    /npm publish\s+["']?release-artifact\/agentify-\*\.tgz/,
-    "npm publish must never receive an ambiguous non-local tarball specification",
-  );
-  assert.doesNotMatch(publish, /npm\s+(?:pack|run\s+build)/, "publish job must not rebuild the verified artifact");
+  assert.doesNotMatch(publish, /npm\s+(?:pack|run\s+build)/, "publish job must not rebuild or repack");
+  assert.doesNotMatch(publish, /agentify-\*\.tgz/);
+
   assert.match(release, /actions\/download-artifact@v4/);
-  assert.match(release, /files: release-artifact\/agentify-\*\.tgz/);
+  assert.match(release, /tarballs=\(\.\/release-artifact\/\*\.tgz\)/);
+  assert.match(release, /\$\{#tarballs\[@\]\} != 1/);
+  assert.match(release, /path=%s\\n/);
+  assert.match(release, /files: \$\{\{ steps\.release-artifact\.outputs\.path \}\}/);
+  assert.doesNotMatch(release, /agentify-\*\.tgz/);
+
+  assert.doesNotMatch(workflow, /release-artifact\/agentify-\*\.tgz/);
+  assert.match(workflow, /https:\/\/www\.npmjs\.com\/package\/@anirudhsengar\/agentify/);
 }
 
 async function testTagVersionValidation(): Promise<void> {
@@ -102,6 +133,7 @@ async function testCiSeparatesConcernsAndCoversEngines(): Promise<void> {
 
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "releaseJobsAreTagOnly", fn: testReleaseJobsAreTagOnly },
+  { name: "scopedPackageIdentityIsStable", fn: testScopedPackageIdentityIsStable },
   { name: "exactVerifiedArtifactIsPublished", fn: testExactVerifiedArtifactIsPublished },
   { name: "tagVersionValidation", fn: testTagVersionValidation },
   { name: "ciSeparatesConcernsAndCoversEngines", fn: testCiSeparatesConcernsAndCoversEngines },

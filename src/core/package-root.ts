@@ -6,7 +6,7 @@ function isAgentifyPackageRoot(candidate: string): boolean {
   const packageJsonPath = path.join(candidate, "package.json");
   try {
     const parsed = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8")) as { name?: unknown };
-    return parsed.name === "agentify";
+    return parsed.name === "@anirudhsengar/agentify";
   } catch {
     return false;
   }

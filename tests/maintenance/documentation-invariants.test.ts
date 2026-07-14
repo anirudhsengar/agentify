@@ -141,6 +141,20 @@ test("package guidance files referenced by shipped docs are published", () => {
   assert.deepEqual(packageJson.exports, { "./package.json": "./package.json" });
 });
 
+test("official npm package identity remains scoped while the CLI command stays stable", () => {
+  const packageJson = readPackageJson();
+  const readme = read("README.md");
+  const releaseWorkflow = read(".github/workflows/release-publish.yml");
+
+  assert.equal(packageJson.name, "@anirudhsengar/agentify");
+  assert.deepEqual(packageJson.bin, { agentify: "./bin/agentify.js" });
+  assert.match(readme, /npm install -g @anirudhsengar\/agentify/);
+  assert.match(readme, /npx @anirudhsengar\/agentify/);
+  assert.match(readme, /https:\/\/www\.npmjs\.com\/package\/@anirudhsengar\/agentify/);
+  assert.doesNotMatch(readme, /npm install -g agentify|npx agentify/);
+  assert.match(releaseWorkflow, /https:\/\/www\.npmjs\.com\/package\/@anirudhsengar\/agentify/);
+});
+
 test("binary and scripts preserve the compiled package boundary", () => {
   const packageJson = readPackageJson();
   const binary = read("bin/agentify.js");
