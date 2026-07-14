@@ -20,7 +20,6 @@ import {
 } from "./agentify-config.ts";
 import { selectModelForRole } from "./models/resolver.ts";
 import {
-  LEGACY_PI_STATE_RELATIVE_DIR,
   discoverExistingStateDir,
 } from "./state-dir.ts";
 import { recoverInterruptedStateTransactions } from "./state-transaction.ts";
@@ -365,7 +364,7 @@ export async function logoutCommand(
 
 // ===========================================================================
 // `agentify models ...`
-// ===========================================================================
+// ==============================================================================
 
 const MODELS_LIST_FLAGS = new Set(["provider"]);
 const MODELS_SET_FLAGS = new Set<string>(); // none
@@ -718,8 +717,12 @@ export async function revertCommand(
     return 1;
   }
   recoverInterruptedStateTransactions(ctx.cwd);
-  const stateDir = discoverExistingStateDir(ctx.cwd)?.relativeDir
-    ?? LEGACY_PI_STATE_RELATIVE_DIR;
+  const discoveredState = discoverExistingStateDir(ctx.cwd);
+  if (!discoveredState) {
+    ctx.err.write("agentify: revert: no managed state directory was found; no files were changed\n");
+    return 1;
+  }
+  const stateDir = discoveredState.relativeDir;
   const includeAlongside = parsed.flags["keep-alongside"] !== true;
   const runId = typeof parsed.flags.to === "string" ? parsed.flags.to : undefined;
   const result = await revertLastRun({
