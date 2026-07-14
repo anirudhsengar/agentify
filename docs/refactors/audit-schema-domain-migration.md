@@ -256,6 +256,20 @@ Every movement PR must prove:
 Fixtures must be updated only in a separate semantic-contract PR. A movement PR that
 requires a golden update has detected drift and must stop.
 
+## Implemented top-level composition
+
+Issue #55 establishes the planned composition boundary:
+
+- `schema/codebase-map.ts` owns complete and partial audit-map composition;
+- `schema/write-map-params.ts` owns `write_map` and `write_map_delta` parameters;
+- `schema/index.ts` is the internal re-export boundary and does not redeclare schemas;
+- `schema.ts` is a declaration-free stable façade that forwards the original values and types.
+
+The committed serialization, property order, validation errors, static types, parameter
+identity, generated output, and package boundaries remain frozen by the existing golden
+and characterization suites. Dependency-direction enforcement remains the dedicated
+Issue #56 step.
+
 ## Ownership and maintenance rules
 
 The existing rule that `src/core/audit/schema.ts` is the sole TypeBox declaration owner

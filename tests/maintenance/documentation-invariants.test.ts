@@ -215,19 +215,24 @@ test("architecture documentation names the enforced safety mechanisms", () => {
   }
 });
 
-test("audit schema algorithms preserve the TypeBox ownership boundary", () => {
+test("audit schema algorithms preserve the declaration-free façade boundary", () => {
   const schema = read("src/core/audit/schema.ts");
+  const composition = read("src/core/audit/schema/codebase-map.ts");
+  const parameters = read("src/core/audit/schema/write-map-params.ts");
   const algorithmPaths = [
     "src/core/audit/coverage.ts",
     "src/core/audit/map-defaults.ts",
     "src/core/audit/schema-compatibility.ts",
   ];
 
-  assert.match(schema, /import \{ Type, type Static \} from "typebox"/);
+  assert.doesNotMatch(schema, /from ["']typebox(?:\/[^"']*)?[#']/);
+  assert.doesNotMatch(schema, /\bType\s*\./);
+  assert.match(composition, /import \{ Type, type Static \} from "typebox"/);
+  assert.match(parameters, /import \{ Type, type Static \} from "typebox"/);
   for (const algorithmPath of algorithmPaths) {
     const source = read(algorithmPath);
     assert.doesNotMatch(source, /from ["']typebox(?:\/[^"']*)?["']/);
-    assert.doesNotMatch(source, /from ["']@earendil-works\/pi-ai["']/);
+    assert.doesNotMatch(source, /from [#']@earendil-works\/pi-ai["']/);
     assert.doesNotMatch(source, /\bType\s*\./);
   }
 
