@@ -64,6 +64,9 @@ export class PiSdkRuntime implements AgentRuntime {
 
     const customTools = [...(options.customTools ?? [])];
     if (options.spawnExplorerAgentDir && explorerModelForSpawn) {
+      if (!options.spawnExplorerStateDir) {
+        throw new Error("spawnExplorerStateDir is required when spawnExplorerAgentDir is configured");
+      }
       customTools.push(
         createSpawnExplorerTool({
           agentDir: options.spawnExplorerAgentDir,

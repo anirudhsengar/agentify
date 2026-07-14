@@ -2,90 +2,54 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import {
-  DRAFT_PATH,
-  setMapSessionStateDir,
-  writeMapTool,
-} from "../../src/core/audit/write-map-tool.ts";
-import {
-  renderValidatedBrownfieldArtifacts,
-  setRendererStateDir,
-} from "../../src/core/artifacts/renderers.ts";
-import { LEGACY_PI_STATE_RELATIVE_DIR } from "../../src/core/state-dir.ts";
+import { createWriteMapTools, loadCanonicalMapAt } from "../../src/core/audit/write-map-tool.ts";
+import { renderValidatedBrownfieldArtifacts } from "../../src/core/artifacts/renderers.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
 function tempDir(name: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `agentify-${name}-`));
 }
 
-function isToolError(result: unknown): boolean {
-  return (result as { isError?: boolean }).isError === true;
-}
-
-async function writeMapAt(cwd: string, stateDir: string): Promise<string> {
-  setMapSessionStateDir(stateDir);
-  const result = await writeMapTool.execute(
-    `write-${stateDir}`,
-    { map: makeValidCodebaseMap() } as never,
-    undefined,
-    undefined,
-    { cwd } as never,
-  );
-  assert.equal(isToolError(result), false);
-  const details = result.details as { path?: string } | undefined;
-  assert.ok(details?.path);
-  return details.path;
-}
-
-async function testLegacyMapToolSetterControlsCanonicalWrites(): Promise<void> {
-  const cwd = tempDir("legacy-map-state");
+async function testPiCanonicalStateUsesExplicitFactory(): Promise<void> {
+  const cwd = tempDir("pi-explicit-state");
+  const tools = createWriteMapTools({ stateDir: ".pi/agentify" });
   try {
-    const claudePath = await writeMapAt(cwd, ".claude/agentify");
-    const codexPath = await writeMapAt(cwd, ".codex/agentify");
-
-    assert.equal(claudePath, path.join(cwd, ".claude/agentify", "codebase_map.json"));
-    assert.equal(codexPath, path.join(cwd, ".codex/agentify", "codebase_map.json"));
-    assert.ok(fs.existsSync(claudePath));
-    assert.ok(fs.existsSync(codexPath));
+    const result = await tools.writeMapTool.execute(
+      "write-pi",
+      { map: makeValidCodebaseMap() } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((result as { isError?: boolean }).isError, undefined);
+    assert.ok(fs.existsSync(tools.canonicalMapPath(cwd)));
+    assert.ok(loadCanonicalMapAt(cwd, ".pi/agentify"));
   } finally {
-    setMapSessionStateDir(LEGACY_PI_STATE_RELATIVE_DIR);
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 }
 
-function testLegacyRendererSetterControlsOneArgumentWrapper(): void {
+function testRendererRequiresExplicitContext(): void {
   const map = makeValidCodebaseMap();
   delete map.artifact_intents;
   map.meta.suggested_subagent_domains = ["payments"];
-
-  try {
-    setRendererStateDir(".claude/agentify");
-    const claude = renderValidatedBrownfieldArtifacts(map);
-    assert.equal(claude.errors.length, 0, claude.errors.join("\n"));
-    assert.ok(
-      claude.artifacts.some((artifact) => artifact.relativePath === ".claude/agentify/agents/payments.md"),
-    );
-
-    setRendererStateDir(".codex/agentify");
-    const codex = renderValidatedBrownfieldArtifacts(map);
-    assert.equal(codex.errors.length, 0, codex.errors.join("\n"));
-    assert.ok(
-      codex.artifacts.some((artifact) => artifact.relativePath === ".codex/agentify/agents/payments.md"),
-    );
-  } finally {
-    setRendererStateDir(".pi");
-  }
+  const rendered = renderValidatedBrownfieldArtifacts(map, { stateDir: ".pi" });
+  assert.equal(rendered.errors.length, 0, rendered.errors.join("\n"));
+  assert.ok(rendered.artifacts.some((artifact) => artifact.relativePath === ".pi/agents/payments.md"));
 }
 
-function testLegacyDraftConstantRemainsProviderAgnostic(): void {
-  assert.equal(
-    DRAFT_PATH,
-    path.join(LEGACY_PI_STATE_RELATIVE_DIR, ".agentify", "draft.json"),
-    "deprecated draft constants remain pinned to the legacy Pi state tree",
-  );
+async function testRemovedExportsStayAbsent(): Promise<void> {
+  const mapFacade = await import("../../src/core/audit/write-map-tool.ts") as Record<string, unknown>;
+  const renderers = await import("../../src/core/artifacts/renderers.ts") as Record<string, unknown>;
+  for (const name of [
+    "writeMapTool", "writeMapDeltaTool", "setMapSessionStateDir",
+    "AGENTIFY_OUTPUT_DIR", "MAP_FILENAME", "DRAFT_DIR", "DRAFT_PATH",
+    "DRAFT_TRANSPORT_DIR", "HISTORY_DIR", "canonicalMapPath", "loadCanonicalMap",
+  ]) assert.equal(name in mapFacade, false, `${name} must remain removed`);
+  assert.equal("setRendererStateDir" in renderers, false);
 }
 
-await testLegacyMapToolSetterControlsCanonicalWrites();
-testLegacyRendererSetterControlsOneArgumentWrapper();
-testLegacyDraftConstantRemainsProviderAgnostic();
-console.log("legacy state-directory characterization tests passed.");
+await testPiCanonicalStateUsesExplicitFactory();
+testRendererRequiresExplicitContext();
+await testRemovedExportsStayAbsent();
+console.log("deprecated state API removal tests passed.");

@@ -142,6 +142,8 @@ remain the registry-driven fan-out destinations.
 
 Provider switching is separate from automatic legacy upgrade. Switching among Claude, Codex, and Pi requires an explicit `--targets` selection together with `--migrate-state`; ambiguous, divergent, occupied, unreadable, user-owned, or symlinked layouts stop before writes. Canonical readers use only the authoritative provider-scoped state and do not probe retained cross-provider trees.
 
+All supported runtime operations carry that resolved state directory explicitly. Deprecated singleton write-map tools, mutable renderer/write-map setters, and legacy path wrappers have been removed. Old manifest formats remain readable only through dedicated upgrade readers, and Pi continues to use `.pi/agentify/` as its canonical state.
+
 ## What Gets Written
 
 On a successful **brownfield** audit, agentify writes into your repo:

@@ -13,12 +13,11 @@ import { renderProjectWorkflowArtifacts } from "./workflows.ts";
 import type { RenderArtifactsResult, RenderContext, RenderedArtifact, ValidatedRenderResult } from "./types.ts";
 
 export type { ManagedArtifactKind, RenderArtifactsResult, RenderContext, RenderedArtifact, StructuredRenderError, ValidatedRenderResult } from "./types.ts";
-export { setRendererStateDir } from "./context.ts";
 
 /** Deterministic trust boundary used before any repository-facing apply. */
 export function renderValidatedBrownfieldArtifacts(
   input: unknown,
-  context?: RenderContext | { stateDir?: string },
+  context: RenderContext,
 ): ValidatedRenderResult {
   const schemaErrors = Value.Errors(CodebaseMapSchema, input).map((error) => {
     const detail = error as unknown as { path?: string; instancePath?: string; message: string };
@@ -39,7 +38,7 @@ export function renderValidatedBrownfieldArtifacts(
 
 export function renderBrownfieldArtifacts(
   map: CodebaseMap,
-  context?: RenderContext | { stateDir?: string },
+  context: RenderContext,
 ): RenderArtifactsResult {
   const artifacts: RenderedArtifact[] = [];
   const errors: string[] = [];

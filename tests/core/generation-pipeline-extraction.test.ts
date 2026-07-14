@@ -72,7 +72,7 @@ function testRenderedArtifactStagingMetadata(): void {
     };
     const metadata = new Map<string, ManagedManifestFile>();
 
-    writeRenderedArtifactsToStaging(stagingRoot, [artifact], metadata);
+    writeRenderedArtifactsToStaging(stagingRoot, [artifact], metadata, "brownfield", STATE_DIR);
 
     const stagedPath = path.join(stagingRoot, artifact.relativePath);
     assert.equal(fs.readFileSync(stagedPath, "utf8"), artifact.content);
@@ -86,7 +86,7 @@ function testRenderedArtifactStagingMetadata(): void {
         required: artifact.required,
         marker: artifact.marker,
         source: artifact.source,
-      }),
+      }, "brownfield", STATE_DIR),
     );
   } finally {
     fs.rmSync(stagingRoot, { recursive: true, force: true });
@@ -117,7 +117,7 @@ function testRequiredConflictPreflightWritesNothing(): void {
         source: "characterization-test",
       },
     ];
-    writeRenderedArtifactsToStaging(stagingRoot, artifacts, metadata);
+    writeRenderedArtifactsToStaging(stagingRoot, artifacts, metadata, "brownfield", STATE_DIR);
 
     const result = applyStagedBundle({
       cwd,

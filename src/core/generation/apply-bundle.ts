@@ -68,7 +68,7 @@ export function applyStagedBundle(params: {
 
   for (const file of stagedFiles) {
     const entry = params.metadata.get(file.relativePath)
-      ?? manifestFileFromContent({ relativePath: file.relativePath, content: file.content });
+      ?? manifestFileFromContent({ relativePath: file.relativePath, content: file.content }, params.mode, params.stateDir);
     if (entry.required
       && isConflictingDestination(params.cwd, file.relativePath, params.snapshot)
       && resolveActionForPath(params.policy, file.relativePath, true) === "abort") {
@@ -84,7 +84,7 @@ export function applyStagedBundle(params: {
 
   for (const file of stagedFiles) {
     const baseEntry = params.metadata.get(file.relativePath)
-      ?? manifestFileFromContent({ relativePath: file.relativePath, content: file.content });
+      ?? manifestFileFromContent({ relativePath: file.relativePath, content: file.content }, params.mode, params.stateDir);
     const isRequired = baseEntry.required;
 
     if (!isConflictingDestination(params.cwd, file.relativePath, params.snapshot)) {

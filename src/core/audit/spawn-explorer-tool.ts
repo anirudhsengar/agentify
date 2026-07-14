@@ -51,7 +51,6 @@ import {
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { Model, Api } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
-import { LEGACY_PI_STATE_RELATIVE_DIR } from "../state-dir.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
 import {
@@ -230,37 +229,18 @@ const SpawnExplorerParams = Type.Object({
 
 let activeSpawnCount = 0;
 
-/**
- * @deprecated Default budget-recovery block used by tools created
- * without an explicit stateDir. References the legacy
- * `.pi/agentify/` paths. Use `buildBudgetRecovery(stateDir)` to
- * construct a tool bound to a provider-scoped state dir.
- */
-const BUDGET_RECOVERY: {
+interface BudgetRecovery {
     can_continue: boolean;
     actions: ReadonlyArray<string>;
     state_files: ReadonlyArray<string>;
-} = {
-    can_continue: true,
-    actions: [
-        `Read ${LEGACY_PI_STATE_RELATIVE_DIR}/codebase_map.json and the latest run log before dispatching any more explorers.`,
-        "Reuse completed sub-agent reports and call write_map or write_map_delta with the strongest evidence already gathered.",
-        "Narrow any remaining target_path/focus before retrying only if a budget remains.",
-        "For genuinely unobservable gaps, record an honest null/open_question rather than inventing coverage.",
-    ],
-    state_files: [
-        `${LEGACY_PI_STATE_RELATIVE_DIR}/codebase_map.json`,
-        `${LEGACY_PI_STATE_RELATIVE_DIR}/logs/*.jsonl`,
-        `${LEGACY_PI_STATE_RELATIVE_DIR}/logs/*-spawn-*-report.txt`,
-    ],
-};
+}
 
 /**
  * State-dir-aware budget recovery block. Constructed per tool
  * instance so the LLM-facing recovery text describes the active
  * state dir rather than the historical `.pi/agentify/` literal.
  */
-function buildBudgetRecovery(stateDir: string): typeof BUDGET_RECOVERY {
+function buildBudgetRecovery(stateDir: string): BudgetRecovery {
     return {
         can_continue: true,
         actions: [
@@ -465,11 +445,9 @@ export interface SpawnExplorerToolOptions {
      * Provider-scoped audit state dir (relative to the repo root,
      * no trailing slash — e.g. ".claude/agentify"). Used as the
      * destination for sub-agent logs and as the source of truth for
-     * budget-recovery messages. Defaults to the legacy
-     * `.pi/agentify/` path when omitted (backward compat for tests
-     * and direct callers that haven't migrated yet).
+     * budget-recovery messages.
      */
-    stateDir?: string;
+    stateDir: string;
     /**
      * Resolved model to use for explorer sub-agents. Computed by the
      * caller via `selectModelForRole(registry, config, "explorer")`.
@@ -528,7 +506,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
     const maxConcurrentSpawns = toolOptions.maxConcurrentSpawns ?? DEFAULT_MAX_CONCURRENT_SPAWNS;
     const maxSubagentDurationMs = toolOptions.maxSubagentDurationMs ?? DEFAULT_SUBAGENT_TIMEOUT_MS;
     const maxTotalCostUsd = toolOptions.maxTotalCostUsd ?? DEFAULT_MAX_TOTAL_COST_USD;
-    const stateDir = toolOptions.stateDir ?? LEGACY_PI_STATE_RELATIVE_DIR;
+    const { stateDir } = toolOptions;
     const createSession: CreateExplorerSession = toolOptions.createSession ?? (async (sessionOptions) => {
         const { session } = await createAgentSession(sessionOptions);
         return { session: session as unknown as ExplorerSubSession };

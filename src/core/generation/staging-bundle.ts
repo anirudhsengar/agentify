@@ -6,7 +6,7 @@ import type { RenderedArtifact } from "../artifacts/renderers.ts";
 import { normalizeArtifactPath } from "../artifacts/generated-surface.ts";
 import {
   codebaseMapRelativePath,
-  kindForPath,
+  dynamicKindForPath,
   manifestFileFromContent,
   manifestRelativePath,
   markerForPath,
@@ -55,6 +55,8 @@ export function writeRenderedArtifactsToStaging(
   stagingRoot: string,
   artifacts: readonly RenderedArtifact[],
   metadata: Map<string, ManagedManifestFile>,
+  mode: "brownfield" | "greenfield",
+  stateDir: string,
 ): void {
   for (const artifact of artifacts) {
     writeFileUnderRoot(stagingRoot, artifact.relativePath, artifact.content);
@@ -65,7 +67,7 @@ export function writeRenderedArtifactsToStaging(
       required: artifact.required,
       marker: artifact.marker,
       source: artifact.source,
-    }));
+    }, mode, stateDir));
   }
 }
 
@@ -87,7 +89,7 @@ export function copyCanonicalMapToStaging(
     required: true,
     marker: markerForPath(mapRelPath),
     source: "write_map",
-  }));
+  }, "brownfield", stateDir));
 }
 
 export function collectStagedFiles(
@@ -108,6 +110,8 @@ export function addWriteMetadata(
   writes: readonly ArtifactWrite[],
   source: string,
   metadata: Map<string, ManagedManifestFile>,
+  mode: "brownfield" | "greenfield",
+  stateDir: string,
 ): void {
   for (const write of writes) {
     if (write.action === "conflict") continue;
@@ -127,11 +131,11 @@ export function addWriteMetadata(
     metadata.set(canonicalRelative, manifestFileFromContent({
       relativePath: canonicalRelative,
       content,
-      kind: kindForPath(canonicalRelative),
+      kind: dynamicKindForPath(canonicalRelative, stateDir),
       required: undefined,
       marker: markerForPath(canonicalRelative),
       source,
       alongsidePath: alongsideRel,
-    }));
+    }, mode, stateDir));
   }
 }

@@ -17,12 +17,12 @@ function files(root: string): Map<string, Buffer> { const result = new Map<strin
 function stableFiles(root: string): Map<string, Buffer> { const result = files(root); result.delete(`${STATE_DIR}/manifest.json`); return result; }
 
 function apply(cwd: string, map: unknown, runId: string, policy = DEFAULT_APPLY_POLICY) {
-  const rendered = renderValidatedBrownfieldArtifacts(map);
+  const rendered = renderValidatedBrownfieldArtifacts(map, { stateDir: ".pi" });
   if (rendered.validationErrors.length > 0) return { rendered, applied: null };
   const staging = tempDir();
   try {
     const metadata = new Map<string, ManagedManifestFile>();
-    writeRenderedArtifactsToStaging(staging, rendered.artifacts, metadata);
+    writeRenderedArtifactsToStaging(staging, rendered.artifacts, metadata, "brownfield", STATE_DIR);
     const content = `${JSON.stringify(map, null, 2)}\n`; const relativePath = `${STATE_DIR}/codebase_map.json`;
     fs.mkdirSync(path.join(staging, STATE_DIR), { recursive: true }); fs.writeFileSync(path.join(staging, relativePath), content);
     metadata.set(relativePath, manifestFileFromContent({ relativePath, content, required: true }, "brownfield", STATE_DIR));
@@ -43,7 +43,7 @@ function testOwnershipDeterminismAndRepeatability(): void {
   try {
     fs.mkdirSync(path.join(cwd, "src")); fs.mkdirSync(path.join(cwd, "tests")); fs.writeFileSync(path.join(cwd, "package.json"), "{\"type\":\"module\"}\n"); fs.writeFileSync(path.join(cwd, "src/index.ts"), "export const value = 1;\n"); fs.writeFileSync(path.join(cwd, "tests/index.test.ts"), "// fixture test\n");
     const userAgents = "# Developer-owned instructions\n\nKeep exactly.\n"; fs.writeFileSync(path.join(cwd, "AGENTS.md"), userAgents); fs.mkdirSync(path.join(cwd, ".pi/agents"), { recursive: true }); fs.writeFileSync(path.join(cwd, ".pi/agents/payments.md"), "# User payments notes\n");
-    const map = makeValidCodebaseMap({ generated_at: "2026-07-11T00:00:00.000Z" }); const firstRender = renderValidatedBrownfieldArtifacts(map); assert.deepEqual(renderValidatedBrownfieldArtifacts(map), firstRender); assert.ok(firstRender.artifacts.length > 3);
+    const map = makeValidCodebaseMap({ generated_at: "2026-07-11T00:00:00.000Z" }); const firstRender = renderValidatedBrownfieldArtifacts(map, { stateDir: ".pi" }); assert.deepEqual(renderValidatedBrownfieldArtifacts(map, { stateDir: ".pi" }), firstRender); assert.ok(firstRender.artifacts.length > 3);
     const first = apply(cwd, map, "run-one"); assert.ok(first.applied?.manifest); assert.equal(fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf8"), userAgents); assert.equal(fs.readFileSync(path.join(cwd, ".pi/agents/payments.md"), "utf8"), "# User payments notes\n"); assert.ok(first.applied?.writes.some((write) => write.action === "alongside" && write.path.endsWith("AGENTS.md"))); assert.ok(first.applied?.writes.some((write) => write.action === "alongside" && write.path.endsWith("payments.md"))); assert.ok(fs.readFileSync(path.join(cwd, "specs/README.md"), "utf8").includes(AGENTIFY_MANAGED_MARKERS.markdown));
     const stateOne = stableFiles(cwd); const second = apply(cwd, map, "run-two"); assert.deepEqual(stableFiles(cwd), stateOne); assert.ok(second.applied?.writes.some((write) => write.action === "skipped")); assert.equal(second.applied?.manifest?.run_id, "run-two"); const manifest = readManifestAt(cwd, STATE_DIR); assert.deepEqual(manifest?.files, [...(manifest?.files ?? [])].sort((a, b) => a.path.localeCompare(b.path)));
     const managed = path.join(cwd, "specs/README.md"); fs.writeFileSync(managed, `${AGENTIFY_MANAGED_MARKERS.markdown}\n# stale managed content\n`); apply(cwd, map, "managed-update"); assert.notEqual(fs.readFileSync(managed, "utf8"), `${AGENTIFY_MANAGED_MARKERS.markdown}\n# stale managed content\n`);

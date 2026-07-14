@@ -73,7 +73,7 @@ Production consumers import through `src/core/audit/schema.ts`:
 - `map-storage.ts` — complete map schema/type for persisted state;
 - `map-validation.ts` — complete and partial validation;
 - `write-map-tools.ts` — complete/partial and parameter schemas plus static types;
-- `legacy-write-map.ts` — compatibility tool/type surface;
+- Phase C removal guards — prove deprecated singleton and mutable-state surfaces stay absent;
 - `map-defaults.ts` — schema-derived complete-map type;
 - `map-coverage.ts`, `map-observability.ts`, and `coverage.ts` — coverage types/constants;
 - `schema-compatibility.ts` — schema-derived compatibility input types;

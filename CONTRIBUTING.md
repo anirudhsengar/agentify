@@ -105,8 +105,13 @@ high-severity dependency audit, packed-package smoke tests, and CodeQL.
   explicit execution policy. Prompts do not grant or restrict authority.
 - **Brownfield audits are read-only.** Do not restore unrestricted `bash`,
   `write`, or `edit` to audit and explorer sessions.
+- **State ownership is explicit.** Pass the resolved provider-scoped state
+  directory through factories and contexts. Do not introduce mutable global
+  state, omitted-context fallbacks, singleton tools, or ordinary cross-provider
+  fallback probes.
 - **State replacement is transactional.** Preserve crash recovery, complete
-  rollback, provider-scoped state, and durable commit semantics.
+  rollback, retained migration sources, provider-scoped state, and durable
+  commit semantics.
 - **Rendering and ownership are deterministic.** Structured model proposals
   must pass schemas and quality gates before render/apply. Managed markers and
   manifests determine ownership.

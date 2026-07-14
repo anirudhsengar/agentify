@@ -5,7 +5,6 @@ import * as path from "node:path";
 import {
   LEGACY_PI_STATE_RELATIVE_DIR,
   __test__resolveStateDirFromProvider,
-  isLegacyPiState,
   resolveCanonicalStateDir,
   resolveStateDir,
   stateDirRelative,
@@ -80,26 +79,7 @@ async function testResolveUniversalFallback(): Promise<void> {
   });
 }
 
-async function testIsLegacyPiStateTrue(): Promise<void> {
-  const cwd = tempDir("agentify-state-dir-legacy-true-");
-  try {
-    fs.mkdirSync(path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR), { recursive: true });
-    assert.equal(isLegacyPiState(cwd), true);
-  } finally {
-    rmrf(cwd);
-  }
-}
 
-async function testIsLegacyPiStateFalse(): Promise<void> {
-  const cwd = tempDir("agentify-state-dir-legacy-false-");
-  try {
-    assert.equal(isLegacyPiState(cwd), false);
-    fs.mkdirSync(path.join(cwd, ".claude", "agentify"), { recursive: true });
-    assert.equal(isLegacyPiState(cwd), false);
-  } finally {
-    rmrf(cwd);
-  }
-}
 
 async function testResolveCanonicalPrefersExistingNewDir(): Promise<void> {
   const cwd = tempDir("agentify-state-dir-new-only-");
@@ -195,9 +175,7 @@ async function main(): Promise<void> {
   await testResolveCodexWhenNoClaude();
   await testResolvePiOnly();
   await testResolveUniversalFallback();
-  await testIsLegacyPiStateTrue();
-  await testIsLegacyPiStateFalse();
-  await testResolveCanonicalPrefersExistingNewDir();
+      await testResolveCanonicalPrefersExistingNewDir();
   await testResolveCanonicalMigratesLegacyToClaude();
   await testResolveCanonicalMigratesLegacyToCodex();
   await testResolveCanonicalFreshRepo();

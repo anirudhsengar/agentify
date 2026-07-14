@@ -79,13 +79,13 @@ export function applyBrownfieldFixture(
   policy: ApplyPolicy = DEFAULT_APPLY_POLICY,
   stateDir = PARITY_STATE_DIR,
 ): BrownfieldApplyResult {
-  const rendered = renderValidatedBrownfieldArtifacts(map);
+  const rendered = renderValidatedBrownfieldArtifacts(map, { stateDir: ".pi" });
   if (rendered.validationErrors.length > 0) return { rendered, applied: null };
 
   const stagingRoot = makeParityTempDir("agentify-parity-staging-");
   try {
     const metadata = new Map<string, ManagedManifestFile>();
-    writeRenderedArtifactsToStaging(stagingRoot, rendered.artifacts, metadata);
+    writeRenderedArtifactsToStaging(stagingRoot, rendered.artifacts, metadata, "brownfield", stateDir);
     const mapContent = `${JSON.stringify(map, null, 2)}\n`;
     const mapRelativePath = `${stateDir}/codebase_map.json`;
     fs.mkdirSync(path.join(stagingRoot, stateDir), { recursive: true });

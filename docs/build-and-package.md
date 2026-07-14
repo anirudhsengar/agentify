@@ -53,8 +53,11 @@ The npm `files` allowlist includes:
 - package metadata and top-level guidance files
 
 It excludes raw `src/`, tests, temporary workflows, and build tooling. The
-package `exports` map exposes no library API. The installed `agentify` binary is
-the supported runtime surface.
+package `exports` map exposes no library API. Removed internal compatibility
+symbols therefore cannot be reached through a supported deep import; the
+installed `agentify` binary is the supported runtime surface. Dedicated
+old-manifest and migration readers are bundled only because the CLI needs them
+for safe installed upgrades.
 
 ## Verification
 

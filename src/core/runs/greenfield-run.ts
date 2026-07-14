@@ -88,7 +88,7 @@ export async function runGreenfield(context: RunContext): Promise<void> {
         options.ui.info(`agentify: staging greenfield bundle at ${stagingRoot}`);
         try {
           const metadata = new Map<string, ManagedManifestFile>();
-          writeRenderedArtifactsToStaging(stagingRoot, renderResult.artifacts, metadata);
+          writeRenderedArtifactsToStaging(stagingRoot, renderResult.artifacts, metadata, "greenfield", stateDir);
           const stagedValidation = validateGreenfieldArtifacts(stagingRoot);
           if (!stagedValidation.ok) {
             options.ui.error(
@@ -103,7 +103,7 @@ export async function runGreenfield(context: RunContext): Promise<void> {
               cwd: stagingRoot,
               packageRoot: packageRoot(),
             });
-            addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata);
+            addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata, "greenfield", stateDir);
             const runId = crypto.randomUUID();
             const previousManifest = readManifestAt(options.cwd, stateDir);
             persistRunArtifacts({

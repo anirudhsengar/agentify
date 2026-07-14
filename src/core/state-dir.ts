@@ -1,4 +1,3 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
 import {
   LEGACY_PI_STATE_RELATIVE_DIR,
@@ -45,8 +44,6 @@ export interface ResolvedStateDir {
 export interface ResolvedCanonicalStateDir extends ResolvedStateDir {
   /** Absolute provider-scoped canonical directory. */
   absoluteDir: string;
-  /** @deprecated Use `layout.fallback`. Retained to avoid caller shape churn. */
-  legacy: boolean;
   /** State tree used by this command after recovery/migration. */
   sourceRelativeDir: string;
   /** Provider-selected canonical destination. */
@@ -97,13 +94,6 @@ export function resolveStateDir(
   return { relativeDir: stateDirRelative("universal"), provider: "universal" };
 }
 
-/**
- * @deprecated Existence-only compatibility probe. New production code must use
- * `classifyStateLayout` or `resolveCanonicalStateDir`.
- */
-export function isLegacyPiState(cwd: string): boolean {
-  return fs.existsSync(path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR));
-}
 
 function assertMigrationDecisionIsUnambiguous(layout: StateLayoutClassification): void {
   if (
@@ -211,7 +201,6 @@ export function resolveCanonicalStateDir(
     relativeDir: selected.relativeDir,
     provider: selected.provider,
     absoluteDir: path.join(cwd, selected.relativeDir),
-    legacy: false,
     sourceRelativeDir,
     destinationRelativeDir: selected.relativeDir,
     layout,

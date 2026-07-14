@@ -27,6 +27,46 @@ const FORBIDDEN_COMPATIBILITY_CALLS = [
   "manifestPath",
 ] as const;
 
+
+const REMOVED_EXPORT_NAMES = [
+  "setMapSessionStateDir",
+  "setRendererStateDir",
+  "writeMapTool",
+  "writeMapDeltaTool",
+  "canonicalMapPath",
+  "loadCanonicalMap",
+  "manifestPath",
+  "readManifest",
+  "writeManifest",
+  "verifyManifest",
+  "greenfieldStatePath",
+  "readGreenfieldState",
+  "writeGreenfieldState",
+  "greenfieldFormationPath",
+  "readGreenfieldFormation",
+  "writeGreenfieldFormation",
+] as const;
+
+const REMOVED_CONSTANT_NAMES = [
+  "DRAFT_PATH",
+  "HISTORY_DIR",
+  "CANONICAL_MAP_PATH",
+  "MANIFEST_RELATIVE_PATH",
+  "CODEBASE_MAP_RELATIVE_PATH",
+  "GREENFIELD_STATE_RELATIVE_PATH",
+  "GREENFIELD_FORMATION_RELATIVE_PATH",
+] as const;
+
+function sourceFiles(root: string): string[] {
+  const result: string[] = [];
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const absolute = path.join(root, entry.name);
+    if (entry.isDirectory()) result.push(...sourceFiles(absolute));
+    else if (entry.isFile() && /\.(?:ts|mts|cts|js|mjs|cjs)$/.test(entry.name)) result.push(absolute);
+  }
+  return result;
+}
+
 function read(relativePath: string): string {
   return fs.readFileSync(path.join(REPO_ROOT, relativePath), "utf-8");
 }
@@ -97,4 +137,47 @@ test("attach, status, recovery, and revert pass or discover explicit state direc
   const revert = read("src/core/revert.ts");
   assert.match(revert, /const stateDir = options\.stateDir/);
   assert.match(revert, /readManifestAt\(options\.cwd,\s*stateDir\)/);
+});
+
+test("removed compatibility exports cannot return anywhere in production source", () => {
+  const productionFiles = sourceFiles(path.join(REPO_ROOT, "src"));
+  for (const absolutePath of productionFiles) {
+    const relativePath = path.relative(REPO_ROOT, absolutePath);
+    const source = fs.readFileSync(absolutePath, "utf-8");
+    for (const name of REMOVED_EXPORT_NAMES) {
+      assert.doesNotMatch(
+        source,
+        new RegExp(`export\s+(?:async\s+)?(?:const|let|var|function)\s+${name}\b`),
+        `${relativePath} must not reintroduce removed callable export ${name}`,
+      );
+      assert.doesNotMatch(
+        source,
+        new RegExp(`import\s*\{[^}]*\b${name}\b[^}]*\}\s*from`, "s"),
+        `${relativePath} must not import removed compatibility symbol ${name}`,
+      );
+    }
+    for (const name of REMOVED_CONSTANT_NAMES) {
+      assert.doesNotMatch(
+        source,
+        new RegExp(`export\s+(?:const|let|var)\s+${name}\b`),
+        `${relativePath} must not reintroduce removed path constant ${name}`,
+      );
+    }
+  }
+  assert.equal(
+    fs.existsSync(path.join(REPO_ROOT, "src/core/audit/legacy-write-map.ts")),
+    false,
+    "the removed legacy write-map compatibility module must stay absent",
+  );
+});
+
+test("write-map storage and renderer context contain no mutable process-global state", () => {
+  const storage = read("src/core/audit/map-storage.ts");
+  assert.doesNotMatch(storage, /AsyncLocalStorage|currentSessionStateDir|legacyMapContext/);
+  assert.doesNotMatch(storage, /(?:let|var)\s+\w*stateDir\b/i);
+
+  const rendererContext = read("src/core/artifacts/renderers/context.ts");
+  assert.doesNotMatch(rendererContext, /legacyRendererStateDir|setRendererStateDir/);
+  assert.doesNotMatch(rendererContext, /(?:let|var)\s+\w*stateDir\b/i);
+  assert.match(rendererContext, /resolveRenderContext\(context:\s*RenderContext\)/);
 });

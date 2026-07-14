@@ -9,7 +9,6 @@ import {
   requiredBrownfieldFiles,
 } from "./manifest.ts";
 import { verifyManifestAt } from "./manifest-verification.ts";
-import { LEGACY_PI_STATE_RELATIVE_DIR } from "./state-dir.ts";
 
 export type AgentifyRepoMode = "brownfield" | "greenfield" | "unknown";
 export type AgentifyRepoStatus = "uninitialized" | "partial" | "ready";
@@ -195,13 +194,12 @@ function collectUnmanaged(cwd: string, relatives: readonly string[]): string[] {
 /**
  * Inspect repository readiness using one explicit state directory.
  *
- * The default remains only for compatibility with direct legacy callers. All
- * supported production entry points pass a resolved state directory.
+ * The state directory is resolved by the command owner and is never inferred here.
  */
 export function inspectAgentifyRepoState(
   cwd: string,
   configDir: string,
-  stateDir: string = LEGACY_PI_STATE_RELATIVE_DIR,
+  stateDir: string,
 ): AgentifyRepoState {
   const manifestVerification = verifyManifestAt(cwd, stateDir);
   if (manifestVerification.manifest) {

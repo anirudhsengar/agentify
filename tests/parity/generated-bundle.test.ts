@@ -60,8 +60,8 @@ test(
   { skip: skipUnless("render") },
   () => {
     const map = fixedCodebaseMap();
-    const firstBrownfield = renderValidatedBrownfieldArtifacts(map);
-    const secondBrownfield = renderValidatedBrownfieldArtifacts(map);
+    const firstBrownfield = renderValidatedBrownfieldArtifacts(map, { stateDir: ".pi" });
+    const secondBrownfield = renderValidatedBrownfieldArtifacts(map, { stateDir: ".pi" });
     assert.deepEqual(secondBrownfield, firstBrownfield);
     assert.deepEqual(firstBrownfield.validationErrors, []);
     assert.deepEqual(firstBrownfield.errors, []);

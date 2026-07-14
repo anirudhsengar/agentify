@@ -4,15 +4,17 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   renderGreenfieldArtifacts,
-  writeGreenfieldFormation,
+  writeGreenfieldFormationAt,
 } from "../src/core/greenfield-artifacts.ts";
 import {
-  GREENFIELD_STATE_RELATIVE_PATH,
-  buildGreenfieldState,
-  readGreenfieldState,
+  buildGreenfieldStateAt,
+  greenfieldStateRelativePath,
+  readGreenfieldStateAt,
   validateGreenfieldArtifacts,
-  writeGreenfieldState,
+  writeGreenfieldStateAt,
 } from "../src/core/greenfield-state.ts";
+
+const STATE_DIR = ".pi/agentify";
 import { makeGreenfieldFormation } from "./fixtures/greenfield-formation.ts";
 
 function tempDir(name: string): string {
@@ -29,7 +31,7 @@ function writeRenderedGreenfieldFormation(cwd: string): void {
   const formation = makeGreenfieldFormation();
   const rendered = renderGreenfieldArtifacts(formation);
   assert.deepEqual(rendered.errors, []);
-  writeGreenfieldFormation(cwd, formation);
+  writeGreenfieldFormationAt(cwd, formation, STATE_DIR);
   for (const artifact of rendered.artifacts) {
     writeFile(cwd, artifact.relativePath, artifact.content);
   }
@@ -99,12 +101,12 @@ function testBuildsTypedCheckpointState(): void {
     writeFile(cwd, "docs/prds/first.md");
     writeFile(cwd, "docs/plans/first.md");
 
-    const state = buildGreenfieldState(cwd, {
+    const state = buildGreenfieldStateAt(cwd, {
       turns: 3,
       costUsd: 0.25,
       aborted: false,
       nowIso: "2026-07-06T00:00:00.000Z",
-    });
+    }, STATE_DIR);
 
     assert.equal(state.schema_version, "1");
     assert.equal(state.updated_at, "2026-07-06T00:00:00.000Z");
@@ -128,19 +130,19 @@ function testRoundTripsAndRejectsInvalidState(): void {
     writeFile(cwd, "CONTEXT.md");
     writeFile(cwd, "GOALS.md");
     writeFile(cwd, "specs/feature-first.md");
-    const written = writeGreenfieldState(cwd, {
+    const written = writeGreenfieldStateAt(cwd, {
       turns: 4,
       costUsd: null,
       aborted: false,
       nowIso: "2026-07-06T00:00:00.000Z",
-    });
+    }, STATE_DIR);
     assert.equal(written.checkpoint, "spec");
 
-    const read = readGreenfieldState(cwd);
+    const read = readGreenfieldStateAt(cwd, STATE_DIR);
     assert.deepEqual(read, written);
 
-    fs.writeFileSync(path.join(cwd, GREENFIELD_STATE_RELATIVE_PATH), JSON.stringify({ checkpoint: "spec" }));
-    assert.equal(readGreenfieldState(cwd), null);
+    fs.writeFileSync(path.join(cwd, greenfieldStateRelativePath(STATE_DIR)), JSON.stringify({ checkpoint: "spec" }));
+    assert.equal(readGreenfieldStateAt(cwd, STATE_DIR), null);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -168,12 +170,12 @@ function testArtifactValidationAcceptsSubstantiveCheckpoint(): void {
     writeValidGreenfieldArtifacts(cwd);
 
     const validation = validateGreenfieldArtifacts(cwd);
-    const state = buildGreenfieldState(cwd, {
+    const state = buildGreenfieldStateAt(cwd, {
       turns: 2,
       costUsd: null,
       aborted: false,
       nowIso: "2026-07-06T00:00:00.000Z",
-    });
+    }, STATE_DIR);
 
     assert.deepEqual(validation, { ok: true, reasons: [] });
     assert.equal(state.artifact_validation.ok, true);
@@ -188,12 +190,12 @@ function testFormationBackedResumeContext(): void {
   try {
     writeRenderedGreenfieldFormation(cwd);
 
-    const state = buildGreenfieldState(cwd, {
+    const state = buildGreenfieldStateAt(cwd, {
       turns: 2,
       costUsd: null,
       aborted: false,
       nowIso: "2026-07-06T00:00:00.000Z",
-    });
+    }, STATE_DIR);
 
     assert.equal(state.checkpoint, "spec");
     assert.equal(state.resume.source, "formation");
