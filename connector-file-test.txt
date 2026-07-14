@@ -1,0 +1,1 @@
+/tmp/connector-test.txt
