@@ -57,6 +57,7 @@ test("documentation index covers every maintained trust boundary", () => {
     "docs/architecture/experimental-runtime-decisions.md",
     "docs/build-and-package.md",
     "docs/experimental-surfaces.md",
+    "docs/refactors/audit-schema-domain-migration.md",
     "docs/refactors/modernization-baseline.md",
     "docs/refactors/runtime-reachability.md",
     "docs/state-lifecycle.md",
@@ -167,6 +168,7 @@ test("binary and scripts preserve the compiled package boundary", () => {
   assert.equal(scripts.build, "node scripts/build.mjs");
   assert.equal(scripts.prepack, "npm run build");
   assert.ok(scripts["test:package"]?.includes("installed-cli-smoke.mjs"));
+  assert.ok(scripts["test:maintenance"]?.includes("schema-boundaries.test.ts"));
   for (const focusedScript of ["test:parity:cli", "test:parity:generated", "test:parity:state"]) {
     assert.ok(scripts[focusedScript]?.includes("tests/parity/"));
     assert.ok(scripts["test:parity"]?.includes(focusedScript));
@@ -208,6 +210,7 @@ test("architecture documentation names the enforced safety mechanisms", () => {
     "Capability security",
     "State transaction",
     "Artifact ownership and rollback",
+    "Audit schema ownership and dependency direction",
     "Webhook boundary",
     "Build and release boundary",
   ]) {
@@ -225,14 +228,14 @@ test("audit schema algorithms preserve the declaration-free façade boundary", (
     "src/core/audit/schema-compatibility.ts",
   ];
 
-  assert.doesNotMatch(schema, /from ["']typebox(?:\/[^"']*)?[#']/);
+  assert.doesNotMatch(schema, /from ["']typebox(?:\/[^"']*)?["']/);
   assert.doesNotMatch(schema, /\bType\s*\./);
   assert.match(composition, /import \{ Type, type Static \} from "typebox"/);
   assert.match(parameters, /import \{ Type, type Static \} from "typebox"/);
   for (const algorithmPath of algorithmPaths) {
     const source = read(algorithmPath);
     assert.doesNotMatch(source, /from ["']typebox(?:\/[^"']*)?["']/);
-    assert.doesNotMatch(source, /from [#']@earendil-works\/pi-ai["']/);
+    assert.doesNotMatch(source, /from ["']@earendil-works\/pi-ai["']/);
     assert.doesNotMatch(source, /\bType\s*\./);
   }
 
@@ -250,16 +253,25 @@ test("audit schema algorithms preserve the declaration-free façade boundary", (
   }
 });
 
-test("schema algorithm ownership is documented for maintainers", () => {
+test("schema domain ownership is documented for maintainers", () => {
   const architecture = read("docs/architecture.md");
   const agents = read("AGENTS.md");
   const contributing = read("CONTRIBUTING.md");
 
-  for (const moduleName of ["coverage.ts", "map-defaults.ts", "schema-compatibility.ts"]) {
+  for (const moduleName of [
+    "primitives.ts",
+    "codebase-map.ts",
+    "write-map-params.ts",
+    "coverage.ts",
+    "map-defaults.ts",
+    "schema-compatibility.ts",
+  ]) {
     assert.ok(architecture.includes(`\`${moduleName}\``));
     assert.ok(agents.includes(`\`${moduleName}\``));
+    assert.ok(contributing.includes(`\`${moduleName}\``));
   }
-  assert.ok(contributing.includes("adjacent algorithm modules"));
-  assert.ok(architecture.includes("sole owner"));
-  assert.ok(architecture.includes("Golden schema fingerprints"));
+  assert.ok(architecture.includes("downward"));
+  assert.ok(architecture.includes("Golden fingerprint"));
+  assert.ok(agents.includes("tests/maintenance/schema-boundaries.test.ts"));
+  assert.ok(contributing.includes("Golden fixture drift"));
 });

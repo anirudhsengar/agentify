@@ -96,11 +96,14 @@ high-severity dependency audit, packed-package smoke tests, and CodeQL.
   `src/core/orchestrator/workflow-spec.ts` and its declarative workflow assets are
   the current exception inside an experimental area. Adding another exception
   requires architecture documentation and maintenance-test coverage.
-- **Schemas are centralized.** Audit TypeBox schemas live in
-  `src/core/audit/schema.ts`.
-  Coverage assessment, map defaults, and legacy-field interpretation live in
-  adjacent algorithm modules and remain re-exported by `schema.ts` for
-  compatibility.
+- **Schemas have domain owners.** Audit-map TypeBox declarations live under
+  `src/core/audit/schema/`: `primitives.ts` owns shared leaves, domain files own
+  cohesive contracts, `codebase-map.ts` owns complete/partial composition,
+  `write-map-params.ts` owns tool parameters, and `index.ts` re-exports canonical
+  objects. `src/core/audit/schema.ts` remains a declaration-free stable façade.
+  Coverage assessment (`coverage.ts`), map defaults (`map-defaults.ts`), and
+  legacy-field interpretation (`schema-compatibility.ts`) remain TypeBox-free
+  algorithm modules re-exported by that façade.
 - **Security is capability-based.** Every model-backed session must receive an
   explicit execution policy. Prompts do not grant or restrict authority.
 - **Brownfield audits are read-only.** Do not restore unrestricted `bash`,
@@ -147,6 +150,28 @@ When adding a runtime asset, update the explicit copy manifest in
 - Use `kebab-case` files, `camelCase` functions, `PascalCase` types, and
   `SCREAMING_SNAKE_CASE` module constants.
 - Keep TypeBox field descriptions deliberate because they steer model behavior.
+
+## Audit schema change workflow
+
+Schema refactors and semantic contract changes must remain separate. For a
+structural change:
+
+1. place a declaration in its documented domain owner and keep shared primitives
+   limited to genuinely reused leaves;
+2. preserve property/member order, required arrays, literals, enums, defaults,
+   descriptions, patterns, bounds, static aliases, and schema object identity;
+3. keep complete/partial composition in `schema/codebase-map.ts`, tool parameter
+   composition in `schema/write-map-params.ts`, and façade/index modules
+   declaration-free;
+4. update the explicit downward import graph in
+   `tests/maintenance/schema-boundaries.test.ts` rather than adding an upward or
+   lateral dependency; and
+5. run schema fingerprints, validation-order/static fixtures, generated-output,
+   maintenance, package/deep-import, parity, and packed-artifact checks.
+
+Golden fixture drift is a stop signal for a structural PR. Regenerate fixtures
+only in a separately reviewed semantic schema change that explains every contract
+difference.
 
 ## Commit messages
 

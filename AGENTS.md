@@ -31,11 +31,21 @@ and implementation constraints.
 
 ## Ownership boundaries
 
-- `src/core/audit/schema.ts` is the only file defining audit TypeBox schemas.
-- Audit coverage logic, map default injection, and legacy-field interpretation live
-  in `coverage.ts`, `map-defaults.ts`, and `schema-compatibility.ts`; preserve
-  their compatibility re-exports from `schema.ts` and do not add TypeBox
-  declarations there.
+- Audit-map TypeBox declarations live under `src/core/audit/schema/`. Shared
+  primitives belong in `primitives.ts`; cohesive domain declarations stay in their
+  domain files; `codebase-map.ts` owns complete/partial composition;
+  `write-map-params.ts` owns tool parameters; and `index.ts` is re-export only.
+- `src/core/audit/schema.ts` is a declaration-free stable façade. Preserve its
+  established values, static types, reference identity, and compatibility
+  re-exports from `coverage.ts`, `map-defaults.ts`, and
+  `schema-compatibility.ts`. Those algorithm modules must remain TypeBox-free.
+- Schema-module imports are downward-only and machine-enforced by
+  `tests/maintenance/schema-boundaries.test.ts`. Update the explicit ownership
+  graph when adding a domain; never hide a cycle with duplicate schemas, wrappers,
+  broad casts, or mutable registries.
+- Structural movement and semantic schema changes use separate PRs. Property
+  order, required arrays, enums, descriptions, defaults, validation-error order,
+  static types, and parameter identity are contract data protected by golden tests.
 - Audit defense and capability policy live under `src/core/audit/defense/`.
 - State transaction behavior lives in `src/core/state-transaction.ts` and must
   remain crash-recoverable.

@@ -267,16 +267,20 @@ Issue #55 establishes the planned composition boundary:
 
 The committed serialization, property order, validation errors, static types, parameter
 identity, generated output, and package boundaries remain frozen by the existing golden
-and characterization suites. Dependency-direction enforcement remains the dedicated
-Issue #56 step.
+and characterization suites.
+
+## Implemented ownership enforcement
+
+Issue #56 replaces the temporary sole-file rule with the final domain model.
+`tests/maintenance/schema-boundaries.test.ts` freezes the schema file inventory,
+canonical owners, explicit downward-only import graph, declaration-free façade and
+index, TypeBox-free algorithm modules, and unchanged package confinement. Adding a
+domain or edge therefore requires an intentional maintenance-test and architecture
+review rather than becoming an inferred exception.
 
 ## Ownership and maintenance rules
 
-The existing rule that `src/core/audit/schema.ts` is the sole TypeBox declaration owner
-remains in force during the design PR. It is replaced only in the final composition PR,
-after declarations have moved and an import-direction maintenance test exists.
-
-The replacement rule will state:
+The final replacement rule is now active:
 
 - audit TypeBox declarations live only under `src/core/audit/schema/`;
 - each domain file owns its cohesive declaration set;

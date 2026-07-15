@@ -16,7 +16,7 @@ public product contract.
 | Generation architecture and trust boundary | `docs/architecture.md` |
 | Modernization parity baseline and behavior contract | `docs/refactors/modernization-baseline.md` |
 | Runtime reachability roots and deletion evidence | `docs/refactors/runtime-reachability.md` |
-| Audit schema domain migration design and contract freeze | `docs/refactors/audit-schema-domain-migration.md` |
+| Audit schema domain ownership, migration design, and drift gates | `docs/refactors/audit-schema-domain-migration.md` |
 | Compiled build, runtime assets, and npm package boundary | `docs/build-and-package.md` |
 | Execution-policy security model | `SECURITY.md` (repo root) |
 | Transactional provider-state lifecycle | `docs/state-lifecycle.md` |
@@ -36,7 +36,8 @@ not make an internal module a supported package API.
 - **Public CLI and parser** — `src/cli.ts`, `src/core/cli-parser.ts`,
   `src/core/cli-commands.ts`.
 - **Audit and defense hook** — `src/core/audit/`, `src/core/audit/defense/`,
-  `src/core/audit/schema.ts`, `src/core/audit/prompts/`.
+  `src/core/audit/schema/`, the stable `src/core/audit/schema.ts` façade, and
+  `src/core/audit/prompts/`.
 - **Execution policy** — `src/core/security/execution-policy.ts`.
 - **Transactional state** — `src/core/state-dir.ts`,
   `src/core/state-transaction.ts`.
