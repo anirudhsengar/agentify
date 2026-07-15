@@ -24,14 +24,7 @@
     "noEmit": true,
     "types": [
       "node"
-    ],
-    "baseUrl": ".",
-    "ignoreDeprecations": "5.0",
-    "paths": {
-      "*": [
-        "node_modules/*"
-      ]
-    }
+    ]
   },
   "include": [
     "src/**/*.ts",

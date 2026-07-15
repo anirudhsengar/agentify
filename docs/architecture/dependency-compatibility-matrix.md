@@ -6,11 +6,11 @@ Implementation gate: Issues #32 and #33 must be merged before any dependency ver
 
 ## Executive decision
 
-This discovery PR changes no dependency range, lockfile entry, Node engine, runtime export, schema, generated asset, or package boundary.
+This matrix records both discovery decisions and the isolated implementation result for each dependency group. A completed row may change only its owned manifest, lockfile, configuration, documentation, and characterization surface; later groups remain frozen.
 
 | Group | Resolved baseline | Candidate or decision | Publication date | Status | Implementation issue |
 | --- | --- | --- | --- | --- | --- |
-| TypeScript and Node declarations | TypeScript 5.9.3; `@types/node` 22.19.21 | TypeScript 6.0.3; retain the Node 22 declaration line | TS 6.0.3: 2026-04-16; Node types 22.19.21: 2026-06-10 | **Approved with required config migration; gated** | #60 |
+| TypeScript and Node declarations | TypeScript 5.9.3; `@types/node` 22.19.21 | TypeScript 6.0.3; `@types/node` 22.20.1 | TS 6.0.3: 2026-04-16; Node types 22.20.1: 2026-07-08 | **Implemented; Node 22 floor retained** | #60 |
 | esbuild and tsx | esbuild 0.25.12; tsx 4.22.4 | esbuild 0.28.1; tsx 4.23.0 | 2026-06-11; 2026-07-03 | **Approved as one group; gated** | #61 |
 | TypeBox | direct 1.2.9; Pi nested 1.1.38 | direct 1.3.6 | 2026-07-08 | **Approved; hard-blocked on #33** | #62 |
 | Pi runtime pair | 0.80.6 / 0.80.6 | 0.80.6 / 0.80.6 | 2026-07-09 / 2026-07-09 | **Unnecessary today; re-evaluate at gate** | #63 |
@@ -39,10 +39,10 @@ engines.node                         >=22.19.0
 @earendil-works/pi-ai                ^0.80.6
 @earendil-works/pi-coding-agent      ^0.80.6
 typebox                              ^1.1.38
-@types/node                          ^22.0.0
+@types/node                          22.20.1
 esbuild                              ^0.25.12
 tsx                                  ^4.20.0
-typescript                           ^5.6.0
+typescript                           6.0.3
 override @smithy/util-buffer-from    4.4.7
 ```
 
@@ -53,8 +53,8 @@ override @smithy/util-buffer-from    4.4.7
 @earendil-works/pi-coding-agent      0.80.6
 typebox (direct)                     1.2.9
 typebox (Pi nested copies)           1.1.38
-typescript                           5.9.3
-@types/node (root)                   22.19.21
+typescript                           6.0.3
+@types/node (root)                   22.20.1
 esbuild (root)                       0.25.12
 tsx                                  4.22.4
 esbuild (tsx nested)                 0.28.1
@@ -68,27 +68,35 @@ The baseline production audit reported zero known vulnerabilities. Audit output 
 
 | Required field | Compatibility assessment |
 | --- | --- |
-| Current version | TypeScript range `^5.6.0`, resolved 5.9.3. Node types range `^22.0.0`, resolved 22.19.21. |
-| Candidate version | TypeScript 6.0.3. Keep `@types/node` on the latest compatible Node 22 line; 24.13.3 was inspected but is not approved while the runtime floor is Node 22.19.0. |
-| Release date | TypeScript 6.0.3: 2026-04-16. Node types 22.19.21: 2026-06-10. Inspected Node types 24.13.3: 2026-07-08. |
+| Baseline version | TypeScript range `^5.6.0`, resolved 5.9.3. Node types range `^22.0.0`, resolved 22.19.21. |
+| Implemented version | TypeScript 6.0.3 and `@types/node` 22.20.1, pinned directly for deterministic compiler/declaration selection. Node 24 declarations remain intentionally excluded while the runtime floor is Node 22.19.0. |
+| Release date | TypeScript 6.0.3: 2026-04-16. Node types 22.20.1: 2026-07-08. |
 | Official migration documentation | [TypeScript 6 release notes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html), compiler-provided [TS6 migration guidance](https://aka.ms/ts6), [DefinitelyTyped Node declarations](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node), and the [Node release schedule](https://github.com/nodejs/Release/blob/main/schedule.json). |
 | Breaking API/type changes | TypeScript 6 changes default ambient-type discovery and deprecates `baseUrl`, Node 10 module resolution, legacy module formats, `outFile`, and compatibility options. Agentify already declares `types: ["node"]`, strict mode, ESM, and bundler resolution. The concrete blocker is `baseUrl`. Node 24 declarations may expose APIs absent on Node 22. |
 | Runtime behavior changes | `tsc` remains `noEmit`; runtime behavior should not change. New inference and diagnostics can reveal real schema, Pi API, ESM, or test typing differences. |
 | Node requirements | TypeScript 6 is compatible with the current floor in discovery. Declaration policy must follow the minimum runtime rather than the newest published Node types. |
-| ESM implications | Preserve `module: "ESNext"`, `moduleResolution: "Bundler"`, JSON modules, and `.ts` import checking. Remove `baseUrl` and make `paths` targets explicitly relative. |
+| ESM implications | `module: "ESNext"`, `moduleResolution: "Bundler"`, JSON modules, and `.ts` import checking are preserved. The unused `baseUrl`, wildcard `paths`, and temporary `ignoreDeprecations` workaround were removed; package resolution continues through normal ESM/bundler semantics. |
 | Bundling implications | No direct emitted bundle change is expected, but TypeScript resolution must continue to agree with esbuild resolution. |
 | Schema implications | Re-check every TypeBox `Static<>` contract and schema façade export because compiler inference may change without serialized JSON changing. |
 | Tool/session API implications | Pi session, provider, event, usage, and tool definitions may infer more strictly; do not hide incompatibility with broad casts. |
 | Security advisory effects | No production advisory is fixed by the compiler. Review package provenance and unexpected compiler-package additions. |
 | Expected lockfile impact | TypeScript 6 should update the compiler entry without TypeScript 7's twenty platform packages. Retaining Node 22 types should limit type movement to `@types/node` and possibly `undici-types`. |
 | Required tests | Effective-config comparison, typecheck, maintenance, all tests, schema/tool/session characterization, parity, installed-package smoke, release check, Node 22.19.0 and current supported Node CI. |
-| Decision | **Approved with migration.** Upgrade to TypeScript 6 after the gate. Do not use `ignoreDeprecations` as the final `baseUrl` solution. Do not adopt Node 24 types implicitly. |
+| Decision | **Implemented in #60.** TypeScript 6.0.3 and Node-22 declarations 22.20.1 are isolated to the direct development dependency group. No Node engine, runtime, schema, build-tool, TypeBox, Pi, Smithy, package-export, or generated-output policy changed. |
 
 Isolated evidence:
 
 - TypeScript 6.0.3 reports `baseUrl` as deprecated and points to the TS6 migration guide.
 - TypeScript 7.0.2 reports `baseUrl` as removed and rejects the current paths mapping.
 - TypeScript 7 adds twenty `@typescript/typescript-*` platform packages and is deferred.
+
+Implementation result (2026-07-15):
+
+- clean `npm ci` resolved exactly TypeScript 6.0.3 and root `@types/node` 22.20.1;
+- nested Pi `@types/node` remained 22.19.19 and `undici-types` remained 6.21.0;
+- the lockfile added or removed no package records and changed only the two owned direct records;
+- effective compiler options retain strict ESM/bundler behavior with no `baseUrl`, wildcard `paths`, or `ignoreDeprecations`; and
+- typecheck and the production build pass on exact Node 22.19.0 and Node 24.13.1.
 
 ## esbuild and tsx
 
@@ -200,6 +208,7 @@ The isolated removal probe passed typecheck, security-redteam, and audit with ze
 
 | Simulation | Added | Removed | Changed | Interpretation |
 | --- | ---: | ---: | ---: | --- |
+| TypeScript 6.0.3 + Node 22.20.1 types | 0 | 0 | 2 | Implemented in #60; only the two owned direct package records move. |
 | TypeScript 7.0.2 + Node 24 types | 20 | 0 | 3 | Adds native/platform TypeScript packages; not approved. |
 | esbuild 0.28.1 + tsx 4.23.0 | 0 | 27 | 28 | Deduplicates tsx's nested esbuild/platform tree into the root candidate. |
 | TypeBox 1.3.6 | 0 | 0 | 1 | Root TypeBox only. |
@@ -210,7 +219,7 @@ Every simulation retained a zero-vulnerability production audit result. Audit ou
 
 ## Approved implementation order
 
-1. #60 — TypeScript 6 and Node declaration alignment.
+1. #60 — TypeScript 6 and Node declaration alignment. **Completed.**
 2. #61 — esbuild and tsx.
 3. #62 — TypeBox, only after #33.
 4. #63 — Pi pair re-evaluation; no-op if still current.

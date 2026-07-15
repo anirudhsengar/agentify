@@ -30,6 +30,12 @@ bridge is injected for bundled CommonJS dependencies that perform dynamic
 `require()` calls. This bridge is part of the generated bundle only; application
 source remains ESM.
 
+TypeScript 6 is used only for strict `noEmit` checking. Compiler resolution
+remains explicit ESM/bundler resolution with `types: ["node"]`; the obsolete
+`baseUrl`, wildcard `paths`, and `ignoreDeprecations` workaround are not part of
+the supported configuration. Package imports must resolve through normal ESM
+or package-export semantics so TypeScript and esbuild observe the same graph.
+
 ## Runtime assets
 
 Prompts and workflow definitions are executable inputs, not optional
