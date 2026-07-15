@@ -30,6 +30,12 @@ bridge is injected for bundled CommonJS dependencies that perform dynamic
 `require()` calls. This bridge is part of the generated bundle only; application
 source remains ESM.
 
+TypeScript 6 is used only for strict `noEmit` checking. Compiler resolution
+remains explicit ESM/bundler resolution with `types: ["node"]`; the obsolete
+`baseUrl`, wildcard `paths`, and `ignoreDeprecations` workaround are not part of
+the supported configuration. Package imports must resolve through normal ESM
+or package-export semantics so TypeScript and esbuild observe the same graph.
+
 ## Runtime assets
 
 Prompts and workflow definitions are executable inputs, not optional
@@ -53,8 +59,11 @@ The npm `files` allowlist includes:
 - package metadata and top-level guidance files
 
 It excludes raw `src/`, tests, temporary workflows, and build tooling. The
-package `exports` map exposes no library API. The installed `agentify` binary is
-the supported runtime surface.
+package `exports` map exposes no library API. Removed internal compatibility
+symbols therefore cannot be reached through a supported deep import; the
+installed `agentify` binary is the supported runtime surface. Dedicated
+old-manifest and migration readers are bundled only because the CLI needs them
+for safe installed upgrades.
 
 ## Verification
 
