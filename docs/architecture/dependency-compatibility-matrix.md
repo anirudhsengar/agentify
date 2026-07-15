@@ -11,7 +11,7 @@ This matrix records both discovery decisions and the isolated implementation res
 | Group | Resolved baseline | Candidate or decision | Publication date | Status | Implementation issue |
 | --- | --- | --- | --- | --- | --- |
 | TypeScript and Node declarations | TypeScript 5.9.3; `@types/node` 22.19.21 | TypeScript 6.0.3; `@types/node` 22.20.1 | TS 6.0.3: 2026-04-16; Node types 22.20.1: 2026-07-08 | **Implemented; Node 22 floor retained** | #60 |
-| esbuild and tsx | esbuild 0.25.12; tsx 4.22.4 | esbuild 0.28.1; tsx 4.23.0 | 2026-06-11; 2026-07-03 | **Approved as one group; gated** | #61 |
+| esbuild and tsx | esbuild 0.25.12; tsx 4.22.4 | esbuild 0.28.1; tsx 4.23.1 | esbuild 0.28.1: 2026-06-11; tsx 4.23.1: 2026-07-13 | **Implemented as one build-tooling group** | #61 |
 | TypeBox | direct 1.2.9; Pi nested 1.1.38 | direct 1.3.6 | 2026-07-08 | **Approved; hard-blocked on #33** | #62 |
 | Pi runtime pair | 0.80.6 / 0.80.6 | 0.80.6 / 0.80.6 | 2026-07-09 / 2026-07-09 | **Unnecessary today; re-evaluate at gate** | #63 |
 | Smithy integrity override | override 4.4.7 plus nested 2.2.0 | review 4.4.8, retention, narrowing, or removal | 4.4.8: 2026-07-10 | **Blocked pending provenance review** | #64 |
@@ -39,10 +39,10 @@ engines.node                         >=22.19.0
 @earendil-works/pi-ai                ^0.80.6
 @earendil-works/pi-coding-agent      ^0.80.6
 typebox                              ^1.1.38
-@types/node                          22.20.1
-esbuild                              ^0.25.12
-tsx                                  ^4.20.0
-typescript                           6.0.3
+@types/node                          ^22.20.1
+esbuild                              ^0.28.1
+tsx                                  ^4.23.1
+typescript                           ^6.0.3
 override @smithy/util-buffer-from    4.4.7
 ```
 
@@ -55,9 +55,9 @@ typebox (direct)                     1.2.9
 typebox (Pi nested copies)           1.1.38
 typescript                           6.0.3
 @types/node (root)                   22.20.1
-esbuild (root)                       0.25.12
-tsx                                  4.22.4
-esbuild (tsx nested)                 0.28.1
+esbuild (root)                       0.28.1
+tsx                                  4.23.1
+esbuild (tsx nested)                 none (deduplicated)
 @smithy/util-buffer-from (root)      4.4.7
 @smithy/util-buffer-from (nested)    2.2.0
 ```
@@ -69,7 +69,7 @@ The baseline production audit reported zero known vulnerabilities. Audit output 
 | Required field | Compatibility assessment |
 | --- | --- |
 | Baseline version | TypeScript range `^5.6.0`, resolved 5.9.3. Node types range `^22.0.0`, resolved 22.19.21. |
-| Implemented version | TypeScript 6.0.3 and `@types/node` 22.20.1, pinned directly for deterministic compiler/declaration selection. Node 24 declarations remain intentionally excluded while the runtime floor is Node 22.19.0. |
+| Implemented version | TypeScript range `^6.0.3`, resolved 6.0.3, and `@types/node` range `^22.20.1`, resolved 22.20.1. Node 24 declarations remain intentionally excluded while the runtime floor is Node 22.19.0. |
 | Release date | TypeScript 6.0.3: 2026-04-16. Node types 22.20.1: 2026-07-08. |
 | Official migration documentation | [TypeScript 6 release notes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-6-0.html), compiler-provided [TS6 migration guidance](https://aka.ms/ts6), [DefinitelyTyped Node declarations](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node), and the [Node release schedule](https://github.com/nodejs/Release/blob/main/schedule.json). |
 | Breaking API/type changes | TypeScript 6 changes default ambient-type discovery and deprecates `baseUrl`, Node 10 module resolution, legacy module formats, `outFile`, and compatibility options. Agentify already declares `types: ["node"]`, strict mode, ESM, and bundler resolution. The concrete blocker is `baseUrl`. Node 24 declarations may expose APIs absent on Node 22. |
@@ -102,23 +102,31 @@ Implementation result (2026-07-15):
 
 | Required field | Compatibility assessment |
 | --- | --- |
-| Current version | esbuild 0.25.12; tsx 4.22.4. The existing tsx subtree already carries esbuild 0.28.1 separately. |
-| Candidate version | esbuild 0.28.1 and tsx 4.23.0 as one coherent group. |
-| Release date | esbuild 0.28.1: 2026-06-11. tsx 4.23.0: 2026-07-03. |
+| Baseline version | esbuild range `^0.25.12`, resolved 0.25.12; tsx range `^4.20.0`, resolved 4.22.4. The baseline tsx subtree carried esbuild 0.28.1 separately. |
+| Implemented version | esbuild range `^0.28.1`, resolved 0.28.1, and tsx range `^4.23.1`, resolved 4.23.1, as one coherent group. |
+| Release date | esbuild 0.28.1: 2026-06-11. tsx 4.23.1: 2026-07-13. |
 | Official migration documentation | [esbuild changelog](https://github.com/evanw/esbuild/blob/master/CHANGELOG.md), [tsx releases](https://github.com/privatenumber/tsx/releases), and the [tsx package contract](https://github.com/privatenumber/tsx/blob/master/package.json). |
 | Breaking API/type changes | esbuild 0.28.0 is intentionally a breaking release. Review build/transform options, warnings, binary integrity behavior, and platform package handling. tsx remains on 4.x and officially depends on esbuild `~0.28.0`. |
 | Runtime behavior changes | esbuild owns the compiled CLI; tsx executes repository tests and scripts. Parser, resolver, ESM/CJS interop, lowering, tree-shaking, source maps, or loader changes can alter behavior. |
-| Node requirements | Both candidates require Node >=18, below Agentify's floor. |
-| ESM implications | Preserve esbuild `format: "esm"`, Node platform behavior, externalization, executable startup, and tsx `.ts` ESM resolution on Node 22 and 24. |
-| Bundling implications | Compare `dist/cli.js`, source maps, warnings, size, prompt/workflow asset copying, installed startup, and tarball inventory. No output drift is accepted merely because the bundle runs. |
-| Schema implications | No API migration is expected, but bundled schema objects and generated outputs must remain equivalent. |
-| Tool/session API implications | Ensure bundling does not duplicate, omit, or rewrite Pi and TypeBox runtime boundaries. |
+| Node requirements | Both implemented packages require Node >=18, below Agentify's floor. |
+| ESM implications | esbuild `format: "esm"`, Node platform behavior, externalization, executable startup, and tsx `.ts` ESM resolution remain unchanged on Node 22 and 24. |
+| Bundling implications | `scripts/build.mjs` options are unchanged. `dist/cli.js` grew by 5,388 bytes (0.036%) and its source map by 273 bytes; both supported Node lanes produced identical output hashes. Runtime asset copying and the 181-file tarball inventory are unchanged. |
+| Schema implications | No API migration occurred; bundled schema objects and generated outputs remain equivalent in the focused schema and package characterization. |
+| Tool/session API implications | Bundling continues to preserve Pi and TypeBox runtime boundaries without duplicate nested esbuild packages. |
 | Security advisory effects | esbuild 0.28 adds npm/Deno binary integrity checks. 0.28.1 includes a Windows development-server traversal fix; Agentify does not use the development server, but the integrity improvement supports upgrading. |
-| Expected lockfile impact | Root esbuild plus 26 platform packages update; tsx updates; 27 nested tsx/esbuild platform entries disappear through deduplication. No production dependency should move. |
+| Lockfile impact | Root esbuild plus 26 platform packages update; tsx updates; 27 nested tsx/esbuild platform entries disappear through deduplication. No production dependency moves. |
 | Required tests | Build, generation pipeline, maintenance, all tests, parity, package smoke, source-map/bundle/tarball comparison, audit, Node minimum/current CI. |
-| Decision | **Approved as one dependency group.** |
+| Decision | **Implemented in #61 as one dependency group.** No source, build-option, runtime-asset, package-export, Node-engine, TypeScript, TypeBox, Pi, or Smithy policy changed. |
 
-The isolated pair built the 14.2 MB ESM bundle and passed generation-pipeline tests. Its maintenance failure came only from the temporary discovery script being intentionally absent from the standalone-script allowlist; that script is not retained.
+Implementation result (2026-07-15):
+
+- clean `npm ci` resolved exactly esbuild 0.28.1 and tsx 4.23.1;
+- the root esbuild package and its 26 platform packages moved to 0.28.1, tsx moved to 4.23.1, and 27 nested tsx/esbuild records were removed through deduplication;
+- `scripts/build.mjs` required no compatibility adaptation and emitted no new warnings;
+- Node 22.19.0 and Node 24.13.1 produced identical CLI and source-map hashes;
+- the installed CLI identity, version, full help output, package boundary, deep-import rejection, runtime assets, and 181-file tarball inventory remained unchanged;
+- the packed artifact remained `@anirudhsengar/agentify@0.2.1`, with 8,050,846 packed bytes, 45,718,774 unpacked bytes, SHA-1 `8fb4d623e762b3a81906b226172237c8acbaf18d`, and integrity `sha512-2d/rFeSzmGsoWdV6vsg5qFtm41FSq+gf/VCQ/6oVFZG5BfUkf/N6P8UKYzk6Z2klBpTPrguDj7fAsitKZI/Zcg==`; and
+- the production audit remained at zero known vulnerabilities on both required runtimes.
 
 ## TypeBox
 
@@ -210,7 +218,7 @@ The isolated removal probe passed typecheck, security-redteam, and audit with ze
 | --- | ---: | ---: | ---: | --- |
 | TypeScript 6.0.3 + Node 22.20.1 types | 0 | 0 | 2 | Implemented in #60; only the two owned direct package records move. |
 | TypeScript 7.0.2 + Node 24 types | 20 | 0 | 3 | Adds native/platform TypeScript packages; not approved. |
-| esbuild 0.28.1 + tsx 4.23.0 | 0 | 27 | 28 | Deduplicates tsx's nested esbuild/platform tree into the root candidate. |
+| esbuild 0.28.1 + tsx 4.23.1 | 0 | 27 | 28 | Implemented in #61; the nested tsx esbuild/platform tree is deduplicated into the root candidate. |
 | TypeBox 1.3.6 | 0 | 0 | 1 | Root TypeBox only. |
 | Pi 0.80.6 pair | 0 | 0 | 0 | Already current. |
 | Smithy override removal | 2 | 1 | 0 | Reintroduces another nested 2.2.0 path; requires integrity review. |
@@ -220,7 +228,7 @@ Every simulation retained a zero-vulnerability production audit result. Audit ou
 ## Approved implementation order
 
 1. #60 — TypeScript 6 and Node declaration alignment. **Completed.**
-2. #61 — esbuild and tsx.
+2. #61 — esbuild and tsx. **Completed.**
 3. #62 — TypeBox, only after #33.
 4. #63 — Pi pair re-evaluation; no-op if still current.
 5. #64 — Smithy override/integrity review after the Pi graph is final.

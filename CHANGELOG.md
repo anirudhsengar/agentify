@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- esbuild is upgraded to 0.28.1 and tsx to 4.23.1 as one build-tooling group; the lockfile deduplicates tsx's nested esbuild/platform tree while preserving the Node 22 ESM bundle, source maps, runtime assets, installed CLI behavior, and 181-file package inventory.
 - TypeScript is upgraded to 6.0.3 with Node-22 declarations 22.20.1; obsolete `baseUrl`, wildcard `paths`, and `ignoreDeprecations` configuration are removed while the Node 22.19.0 runtime floor and ESM/bundler behavior remain unchanged.
 - Audit-schema domain ownership and downward-only dependencies are documented and machine-enforced while preserving the declaration-free façade, schema identity, algorithm separation, and package confinement.
 - Audit-map complete/partial composition and write-map parameter schemas now have canonical owners under `src/core/audit/schema/`; the stable `schema.ts` façade is declaration-free and preserves object identity.
