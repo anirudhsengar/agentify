@@ -19,6 +19,15 @@ updates:
           - "typescript"
           - "@types/*"
           - "tsx"
+    # Temporary #60 ceilings keep the automation result inside the approved
+    # TypeScript 6 / Node 22 scope while the exact lockfile is generated.
+    ignore:
+      - dependency-name: "typescript"
+        versions: [">=7.0.0"]
+      - dependency-name: "@types/node"
+        versions: [">=23.0.0"]
+      - dependency-name: "tsx"
+        versions: [">4.22.4"]
     # agentify treats new runtime deps as gated (see AGENTS.md).
     # Let dependabot bump existing runtime deps, but require explicit
     # maintainer approval for any *new* dependency — surfaced in the
