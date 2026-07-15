@@ -36,6 +36,13 @@ remains explicit ESM/bundler resolution with `types: ["node"]`; the obsolete
 the supported configuration. Package imports must resolve through normal ESM
 or package-export semantics so TypeScript and esbuild observe the same graph.
 
+The supported build-tooling pair is esbuild 0.28.1 with tsx 4.23.1. The
+`scripts/build.mjs` target, ESM format, platform, source-map, externalization,
+asset-copy, and executable-entry options remain unchanged. Characterization
+recorded a 5,388-byte (0.036%) `dist/cli.js` increase and a 273-byte source-map
+increase; Node 22.19.0 and Node 24.13.1 produced identical output hashes. The
+runtime-asset inventory and 181-file npm package inventory remained unchanged.
+
 ## Runtime assets
 
 Prompts and workflow definitions are executable inputs, not optional
