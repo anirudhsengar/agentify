@@ -19,15 +19,6 @@ updates:
           - "typescript"
           - "@types/*"
           - "tsx"
-    # Temporary #60 ceilings keep the automation result inside the approved
-    # TypeScript 6 / Node 22 scope while the exact lockfile is generated.
-    ignore:
-      - dependency-name: "typescript"
-        versions: [">=7.0.0"]
-      - dependency-name: "@types/node"
-        versions: [">=23.0.0"]
-      - dependency-name: "tsx"
-        versions: [">4.22.4"]
     # agentify treats new runtime deps as gated (see AGENTS.md).
     # Let dependabot bump existing runtime deps, but require explicit
     # maintainer approval for any *new* dependency — surfaced in the
@@ -38,6 +29,11 @@ updates:
     commit-message:
       prefix: "deps"
       include: "scope"
+    # Match only the engines.node floor in package.json. Allow patch+minor
+    # on runtime peers; keep major bumps as their own PRs for review.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
