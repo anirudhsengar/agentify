@@ -19,6 +19,18 @@ updates:
           - "typescript"
           - "@types/*"
           - "tsx"
+          - "esbuild"
+    # Temporary #61 bounds generate one exact build-tooling lockfile while
+    # preserving the already completed #60 compiler/declaration group.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        versions: [">=23.0.0"]
+      - dependency-name: "tsx"
+        versions: [">4.23.1"]
+      - dependency-name: "esbuild"
+        versions: [">0.28.1"]
     # agentify treats new runtime deps as gated (see AGENTS.md).
     # Let dependabot bump existing runtime deps, but require explicit
     # maintainer approval for any *new* dependency — surfaced in the
@@ -29,11 +41,6 @@ updates:
     commit-message:
       prefix: "deps"
       include: "scope"
-    # Match only the engines.node floor in package.json. Allow patch+minor
-    # on runtime peers; keep major bumps as their own PRs for review.
-    ignore:
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
