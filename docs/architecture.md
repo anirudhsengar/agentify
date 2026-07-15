@@ -109,25 +109,73 @@ templates and lifecycle prompts, experts, and skills/extensions. `index.ts` owns
 schema/coverage validation, family composition order, unsafe-path checks, duplicate
 checks, and the legacy façade exports. Renderer modules perform no filesystem I/O.
 
-## Audit schema contract and algorithm ownership
+## Audit schema ownership and dependency direction
 
-`src/core/audit/schema.ts` remains the sole owner of the codebase-map, partial-map,
-and write-map TypeBox declarations. Their required fields, optionality, enums,
-bounds, descriptions, and serialized forms remain contract data. The same module
-continues to re-export the established helper names for compatibility.
+Audit-map TypeBox declarations have cohesive owners under
+`src/core/audit/schema/`. The stable `src/core/audit/schema.ts` path is a
+declaration-free compatibility façade; it forwards the same schema values and
+static types without wrapping, cloning, or recomposing them.
 
-Non-schema behavior has focused owners:
+Ownership is explicit:
 
-- `coverage.ts` owns the canonical coverage dimensions, summary calculation,
-  substance gates, closure ordering, constants, and stable reason text;
-- `map-defaults.ts` owns shallow-copy default injection and preserves the
-  `schema_version` then `generated_at` application order; and
-- `schema-compatibility.ts` owns deterministic interpretation of documented
-  typed-versus-legacy aliases without declaring schemas.
+- `primitives.ts` owns only genuinely shared schema leaves such as coverage
+  status/confidence and safe names/paths;
+- domain modules own meta, skeleton, module graph, type/contract, conventions,
+  pitfalls, validation, operational, security, evidence, artifact-intent, and
+  coverage declarations;
+- `codebase-map.ts` is the only complete/partial map composition owner;
+- `write-map-params.ts` is the only `write_map`/`write_map_delta` parameter owner;
+- `index.ts` re-exports canonical declarations and types but declares nothing; and
+- `schema.ts` preserves the established façade plus non-schema compatibility
+  re-exports.
 
-The extracted modules use schema-derived types only and do not initialize or
-redefine TypeBox declarations. Golden schema fingerprints and behavior tables
-protect the compatibility façade against contract drift.
+The dependency graph flows downward:
+
+```text
+TypeBox + StringEnum
+        |
+        v
+ schema/primitives.ts
+        |
+        v
+ cohesive domain modules
+        |
+        v
+ schema/codebase-map.ts
+        |
+        v
+ schema/write-map-params.ts
+        |
+        v
+ schema/index.ts
+        |
+        v
+ src/core/audit/schema.ts façade
+```
+
+Domain modules may consume shared primitives but must not import composition,
+parameter, index, façade, renderer, storage, tool, or algorithm owners.
+`codebase-map.ts` may compose domains and consume the canonical
+`COVERAGE_DIMENSIONS`; `write-map-params.ts` may consume top-level maps and that
+coverage enum; lower layers never import either module. The explicit file
+inventory and allowed edges are enforced by
+`tests/maintenance/schema-boundaries.test.ts`, which makes new domains and
+dependency exceptions deliberate review events.
+
+Static aliases live beside their schema declarations. The façade and internal
+index preserve reference identity, so tool parameter objects and existing imports
+continue receiving the canonical schema objects. `coverage.ts`,
+`map-defaults.ts`, and `schema-compatibility.ts` remain TypeBox-free algorithm
+owners; they consume schema-derived types and are re-exported only for established
+compatibility.
+
+Schema movement and semantic contract edits use separate PRs. Structural changes
+must preserve exact serialization, property/required ordering, enum and union
+member order, literals, descriptions, defaults, patterns, bounds, validation
+acceptance and error ordering, static assignability, generated output, parameter
+identity, and package confinement. Golden fingerprint or validation-fixture drift
+stops a structural PR; fixture regeneration belongs only to a separately approved
+semantic change.
 
 ## Structured write-map ownership
 

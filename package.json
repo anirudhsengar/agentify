@@ -63,7 +63,7 @@
     "test:parity:generated": "tsx tests/parity/generated-bundle.test.ts",
     "test:parity:state": "tsx tests/parity/state-directory-matrix.test.ts",
     "test:parity": "npm run build && npm run test:parity:cli && npm run test:parity:generated && npm run test:parity:state && npm run test:package",
-    "test:maintenance": "tsx tests/maintenance/documentation-invariants.test.ts && tsx tests/maintenance/reachability-invariants.test.ts && tsx tests/maintenance/module-boundaries.test.ts && tsx tests/maintenance/legacy-state-consumers.test.ts && tsx tests/release-safety.test.ts",
+    "test:maintenance": "tsx tests/maintenance/documentation-invariants.test.ts && tsx tests/maintenance/schema-boundaries.test.ts && tsx tests/maintenance/reachability-invariants.test.ts && tsx tests/maintenance/module-boundaries.test.ts && tsx tests/maintenance/legacy-state-consumers.test.ts && tsx tests/release-safety.test.ts",
     "test:fixtures": "npm run test:unit",
     "test:generated-output": "tsx tests/artifacts-renderers.test.ts && tsx tests/generated-output-quality.test.ts && tsx tests/core/expert-outcome.test.ts && tsx tests/core/smoke-evidence.test.ts && tsx tests/core/release-qualification.test.ts",
     "test:scaffold-e2e": "bash scaffold/tests/run.sh",
