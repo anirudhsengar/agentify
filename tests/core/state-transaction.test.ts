@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   beginStateTransaction,
+  listInterruptedStateTransactions,
   recoverInterruptedStateTransactions,
 } from "../../src/core/state-transaction.ts";
 
@@ -104,8 +105,11 @@ async function testInterruptedTransactionRecovery(): Promise<void> {
     });
     write(cwd, ".agents/agentify/manifest.json", "partial-manifest\n");
 
+    assert.deepEqual(listInterruptedStateTransactions(cwd), ["interrupted-run"]);
+    assert.equal(read(cwd, ".agents/agentify/manifest.json"), "partial-manifest\n");
     assert.deepEqual(recoverInterruptedStateTransactions(cwd), ["interrupted-run"]);
     assert.equal(read(cwd, ".agents/agentify/manifest.json"), "old-manifest\n");
+    assert.deepEqual(listInterruptedStateTransactions(cwd), []);
     assert.deepEqual(recoverInterruptedStateTransactions(cwd), []);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });

@@ -75,7 +75,7 @@ const DEFAULT_TERMINAL_WIDTH = 100;
 const DEFAULT_TERMINAL_HEIGHT = 24;
 const MAX_VIEWPORT_ROWS = 30;
 
-// Picker chrome: message + blank + blank + nav = 4 fixed rows.
+// Picker chrome: message + selected-summary + blank + nav = 4 fixed rows.
 const PICKER_CHROME_ROWS = 4;
 
 /** A single rendered row (no trailing newline). */
@@ -113,7 +113,18 @@ function buildFrame(
 
   const rows: FrameRow[] = [];
   rows.push({ text: message });
-  rows.push({ text: "" });
+  const selectedLabels = choices
+    .filter((choice) => selected.has(choice.value))
+    .map((choice) => choice.label);
+  const selectedPreview = selectedLabels.length <= 3
+    ? selectedLabels.join(", ")
+    : `${selectedLabels.slice(0, 2).join(", ")} +${selectedLabels.length - 2} more`;
+  rows.push({
+    text: truncate(
+      `Selected (${selectedLabels.length}): ${selectedPreview || "none"}`,
+      safeWidth,
+    ),
+  });
 
   const totalChoices = choices.length;
   // Show `viewportHeight` choices starting at `viewportStart`. If the

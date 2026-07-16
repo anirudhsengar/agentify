@@ -730,6 +730,37 @@ export function recoverInterruptedStateTransactions(cwd: string): string[] {
   return recovered;
 }
 
+/**
+ * Return interrupted transaction IDs without changing repository state.
+ * Callers can use this to ask an interactive user how they want to proceed
+ * before the mandatory crash-recovery pass restores a safe filesystem state.
+ */
+export function listInterruptedStateTransactions(cwd: string): string[] {
+  const root = transactionRoot(cwd);
+  if (!fs.existsSync(root)) return [];
+  const rootStat = fs.lstatSync(root);
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
+    throw new Error(`unsafe Agentify state transaction root: ${TRANSACTION_ROOT_RELATIVE}`);
+  }
+
+  return fs.readdirSync(root, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((entry) => {
+      if (!entry.isDirectory() || !SAFE_RUN_ID.test(entry.name)) {
+        throw new Error(`invalid Agentify state transaction directory: ${entry.name}`);
+      }
+      const filePath = journalPath(cwd, entry.name);
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`Agentify state transaction is missing its journal: ${filePath}`);
+      }
+      const journal = readJournal(filePath);
+      if (journal.run_id !== entry.name) {
+        throw new Error(`Agentify state transaction run ID mismatch: ${filePath}`);
+      }
+      return entry.name;
+    });
+}
+
 export function migrateRetainedState(
   options: MigrateRetainedStateOptions,
 ): StateMigrationResult {

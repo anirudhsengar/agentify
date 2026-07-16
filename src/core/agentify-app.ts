@@ -10,12 +10,14 @@ import {
   discoverExistingStateDir,
   resolveCanonicalStateDir,
 } from "./state-dir.ts";
+import { listInterruptedStateTransactions } from "./state-transaction.ts";
 import type {
   AgentifyTarget,
   RunAgentifyOptions,
 } from "./types.ts";
 
 const DEFAULT_TARGETS: ReadonlyArray<AgentifyTarget> = ["codex", "claude", "pi"];
+type ExistingStateChoice = "resume" | "fresh";
 
 export interface RunAgentifyAppOptions
   extends Omit<RunAgentifyOptions, "targets" | "additionalAgents" | "args"> {
@@ -104,6 +106,26 @@ async function shouldResumeInitializedRepo(
   return choice !== "fresh";
 }
 
+async function chooseInterruptedTransactionAction(
+  options: RunAgentifyAppOptions,
+  transactionIds: ReadonlyArray<string>,
+): Promise<ExistingStateChoice | null> {
+  if (!input.isTTY || transactionIds.length === 0) return null;
+  return options.ui.promptSelect(
+    `Agentify found ${transactionIds.length === 1 ? "an" : `${transactionIds.length}`} interrupted state transaction${transactionIds.length === 1 ? "" : "s"}. What would you like to do?`,
+    [
+      {
+        label: "Resume recovery — restore the interrupted Agentify state",
+        value: "resume",
+      },
+      {
+        label: "Start a fresh run — recover safely, then regenerate managed artifacts",
+        value: "fresh",
+      },
+    ],
+  ) as Promise<ExistingStateChoice>;
+}
+
 async function resolveTargets(
   options: RunAgentifyAppOptions,
 ): Promise<{ targets: ReadonlyArray<AgentifyTarget>; additionalAgents: ReadonlyArray<string> }> {
@@ -142,6 +164,10 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
 
   const configDir = defaultConfigDir();
   const resolved = await resolveTargets(options);
+  const interruptedTransactionChoice = await chooseInterruptedTransactionAction(
+    options,
+    listInterruptedStateTransactions(options.cwd),
+  );
   const hasExplicitTargets = options.targets !== undefined
     || options.targetsOverride !== undefined;
   if (!hasExplicitTargets && !input.isTTY) {
@@ -177,14 +203,20 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
   );
 
   if (repoState.status === "ready") {
-    if (await shouldResumeInitializedRepo(options, repoState)) {
+    if (
+      interruptedTransactionChoice === "resume"
+      || (interruptedTransactionChoice === null && await shouldResumeInitializedRepo(options, repoState))
+    ) {
       attachToInitializedRepo(options, repoState);
       return;
     }
     options.ui.status("agentify: starting a fresh run from the existing repository");
   }
   if (repoState.status === "partial") {
-    if (await shouldResumeInitializedRepo(options, repoState)) {
+    if (
+      interruptedTransactionChoice === "resume"
+      || (interruptedTransactionChoice === null && await shouldResumeInitializedRepo(options, repoState))
+    ) {
       reportPartialRepo(options, repoState);
     } else {
       options.ui.status("agentify: starting a fresh run from the existing repository");
