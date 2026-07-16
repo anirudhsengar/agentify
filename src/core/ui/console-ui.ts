@@ -62,18 +62,30 @@ export class ConsoleUi implements AgentifyUi {
   async promptMultiSelect(
     message: string,
     choices: ReadonlyArray<{ label: string; value: string; hint?: string }>,
+    options?: {
+      initialValues?: ReadonlyArray<string>;
+      cursorAt?: string;
+    },
   ): Promise<ReadonlyArray<string>> {
     this.ensureInteractive(message);
+    const initialValues = options?.initialValues ?? [];
     const rl = readline.createInterface({ input, output });
     try {
       output.write(`${message}\n`);
       choices.forEach((choice, index) => {
+        const mark = initialValues.includes(choice.value) ? "[x]" : "[ ]";
         const hint = choice.hint ? `  → ${choice.hint}` : "";
-        output.write(`  ${index + 1}. ${choice.label}${hint}\n`);
+        output.write(`  ${mark} ${index + 1}. ${choice.label}${hint}\n`);
       });
-      output.write("(comma-separated numbers, 'all', or 'none')\n");
+      output.write("(comma-separated numbers to toggle; 'all' / 'none'; Enter to accept)\n");
+      if (initialValues.length > 0) {
+        output.write(
+          `Pre-selected: ${initialValues.join(", ")} (press Enter to accept)\n`,
+        );
+      }
       while (true) {
         const answer = (await rl.question("> ")).trim().toLowerCase();
+        if (answer === "") return [...initialValues];
         if (answer === "all") return choices.map((choice) => choice.value);
         if (answer === "none") return [];
         const parts = answer.split(",").map((part) => part.trim()).filter(Boolean);
@@ -81,27 +93,42 @@ export class ConsoleUi implements AgentifyUi {
           output.write(`Enter 1-${choices.length} (comma-separated), 'all', or 'none'.\n`);
           continue;
         }
-        const indices = parts.map((part) => Number.parseInt(part, 10));
-        const allNumeric = indices.every(
-          (idx) => Number.isInteger(idx) && idx >= 1 && idx <= choices.length,
-        );
-        if (!allNumeric) {
-          output.write(`Enter 1-${choices.length} (comma-separated), 'all', or 'none'.\n`);
-          continue;
-        }
         const seen = new Set<string>();
         const result: string[] = [];
-        for (const idx of indices) {
+        for (const part of parts) {
+          const idx = Number.parseInt(part, 10);
+          if (!Number.isInteger(idx) || idx < 1 || idx > choices.length) {
+            output.write(`Enter 1-${choices.length} (comma-separated), 'all', or 'none'.\n`);
+            result.length = 0;
+            break;
+          }
           const value = choices[idx - 1].value;
           if (seen.has(value)) continue;
           seen.add(value);
           result.push(value);
         }
-        return result;
+        if (result.length > 0) return result;
       }
     } finally {
       rl.close();
     }
+  }
+
+  async promptCheckboxList(
+    message: string,
+    choices: ReadonlyArray<{ label: string; value: string; hint?: string }>,
+    pickerOptions?: {
+      initialValues?: ReadonlyArray<string>;
+      cursorAt?: string;
+    },
+  ): Promise<ReadonlyArray<string>> {
+    // Same UX as the readline `promptMultiSelect`: numbered checkbox
+    // list with comma-separated numbers that toggle entries. Empty
+    // Enter accepts the pre-selected defaults. `'all'`/`'none'` are
+    // shortcuts. This is only reached when `AGENTIFY_OLD_UI=1`;
+    // the supported default is the custom polished picker at
+    // `src/core/ui/checkbox-picker.ts`.
+    return this.promptMultiSelect(message, choices, pickerOptions);
   }
 
   async promptSecret(message: string): Promise<string> {

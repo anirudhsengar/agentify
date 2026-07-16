@@ -5,7 +5,7 @@ import { inspectAgentifyRepoState, type AgentifyRepoState } from "./repo-status.
 import { defaultConfigDir } from "./agentify-config.ts";
 import { stdin as input } from "node:process";
 import { getPremiumTargets, isKnownAgent } from "./agent-registry.ts";
-import { promptTargets } from "./target-picker.ts";
+import { promptTargets, resolveSkillsDirsToAgents } from "./target-picker.ts";
 import {
   discoverExistingStateDir,
   resolveCanonicalStateDir,
@@ -94,12 +94,12 @@ async function resolveTargets(
     return { targets: DEFAULT_TARGETS, additionalAgents: [] };
   }
 
-  const selected = await promptTargets(options.ui);
-  const premium = getPremiumTargets(selected);
-  const additional = selected.filter(
-    (id) => !premium.includes(id as AgentifyTarget),
-  );
-  return { targets: premium, additionalAgents: additional };
+  const selectedDirs = await promptTargets(options.ui);
+  const resolved = resolveSkillsDirsToAgents(selectedDirs);
+  return {
+    targets: resolved.targets as ReadonlyArray<AgentifyTarget>,
+    additionalAgents: resolved.additionalAgents,
+  };
 }
 
 export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<void> {

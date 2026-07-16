@@ -72,6 +72,10 @@ class TestUi implements AgentifyUi {
     return next;
   }
 
+  async promptCheckboxList(): Promise<ReadonlyArray<string>> {
+    throw new Error("promptCheckboxList should not be called in this test");
+  }
+
   async promptSecret(): Promise<string> {
     const next = this.secretAnswers.shift();
     if (!next) throw new Error("No promptSecret answer queued.");

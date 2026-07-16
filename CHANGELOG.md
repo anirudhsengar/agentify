@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- All interactive choice prompts now use one stable, viewport-aware selector; keyboard navigation redraws in place instead of leaving duplicate frames in the terminal.
 - Brownfield audit map guidance now directs read-only model sessions to submit inline maps with `write_map(mode="auto")`; automatic private draft transport handles oversized maps without suggesting an unavailable general-purpose write tool.
 - The paired Pi runtime packages are upgraded atomically to 0.80.7, retaining Node 22.19.0 support, Pi-controlled TypeBox 1.1.38 copies, Agentify-owned authentication and execution policy, model-visible tool contracts, and the existing Smithy integrity override while accepting upstream provider, dynamic-tool, session-affinity, and Bedrock fixes.
 - The direct TypeBox dependency is upgraded to 1.3.6 while Pi-controlled nested TypeBox copies remain at 1.1.38; schema serialization, validation/error behavior, tool-schema identity, package boundaries, and the Node support policy are unchanged.

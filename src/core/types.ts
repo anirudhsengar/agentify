@@ -63,6 +63,25 @@ export interface AgentifyUi {
     message: string,
     choices: ReadonlyArray<{ label: string; value: string; hint?: string }>,
   ): Promise<ReadonlyArray<string>>;
+  /**
+   * Custom checkbox list. Renders a deterministic full-frame list on
+   * every keypress — does NOT use clack's diff renderer, which can
+   * leave visual artefacts when the frame line count shifts between
+   * renders. Use this for long lists (e.g., the skills-dir picker)
+   * where render-stability matters more than visual richness.
+   *
+   * `options.initialValues` pre-selects entries; `options.cursorAt`
+   * pins the starting cursor position to the entry whose value
+   * matches.
+   */
+  promptCheckboxList(
+    message: string,
+    choices: ReadonlyArray<{ label: string; value: string; hint?: string }>,
+    options?: {
+      initialValues?: ReadonlyArray<string>;
+      cursorAt?: string;
+    },
+  ): Promise<ReadonlyArray<string>>;
   promptSecret(message: string): Promise<string>;
 }
 

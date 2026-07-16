@@ -47,6 +47,10 @@ class RecordingUi implements AgentifyUi {
     throw new Error("promptMultiSelect should not be called");
   }
 
+  async promptCheckboxList(): Promise<ReadonlyArray<string>> {
+    throw new Error("promptCheckboxList should not be called");
+  }
+
   async promptSecret(): Promise<string> {
     throw new Error("promptSecret should not be called");
   }
