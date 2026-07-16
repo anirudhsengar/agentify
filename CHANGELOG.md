@@ -26,11 +26,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Fixed
 
 - `v0.2.0` was tagged, but npm publication did not complete and no GitHub release was published. The workflow passed `release-artifact/agentify-0.2.0.tgz` as an ambiguous package specification, so npm interpreted it as GitHub shorthand instead of a local tarball path.
-- The publication workflow now resolves exactly one downloaded local `.tgz` file and publishes that explicit path, failing closed when zero or multiple tarballs ar present.
+- The publication workflow now resolves exactly one downloaded local `.tgz` file and publishes that explicit path, failing closed when zero or multiple tarballs are present.
 
 ### Changed
 
-- `0.2.1` contains the complete release contents intended for `0.2.0`, together with the `corrected artifact-publication workflow.
+- `0.2.1` contains the complete release contents intended for `0.2.0`, together with the corrected artifact-publication workflow.
 - The unscoped `agentify` npm name is owned by another publisher, so the official package is now `@anirudhsengar/agentify`; the installed executable remains `agentify`.
 - Release artifact handling now derives the exact tarball filename from the single validated result returned by `npm pack --json` instead of assuming an unscoped filename.
 
@@ -43,7 +43,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Evidence-based lifecycle decisions for webhook, AIW, orchestrator, communications, and Agent Expert, with communications relocation split into a dedicated follow-up issue.
 - An audited runtime-reachability inventory and maintenance guard for standalone scripts.
 - Modernization behavior and runtime-reachability contracts with a reusable CLI, generated-bundle, state-directory, and installed-package parity gate.
-- Typed Top-level CLI parsing with process-level regression coverage.
+- Typed top-level CLI parsing with process-level regression coverage.
 - Recursive test discovery, security regression suites, and installed-package smoke tests.
 - Explicit per-session execution policies for tools, filesystem roots, shell access, and network posture.
 - Transactional provider-scoped state with journals, backups, rollback, migration, and interrupted-run recovery.
