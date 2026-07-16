@@ -1,6 +1,7 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { defaultConfigDir } from "../agentify-config.ts";
 import { resolveApplyPolicy } from "../agentifyrc.ts";
 import { normalizeArtifactPath } from "../artifacts/generated-surface.ts";
@@ -43,6 +44,12 @@ function toRel(cwd: string, filePath: string): string {
   return normalizeArtifactPath(path.relative(cwd, filePath));
 }
 
+function eventCostUsd(event: AgentSessionEvent): number | undefined {
+  const message = (event as { message?: { usage?: { cost?: { total?: unknown } } } }).message;
+  const cost = message?.usage?.cost?.total;
+  return typeof cost === "number" ? cost : undefined;
+}
+
 export async function runGreenfield(context: RunContext): Promise<void> {
   const options = context;
   const config = context.config;
@@ -57,6 +64,8 @@ export async function runGreenfield(context: RunContext): Promise<void> {
   setAgentifySessionActive(sessionId, true);
   const spinner: SpinnerHandle = startSpinner("starting greenfield chat…");
   let spinnerStopped = false;
+  let turnCount = 0;
+  let costUsd = 0;
   let result: Awaited<ReturnType<typeof options.runtime.runGreenfield>>;
   try {
     result = await options.runtime.runGreenfield({
@@ -65,6 +74,30 @@ export async function runGreenfield(context: RunContext): Promise<void> {
       config,
       stateDir,
       signal: options.signal,
+      onEvent: (event) => {
+        const type = (event as { type?: string }).type;
+        if (type === "message_start") {
+          spinner.update("Exploring your project idea and shaping the first milestone…");
+        } else if (type === "message_end") {
+          turnCount += 1;
+          const cost = eventCostUsd(event);
+          if (cost !== undefined) costUsd += cost;
+          spinner.update(
+            `Planning pass ${turnCount} complete • estimated spend $${costUsd.toFixed(4)}`,
+          );
+        } else if (type === "tool_execution_start") {
+          const toolName = (event as { toolName?: string; tool_name?: string }).toolName
+            ?? (event as { tool_name?: string }).tool_name
+            ?? "unknown";
+          spinner.update(
+            toolName === "write_greenfield_artifacts"
+              ? "Writing the approved project artifacts…"
+              : "Refining the project plan and next steps…",
+          );
+        } else if (type === "tool_execution_end") {
+          spinner.update("Project artifacts captured — preparing your workspace…");
+        }
+      },
     });
     spinner.stop(
       result.aborted ? "greenfield session aborted" : "greenfield session complete",

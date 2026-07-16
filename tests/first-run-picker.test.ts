@@ -47,6 +47,10 @@ class TestUi implements AgentifyUi {
     throw new Error("promptMultiSelect should not be called in this test");
   }
 
+  async promptCheckboxList(): Promise<ReadonlyArray<string>> {
+    throw new Error("promptCheckboxList should not be called in this test");
+  }
+
   async promptSecret(_message: string): Promise<string> {
     if (this.secretAnswers.length === 0) {
       throw new Error("promptSecret called with no answer queued");

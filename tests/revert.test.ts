@@ -26,6 +26,12 @@ class TestUi implements AgentifyUi {
   async promptMultiSelect(_msg: string, _choices: ReadonlyArray<{ label: string; value: string; hint?: string }>): Promise<ReadonlyArray<string>> {
     throw new Error("no prompt");
   }
+  async promptCheckboxList(
+    _msg: string,
+    _choices: ReadonlyArray<{ label: string; value: string; hint?: string }>,
+  ): Promise<ReadonlyArray<string>> {
+    throw new Error("no prompt");
+  }
   async promptSecret(_msg: string): Promise<string> {
     throw new Error("no prompt");
   }

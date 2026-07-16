@@ -20,6 +20,7 @@ class TestUi implements AgentifyUi {
   error(message: string): void { this.errors.push(message); }
   async promptSelect(): Promise<string> { throw new Error("unexpected prompt"); }
   async promptMultiSelect(): Promise<ReadonlyArray<string>> { throw new Error("unexpected prompt"); }
+  async promptCheckboxList(): Promise<ReadonlyArray<string>> { throw new Error("unexpected prompt"); }
   async promptSecret(): Promise<string> { throw new Error("unexpected prompt"); }
 }
 

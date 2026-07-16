@@ -26,8 +26,9 @@
 //    `promptMultiSelect` so the default-target flow stays one click.
 
 import { stdin as input } from "node:process";
-import * as clack from "@clack/prompts";
 import type { AgentifyUi } from "../types.ts";
+import * as clack from "@clack/prompts";
+import { runCheckboxPicker, runSelectPicker } from "./checkbox-picker.ts";
 
 const NON_TTY_TAIL =
   "Cannot prompt because stdin is not interactive. " +
@@ -76,21 +77,7 @@ export class ClackUi implements AgentifyUi {
     choices: ReadonlyArray<{ label: string; value: string }>,
   ): Promise<string> {
     this.ensureInteractive(message);
-    // `clack.select` returns `Promise<symbol | Value>`; when the user
-    // hits Ctrl-C the result is the cancel symbol. We translate that
-    // into an `Error("Interrupted.")` so the bin's catch handler
-    // produces its standard error line.
-    const result = await clack.select({
-      message,
-      options: choices.map((choice) => ({
-        value: choice.value as string,
-        label: choice.label,
-      })),
-    });
-    if (clack.isCancel(result)) {
-      throw new Error("Interrupted.");
-    }
-    return result as string;
+    return runSelectPicker(message, choices);
   }
 
   async promptMultiSelect(
@@ -98,19 +85,19 @@ export class ClackUi implements AgentifyUi {
     choices: ReadonlyArray<{ label: string; value: string; hint?: string }>,
   ): Promise<ReadonlyArray<string>> {
     this.ensureInteractive(message);
-    const result = await clack.multiselect({
-      message,
-      options: choices.map((choice) => ({
-        value: choice.value as string,
-        label: choice.label,
-        hint: choice.hint,
-      })),
-      required: false,
-    });
-    if (clack.isCancel(result)) {
-      throw new Error("Interrupted.");
-    }
-    return (result as string[]).slice();
+    return runCheckboxPicker(message, choices);
+  }
+
+  async promptCheckboxList(
+    message: string,
+    choices: ReadonlyArray<{ label: string; value: string; hint?: string }>,
+    options?: {
+      initialValues?: ReadonlyArray<string>;
+      cursorAt?: string;
+    },
+  ): Promise<ReadonlyArray<string>> {
+    this.ensureInteractive(message);
+    return runCheckboxPicker(message, choices, options);
   }
 
   async promptSecret(message: string): Promise<string> {
