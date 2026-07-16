@@ -187,7 +187,9 @@ async function testGreenfieldDelegationCharacterization(): Promise<void> {
         signal: controller.signal,
       });
 
-      assert.deepEqual(runtime.observed, {
+      assert.ok(runtime.observed, "expected greenfield runtime call");
+      const { onEvent, ...observed } = runtime.observed;
+      assert.deepEqual(observed, {
         cwd,
         configDir,
         config: {
@@ -200,6 +202,7 @@ async function testGreenfieldDelegationCharacterization(): Promise<void> {
         stateDir: ".agents/agentify",
         signal: controller.signal,
       });
+      assert.equal(typeof onEvent, "function");
       assert.deepEqual(ui.statuses, ["agentify: starting greenfield chat"]);
       assert.ok(ui.infos.some((message) => message.includes("greenfield session complete (4 turn(s), $0.1250")));
       assert.equal(ui.errors.length, 0);

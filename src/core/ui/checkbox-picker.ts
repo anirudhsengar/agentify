@@ -73,6 +73,7 @@ const INNER_PADDING = 2; // space before hint
 const MIN_LABEL_WIDTH = 24;
 const DEFAULT_TERMINAL_WIDTH = 100;
 const DEFAULT_TERMINAL_HEIGHT = 24;
+const MAX_VIEWPORT_ROWS = 30;
 
 // Picker chrome: message + blank + blank + nav = 4 fixed rows.
 const PICKER_CHROME_ROWS = 4;
@@ -137,17 +138,21 @@ function buildFrame(
   }
 
   rows.push({ text: "" });
-  // Footer: progress indicator + keybind hint.
-  const footer =
-    totalChoices <= viewportHeight
-      ? selectionMode === "multiple"
-        ? "↑↓ navigate · Space toggle · Enter confirm (Ctrl-C to cancel)"
-        : "↑↓ navigate · Enter confirm (Ctrl-C to cancel)"
-      : selectionMode === "multiple"
-        ? `↑↓ navigate · Space toggle · Enter confirm   ` +
-          `(${viewportStart + 1}-${Math.min(viewportStart + viewportHeight, totalChoices)} of ${totalChoices})`
-        : `↑↓ navigate · Enter confirm   ` +
-        `(${viewportStart + 1}-${Math.min(viewportStart + viewportHeight, totalChoices)} of ${totalChoices})`;
+  // Footer: navigation instructions plus an explicit cue that scrolling
+  // reveals additional choices beyond the 30-row viewport.
+  const visibleEnd = Math.min(viewportStart + viewportHeight, totalChoices);
+  const navigation = selectionMode === "multiple"
+    ? "↑↓ navigate · Space toggle · Enter confirm"
+    : "↑↓ navigate · Enter confirm";
+  const hiddenChoices = totalChoices - visibleEnd;
+  const moreCue = hiddenChoices > 0
+    ? ` · ↓ ${hiddenChoices} more below`
+    : viewportStart > 0
+      ? ` · ↑ ${viewportStart} above`
+      : "";
+  const footer = totalChoices <= viewportHeight
+    ? `${navigation} (Ctrl-C to cancel)`
+    : `${navigation}   (${viewportStart + 1}-${visibleEnd} of ${totalChoices})${moreCue}`;
   rows.push({ text: footer });
 
   // Pad to exactly frameHeight rows so the rendered byte sequence is
@@ -279,14 +284,13 @@ export async function runCheckboxPicker(
     selected.add(choices[cursorIndex].value);
   }
 
-  // Compute viewport dimensions. The frame height is bounded by the
-  // terminal height so the picker never pushes content into the
-  // scroll buffer.
+  // Show at most 30 choices at once, while respecting shorter terminals
+  // so redraws never push the picker into the scroll buffer.
   const terminalWidth = output.columns ?? DEFAULT_TERMINAL_WIDTH;
   const terminalHeight = output.rows ?? DEFAULT_TERMINAL_HEIGHT;
   const viewportHeight = Math.max(
     3,
-    Math.min(choices.length, terminalHeight - PICKER_CHROME_ROWS),
+    Math.min(choices.length, MAX_VIEWPORT_ROWS, terminalHeight - PICKER_CHROME_ROWS),
   );
   const frameHeight = PICKER_CHROME_ROWS + viewportHeight;
 
