@@ -74,24 +74,20 @@ function reportPartialRepo(
   }
 }
 
-async function shouldResumeExistingRepo(
+async function shouldResumeInitializedRepo(
   options: RunAgentifyAppOptions,
   repoState: AgentifyRepoState,
 ): Promise<boolean> {
-  // Scripted invocations retain their current deterministic behavior. Interactive
-  // users can explicitly choose whether to reuse or replace prior state.
+  // Scripted invocations retain their current deterministic behavior: an
+  // initialized repository is attached rather than prompting or rewriting
+  // generated artifacts. Interactive users can explicitly choose a new run.
   if (!input.isTTY) return true;
 
-  const isPartial = repoState.status === "partial";
   const choice = await options.ui.promptSelect(
-    isPartial
-      ? `Agentify found an incomplete ${repoState.mode} run in this repository. What would you like to do?`
-      : `Agentify found a completed ${repoState.mode} run in this repository. What would you like to do?`,
+    `Agentify found a completed ${repoState.mode} run in this repository. What would you like to do?`,
     [
       {
-        label: isPartial
-          ? "Resume recovery — continue from the existing Agentify state"
-          : "Resume previous setup — inspect the saved state and GitHub readiness",
+        label: "Resume previous setup — inspect the saved state and GitHub readiness",
         value: "resume",
       },
       {
@@ -152,7 +148,7 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
         discovered.relativeDir,
       );
       if (discoveredState.status === "ready") {
-        if (await shouldResumeExistingRepo(options, discoveredState)) {
+        if (await shouldResumeInitializedRepo(options, discoveredState)) {
           attachToInitializedRepo(options, discoveredState);
           return;
         }
@@ -176,7 +172,7 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
   );
 
   if (repoState.status === "ready") {
-    if (await shouldResumeExistingRepo(options, repoState)) {
+    if (await shouldResumeInitializedRepo(options, repoState)) {
       attachToInitializedRepo(options, repoState);
       return;
     }

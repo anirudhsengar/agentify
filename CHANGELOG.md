@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- On a repository with completed or incomplete Agentify state, interactive runs now let the user choose between resuming the existing setup and starting a fresh managed run; scripted invocations continue to resume deterministically.
+- On an initialized repository, interactive runs now let the user choose between resuming the existing setup and starting a fresh managed run; scripted invocations continue to resume deterministically.
 - All interactive choice prompts now use one stable, viewport-aware selector; keyboard navigation redraws in place instead of leaving duplicate frames in the terminal.
 - Long choice lists show at most 30 entries at once and explicitly indicate when additional options are available below.
 - Completed selectors now collapse to a concise answered line. Audit and greenfield sessions report their current activity and cumulative provider-reported spend instead of opaque turn-only updates.
