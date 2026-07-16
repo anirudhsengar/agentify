@@ -133,6 +133,7 @@ Current production dependencies are:
 - `@earendil-works/pi-ai`
 - `@earendil-works/pi-coding-agent`
 - `typebox`
+- `@clack/prompts`
 
 They are regular dependencies because the installed command uses them. Build
 and test tooling—including `esbuild`, `tsx`, TypeScript, and `@types/node`—must
