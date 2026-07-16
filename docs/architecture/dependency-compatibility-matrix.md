@@ -1,9 +1,9 @@
 # Dependency compatibility matrix
 
-Status: living implementation record for Issue #34  
+Status: final implementation record for Issue #34  
 Last updated: 2026-07-16
 
-This file records the approved current dependency state and the evidence for each isolated implementation group. The original 2026-07-12 discovery analysis remains available in repository history. Completed groups may change only their owned manifest, lockfile, configuration, documentation, and characterization surfaces.
+This file records the approved dependency and runtime-support state and the evidence for each isolated implementation group. The original 2026-07-12 discovery analysis remains available in repository history. Completed groups may change only their owned manifest, lockfile, configuration, documentation, and characterization surfaces.
 
 ## Current decisions
 
@@ -14,7 +14,7 @@ This file records the approved current dependency state and the evidence for eac
 | TypeBox | direct 1.2.9; Pi nested 1.1.38 | direct 1.3.6; Pi nested 1.1.38 | **Implemented; schema and tool contracts retained** | #62 |
 | Pi runtime pair | 0.80.6 / 0.80.6 | 0.80.7 / 0.80.7 | **Implemented atomically; runtime contracts retained** | #63 |
 | Smithy integrity override | root 4.4.7 plus shrinkwrapped nested 2.2.0 | retain root override 4.4.7; document residual nested 2.2.0 | **Completed; integrity protection retained** | #64 |
-| Node support | engine `>=22.19.0`; required Node 22.19.0 and Node 24 validation | retain current policy unless final dependency evidence requires change | **Pending final policy confirmation** | #65 |
+| Node support | engine `>=22.19.0`; required Node 22.19.0 and Node 24 validation | retain the floor; require exact Node 22.19.0 and a current Node 24 patch; keep Node 22 declarations; make no Node 26 support claim | **Completed; policy retained** | #65 |
 
 ## Current manifest and important resolved versions
 
@@ -54,7 +54,7 @@ The post-#62 gate found a newer official compatible pair: `@earendil-works/pi-ai
 
 The exact registry-generated lock object was replayed onto post-#62 `main`. No package record was added or removed. The two direct Pi records and three matching nested family records moved from 0.80.6 to 0.80.7. Five existing optional clipboard Linux records gained registry-provided `libc` metadata. No provider SDK, networking, undici, AWS/Smithy, TypeBox, TypeScript, declaration, or build-tool version moved.
 
-Exact Node 22.19.0 and Node 24.13.1 validation with npm 10.9.2 confirmed clean installs, a valid dependency graph, unchanged direct/nested TypeBox and Smithy topology, byte-identical export/model/session/tool characterization across Pi 0.80.6 and 0.80.7, and zero production vulnerabilities.
+Final policy validation on exact Node 22.19.0 and Node 24.18.0 with npm 10.9.2 confirmed clean installs, a valid dependency graph, unchanged direct/nested TypeBox and Smithy topology, byte-identical export/model/session/tool characterization across Pi 0.80.6 and 0.80.7, and zero production vulnerabilities.
 
 ## Smithy integrity override — #64
 
@@ -86,13 +86,47 @@ The final Pi 0.80.7 graph contains:
 - one Pi coding-agent shrinkwrapped nested 2.2.0 copy that the root override does not rewrite;
 - no additional nested 2.2.0 path under the root `@smithy/util-utf8` graph.
 
-Clean installs on exact Node 22.19.0 and Node 24.13.1 with npm 10.9.2 remained deterministic. `npm ls --all` reported no dependency problems. Dynamic ESM loading of both root and nested buffer packages, UTF-8 and hexadecimal string conversion, ArrayBuffer offset/length conversion, Buffer result identity, and Bedrock client construction produced identical results on both runtimes. The characterization file SHA-256 was `56f751477ecc02937e3d712890f2254913a09a883fafded973006d022270b494`; its embedded stable-result SHA-256 was `13dbfb31e252cf96ef319dcb31da999fc34db64761b56ef22258f4ecfed10afc`. Production audit remained zero vulnerabilities with 230 production, 30 development, 38 optional, and 270 total dependencies.
+Clean installs on exact Node 22.19.0 and Node 24.18.0 with npm 10.9.2 remained deterministic. `npm ls --all` reported no dependency problems. Dynamic ESM loading of both root and nested buffer packages, UTF-8 and hexadecimal string conversion, ArrayBuffer offset/length conversion, Buffer result identity, and Bedrock client construction produced identical results on both runtimes. The characterization file SHA-256 was `56f751477ecc02937e3d712890f2254913a09a883fafded973006d022270b494`; its embedded stable-result SHA-256 was `13dbfb31e252cf96ef319dcb31da999fc34db64761b56ef22258f4ecfed10afc`. Production audit remained zero vulnerabilities with 230 production, 30 development, 38 optional, and 270 total dependencies.
 
 No manifest or lockfile change is required. Residual risk is the unavoidable Pi shrinkwrap-owned 2.2.0 copy; it remains integrity-pinned in the lockfile and is explicitly documented. A future Pi release that removes that copy should trigger a fresh override-removal review.
 
 ## Node support policy — #65
 
-The current product policy is engine `>=22.19.0`, exact minimum validation on Node 22.19.0, separate required Node 24 validation, and root `@types/node` aligned with the Node 22 floor. No completed dependency requires a higher minimum. Node 26 is not a supported line without an explicit later approval and complete validation. The final decision remains separate from dependency upgrades.
+### Decision
+
+Retain policy option 1:
+
+- minimum supported runtime: Node `>=22.19.0`;
+- required minimum lane: exact Node 22.19.0;
+- required current-supported lane: a current Node 24 patch, validated here on Node 24.18.0;
+- declaration policy: root `@types/node` stays on the Node 22 line, currently 22.20.1;
+- package-manager policy: npm 10.9.2 is validated on both required runtimes;
+- Node 26: no support claim or required lane before a separate explicit approval.
+
+### Official lifecycle evidence
+
+The official Node release schedule places Node 22 in maintenance through 2027-04-30 and Node 24 in LTS/maintenance support through 2028-04-30. Node 26 began its Current line on 2026-05-05 and is not scheduled to become LTS until 2026-10-28. The official distribution index identified Node 24.18.0, published 2026-06-23, as the current Node 24 patch at this decision gate.
+
+### Dependency engine evidence
+
+```text
+Agentify package engine                 >=22.19.0
+@earendil-works/pi-ai 0.80.7           >=22.19.0
+@earendil-works/pi-coding-agent 0.80.7 >=22.19.0
+typebox 1.3.6                           no engine field
+typescript 6.0.3                        >=14.17
+esbuild 0.28.1                          >=18
+tsx 4.23.1                              >=18.0.0
+@smithy/util-buffer-from 4.4.7          >=18.0.0
+```
+
+No completed direct dependency requires raising the product floor. Raising it would exclude supported Node 22 users without providing a compatibility or security benefit. Node 24 declarations remain intentionally excluded because the declaration surface must not imply APIs unavailable at the minimum runtime.
+
+### Final runtime validation
+
+A real clean `npm ci --no-audit --no-fund` ran on both exact lanes and installed 235 packages. `npm ls --all --json` reported no dependency problems. Pi characterization was byte-identical with SHA-256 `82ad06b58125b590fe44e17d784587c77ce6baea6f597afe00f8fa6f1bfb5b3a`; Smithy/Bedrock characterization was byte-identical with SHA-256 `56f751477ecc02937e3d712890f2254913a09a883fafded973006d022270b494`. `npm audit --omit=dev --json` reported zero vulnerabilities on both lanes, with 230 production, 30 development, 38 optional, and 270 total dependencies.
+
+`README.md`, `CONTRIBUTING.md`, `docs/build-and-package.md`, and `docs/release-process.md` already state the retained minimum, Node 22/24 validation roles, Node-22-targeted bundle, and package gate accurately. No manifest, lockfile, workflow, release, or changelog change is required for a retained policy.
 
 ## Lockfile summary
 
@@ -103,7 +137,7 @@ The current product policy is engine `>=22.19.0`, exact minimum validation on No
 | TypeBox 1.3.6 | 0 | 0 | 1 | none |
 | Pi 0.80.7 pair | 0 | 0 | 5 family records | five existing optional clipboard records gained `libc` metadata |
 | Smithy integrity decision | 0 | 0 | 0 | retain root 4.4.7; document residual nested 2.2.0 |
-| Node policy | expected 0 | expected 0 | expected 0 | no manifest churn when retained |
+| Node support decision | 0 | 0 | 0 | retain engine and Node-22 declaration policy |
 
 ## Mandatory validation policy
 
@@ -124,4 +158,4 @@ npm pack --json --ignore-scripts
 npm audit --omit=dev
 ```
 
-Validation must cover exact Node 22.19.0 and a recorded Node 24 patch. No test, schema, validator, execution policy, package boundary, security control, or migration gate may be weakened. GitHub Actions remain disabled; no hosted workflow may be dispatched or rerun. Release work, tag movement, npm publication, and GitHub releases remain prohibited.
+Validation must cover exact Node 22.19.0 and a current Node 24 patch. No test, schema, validator, execution policy, package boundary, security control, or migration gate may be weakened. GitHub Actions remain disabled; no hosted workflow may be dispatched or rerun. Release work, tag movement, npm publication, and GitHub releases remain prohibited.
