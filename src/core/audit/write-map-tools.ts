@@ -49,13 +49,14 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
         label: "Write Codebase Map",
         description:
             "Persist the 10-dimension codebase map to ./.pi/agentify/codebase_map.json. " +
-            "Schema-enforced via TypeBox. Two modes: (1) inline `map` for small maps (≤ 3KB); " +
-            "(2) `map_file` pointing to a JSON file for large maps. The tool reads, " +
+            "Schema-enforced via TypeBox. Submit the complete map inline with `mode: 'auto'`; " +
+            "the tool safely creates its own draft transport when it exceeds 100KB. " +
+            "Use `map_file` only for an already-existing JSON file. The tool reads, " +
             "validates, and writes the canonical map. Gap entries in the coverage block are " +
             "allowed in the data and reported in the result; weak `covered` entries are " +
             "also reported with the same closure rules as the final post-run gate. " +
-            "In `auto` mode (default), inline maps that exceed 100KB are transparently " +
-            "fall-backed to the file-based transport. " +
+            "Audit sessions do not have a general-purpose write tool, so do not attempt to " +
+            "create a draft file yourself. " +
             "Call multiple times during exploration to persist progress; call once with the " +
             "final map before rendering the report.",
         parameters: WriteMapParamsSchema,

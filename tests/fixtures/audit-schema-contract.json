@@ -9,8 +9,8 @@
       "bytes": 39982
     },
     "write_map_params": {
-      "sha256": "2bde81d12c125b6e35a4cdacbb142da63ce9ad73d20ce3a99633970466dae767",
-      "bytes": 41193
+      "sha256": "7dfcc2581307f71434585d79faea852b0f7429310bb047b53e1593caacae00b0",
+      "bytes": 41267
     },
     "write_map_delta_params": {
       "sha256": "235e368c13f3d72372f85d2204145b6208649422d64d66e0b155cf1e1a2b327c",
@@ -150,8 +150,8 @@
       "minItems": 0,
       "maxItems": 24
     },
-    "write_map_file_description": "Path (absolute or cwd-relative) to a JSON file containing the codebase map. Use for large maps (> 3KB) or when the LLM has built the JSON via the `write` tool. The tool reads, validates, and writes the canonical map to ./.pi/agentify/codebase_map.json.",
-    "write_mode_description": "Persist mode. `inline` (strict) errors if the inline map exceeds 100KB. `file` (strict) requires explicit `map_file`. `auto` (default) falls back to file-based persistence transparently when inline exceeds the cap.",
+    "write_map_file_description": "Path (absolute or cwd-relative) to an already-existing JSON file containing the codebase map. Audit sessions cannot create this file; normally submit `map` inline with mode `auto`, which safely creates a private draft when needed. The tool reads, validates, and writes the canonical map to ./.pi/agentify/codebase_map.json.",
+    "write_mode_description": "Persist mode. `inline` (strict) errors if the inline map exceeds 100KB. `file` (strict) requires explicit `map_file`. `auto` (default and recommended) safely creates a private draft when an inline map exceeds the cap.",
     "merge_strategy_description": "How to merge the delta into the canonical map. `shallow_overwrite` (default) replaces matching top-level keys. `deep_merge` recursively merges objects. `append` pushes onto existing arrays."
   }
 }

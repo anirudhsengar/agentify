@@ -142,6 +142,11 @@ each section and each feature is discovered, not templated.
   errors. Call it before and after each sub-agent to
   checkpoint progress; after coverage closes, use it to persist
   `artifact_intents`.
+- **Map transport.** Submit maps inline with `write_map(mode="auto")`.
+  Inline maps may be up to 100 KB; if one is larger, the tool creates
+  its own private draft automatically. Audit sessions do not have a
+  general-purpose `write` tool, so never plan to create a JSON draft
+  yourself or wait for one.
 - **`AGENTS.md` is hard-capped at 200 lines.** Count your
   intended rendered lines before finalizing intents. If your draft exceeds 200, cut the
   lowest-value sections first (see the cut-order under
@@ -1772,8 +1777,9 @@ agentify run FAILED. N areas uncovered (<area names>). No files written. Re-run 
 
 - **Skipping `write_map` between phases** — context fills
   up and you lose what you saw.
-- **Calling `write_map` inline for large maps** — use the
-  file-based mode for > 3KB.
+- **Trying to create a map file yourself** — audit sessions do not
+  have a general-purpose `write` tool. Submit the map inline with
+  `mode="auto"`; the tool handles maps over 100KB safely.
 - **Inventing data to fill a `gap`** — honest `null` is
   `covered`; padding is not.
 - **Skipping the self-diagnostic** — `write_map` gives immediate
