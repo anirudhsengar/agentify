@@ -1,4 +1,8 @@
-import * as readline from "node:readline/promises";
+// CLI entry for `agentify`. The hand-rolled `node:readline/promises`
+// UI was extracted to `./core/ui/console-ui.ts` and is used only when
+// the `AGENTIFY_OLD_UI=1` env flag is set. ClackUi is the default in
+// 0.2.x — see `./core/ui/clack-ui.ts` for the design notes.
+
 import { stdin as input, stdout as output, stderr as errOutput } from "node:process";
 import { PiSdkRuntime } from "./core/pi-sdk-runtime.ts";
 import { readPackageVersion } from "./core/package-version.ts";
@@ -10,138 +14,7 @@ import {
   type SubcommandContext,
 } from "./core/cli-commands.ts";
 import { parseCliArgs } from "./core/cli-parser.ts";
-import type { AgentifyUi } from "./core/types.ts";
-
-class ConsoleUi implements AgentifyUi {
-  status(message: string): void {
-    output.write(`${message}\n`);
-  }
-
-  info(message: string): void {
-    output.write(`${message}\n`);
-  }
-
-  error(message: string): void {
-    process.stderr.write(`${message}\n`);
-  }
-
-  private ensureInteractive(message: string): void {
-    if (!input.isTTY) {
-      throw new Error(
-        `${message} Cannot prompt because stdin is not interactive. ` +
-          "Pre-configure auth via a provider env var (e.g. OPENAI_API_KEY / ANTHROPIC_API_KEY) " +
-          "or ~/.agentify/auth.json before running agentify.",
-      );
-    }
-  }
-
-  async promptSelect(
-    message: string,
-    choices: ReadonlyArray<{ label: string; value: string }>,
-  ): Promise<string> {
-    this.ensureInteractive(message);
-    const rl = readline.createInterface({ input, output });
-    try {
-      output.write(`${message}\n`);
-      choices.forEach((choice, index) => output.write(`  ${index + 1}. ${choice.label}\n`));
-      while (true) {
-        const answer = (await rl.question("> ")).trim();
-        const index = Number.parseInt(answer, 10);
-        if (Number.isInteger(index) && index >= 1 && index <= choices.length) {
-          return choices[index - 1].value;
-        }
-        const byValue = choices.find((choice) => choice.value === answer);
-        if (byValue) return byValue.value;
-        output.write(`Enter 1-${choices.length}.\n`);
-      }
-    } finally {
-      rl.close();
-    }
-  }
-
-  async promptMultiSelect(
-    message: string,
-    choices: ReadonlyArray<{ label: string; value: string; hint?: string }>,
-  ): Promise<ReadonlyArray<string>> {
-    this.ensureInteractive(message);
-    const rl = readline.createInterface({ input, output });
-    try {
-      output.write(`${message}\n`);
-      choices.forEach((choice, index) => {
-        const hint = choice.hint ? `  → ${choice.hint}` : "";
-        output.write(`  ${index + 1}. ${choice.label}${hint}\n`);
-      });
-      output.write("(comma-separated numbers, 'all', or 'none')\n");
-      while (true) {
-        const answer = (await rl.question("> ")).trim().toLowerCase();
-        if (answer === "all") return choices.map((choice) => choice.value);
-        if (answer === "none") return [];
-        const parts = answer.split(",").map((part) => part.trim()).filter(Boolean);
-        if (parts.length === 0) {
-          output.write(`Enter 1-${choices.length} (comma-separated), 'all', or 'none'.\n`);
-          continue;
-        }
-        const indices = parts.map((part) => Number.parseInt(part, 10));
-        const allNumeric = indices.every(
-          (idx) => Number.isInteger(idx) && idx >= 1 && idx <= choices.length,
-        );
-        if (!allNumeric) {
-          output.write(`Enter 1-${choices.length} (comma-separated), 'all', or 'none'.\n`);
-          continue;
-        }
-        const seen = new Set<string>();
-        const result: string[] = [];
-        for (const idx of indices) {
-          const value = choices[idx - 1].value;
-          if (seen.has(value)) continue;
-          seen.add(value);
-          result.push(value);
-        }
-        return result;
-      }
-    } finally {
-      rl.close();
-    }
-  }
-
-  async promptSecret(message: string): Promise<string> {
-    this.ensureInteractive(message);
-    return new Promise((resolve, reject) => {
-      const stdin = process.stdin;
-      const stdout = process.stdout;
-      const wasRaw = stdin.isRaw;
-      let value = "";
-      stdout.write(`${message}: `);
-      stdin.setRawMode(true);
-      stdin.resume();
-      stdin.setEncoding("utf-8");
-      const onData = (chunk: string): void => {
-        if (chunk === "\u0003") {
-          cleanup();
-          reject(new Error("Interrupted."));
-          return;
-        }
-        if (chunk === "\r" || chunk === "\n") {
-          stdout.write("\n");
-          cleanup();
-          resolve(value);
-          return;
-        }
-        if (chunk === "\u007f") {
-          value = value.slice(0, -1);
-          return;
-        }
-        value += chunk;
-      };
-      const cleanup = (): void => {
-        stdin.off("data", onData);
-        stdin.setRawMode(wasRaw);
-        stdin.pause();
-      };
-      stdin.on("data", onData);
-    });
-  }
-}
+import { ClackUi, ConsoleUi, printBanner } from "./core/ui/index.ts";
 
 function printHelp(): void {
   output.write(`agentify ${readPackageVersion()}
@@ -174,18 +47,32 @@ through GitHub issues, comments, and PRs (see docs/lifecycle/README.md).
   printSubcommandHelp(output);
 }
 
+function shouldPrintBanner(): boolean {
+  // Banner prints once per invocation when the user is at a terminal
+  // (so the first-run experience is rich) and they have not opted into
+  // the historic readline-based UI. Piped runs and CI keep their
+  // machine-greppable output untouched.
+  return Boolean(input.isTTY) && !("AGENTIFY_OLD_UI" in process.env);
+}
+
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const command = parseCliArgs(argv);
+  if (command.kind === "version") {
+    // Preserves the one-line, machine-readable contract that shell
+    // dotfiles and CI scripts depend on.
+    output.write(`${readPackageVersion()}\n`);
+    return;
+  }
+  if (shouldPrintBanner()) {
+    printBanner(readPackageVersion());
+  }
   if (command.kind === "help") {
     printHelp();
     return;
   }
-  if (command.kind === "version") {
-    output.write(`${readPackageVersion()}\n`);
-    return;
-  }
 
-  const ui = new ConsoleUi();
+  const useOldUi = "AGENTIFY_OLD_UI" in process.env;
+  const ui = useOldUi ? new ConsoleUi() : new ClackUi();
   if (command.kind === "subcommand") {
     const subcommandCtx: SubcommandContext = {
       cwd: process.cwd(),

@@ -58,6 +58,7 @@ import {
   makeStagingRoot,
   writeRenderedArtifactsToStaging,
 } from "../generation/staging-bundle.ts";
+import { startSpinner, type SpinnerHandle } from "../ui/spinner.ts";
 import { persistProjectState, reportGitHubReadiness } from "./project-state-reporter.ts";
 import type { RunArtifactSnapshot, RunContext } from "./run-context.ts";
 
@@ -328,62 +329,83 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
 
     options.ui.status("agentify: auditing existing codebase");
     setAgentifySessionActive(sessionId, true);
-    const runtimeResult = await options.runtime.runSession({
-      cwd: options.cwd,
-      configDir: defaultConfigDir(),
-      config,
-      systemPrompt: promptContent,
-      userPrompt: buildBrownfieldUserPrompt(options.targets, options.additionalAgents),
-      tools: BUILDER_TOOL_ALLOWLIST,
-      executionPolicy: createReadOnlyExecutionPolicy({
+    const spinner: SpinnerHandle = startSpinner("starting audit…");
+    let turnCount = 0;
+    let spinnerStopped = false;
+    let runtimeResult: Awaited<ReturnType<typeof options.runtime.runSession>>;
+    try {
+      runtimeResult = await options.runtime.runSession({
         cwd: options.cwd,
-        mode: "audit-readonly",
-        tools: BUILDER_TOOL_ALLOWLIST.filter((tool) =>
-          tool === "read" || tool === "grep" || tool === "find" || tool === "ls"
-        ),
-        protectedPaths,
-      }),
-      customTools: [
-        mapTools.writeMapTool,
-        mapTools.writeMapDeltaTool,
-      ],
-      spawnExplorerAgentDir: defaultConfigDir(),
-      spawnExplorerStateDir: stateDir,
-      signal: options.signal,
-      onEvent: (event) => {
-        const piType = (event as { type?: string }).type ?? "unknown";
-        log.sessionEvent({ pi_event_type: piType, event });
-        if (piType === "message_start" && (event as { message?: { role?: string } }).message?.role === "user") {
-          log.recordTurnStart();
-        } else if (piType === "message_end") {
-          log.incrementTurns();
-          log.recordTurnEnd(extractUsage(event));
-        } else if (piType === "tool_execution_end") {
-          const toolEvent = event as { toolName?: string; result?: WriteMapResult };
-          if (toolEvent.toolName === "write_map") {
-            const mapResult = extractWriteMapResult(toolEvent.result);
-            if (mapResult) {
-              log.mapWritten({
-                path: mapResult.path,
-                size_bytes: mapResult.size_bytes,
-                coverage_summary: {
-                  covered: mapResult.covered,
-                  gap: mapResult.gap,
-                  total: mapResult.total,
-                },
-                gap_warning: mapResult.gap_warning,
+        configDir: defaultConfigDir(),
+        config,
+        systemPrompt: promptContent,
+        userPrompt: buildBrownfieldUserPrompt(options.targets, options.additionalAgents),
+        tools: BUILDER_TOOL_ALLOWLIST,
+        executionPolicy: createReadOnlyExecutionPolicy({
+          cwd: options.cwd,
+          mode: "audit-readonly",
+          tools: BUILDER_TOOL_ALLOWLIST.filter((tool) =>
+            tool === "read" || tool === "grep" || tool === "find" || tool === "ls"
+          ),
+          protectedPaths,
+        }),
+        customTools: [
+          mapTools.writeMapTool,
+          mapTools.writeMapDeltaTool,
+        ],
+        spawnExplorerAgentDir: defaultConfigDir(),
+        spawnExplorerStateDir: stateDir,
+        signal: options.signal,
+        onEvent: (event) => {
+          const piType = (event as { type?: string }).type ?? "unknown";
+          log.sessionEvent({ pi_event_type: piType, event });
+          if (piType === "message_start" && (event as { message?: { role?: string } }).message?.role === "user") {
+            log.recordTurnStart();
+          } else if (piType === "message_end") {
+            log.incrementTurns();
+            log.recordTurnEnd(extractUsage(event));
+            const usage = extractUsage(event);
+            turnCount += 1;
+            const cost = usage?.cost?.total ?? 0;
+            spinner.update(`turn ${turnCount} • $${cost.toFixed(4)}`);
+          } else if (piType === "tool_execution_end") {
+            const toolEvent = event as { toolName?: string; result?: WriteMapResult };
+            if (toolEvent.toolName === "write_map") {
+              const mapResult = extractWriteMapResult(toolEvent.result);
+              if (mapResult) {
+                log.mapWritten({
+                  path: mapResult.path,
+                  size_bytes: mapResult.size_bytes,
+                  coverage_summary: {
+                    covered: mapResult.covered,
+                    gap: mapResult.gap,
+                    total: mapResult.total,
+                  },
+                  gap_warning: mapResult.gap_warning,
+                });
+                spinner.update("coverage map written");
+              }
+            } else if (toolEvent.toolName === "spawn_explorer") {
+              log.subagentSpawned({
+                tool_name: "spawn_explorer",
+                details: (toolEvent.result as { details?: unknown } | undefined)?.details ?? null,
+                is_error: toolEvent.result?.isError ?? false,
               });
+              spinner.update("dispatching explorer sub-agent");
             }
-          } else if (toolEvent.toolName === "spawn_explorer") {
-            log.subagentSpawned({
-              tool_name: "spawn_explorer",
-              details: (toolEvent.result as { details?: unknown } | undefined)?.details ?? null,
-              is_error: toolEvent.result?.isError ?? false,
-            });
+          } else if (piType === "agent_end" && !spinnerStopped) {
+            spinner.update(`audit complete: ${turnCount} turn(s)`);
           }
-        }
-      },
-    });
+        },
+      });
+      spinner.stop("audit finished", "success");
+      spinnerStopped = true;
+    } finally {
+      if (!spinnerStopped) {
+        spinner.stop("audit failed", "error");
+        spinnerStopped = true;
+      }
+    }
 
     const finalState: FinalAuditState = runtimeResult.aborted
       ? {

@@ -35,6 +35,7 @@ import {
   makeStagingRoot,
   writeRenderedArtifactsToStaging,
 } from "../generation/staging-bundle.ts";
+import { startSpinner, type SpinnerHandle } from "../ui/spinner.ts";
 import { persistProjectState, reportGitHubReadiness } from "./project-state-reporter.ts";
 import type { RunArtifactSnapshot, RunContext } from "./run-context.ts";
 
@@ -54,6 +55,8 @@ export async function runGreenfield(context: RunContext): Promise<void> {
   setThinkingLevel(config.thinkingLevel ?? "high");
   const sessionId = getOrCreateSessionId();
   setAgentifySessionActive(sessionId, true);
+  const spinner: SpinnerHandle = startSpinner("starting greenfield chat…");
+  let spinnerStopped = false;
   let result: Awaited<ReturnType<typeof options.runtime.runGreenfield>>;
   try {
     result = await options.runtime.runGreenfield({
@@ -63,7 +66,16 @@ export async function runGreenfield(context: RunContext): Promise<void> {
       stateDir,
       signal: options.signal,
     });
+    spinner.stop(
+      result.aborted ? "greenfield session aborted" : "greenfield session complete",
+      result.aborted ? "warn" : "success",
+    );
+    spinnerStopped = true;
   } finally {
+    if (!spinnerStopped) {
+      spinner.stop("greenfield session failed", "error");
+      spinnerStopped = true;
+    }
     setAgentifySessionActive(sessionId, false);
   }
   let scaffoldInstalled = 0;

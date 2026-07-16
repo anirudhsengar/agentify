@@ -85,9 +85,12 @@ and implementation constraints.
 
 - New production dependencies require explicit maintainer review and a clear
   installed-runtime justification.
-- Current production dependencies are `typebox`, `@earendil-works/pi-ai`, and
-  `@earendil-works/pi-coding-agent`. They are regular dependencies because the
-  installed CLI requires them; they are not peer dependencies.
+- Current production dependencies are `typebox`, `@earendil-works/pi-ai`,
+  `@earendil-works/pi-coding-agent`, and `@clack/prompts`. They are regular
+  dependencies because the installed CLI requires them; they are not peer
+  dependencies. `@clack/prompts` powers the first-run picker UI (searchable
+  provider select, masked secret prompt, multi-select target picker, keyless
+  audit spinner).
 - Build/test tooling such as `esbuild`, `tsx`, and TypeScript belongs in
   `devDependencies`.
 - The npm artifact exposes the `agentify` executable only, excludes raw `src/`,
