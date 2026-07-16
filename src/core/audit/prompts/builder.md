@@ -142,6 +142,11 @@ each section and each feature is discovered, not templated.
   errors. Call it before and after each sub-agent to
   checkpoint progress; after coverage closes, use it to persist
   `artifact_intents`.
+- **First checkpoint is mandatory.** After the four Phase 0 scout
+  reads, write one valid complete map before calling `spawn_explorer`.
+  Do not defer this write until feature exploration is complete:
+  it is the canonical working memory that enables later
+  `write_map_delta` checkpoints.
 - **Map transport.** Submit maps inline with `write_map(mode="auto")`.
   Inline maps may be up to 100 KB; if one is larger, the tool creates
   its own private draft automatically. Audit sessions do not have a
@@ -194,6 +199,12 @@ meta, skeleton, module_graph, type_contract_surface, conventions,
 pitfalls, validation_surface, operational_surface, security_surface,
 coverage (the gate), open_questions, exploration_log
 ```
+
+`write_map` accepts this complete shape only. For the first checkpoint,
+provide every top-level section: use honest empty arrays, `gap` coverage
+entries, and low-confidence evidence for areas not yet explored. Do not send
+a partial top-level object; use `write_map_delta` only after this first valid
+map exists.
 
 The coverage block is the gate:
 
@@ -264,9 +275,11 @@ Establish the codebase shape. **No sub-agents yet.** Use
 3. Read `README.md` (or top-level `*.md` if no README).
 4. Run `find . -maxdepth 2 -type d -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/.venv/*' -not -path '*/dist/*' -not -path '*/__pycache__/*'` to enumerate top-level dirs.
 
-Persist initial findings via `write_map` (the `meta`,
-`skeleton`, and `documentation` sections can already be
-partially filled).
+Persist initial findings via `write_map` with the complete top-level shape.
+Fill `meta`, `skeleton`, and documentation evidence from the scout pass; keep
+the other sections honest and mark their coverage entries as `gap` until they
+are explored. This write must happen before Phase 1 or any `spawn_explorer`
+call.
 
 ### Phase 1 — Feature Decomposition (soft guidance: 1–2 actions)
 

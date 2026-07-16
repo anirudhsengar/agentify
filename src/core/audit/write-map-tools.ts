@@ -49,7 +49,8 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
         label: "Write Codebase Map",
         description:
             "Persist the 10-dimension codebase map to ./.pi/agentify/codebase_map.json. " +
-            "Schema-enforced via TypeBox. Submit the complete map inline with `mode: 'auto'`; " +
+            "Schema-enforced via TypeBox. Every write, including the first checkpoint, requires the complete top-level map; " +
+            "use honest empty sections and `gap` coverage entries for unexplored areas. Submit the map inline with `mode: 'auto'`; " +
             "the tool safely creates its own draft transport when it exceeds 100KB. " +
             "Use `map_file` only for an already-existing JSON file. The tool reads, " +
             "validates, and writes the canonical map. Gap entries in the coverage block are " +

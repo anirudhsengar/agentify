@@ -60,12 +60,22 @@ async function testLoadSubstitutesPlaceholder(): Promise<void> {
   );
 }
 
+async function testPromptRequiresInitialMapBeforeExplorers(): Promise<void> {
+  const raw = readRawBuilderPrompt();
+  assert.match(
+    raw,
+    /After the four Phase 0 scout\n  reads, write one valid complete map before calling `spawn_explorer`\./,
+    "builder prompt must require a valid initial map before explorer dispatch",
+  );
+}
+
 async function main(): Promise<void> {
   await testSourcePromptHasStateDirPlaceholder();
   await testSourcePromptHasNoHardcodedAgentify();
   await testLoadSubstitutesPlaceholder();
+  await testPromptRequiresInitialMapBeforeExplorers();
   // eslint-disable-next-line no-console
-  console.log("builder-prompt-state-dir: all 3 checks passed");
+  console.log("builder-prompt-state-dir: all 4 checks passed");
 }
 
 await main();
