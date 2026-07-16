@@ -179,7 +179,11 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
     options.ui.status("agentify: starting a fresh run from the existing repository");
   }
   if (repoState.status === "partial") {
-    reportPartialRepo(options, repoState);
+    if (await shouldResumeExistingRepo(options, repoState)) {
+      reportPartialRepo(options, repoState);
+    } else {
+      options.ui.status("agentify: starting a fresh run from the existing repository");
+    }
   }
 
   await runAgentify({

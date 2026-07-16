@@ -358,18 +358,21 @@ async function testRecoversPartialRepo(): Promise<void> {
       saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
       fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
 
-      const ui = new TestUi();
+      const ui = new SelectingUi("resume");
       const runtime = new BrownfieldFakeRuntime();
-      await runAgentifyApp({
+      await withInteractiveStdin(() => runAgentifyApp({
         args: [],
         cwd,
         ui,
         runtime,
+        targets: ["pi"],
         mode: "brownfield",
         githubReadinessOverride: READY_GITHUB,
-      });
+      }));
 
       assert.equal(runtime.sessionCalls, 1);
+      assert.equal(ui.prompts.length, 1);
+      assert.match(ui.prompts[0] ?? "", /incomplete brownfield run/i);
       assert.ok(ui.statuses.some((message) => message.includes("detected incomplete setup; recovering")));
       assert.ok(ui.infos.some((message) => message.includes("previous run ended with partial at 2026-07-04T12:00:00Z")));
       assert.ok(ui.infos.some((message) => message.includes("missing specs/README.md")));
