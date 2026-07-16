@@ -27,6 +27,7 @@ function testSnapshotOwnershipContentAndModes(): void {
   const cwd = tempDir();
   try {
     fs.writeFileSync(path.join(cwd, "AGENTS.md"), "# user owned\n", { mode: 0o600 });
+    fs.writeFileSync(path.join(cwd, ".gitignore"), "*.class\n", { mode: 0o644 });
     fs.mkdirSync(path.join(cwd, "specs"), { recursive: true });
     fs.writeFileSync(
       path.join(cwd, "specs/README.md"),
@@ -44,6 +45,8 @@ function testSnapshotOwnershipContentAndModes(): void {
     assert.equal(snapshot.get("AGENTS.md")?.ownership, "unmanaged");
     assert.equal(snapshot.get("AGENTS.md")?.content.toString("utf8"), "# user owned\n");
     assert.equal(snapshot.get("AGENTS.md")?.mode, 0o600);
+    assert.equal(snapshot.get(".gitignore")?.ownership, "unmanaged");
+    assert.equal(snapshot.get(".gitignore")?.content.toString("utf8"), "*.class\n");
     assert.equal(snapshot.get("specs/README.md")?.ownership, "managed");
     assert.equal(snapshot.get("specs/README.md")?.mode, 0o640);
     assert.equal(snapshot.has(`${SNAPSHOT_STATE_DIR}/codebase_map.json`), false);

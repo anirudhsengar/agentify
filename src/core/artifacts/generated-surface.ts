@@ -1,4 +1,5 @@
 export const GENERATED_SURFACE_PATHS = [
+  ".gitignore",
   "AGENTS.md",
   "CLAUDE.md",
   "CONTEXT.md",
