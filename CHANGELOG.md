@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- The direct TypeBox dependency is upgraded to 1.3.6 while Pi-controlled nested TypeBox copies remain at 1.1.38; schema serialization, validation/error behavior, tool-schema identity, package boundaries, and the Node support policy are unchanged.
 - esbuild is upgraded to 0.28.1 and tsx to 4.23.1 as one build-tooling group; the lockfile deduplicates tsx's nested esbuild/platform tree while preserving the Node 22 ESM bundle, source maps, runtime assets, installed CLI behavior, and 181-file package inventory.
 - TypeScript is upgraded to 6.0.3 with Node-22 declarations 22.20.1; obsolete `baseUrl`, wildcard `paths`, and `ignoreDeprecations` configuration are removed while the Node 22.19.0 runtime floor and ESM/bundler behavior remain unchanged.
 - Audit-schema domain ownership and downward-only dependencies are documented and machine-enforced while preserving the declaration-free façade, schema identity, algorithm separation, and package confinement.
@@ -25,11 +26,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Fixed
 
 - `v0.2.0` was tagged, but npm publication did not complete and no GitHub release was published. The workflow passed `release-artifact/agentify-0.2.0.tgz` as an ambiguous package specification, so npm interpreted it as GitHub shorthand instead of a local tarball path.
-- The publication workflow now resolves exactly one downloaded local `.tgz` file and publishes that explicit path, failing closed when zero or multiple tarballs are present.
+- The publication workflow now resolves exactly one downloaded local `.tgz` file and publishes that explicit path, failing closed when zero or multiple tarballs ar present.
 
 ### Changed
 
-- `0.2.1` contains the complete release contents intended for `0.2.0`, together with the corrected artifact-publication workflow.
+- `0.2.1` contains the complete release contents intended for `0.2.0`, together with the `corrected artifact-publication workflow.
 - The unscoped `agentify` npm name is owned by another publisher, so the official package is now `@anirudhsengar/agentify`; the installed executable remains `agentify`.
 - Release artifact handling now derives the exact tarball filename from the single validated result returned by `npm pack --json` instead of assuming an unscoped filename.
 
@@ -42,7 +43,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Evidence-based lifecycle decisions for webhook, AIW, orchestrator, communications, and Agent Expert, with communications relocation split into a dedicated follow-up issue.
 - An audited runtime-reachability inventory and maintenance guard for standalone scripts.
 - Modernization behavior and runtime-reachability contracts with a reusable CLI, generated-bundle, state-directory, and installed-package parity gate.
-- Typed top-level CLI parsing with process-level regression coverage.
+- Typed Top-level CLI parsing with process-level regression coverage.
 - Recursive test discovery, security regression suites, and installed-package smoke tests.
 - Explicit per-session execution policies for tools, filesystem roots, shell access, and network posture.
 - Transactional provider-scoped state with journals, backups, rollback, migration, and interrupted-run recovery.
