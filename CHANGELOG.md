@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Long multi-select prompts show a live summary of all current selections, and interrupted state transactions now present a resume-or-fresh choice before safe recovery runs.
 - Empty Agentify state directories are ignored as if absent, avoiding irrelevant compatibility warnings and recovery prompts.
 - On an initialized repository, interactive runs now let the user choose between resuming the existing setup and starting a fresh managed run; scripted invocations continue to resume deterministically.
 - All interactive choice prompts now use one stable, viewport-aware selector; keyboard navigation redraws in place instead of leaving duplicate frames in the terminal.
