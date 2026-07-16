@@ -74,6 +74,31 @@ function reportPartialRepo(
   }
 }
 
+async function shouldResumeInitializedRepo(
+  options: RunAgentifyAppOptions,
+  repoState: AgentifyRepoState,
+): Promise<boolean> {
+  // Scripted invocations retain their current deterministic behavior: an
+  // initialized repository is attached rather than prompting or rewriting
+  // generated artifacts. Interactive users can explicitly choose a new run.
+  if (!input.isTTY) return true;
+
+  const choice = await options.ui.promptSelect(
+    `Agentify found a completed ${repoState.mode} run in this repository. What would you like to do?`,
+    [
+      {
+        label: "Resume previous setup — inspect the saved state and GitHub readiness",
+        value: "resume",
+      },
+      {
+        label: "Start a fresh run — regenerate Agentify-managed artifacts",
+        value: "fresh",
+      },
+    ],
+  );
+  return choice !== "fresh";
+}
+
 async function resolveTargets(
   options: RunAgentifyAppOptions,
 ): Promise<{ targets: ReadonlyArray<AgentifyTarget>; additionalAgents: ReadonlyArray<string> }> {
@@ -123,8 +148,11 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
         discovered.relativeDir,
       );
       if (discoveredState.status === "ready") {
-        attachToInitializedRepo(options, discoveredState);
-        return;
+        if (await shouldResumeInitializedRepo(options, discoveredState)) {
+          attachToInitializedRepo(options, discoveredState);
+          return;
+        }
+        options.ui.status("agentify: starting a fresh run from the existing repository");
       }
     }
   }
@@ -144,8 +172,11 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
   );
 
   if (repoState.status === "ready") {
-    attachToInitializedRepo(options, repoState);
-    return;
+    if (await shouldResumeInitializedRepo(options, repoState)) {
+      attachToInitializedRepo(options, repoState);
+      return;
+    }
+    options.ui.status("agentify: starting a fresh run from the existing repository");
   }
   if (repoState.status === "partial") {
     reportPartialRepo(options, repoState);
