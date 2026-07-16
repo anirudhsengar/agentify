@@ -4,6 +4,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { stdin as input } from "node:process";
 import { authPath, defaultConfigDir, saveAgentifyConfig } from "../src/core/agentify-config.ts";
 import { writeProjectState } from "../src/core/project-state.ts";
 import { runAgentifyApp } from "../src/core/agentify-app.ts";
@@ -35,7 +36,7 @@ class TestUi implements AgentifyUi {
     this.errors.push(message);
   }
 
-  async promptSelect(): Promise<string> {
+  async promptSelect(_message: string): Promise<string> {
     throw new Error("promptSelect should not be called in this test");
   }
 
@@ -49,6 +50,19 @@ class TestUi implements AgentifyUi {
 
   async promptSecret(): Promise<string> {
     throw new Error("promptSecret should not be called in this test");
+  }
+}
+
+class SelectingUi extends TestUi {
+  prompts: string[] = [];
+
+  constructor(private readonly selection: "resume" | "fresh") {
+    super();
+  }
+
+  override async promptSelect(message: string): Promise<string> {
+    this.prompts.push(message);
+    return this.selection;
   }
 }
 
@@ -175,6 +189,17 @@ async function withTempHome<T>(fn: (configDir: string) => Promise<T>): Promise<T
   }
 }
 
+async function withInteractiveStdin<T>(fn: () => Promise<T>): Promise<T> {
+  const descriptor = Object.getOwnPropertyDescriptor(input, "isTTY");
+  Object.defineProperty(input, "isTTY", { value: true, configurable: true });
+  try {
+    return await fn();
+  } finally {
+    if (descriptor) Object.defineProperty(input, "isTTY", descriptor);
+    else delete (input as { isTTY?: boolean }).isTTY;
+  }
+}
+
 async function testRejectsLegacySubcommands(): Promise<void> {
   await withTempHome(async () => {
     const cwd = tempDir("agentify-cli-main-subcommands-");
@@ -245,6 +270,61 @@ async function testAttachesToInitializedRepoWithoutRerun(): Promise<void> {
       assert.ok(ui.infos.some((message) => message.includes("last_run=2026-07-05T00:00:00Z")));
       assert.ok(ui.infos.some((message) => message.includes("latest log")));
       assert.ok(ui.infos.some((message) => message.includes("GitHub bootstrap is ready")));
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+}
+
+async function testInitializedRepoOffersResumeOrFreshChoice(): Promise<void> {
+  await withTempHome(async (configDir) => {
+    const cwd = tempDir("agentify-cli-main-resume-choice-");
+    try {
+      seedReadyRepo(cwd, configDir);
+      const ui = new SelectingUi("resume");
+      const runtime = new BrownfieldFakeRuntime();
+
+      await withInteractiveStdin(() => runAgentifyApp({
+        args: [],
+        cwd,
+        ui,
+        runtime,
+        targets: ["pi"],
+        githubReadinessOverride: READY_GITHUB,
+      }));
+
+      assert.equal(runtime.sessionCalls, 0);
+      assert.equal(ui.prompts.length, 1);
+      assert.match(ui.prompts[0] ?? "", /completed brownfield run/i);
+      assert.ok(ui.statuses.some((message) => message.includes("attached to initialized brownfield repo")));
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+}
+
+async function testInitializedRepoCanStartFreshRun(): Promise<void> {
+  await withTempHome(async (configDir) => {
+    const cwd = tempDir("agentify-cli-main-fresh-choice-");
+    try {
+      seedReadyRepo(cwd, configDir);
+      saveAgentifyConfig(configDir, { provider: "openai", thinkingLevel: "high" });
+      fs.writeFileSync(authPath(configDir), JSON.stringify({ openai: { type: "api_key", key: "sk-test" } }));
+      const ui = new SelectingUi("fresh");
+      const runtime = new BrownfieldFakeRuntime();
+
+      await withInteractiveStdin(() => runAgentifyApp({
+        args: [],
+        cwd,
+        ui,
+        runtime,
+        targets: ["pi"],
+        mode: "brownfield",
+        githubReadinessOverride: READY_GITHUB,
+      }));
+
+      assert.equal(runtime.sessionCalls, 1);
+      assert.ok(ui.statuses.some((message) => message.includes("starting a fresh run")));
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
     }
@@ -355,6 +435,8 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "rejectsLegacySubcommands", fn: testRejectsLegacySubcommands },
   { name: "runsThroughSingleEntrypoint", fn: testRunsThroughSingleEntrypoint },
   { name: "attachesToInitializedRepoWithoutRerun", fn: testAttachesToInitializedRepoWithoutRerun },
+  { name: "initializedRepoOffersResumeOrFreshChoice", fn: testInitializedRepoOffersResumeOrFreshChoice },
+  { name: "initializedRepoCanStartFreshRun", fn: testInitializedRepoCanStartFreshRun },
   { name: "recoversPartialRepo", fn: testRecoversPartialRepo },
   { name: "binPrintsConciseErrors", fn: testBinPrintsConciseErrors },
   { name: "binDispatchesLoginAndExitsZero", fn: testBinDispatchesLoginAndExitsZero },

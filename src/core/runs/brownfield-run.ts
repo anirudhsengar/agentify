@@ -565,7 +565,12 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
           } else {
             const repoState = inspectAgentifyRepoState(options.cwd, defaultConfigDir(), stateDir);
             reportedStatus = repoState.status === "ready" ? "success" : "partial";
-            removeStaleSkills(options.cwd, previousManifest, shippedSkills, options.ui.info);
+            removeStaleSkills(
+              options.cwd,
+              previousManifest,
+              shippedSkills,
+              (message) => options.ui.info(message),
+            );
             options.ui.info(
               `agentify: audit complete. ${repoState.featureAgentCount} feature agent(s), ` +
                 `${exportResults.length} harness export(s), ${scaffoldInstalled} scaffold file(s) installed, ` +
