@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - All interactive choice prompts now use one stable, viewport-aware selector; keyboard navigation redraws in place instead of leaving duplicate frames in the terminal.
+- Long choice lists show at most 30 entries at once and explicitly indicate when additional options are available below.
 - Completed selectors now collapse to a concise answered line. Audit and greenfield sessions report their current activity and cumulative provider-reported spend instead of opaque turn-only updates.
 - Brownfield audit map guidance now directs read-only model sessions to submit inline maps with `write_map(mode="auto")`; automatic private draft transport handles oversized maps without suggesting an unavailable general-purpose write tool.
 - The paired Pi runtime packages are upgraded atomically to 0.80.7, retaining Node 22.19.0 support, Pi-controlled TypeBox 1.1.38 copies, Agentify-owned authentication and execution policy, model-visible tool contracts, and the existing Smithy integrity override while accepting upstream provider, dynamic-tool, session-affinity, and Bedrock fixes.
