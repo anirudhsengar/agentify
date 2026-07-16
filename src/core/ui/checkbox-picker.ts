@@ -128,9 +128,7 @@ function buildFrame(
     const isCursor = idx === cursorIndex;
     const isSelected = selected.has(choice.value);
     const cursorMark = isCursor ? "▸ " : "  ";
-    const checkMark = selectionMode === "multiple"
-      ? (isSelected ? "[x]" : "[ ]")
-      : (isSelected ? "●" : "○");
+    const checkMark = isSelected ? "[x]" : "[ ]";
     const label = truncate(choice.label, labelWidth);
     const hint = choice.hint
       ? `  ${truncate(choice.hint, Math.max(0, hintBudget - 2))}`
@@ -182,6 +180,32 @@ function redraw(rows: ReadonlyArray<FrameRow>, moveUpBy: number): void {
     if (i < rows.length - 1) output.write("\r\n");
   }
   // Cursor is now at column 0 of the last row.
+}
+
+/** Replace the interactive frame with one compact, answered prompt line. */
+function collapseFrame(
+  message: string,
+  choices: ReadonlyArray<CheckboxChoice>,
+  selected: ReadonlySet<string>,
+  frameHeight: number,
+): void {
+  const labels = choices
+    .filter((choice) => selected.has(choice.value))
+    .map((choice) => choice.label);
+  const answer = labels.length === 0
+    ? "none"
+    : labels.length === 1
+      ? labels[0]
+      : `${labels[0]} +${labels.length - 1} more`;
+
+  output.write(MOVE_UP(frameHeight - 1));
+  output.write("\r");
+  for (let i = 0; i < frameHeight; i += 1) {
+    output.write(CLEAR_LINE);
+    if (i < frameHeight - 1) output.write("\r\n");
+  }
+  output.write(MOVE_UP(frameHeight - 1));
+  output.write(`\r${message} ${answer}\n`);
 }
 
 /** Read a single raw keypress and return the resolved action. */
@@ -352,8 +376,7 @@ export async function runCheckboxPicker(
     input.pause();
   }
 
-  // Move cursor below the frame so the next output starts on a fresh line.
-  output.write("\n");
+  collapseFrame(message, choices, selected, frameHeight);
 
   // Return selected values in `choices` order (stable).
   return choices.map((c) => c.value).filter((v) => selected.has(v));

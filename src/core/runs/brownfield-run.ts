@@ -211,6 +211,23 @@ function extractWriteMapResult(result: WriteMapResult | undefined): {
   };
 }
 
+function auditActivityForTool(toolName: string): string {
+  switch (toolName) {
+    case "read":
+    case "grep":
+    case "find":
+    case "ls":
+      return "Inspecting repository files and source patterns…";
+    case "write_map":
+    case "write_map_delta":
+      return "Recording the codebase map and evidence…";
+    case "spawn_explorer":
+      return "Launching a focused explorer for deeper analysis…";
+    default:
+      return "Reviewing the codebase and connecting findings…";
+  }
+}
+
 function readFinalAuditState(cwd: string, stateDir: string): FinalAuditState {
   const agentsMdPath = path.join(cwd, AGENTS_MD_PATH);
   const agentsMdExists = fs.existsSync(agentsMdPath);
@@ -331,6 +348,7 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
     setAgentifySessionActive(sessionId, true);
     const spinner: SpinnerHandle = startSpinner("starting audit…");
     let turnCount = 0;
+    let costUsd = 0;
     let spinnerStopped = false;
     let runtimeResult: Awaited<ReturnType<typeof options.runtime.runSession>>;
     try {
@@ -361,13 +379,23 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
           log.sessionEvent({ pi_event_type: piType, event });
           if (piType === "message_start" && (event as { message?: { role?: string } }).message?.role === "user") {
             log.recordTurnStart();
+          } else if (piType === "message_start") {
+            spinner.update("Reviewing findings and planning the next analysis step…");
           } else if (piType === "message_end") {
             log.incrementTurns();
             log.recordTurnEnd(extractUsage(event));
             const usage = extractUsage(event);
             turnCount += 1;
-            const cost = usage?.cost?.total ?? 0;
-            spinner.update(`turn ${turnCount} • $${cost.toFixed(4)}`);
+            const cost = usage?.cost?.total;
+            if (typeof cost === "number") costUsd += cost;
+            spinner.update(
+              `Analysis pass ${turnCount} complete • estimated spend $${costUsd.toFixed(4)}`,
+            );
+          } else if (piType === "tool_execution_start") {
+            const toolName = (event as { toolName?: string; tool_name?: string }).toolName
+              ?? (event as { tool_name?: string }).tool_name
+              ?? "unknown";
+            spinner.update(auditActivityForTool(toolName));
           } else if (piType === "tool_execution_end") {
             const toolEvent = event as { toolName?: string; result?: WriteMapResult };
             if (toolEvent.toolName === "write_map") {
@@ -383,7 +411,7 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
                   },
                   gap_warning: mapResult.gap_warning,
                 });
-                spinner.update("coverage map written");
+                spinner.update("Codebase map captured — checking coverage and gaps…");
               }
             } else if (toolEvent.toolName === "spawn_explorer") {
               log.subagentSpawned({
@@ -391,10 +419,12 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
                 details: (toolEvent.result as { details?: unknown } | undefined)?.details ?? null,
                 is_error: toolEvent.result?.isError ?? false,
               });
-              spinner.update("dispatching explorer sub-agent");
+              spinner.update("Explorer completed — incorporating its findings…");
             }
           } else if (piType === "agent_end" && !spinnerStopped) {
-            spinner.update(`audit complete: ${turnCount} turn(s)`);
+            spinner.update(
+              `Audit analysis complete • ${turnCount} pass(es) • estimated spend $${costUsd.toFixed(4)}`,
+            );
           }
         },
       });
