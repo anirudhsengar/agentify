@@ -78,16 +78,21 @@ async function shouldResumeInitializedRepo(
   options: RunAgentifyAppOptions,
   repoState: AgentifyRepoState,
 ): Promise<boolean> {
-  // Scripted invocations retain their current deterministic behavior: an
-  // initialized repository is attached rather than prompting or rewriting
-  // generated artifacts. Interactive users can explicitly choose a new run.
+  // Scripted invocations retain their current deterministic behavior.
+  // Interactive users can explicitly choose whether to reuse or replace
+  // completed or incomplete Agentify state.
   if (!input.isTTY) return true;
 
+  const isPartial = repoState.status === "partial";
   const choice = await options.ui.promptSelect(
-    `Agentify found a completed ${repoState.mode} run in this repository. What would you like to do?`,
+    isPartial
+      ? `Agentify found an incomplete ${repoState.mode} run in this repository. What would you like to do?`
+      : `Agentify found a completed ${repoState.mode} run in this repository. What would you like to do?`,
     [
       {
-        label: "Resume previous setup — inspect the saved state and GitHub readiness",
+        label: isPartial
+          ? "Resume recovery — continue from the existing Agentify state"
+          : "Resume previous setup — inspect the saved state and GitHub readiness",
         value: "resume",
       },
       {
@@ -179,7 +184,7 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
     options.ui.status("agentify: starting a fresh run from the existing repository");
   }
   if (repoState.status === "partial") {
-    if (await shouldResumeExistingRepo(options, repoState)) {
+    if (await shouldResumeInitializedRepo(options, repoState)) {
       reportPartialRepo(options, repoState);
     } else {
       options.ui.status("agentify: starting a fresh run from the existing repository");

@@ -291,14 +291,17 @@ export function inspectStateTree(cwd: string, requestedRelativeDir: string): Sta
     .digest("hex");
   const evidence = [...ownershipEvidence].sort();
   if (entryCount === 0) {
+    // An empty directory carries no recoverable Agentify state or ownership
+    // evidence. Treat it exactly like an absent path so a leftover directory
+    // never triggers migration guidance, a recovery prompt, or a warning.
     return {
       relativeDir,
       absoluteDir,
-      status: "partial",
-      detail: "state directory is empty",
-      fingerprint,
-      ownershipEvidence: evidence,
-      manifestStateDir,
+      status: "absent",
+      detail: null,
+      fingerprint: null,
+      ownershipEvidence: [],
+      manifestStateDir: null,
     };
   }
   if (evidence.length === 0) {
