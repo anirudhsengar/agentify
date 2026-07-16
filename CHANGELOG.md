@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Before an interactive run, Agentify refreshes the tracked remote branch and offers a fast-forward pull when the local branch is behind.
 - Long multi-select prompts show a live summary of all current selections, and interrupted state transactions now present a resume-or-fresh choice before safe recovery runs.
 - Empty Agentify state directories are ignored as if absent, avoiding irrelevant compatibility warnings and recovery prompts.
 - On an initialized repository, interactive runs now let the user choose between resuming the existing setup and starting a fresh managed run; scripted invocations continue to resume deterministically.
@@ -23,6 +24,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Audit-map complete/partial composition and write-map parameter schemas now have canonical owners under `src/core/audit/schema/`; the stable `schema.ts` façade is declaration-free and preserves object identity.
 - Supported runtime code now owns state exclusively through explicit provider-scoped contexts, write-map factories, renderer contexts, and state-directory-aware manifest and greenfield APIs.
 - Phase B retained-source migration, transaction recovery, deterministic conflict handling, provider switching, and Pi canonical `.pi/agentify` behavior remain unchanged.
+
+### Fixed
+
+- Existing user-owned `.gitignore` files are now preserved during scaffold application instead of being replaced by Agentify's runtime ignore rules.
 
 ### Removed
 

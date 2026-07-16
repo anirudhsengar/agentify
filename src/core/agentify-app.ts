@@ -11,6 +11,7 @@ import {
   resolveCanonicalStateDir,
 } from "./state-dir.ts";
 import { listInterruptedStateTransactions } from "./state-transaction.ts";
+import { inspectGitSyncStatus, pullLatestBranch } from "./git-sync.ts";
 import type {
   AgentifyTarget,
   RunAgentifyOptions,
@@ -126,6 +127,28 @@ async function chooseInterruptedTransactionAction(
   ) as Promise<ExistingStateChoice>;
 }
 
+async function offerPullLatestBranch(options: RunAgentifyAppOptions): Promise<void> {
+  if (!input.isTTY) return;
+  const sync = inspectGitSyncStatus(options.cwd);
+  if (sync.kind !== "behind") return;
+  const choice = await options.ui.promptSelect(
+    `Your branch is ${sync.behind} commit${sync.behind === 1 ? "" : "s"} behind ${sync.upstream}. Pull before Agentify runs?`,
+    [
+      { label: "Pull latest changes (fast-forward only)", value: "pull" },
+      { label: "Continue without pulling", value: "skip" },
+    ],
+  );
+  if (choice !== "pull") {
+    options.ui.info("agentify: continuing on the current branch without pulling remote changes.");
+    return;
+  }
+  const pulled = pullLatestBranch(options.cwd);
+  if (!pulled.ok) {
+    throw new Error(`could not fast-forward the current branch: ${pulled.message}`);
+  }
+  options.ui.status("agentify: pulled the latest remote changes");
+}
+
 async function resolveTargets(
   options: RunAgentifyAppOptions,
 ): Promise<{ targets: ReadonlyArray<AgentifyTarget>; additionalAgents: ReadonlyArray<string> }> {
@@ -162,6 +185,7 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
     );
   }
 
+  await offerPullLatestBranch(options);
   const configDir = defaultConfigDir();
   const resolved = await resolveTargets(options);
   const interruptedTransactionChoice = await chooseInterruptedTransactionAction(

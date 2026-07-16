@@ -90,6 +90,7 @@ test("reserved-agent filtering has one exact convention", () => {
 
 test("generated-surface inventory and normalization preserve order", () => {
   assert.deepEqual(GENERATED_SURFACE_PATHS, [
+    ".gitignore",
     "AGENTS.md",
     "CLAUDE.md",
     "CONTEXT.md",
