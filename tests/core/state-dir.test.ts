@@ -91,8 +91,13 @@ async function testResolveCanonicalPrefersExistingNewDir(): Promise<void> {
     assert.equal(fresh.layout.fallback, false);
     assert.equal(fresh.absoluteDir, path.join(cwd, ".claude/agentify"));
 
-    fs.mkdirSync(path.join(cwd, ".claude", "agentify"), { recursive: true });
-    fs.mkdirSync(path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR), { recursive: true });
+    seedLegacyState(cwd);
+    const canonicalMap = path.join(cwd, ".claude", "agentify", "codebase_map.json");
+    fs.mkdirSync(path.dirname(canonicalMap), { recursive: true });
+    fs.copyFileSync(
+      path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, "codebase_map.json"),
+      canonicalMap,
+    );
     const both = resolveCanonicalStateDir(cwd, ["claude"]);
     assert.equal(both.absoluteDir, path.join(cwd, ".claude/agentify"));
     assert.equal(both.layout.kind, "dual_identical");

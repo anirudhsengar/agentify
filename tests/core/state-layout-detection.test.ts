@@ -111,11 +111,12 @@ withRepo("dual-divergent", (cwd) => {
   assert.equal(fs.readFileSync(sentinel, "utf-8"), "unchanged\n");
 });
 
-withRepo("partial", (cwd) => {
+withRepo("empty-state-directory-is-ignored", (cwd) => {
   fs.mkdirSync(path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR), { recursive: true });
   const layout = classifyStateLayout(cwd, ".claude/agentify");
-  assert.equal(layout.kind, "partial");
-  assert.equal(layout.fallback, true);
+  assert.equal(layout.kind, "empty");
+  assert.equal(layout.fallback, false);
+  assert.equal(layout.legacy.status, "absent");
 });
 
 withRepo("user-owned", (cwd) => {
