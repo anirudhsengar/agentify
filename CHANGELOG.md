@@ -8,6 +8,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- GitHub Actions automation is now an explicit opt-in: interactive runs ask before installation or refresh, and scripted runs require `--github-runtime`. Default audits retain codebase intelligence and selected harness exports without adding workflows, secrets guidance, or Agentify implementation tests to the target repository.
+- Revert snapshots now retain only Agentify-managed files that a run can replace; user-owned files remain untouched and are no longer copied into repository state.
+
+### Fixed
+
+- Scaffold installation now uses syntax-valid markers for JSON and JavaScript/TypeScript assets, preserves source modes, invokes shell helpers through Bash, omits empty extension placeholders, and uses the selected canonical state directory in generated expert and prompt references.
+
+- Generated runtime validation no longer depends on a copied root `tests/` tree.
+
+- Rendered output rejects stale bootstrap claims, unsupported perfect-coverage conclusions, legacy path leaks, and malformed JSON before applying a bundle.
+
+- Existing user-owned `.gitignore` files are now preserved during scaffold application instead of being replaced by Agentify's runtime ignore rules.
+
+### Changed
+
 - Agentify now writes its generated agents, prompts, workflows, extensions, skills, experts, and conditional-docs surface under the selected harness's state directory. Safe relative `.pi/*` compatibility symlinks preserve existing runtime references without duplicating that surface.
 - Before an interactive run, Agentify refreshes the tracked remote branch and offers a fast-forward pull when the local branch is behind.
 - Long multi-select prompts show a live summary of all current selections, and interrupted state transactions now present a resume-or-fresh choice before safe recovery runs.
@@ -25,10 +40,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Audit-map complete/partial composition and write-map parameter schemas now have canonical owners under `src/core/audit/schema/`; the stable `schema.ts` façade is declaration-free and preserves object identity.
 - Supported runtime code now owns state exclusively through explicit provider-scoped contexts, write-map factories, renderer contexts, and state-directory-aware manifest and greenfield APIs.
 - Phase B retained-source migration, transaction recovery, deterministic conflict handling, provider switching, and Pi canonical `.pi/agentify` behavior remain unchanged.
-
-### Fixed
-
-- Existing user-owned `.gitignore` files are now preserved during scaffold application instead of being replaced by Agentify's runtime ignore rules.
 
 ### Removed
 

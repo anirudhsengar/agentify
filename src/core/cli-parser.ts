@@ -13,6 +13,7 @@ export type ParsedCliCommand =
       mode?: CliMode;
       targetsOverride?: readonly AgentId[];
       migrateState?: boolean;
+      githubRuntime?: boolean;
     };
 
 const SUBCOMMAND_SET = new Set<string>(SUBCOMMAND_NAMES);
@@ -27,7 +28,7 @@ function countLongOption(argv: readonly string[], name: string): number {
 }
 
 function assertNoDuplicateSingletonOptions(argv: readonly string[]): void {
-  for (const name of ["mode", "targets", "migrate-state"] as const) {
+  for (const name of ["mode", "targets", "migrate-state", "github-runtime"] as const) {
     if (countLongOption(argv, name) > 1) {
       throw new Error(`--${name} may only be specified once.`);
     }
@@ -98,6 +99,7 @@ export function parseCliArgs(argv: readonly string[]): ParsedCliCommand {
           mode: { type: "string" },
           targets: { type: "string" },
           "migrate-state": { type: "boolean" },
+          "github-runtime": { type: "boolean" },
         },
       });
     } catch (error) {
@@ -125,6 +127,7 @@ export function parseCliArgs(argv: readonly string[]): ParsedCliCommand {
   const targetsValue = parsed.values.targets;
   const targetsOverride = targetsValue === undefined ? undefined : parseTargets(targetsValue);
   const migrateState = parsed.values["migrate-state"] === true;
+  const githubRuntime = parsed.values["github-runtime"] === true;
   if (migrateState && targetsOverride === undefined) {
     throw new Error("--migrate-state requires an explicit --targets selection.");
   }
@@ -134,5 +137,6 @@ export function parseCliArgs(argv: readonly string[]): ParsedCliCommand {
     ...(mode === undefined ? {} : { mode }),
     ...(targetsOverride === undefined ? {} : { targetsOverride }),
     ...(migrateState ? { migrateState: true } : {}),
+    ...(githubRuntime ? { githubRuntime: true } : {}),
   };
 }

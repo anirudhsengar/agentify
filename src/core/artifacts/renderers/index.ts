@@ -77,5 +77,28 @@ export function renderBrownfieldArtifacts(
     seen.add(artifact.relativePath);
   }
 
+  for (const artifact of artifacts) {
+    if (/currently absent|to be generated/i.test(artifact.content)) {
+      errors.push(`stale bootstrap wording in rendered artifact: ${artifact.relativePath}`);
+    }
+    if (/\*\*Overall:\s*10\/10/i.test(artifact.content)) {
+      errors.push(`unsupported coverage conclusion in rendered artifact: ${artifact.relativePath}`);
+    }
+    if (context.stateDir !== ".pi" && /\.pi\/(?:prompts|conditional_docs|agents|workflows|extensions)\b/.test(artifact.content)) {
+      errors.push(`legacy .pi path leaked into rendered artifact: ${artifact.relativePath}`);
+    }
+    if (artifact.relativePath.endsWith(".json")) {
+      try {
+        JSON.parse(artifact.content);
+      } catch {
+        errors.push(`invalid JSON rendered artifact: ${artifact.relativePath}`);
+      }
+    }
+    if ((artifact.relativePath.endsWith(".js") || artifact.relativePath.endsWith(".mjs") || artifact.relativePath.endsWith(".ts"))
+      && artifact.content.startsWith("# agentify:managed")) {
+      errors.push(`invalid hash marker for source artifact: ${artifact.relativePath}`);
+    }
+  }
+
   return { artifacts, errors };
 }

@@ -119,12 +119,12 @@ export async function runGreenfield(context: RunContext): Promise<void> {
     const formation = readGreenfieldFormationAt(options.cwd, stateDir);
     if (!formation) {
       options.ui.error(
-        "agentify: greenfield session did not submit structured artifacts with write_greenfield_artifacts; scaffold was not installed.",
+        "agentify: greenfield session did not submit structured artifacts with write_greenfield_artifacts.",
       );
     } else {
       const renderResult = renderGreenfieldArtifacts(formation);
       if (renderResult.errors.length > 0) {
-        options.ui.error("agentify: greenfield structured artifacts failed deterministic rendering; scaffold was not installed.");
+          options.ui.error("agentify: greenfield structured artifacts failed deterministic rendering.");
         for (const reason of renderResult.errors.slice(0, 8)) {
           options.ui.error(`agentify:   - ${reason}`);
         }
@@ -137,18 +137,20 @@ export async function runGreenfield(context: RunContext): Promise<void> {
           const stagedValidation = validateGreenfieldArtifacts(stagingRoot);
           if (!stagedValidation.ok) {
             options.ui.error(
-              "agentify: greenfield artifacts did not pass the substance gate; scaffold was not installed.",
+              "agentify: greenfield artifacts did not pass the substance gate.",
             );
             for (const reason of stagedValidation.reasons.slice(0, 8)) {
               options.ui.error(`agentify:   - ${reason}`);
             }
             validationReported = true;
           } else {
-            const scaffoldWrites = installScaffoldRuntime({
-              cwd: stagingRoot,
-              packageRoot: packageRoot(),
-            });
-            addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata, "greenfield", stateDir);
+            if (options.githubRuntime) {
+              const scaffoldWrites = installScaffoldRuntime({
+                cwd: stagingRoot,
+                packageRoot: packageRoot(),
+              });
+              addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata, "greenfield", stateDir);
+            }
             const runId = crypto.randomUUID();
             const previousManifest = readManifestAt(options.cwd, stateDir);
             persistRunArtifacts({
@@ -198,7 +200,7 @@ export async function runGreenfield(context: RunContext): Promise<void> {
               artifactsValid = greenfieldState.artifact_validation.ok;
               if (!artifactsValid) {
                 options.ui.error(
-                  "agentify: greenfield artifacts did not pass the substance gate after apply; scaffold readiness was blocked.",
+                  "agentify: greenfield artifacts did not pass the substance gate after apply.",
                 );
                 for (const reason of greenfieldState.artifact_validation.reasons.slice(0, 8)) {
                   options.ui.error(`agentify:   - ${reason}`);
@@ -231,14 +233,18 @@ export async function runGreenfield(context: RunContext): Promise<void> {
     ? ")"
     : artifactsValid
       ? `, ${scaffoldInstalled} scaffold file(s) installed, ${scaffoldConflicts} conflict(s))`
-      : ", scaffold not installed: artifact substance gate failed)";
+      : ", artifact substance gate failed)";
   options.ui.info(
     `agentify: greenfield session complete (${result.turns} turn(s)` +
       `${result.costUsd === null ? "" : `, $${result.costUsd.toFixed(4)}`}` +
       `${scaffoldSummary}.`,
   );
   if (!result.aborted && artifactsValid) {
-    reportGitHubReadiness(options);
+    if (options.githubRuntime) {
+      reportGitHubReadiness(options);
+    } else {
+      options.ui.info("agentify: GitHub runtime not installed. Re-run with --github-runtime when you want GitHub Actions automation.");
+    }
     const repoState = inspectAgentifyRepoState(options.cwd, defaultConfigDir(), stateDir);
     persistProjectState(options, {
       projectKind: "greenfield",

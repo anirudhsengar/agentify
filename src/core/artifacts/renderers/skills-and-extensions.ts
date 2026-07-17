@@ -177,6 +177,7 @@ export function renderExtensionCandidateArtifacts(
 ): RenderedArtifact[] {
   const artifacts: RenderedArtifact[] = [];
   for (const extension of intents?.extension_candidates ?? []) {
+    if (extension.name === "no-candidate" || extension.body.trim().toLowerCase() === "none") continue;
     if (!isKebabName(extension.name)) {
       errors.push(`invalid extension candidate name: ${extension.name}`);
       continue;

@@ -24,7 +24,7 @@ resolve_base() {
 base=$(resolve_base)
 repo_root=$(pwd)
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-state_dir=$("$script_dir/resolve-state-dir.sh" "$repo_root")
+state_dir=$(bash "$script_dir/resolve-state-dir.sh" "$repo_root")
 
 changed_paths() {
   {

@@ -15,4 +15,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run repository contract tests
-        run: bash tests/run.sh
+        run: bash .github/scripts/validate-repository.sh

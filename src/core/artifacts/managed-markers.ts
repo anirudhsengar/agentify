@@ -2,11 +2,13 @@ import { normalizeArtifactPath } from "./generated-surface.ts";
 
 export const MARKDOWN_MANAGED_MARKER = "<!-- agentify:managed -->";
 export const TOML_MANAGED_MARKER = "# agentify:managed";
+export const SLASH_MANAGED_MARKER = "// agentify:managed";
 export const SHA256_MANAGED_MARKER = "sha256";
 
 export const AGENTIFY_MANAGED_MARKERS = {
   markdown: MARKDOWN_MANAGED_MARKER,
   toml: TOML_MANAGED_MARKER,
+  slash: SLASH_MANAGED_MARKER,
 } as const;
 
 /** Insert the managed marker after YAML frontmatter when present. */
@@ -39,5 +41,8 @@ export function markerForArtifactPath(relativePath: string): string {
   const normalized = normalizeArtifactPath(relativePath);
   if (normalized.endsWith(".md")) return MARKDOWN_MANAGED_MARKER;
   if (normalized.endsWith(".json")) return SHA256_MANAGED_MARKER;
+  if (normalized.endsWith(".js") || normalized.endsWith(".mjs") || normalized.endsWith(".cjs") || normalized.endsWith(".ts")) {
+    return SLASH_MANAGED_MARKER;
+  }
   return TOML_MANAGED_MARKER;
 }

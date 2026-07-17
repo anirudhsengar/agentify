@@ -371,13 +371,13 @@ async function testRecoversPartialRepo(): Promise<void> {
       }));
 
       assert.equal(runtime.sessionCalls, 1);
-      assert.equal(ui.prompts.length, 1);
+      assert.equal(ui.prompts.length, 2);
       assert.match(ui.prompts[0] ?? "", /incomplete brownfield run/i);
       assert.ok(ui.statuses.some((message) => message.includes("detected incomplete setup; recovering")));
       assert.ok(ui.infos.some((message) => message.includes("previous run ended with partial at 2026-07-04T12:00:00Z")));
       assert.ok(ui.infos.some((message) => message.includes("missing specs/README.md")));
       assert.ok(fs.existsSync(path.join(cwd, "specs", "README.md")));
-      assert.ok(fs.existsSync(path.join(cwd, "SETUP.md")));
+      assert.ok(!fs.existsSync(path.join(cwd, "SETUP.md")));
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
     }

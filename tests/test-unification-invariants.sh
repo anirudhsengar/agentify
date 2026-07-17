@@ -113,7 +113,7 @@ for f in \
   scaffold/.github/scripts/verify-implementation-commits.sh \
   scaffold/.github/scripts/verify-routing-evidence.sh \
   scaffold/.github/scripts/validate-repository.sh \
-  scaffold/SETUP.md scaffold/.gitignore scaffold/tests/run.sh; do
+  scaffold/SETUP.md scaffold/tests/run.sh; do
   [ -f "$f" ] || fail "scaffold payload missing: $f"
 done
 

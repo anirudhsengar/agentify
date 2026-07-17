@@ -71,7 +71,11 @@ function renderExpertiseYaml(expert: ExpertDomainIntent): string {
   ].join("\n");
 }
 
-function renderExpertQuestionPrompt(expert: ExpertDomainIntent): string {
+function expertisePath(expert: ExpertDomainIntent, context: RenderContext): string {
+  return `${context.stateDir}/prompts/experts/${expert.domain}/expertise.yaml`;
+}
+
+function renderExpertQuestionPrompt(expert: ExpertDomainIntent, context: RenderContext): string {
   return [
     "---",
     `description: ${expert.domain} expert - answer questions about ${expert.domain}.`,
@@ -80,7 +84,7 @@ function renderExpertQuestionPrompt(expert: ExpertDomainIntent): string {
     "",
     `# ${expert.domain} Expert Question`,
     "",
-    `Read .pi/prompts/experts/${expert.domain}/expertise.yaml first.`,
+    `Read ${expertisePath(expert, context)} first.`,
     "Answer the user's question from that expertise and cite repository file:line references when available.",
     "If the expertise is stale or insufficient, say what must be re-read before acting.",
     "",
@@ -91,7 +95,7 @@ function renderExpertQuestionPrompt(expert: ExpertDomainIntent): string {
   ].join("\n");
 }
 
-function renderExpertSelfImprovePrompt(expert: ExpertDomainIntent): string {
+function renderExpertSelfImprovePrompt(expert: ExpertDomainIntent, context: RenderContext): string {
   return [
     "---",
     `description: ${expert.domain} expert - refresh expertise.yaml after code changes.`,
@@ -99,13 +103,15 @@ function renderExpertSelfImprovePrompt(expert: ExpertDomainIntent): string {
     "",
     `# ${expert.domain} Expert Self-Improve`,
     "",
-    `Update .pi/prompts/experts/${expert.domain}/expertise.yaml from the current repository state.`,
+    `Update ${expertisePath(expert, context)} from the current repository state.`,
     "Preserve stable knowledge, remove stale claims, add newly discovered patterns and pitfalls, and update last_updated to today's ISO timestamp.",
     "Only edit this expert directory unless explicitly asked to change product code.",
     "",
     "Primary paths:",
     "",
-    ...expert.primary_paths.map((pathName) => `- ${pathName}`),
+    ...(expert.primary_paths.length > 0
+      ? expert.primary_paths.map((pathName) => `- ${pathName}`)
+      : ["- Derive the relevant paths from the expertise key files before editing."]),
     "",
     "Validation:",
     "",
@@ -123,7 +129,7 @@ function expertKnowledgeMarkdown(expert: ExpertDomainIntent): string[] {
     ...(
       expert.primary_paths.length > 0
         ? ["- Primary paths:", ...expert.primary_paths.map((pathName) => `  - \`${pathName}\``)]
-        : ["- Primary paths: none declared; infer from touched paths and domain name."]
+        : []
     ),
     ...(
       expert.entry_points.length > 0
@@ -182,7 +188,7 @@ function expertKnowledgeMarkdown(expert: ExpertDomainIntent): string[] {
   ];
 }
 
-function renderExpertPlanPrompt(expert: ExpertDomainIntent): string {
+function renderExpertPlanPrompt(expert: ExpertDomainIntent, context: RenderContext): string {
   return [
     "---",
     `description: ${expert.domain} expert - plan work using domain expertise.`,
@@ -191,7 +197,7 @@ function renderExpertPlanPrompt(expert: ExpertDomainIntent): string {
     "",
     `# ${expert.domain} Expert Plan`,
     "",
-    `Read .pi/prompts/experts/${expert.domain}/expertise.yaml and plan the requested task.`,
+    `Read ${expertisePath(expert, context)} and plan the requested task.`,
     "Do not edit files in this mode.",
     "",
     ...expertKnowledgeMarkdown(expert),
@@ -209,7 +215,7 @@ function renderExpertPlanPrompt(expert: ExpertDomainIntent): string {
   ].join("\n");
 }
 
-function renderExpertPlanBuildImprovePrompt(expert: ExpertDomainIntent): string {
+function renderExpertPlanBuildImprovePrompt(expert: ExpertDomainIntent, context: RenderContext): string {
   return [
     "---",
     `description: ${expert.domain} expert - plan, build, validate, then refresh expertise.`,
@@ -218,7 +224,7 @@ function renderExpertPlanBuildImprovePrompt(expert: ExpertDomainIntent): string 
     "",
     `# ${expert.domain} Expert Plan Build Improve`,
     "",
-    `Use .pi/prompts/experts/${expert.domain}/expertise.yaml before planning or editing.`,
+    `Use ${expertisePath(expert, context)} before planning or editing.`,
     "Before editing, produce the same risk-aware plan required by plan.md and apply these expert constraints to the implementation.",
     "Implement the task at the smallest safe scope, run the relevant validation, then update this expert's expertise.yaml if the work changed durable domain knowledge.",
     "",
@@ -228,7 +234,7 @@ function renderExpertPlanBuildImprovePrompt(expert: ExpertDomainIntent): string 
     "- Plan against the key files, key types, patterns, pitfalls, conventions, and validation above.",
     "- Edit only the smallest necessary domain surface.",
     `- Run \`${expert.test_command ?? "the relevant repository validation from AGENTS.md"}\`.`,
-    `- If durable knowledge changes, update \`.pi/prompts/experts/${expert.domain}/expertise.yaml\` before finishing.`,
+    `- If durable knowledge changes, update \`${expertisePath(expert, context)}\` before finishing.`,
     "",
     "$ARGUMENTS",
     "",
@@ -275,28 +281,28 @@ function renderExpertDomainArtifacts(expert: ExpertDomainIntent, context: Render
       kind: "expert",
       required: false,
       source: "expert-domain-renderer",
-      body: renderExpertQuestionPrompt(expert),
+      body: renderExpertQuestionPrompt(expert, context),
     }),
     markdownArtifact({
       relativePath: `${basePath}/self-improve.md`,
       kind: "expert",
       required: false,
       source: "expert-domain-renderer",
-      body: renderExpertSelfImprovePrompt(expert),
+      body: renderExpertSelfImprovePrompt(expert, context),
     }),
     markdownArtifact({
       relativePath: `${basePath}/plan.md`,
       kind: "expert",
       required: false,
       source: "expert-domain-renderer",
-      body: renderExpertPlanPrompt(expert),
+      body: renderExpertPlanPrompt(expert, context),
     }),
     markdownArtifact({
       relativePath: `${basePath}/plan_build_improve.md`,
       kind: "expert",
       required: false,
       source: "expert-domain-renderer",
-      body: renderExpertPlanBuildImprovePrompt(expert),
+      body: renderExpertPlanBuildImprovePrompt(expert, context),
     }),
   ];
 }

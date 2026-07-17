@@ -88,8 +88,9 @@ Run:
 bash tests/run.sh
 ```
 
-This checks the shell behavior, skill/lock consistency, workflow security
-guards, label contract, and drill-workflow triggers.
+This checks generated script syntax, workflow structure, label contract, and
+runtime safety guards. Agentify's full implementation test suite runs in the
+Agentify source repository, not in your project.
 
 ## 5. Live-smoke the GitHub runtime
 

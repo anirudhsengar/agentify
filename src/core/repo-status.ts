@@ -98,9 +98,9 @@ function manifestFileCarriesMarker(cwd: string, file: ManagedManifestFile): bool
   return fs.readFileSync(filePath, "utf-8").includes(file.marker);
 }
 
-function countFeatureAgentsFromManifest(cwd: string, files: ManagedManifestFile[]): number {
+function countFeatureAgentsFromManifest(cwd: string, files: ManagedManifestFile[], stateDir: string): number {
   return files
-    .filter((file) => file.path.startsWith(".pi/agents/") && file.path.endsWith(".md"))
+    .filter((file) => (file.path.startsWith(`${stateDir}/agents/`) || file.path.startsWith(".pi/agents/")) && file.path.endsWith(".md"))
     .filter((file) => manifestFileCarriesMarker(cwd, file))
     .filter((file) => {
       const name = path.basename(file.path);
@@ -109,30 +109,32 @@ function countFeatureAgentsFromManifest(cwd: string, files: ManagedManifestFile[
     .length;
 }
 
-function countWorkflowsFromManifest(cwd: string, files: ManagedManifestFile[]): number {
+function countWorkflowsFromManifest(cwd: string, files: ManagedManifestFile[], stateDir: string): number {
   return files
-    .filter((file) => file.kind === "workflow" && file.path.startsWith(".pi/workflows/") && file.path.endsWith(".json"))
+    .filter((file) => file.kind === "workflow" && (file.path.startsWith(`${stateDir}/workflows/`) || file.path.startsWith(".pi/workflows/")) && file.path.endsWith(".json"))
     .filter((file) => manifestFileCarriesMarker(cwd, file))
     .length;
 }
 
-function countExpertsFromManifest(cwd: string, files: ManagedManifestFile[]): number {
+function countExpertsFromManifest(cwd: string, files: ManagedManifestFile[], stateDir: string): number {
   const domains = new Set<string>();
   for (const file of files) {
     if (file.kind !== "expert" || !file.path.endsWith("/expertise.yaml")) continue;
     if (!manifestFileCarriesMarker(cwd, file)) continue;
-    const match = /^\.pi\/prompts\/experts\/([^/]+)\/expertise\.yaml$/.exec(file.path);
+    const roots = [stateDir, ".pi"].map((root) => root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    const match = new RegExp(`^(?:${roots})/prompts/experts/([^/]+)/expertise\\.yaml$`).exec(file.path);
     if (match) domains.add(match[1]!);
   }
   return domains.size;
 }
 
-function countSkillsFromManifest(cwd: string, files: ManagedManifestFile[]): number {
+function countSkillsFromManifest(cwd: string, files: ManagedManifestFile[], stateDir: string): number {
   const skills = new Set<string>();
   for (const file of files) {
     if (file.kind !== "skill" || !file.path.endsWith("/SKILL.md")) continue;
     if (!manifestFileCarriesMarker(cwd, file)) continue;
-    const match = /^\.pi\/skills\/([^/]+)\/SKILL\.md$/.exec(file.path);
+    const roots = [stateDir, ".pi"].map((root) => root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    const match = new RegExp(`^(?:${roots})/skills/([^/]+)/SKILL\\.md$`).exec(file.path);
     if (match) skills.add(match[1]!);
   }
   return skills.size;
@@ -141,12 +143,13 @@ function countSkillsFromManifest(cwd: string, files: ManagedManifestFile[]): num
 function inspectManifestSurfaceCounts(
   cwd: string,
   files: ManagedManifestFile[],
+  stateDir: string,
 ): Pick<AgentifyRepoState, "featureAgentCount" | "workflowCount" | "expertCount" | "skillCount"> {
   return {
-    featureAgentCount: countFeatureAgentsFromManifest(cwd, files),
-    workflowCount: countWorkflowsFromManifest(cwd, files),
-    expertCount: countExpertsFromManifest(cwd, files),
-    skillCount: countSkillsFromManifest(cwd, files),
+    featureAgentCount: countFeatureAgentsFromManifest(cwd, files, stateDir),
+    workflowCount: countWorkflowsFromManifest(cwd, files, stateDir),
+    expertCount: countExpertsFromManifest(cwd, files, stateDir),
+    skillCount: countSkillsFromManifest(cwd, files, stateDir),
   };
 }
 
@@ -203,11 +206,11 @@ export function inspectAgentifyRepoState(
 ): AgentifyRepoState {
   const manifestVerification = verifyManifestAt(cwd, stateDir);
   if (manifestVerification.manifest) {
-    const counts = inspectManifestSurfaceCounts(cwd, manifestVerification.manifest.files);
+    const counts = inspectManifestSurfaceCounts(cwd, manifestVerification.manifest.files, stateDir);
     const latestLogPath = findLatestLogPath(cwd, configDir);
     const expectedSurface = manifestVerification.mode === "brownfield"
-      ? [...requiredBrownfieldFiles(stateDir), ...SCAFFOLD_EXPECTED]
-      : [...REQUIRED_GREENFIELD_FILES, ...SCAFFOLD_EXPECTED];
+      ? [...requiredBrownfieldFiles(stateDir)]
+      : [...REQUIRED_GREENFIELD_FILES];
     const manifestUnmanaged = new Set(manifestVerification.unmanaged);
     const unmanagedExpected = collectUnmanaged(cwd, expectedSurface)
       .filter((entry) => !manifestUnmanaged.has(entry));

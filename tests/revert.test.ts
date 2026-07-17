@@ -107,20 +107,21 @@ async function testRevertRestoresUserFileFromSnapshot(): Promise<void> {
   const agentifyContent = "<!-- agentify:managed -->\n# Agentified\n";
   const runId = "test-run-2";
   try {
-    // Pre-existing user file that agentify would have overwritten.
+    // A prior Agentify-managed file is replaced by a later run.
     fs.mkdirSync(path.join(cwd, "specs"), { recursive: true });
     fs.writeFileSync(path.join(cwd, "specs", "README.md"), userContent);
     // Write the agentified content (simulating the post-apply state).
     fs.writeFileSync(path.join(cwd, "specs", "README.md"), agentifyContent);
 
-    // Persist the snapshot with the user's original content.
+    // Persist the prior managed content; user-owned files are never
+    // overwritten and therefore are intentionally not snapshotted.
     persistRunArtifacts({
       cwd, stateDir, runId,
       snapshot: {
         "specs/README.md": {
           content: Buffer.from(userContent),
           mode: 0o644,
-          ownership: "unmanaged",
+          ownership: "managed",
         },
       },
       previousManifest: null,

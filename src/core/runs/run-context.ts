@@ -18,6 +18,7 @@ export interface RunContext {
   config: AgentifyConfig;
   args?: string;
   signal?: AbortSignal;
+  githubRuntime: boolean;
   githubReadinessOverride?: GitHubReadiness;
 }
 
@@ -37,6 +38,7 @@ export function createRunContext(
     config,
     args: options.args,
     signal: options.signal,
+    githubRuntime: options.githubRuntime === true,
     githubReadinessOverride: options.githubReadinessOverride,
   };
 }

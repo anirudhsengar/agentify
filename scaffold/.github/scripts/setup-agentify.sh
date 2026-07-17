@@ -68,7 +68,7 @@ for variable in PI_VERSION PI_MODEL AGENT_BOT_LOGIN; do
   fi
 done
 
-bash "$(dirname "${BASH_SOURCE[0]}")/../../tests/run.sh"
+bash "$(dirname "${BASH_SOURCE[0]}")/validate-repository.sh"
 
 if [ "$missing" -ne 0 ]; then
   echo "agentify setup is incomplete; fix the items above and rerun." >&2

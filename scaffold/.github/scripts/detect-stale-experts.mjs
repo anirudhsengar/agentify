@@ -1,9 +1,12 @@
 #!/usr/bin/env node
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
 const cwd = path.resolve(process.argv[2] ?? ".");
-const expertsDir = path.join(cwd, ".pi", "prompts", "experts");
+const scriptDir = path.dirname(new URL(import.meta.url).pathname);
+const stateDir = execFileSync("bash", [path.join(scriptDir, "resolve-state-dir.sh"), cwd], { encoding: "utf-8" }).trim();
+const expertsDir = path.join(cwd, stateDir, "prompts", "experts");
 const maxFilesPerExpert = Number.parseInt(process.env["AGENTIFY_STALE_EXPERT_FILE_LIMIT"] ?? "500", 10);
 
 function stripLineRef(value) {

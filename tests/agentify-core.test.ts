@@ -323,6 +323,7 @@ async function testBrownfieldRunWithFakeRuntime(): Promise<void> {
         runtime: new BrownfieldFakeRuntime(),
         targets: ["codex", "claude", "pi"],
         mode: "brownfield",
+        githubRuntime: true,
         githubReadinessOverride: READY_GITHUB,
       });
 
@@ -360,6 +361,7 @@ async function testGreenfieldRunWithFakeRuntime(): Promise<void> {
       runtime: new GreenfieldFakeRuntime(),
       targets: ["codex", "claude", "pi"],
       mode: "greenfield",
+      githubRuntime: true,
       githubReadinessOverride: READY_GITHUB,
     });
 
@@ -417,7 +419,7 @@ async function testInvalidGreenfieldArtifactsRemainPartial(): Promise<void> {
     assert.ok(!fs.existsSync(path.join(cwd, "SETUP.md")), "invalid greenfield artifacts must not install scaffold");
     assert.equal(readProjectState(configDir, cwd)?.runStatus, "partial");
     assert.ok(ui.errors.some((message) => message.includes("substance gate")));
-    assert.ok(ui.infos.some((message) => message.includes("scaffold not installed")));
+    assert.ok(ui.infos.some((message) => message.includes("artifact substance gate failed")));
     assert.ok(!ui.infos.some((message) => message.includes("GitHub bootstrap is ready")));
   });
 }

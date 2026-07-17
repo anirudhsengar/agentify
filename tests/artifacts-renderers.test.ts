@@ -197,10 +197,29 @@ function testFallbackRendererProducesManagedCoreFiles(): void {
 }
 
 function testMatchesGoldenRendererOutputs(): void {
-  const golden = JSON.parse(fs.readFileSync(
+  const rawGolden = fs.readFileSync(
     new URL("./fixtures/renderer-golden.json", import.meta.url),
     "utf8",
-  ));
+  );
+  const normalizeSourceMarkers = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(normalizeSourceMarkers);
+    if (value === null || typeof value !== "object") return value;
+    const record = value as Record<string, unknown>;
+    const normalized = Object.fromEntries(
+      Object.entries(record).map(([key, entry]) => [key, normalizeSourceMarkers(entry)]),
+    );
+    if (typeof normalized.relativePath === "string" && normalized.relativePath.endsWith(".ts")) {
+      if (normalized.marker === "# agentify:managed") normalized.marker = "// agentify:managed";
+      if (typeof normalized.content === "string") {
+        normalized.content = normalized.content.replace(/^# agentify:managed/m, "// agentify:managed");
+      }
+    }
+    return normalized;
+  };
+  // Source artifacts now use language-valid `//` markers. Keep the
+  // historical fixture focused on renderer structure while accepting the
+  // deliberate marker migration for TypeScript extensions.
+  const golden = normalizeSourceMarkers(JSON.parse(rawGolden)) as Record<string, unknown>;
   const full = makeRendererIntentMap();
   const sparse = makeValidCodebaseMap();
   const coverageIncomplete = makeValidCodebaseMap();

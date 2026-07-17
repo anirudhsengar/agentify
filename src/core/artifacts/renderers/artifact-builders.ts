@@ -1,4 +1,9 @@
-import { AGENTIFY_MANAGED_MARKERS, addMarkdownManagedMarker } from "../managed-markers.ts";
+import {
+  AGENTIFY_MANAGED_MARKERS,
+  addManagedMarker,
+  addMarkdownManagedMarker,
+  markerForArtifactPath,
+} from "../managed-markers.ts";
 import { normalizeArtifactPath } from "../generated-surface.ts";
 import type { ManagedArtifactKind, RenderedArtifact } from "./types.ts";
 
@@ -63,8 +68,8 @@ export function hashCommentArtifact(params: {
   required: boolean;
   source: string;
 }): RenderedArtifact {
-  const marker = AGENTIFY_MANAGED_MARKERS.toml;
-  const body = params.body.includes(marker) ? params.body : `${marker}\n${params.body}`;
+  const marker = markerForArtifactPath(params.relativePath);
+  const body = addManagedMarker(params.body, marker);
   return {
     relativePath: normalizeArtifactPath(params.relativePath),
     content: ensureTrailingNewline(body),

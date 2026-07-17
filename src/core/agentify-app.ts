@@ -27,6 +27,32 @@ export interface RunAgentifyAppOptions
   targetsOverride?: ReadonlyArray<string>;
   /** Explicit approval for a retained-source provider switch migration. */
   migrateState?: boolean;
+  /** Explicit approval for the optional GitHub Actions runtime. */
+  githubRuntime?: boolean;
+}
+
+async function chooseGitHubRuntime(
+  options: RunAgentifyAppOptions,
+  repoState: AgentifyRepoState,
+): Promise<boolean> {
+  if (options.githubRuntime === true) return true;
+  if (!input.isTTY) return false;
+  const installed = repoState.found.some((path) => path.startsWith(".github/") || path === "SETUP.md");
+  const choice = await options.ui.promptSelect(
+    installed
+      ? "Agentify found an existing GitHub runtime. Refresh its managed files?"
+      : "Install Agentify's optional GitHub Actions runtime? It adds workflows, scripts, labels, and CI validation.",
+    installed
+      ? [
+        { label: "Keep existing runtime unchanged", value: "skip" },
+        { label: "Refresh GitHub runtime", value: "install" },
+      ]
+      : [
+        { label: "Skip GitHub runtime for now", value: "skip" },
+        { label: "Install GitHub runtime", value: "install" },
+      ],
+  );
+  return choice === "install";
 }
 
 function reportGitHubReadiness(options: RunAgentifyAppOptions): void {
@@ -247,6 +273,8 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
     }
   }
 
+  const githubRuntime = await chooseGitHubRuntime(options, repoState);
+
   await runAgentify({
     cwd: options.cwd,
     ui: options.ui,
@@ -255,6 +283,7 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
     additionalAgents: resolved.additionalAgents,
     signal: options.signal,
     mode: options.mode,
+    githubRuntime,
     configOverride: options.configOverride,
     githubReadinessOverride: options.githubReadinessOverride,
   });

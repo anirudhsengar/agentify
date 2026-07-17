@@ -35,6 +35,9 @@ Options:
   --migrate-state            With --targets, explicitly migrate one unambiguous
                              prior provider state tree to the selected provider.
                              The prior tree is retained unchanged.
+  --github-runtime           Install or refresh the optional GitHub Actions
+                             agent runtime. Non-interactive runs never install it
+                             unless this flag is supplied.
 
 Run agentify in the current repository. Existing repos are audited and exported to
 the coding agents you select — by default Claude Code, Codex, and Pi, prompted
@@ -93,6 +96,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     mode: command.mode,
     targetsOverride: command.targetsOverride,
     migrateState: command.migrateState,
+    githubRuntime: command.githubRuntime,
   });
 }
 

@@ -508,11 +508,13 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
           for (const result of exportResults) {
             addWriteMetadata(stagingRoot, result.writes, `harness-export:${result.target}`, metadata, "brownfield", stateDir);
           }
-          const scaffoldWrites = installScaffoldRuntime({
-            cwd: stagingRoot,
-            packageRoot: packageRoot(),
-          });
-          addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata, "brownfield", stateDir);
+          if (options.githubRuntime) {
+            const scaffoldWrites = installScaffoldRuntime({
+              cwd: stagingRoot,
+              packageRoot: packageRoot(),
+            });
+            addWriteMetadata(stagingRoot, scaffoldWrites, "scaffold-installer", metadata, "brownfield", stateDir);
+          }
 
           const runId = crypto.randomUUID();
           persistRunArtifacts({
@@ -588,7 +590,11 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
             for (const line of formatApplyReport(applyResult.writes, options.cwd)) {
               options.ui.info(line);
             }
-            reportGitHubReadiness(options);
+            if (options.githubRuntime) {
+              reportGitHubReadiness(options);
+            } else {
+              options.ui.info("agentify: GitHub runtime not installed. Re-run with --github-runtime when you want GitHub Actions automation.");
+            }
             persistProjectState(options, {
               projectKind: "brownfield",
               runStatus: reportedStatus,

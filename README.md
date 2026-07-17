@@ -10,9 +10,9 @@
 
 `agentify` is a standalone CLI. You run it once inside a repository and
 it turns that repository into an "agentic codebase": it audits the code,
-generates codebase-specific agent intelligence, ships a generic skill
-pack, and stamps a GitHub runtime so that — after bootstrap — issues,
-comments, and PRs drive agentic work.
+generates codebase-specific agent intelligence and ships a generic skill
+pack. The GitHub Actions runtime is an explicit opt-in for repositories that
+want issues, comments, and PRs to drive agentic work.
 
 ## Install
 
@@ -85,9 +85,9 @@ under `~/.agentify/`. After auth, the CLI prompts you to pick which
 coding agent(s) you're targeting — Claude Code, Codex, Pi, and ~70 others
 in the registry (Cursor, OpenCode, Windsurf, GitHub Copilot, Cline,
 Continue, Roo Code, Kilo Code, …). The audit writes codebase-specific
-intelligence to the current repository, exports harness surfaces only
-to the selected targets, installs the GitHub runtime scaffold, and
-reports GitHub readiness plus next-step setup guidance. Later runs attach to an initialized repo, report last
+intelligence to the current repository and exports harness surfaces only
+to the selected targets. Interactive runs ask before installing the optional
+GitHub runtime; non-interactive runs require `--github-runtime`. Later runs attach to an initialized repo, report last
 run status, installed surface counts (feature agents, workflows, experts,
 and repo skills), the latest log path, and recover incomplete setup when
 needed. User-owned files are reported as conflicts and left intact.
@@ -101,8 +101,8 @@ gate, so agentify rejects PRDs, plans, issues, or specs beyond the
 user-approved milestone. agentify deterministically renders `CONTEXT.md`,
 `GOALS.md`, PRDs, plans, issues, and specs from that payload, records
 artifact validation and resume context in `<stateDir>/greenfield-state.json`,
-and installs the GitHub runtime scaffold only after the artifacts pass the
-substance gate. The state file also includes a structured `github_handoff`
+and can install the GitHub runtime scaffold only after the artifacts pass the
+substance gate and the user explicitly opts in. The state file also includes a structured `github_handoff`
 with the next issue title, body, labels, and artifact paths, so
 post-bootstrap work can enter the same GitHub loop without relying on prose
 alone. Approved unblocked implementation handoffs can activate the issue
@@ -166,13 +166,13 @@ On a successful **brownfield** audit, agentify writes into your repo:
 | `app_review/`, `app_docs/`, `app_fix_reports/`, `<stateDir>/conditional_docs.md` | Feedback-loop storage used by the shipped review, document, fix, and implementation skills; legacy `.pi` references are symlinked when safe |
 | `<stateDir>/codebase_map.json`, `<stateDir>/manifest.json` | The validated audit map and managed-file manifest |
 | `.agents/skills/`, `.claude/`, `.codex/`, `CLAUDE.md` | Harness exports — only to the targets you picked in the picker (or via `--targets`) |
-| `SETUP.md`, `.github/workflows/*`, `.github/scripts/*` | GitHub runtime scaffold |
+| `SETUP.md`, `.github/workflows/*`, `.github/scripts/*` | Optional GitHub runtime scaffold (`--github-runtime` or interactive confirmation) |
 
 On a successful **greenfield** formation, agentify writes
 `CONTEXT.md`, `GOALS.md`, `docs/prds/*`, `docs/plans/*`,
 `docs/issues/*`, `specs/*`, `<stateDir>/greenfield-formation.json`,
 `<stateDir>/greenfield-state.json`, `<stateDir>/manifest.json`, and
-the same GitHub runtime scaffold.
+the same optional GitHub runtime scaffold when selected.
 
 Generated files carry an `agentify:managed` marker. agentify never
 overwrites a pre-existing user-owned file: it reports it as a conflict,

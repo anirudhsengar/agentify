@@ -9,7 +9,7 @@ if [ -z "$state_name" ]; then
   state_name="${state_name}field-state.json"
 fi
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-state_dir=$("$script_dir/resolve-state-dir.sh" "$repo_root")
+state_dir=$(bash "$script_dir/resolve-state-dir.sh" "$repo_root")
 state_file="$repo_root/$state_dir/$state_name"
 state_label="$state_dir/$state_name"
 

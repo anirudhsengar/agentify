@@ -209,8 +209,9 @@ export async function revertLastRun(options: RevertOptions): Promise<RevertResul
  * restore the originals. Two artifacts:
  *
  * 1. `<stateDir>/runs/<run-id>/snapshot.json` — the pre-run
- *    snapshot of every file in the generated surface, base64-
- *    encoded.
+ *    snapshot of Agentify-managed files that may be replaced, base64-
+ *    encoded. User-owned files are never overwritten, so retaining
+ *    their bytes only adds repository churn and is not needed for revert.
  * 2. `<stateDir>/runs/<run-id>/manifest.previous.json` — a copy
  *    of the pre-existing manifest (if any), so `revert` can
  *    restore the manifest itself. Omitted on first-run.
@@ -231,6 +232,7 @@ export function persistRunArtifacts(params: {
     ? params.snapshot.entries()
     : Object.entries(params.snapshot);
   for (const [rel, entry] of snapshotEntries) {
+    if (entry.ownership === "unmanaged") continue;
     encoded[rel] = { content: entry.content.toString("base64"), mode: entry.mode };
   }
   fs.writeFileSync(

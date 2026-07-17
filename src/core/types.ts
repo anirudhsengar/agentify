@@ -115,6 +115,8 @@ export interface RunAgentifyOptions {
    * `"brownfield"` or `"greenfield"`. Surfaced to users as `--mode`.
    */
   mode?: "brownfield" | "greenfield";
+  /** Install or refresh the optional GitHub Actions agent runtime. */
+  githubRuntime?: boolean;
   githubReadinessOverride?: GitHubReadiness;
 }
 
