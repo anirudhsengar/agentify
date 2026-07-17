@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Agentify now writes its generated agents, prompts, workflows, extensions, skills, experts, and conditional-docs surface under the selected harness's state directory. Safe relative `.pi/*` compatibility symlinks preserve existing runtime references without duplicating that surface.
 - Before an interactive run, Agentify refreshes the tracked remote branch and offers a fast-forward pull when the local branch is behind.
 - Long multi-select prompts show a live summary of all current selections, and interrupted state transactions now present a resume-or-fresh choice before safe recovery runs.
 - Empty Agentify state directories are ignored as if absent, avoiding irrelevant compatibility warnings and recovery prompts.

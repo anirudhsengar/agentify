@@ -65,9 +65,12 @@ package APIs or hidden command families. See
 - **GitHub-first async loop:** after bootstrap, issues, comments, and
   PRs are the primary out-of-loop surface.
 
-Generated project artifacts may still be harness-shaped (`.pi/agents`,
-`.agents/skills`, `.claude/skills`, `.codex/agents`, etc.) because those
-are target outputs. The agentify package itself is not a Pi extension.
+Generated project artifacts live under the selected harness's Agentify state
+directory. Compatibility paths such as `.pi/agents` are relative symlinks to
+that canonical surface, rather than a second physical copy. Harness-native
+exports (`.agents/skills`, `.claude/skills`, `.codex/agents`, etc.) remain in
+the locations their respective tools require. The agentify package itself is
+not a Pi extension.
 
 ## Existing Repo
 
@@ -131,8 +134,14 @@ Inside that state dir agentify stores:
 - `manifest.json` — the managed-file manifest (with a `state_dir` field)
 - `greenfield-state.json` / `greenfield-formation.json` (greenfield only)
 - `agents/`, `prompts/`, `workflows/`, `extensions/`, `skills/`,
-  `experts/`, `logs/`, `history/` — audit scratch surface
-  fanned out per the chosen provider's harness exporters
+  `experts/`, `logs/`, `history/` — the complete Agentify-owned generated
+  surface for that selected harness
+
+For compatibility with the existing Pi-shaped runtime references, Agentify
+creates relative `.pi/agents`, `.pi/prompts`, `.pi/workflows`,
+`.pi/extensions`, and `.pi/conditional_docs.md` symlinks to this canonical
+surface when those paths are available. It never replaces an existing file or
+symlink at a compatibility path.
 
 The per-harness output dirs (`.claude/agents/`, `.codex/agents/`,
 `.pi/skills/`, `.agents/skills/`, etc.) are unchanged — they
@@ -152,9 +161,9 @@ On a successful **brownfield** audit, agentify writes into your repo:
 |------|------|
 | `AGENTS.md` | Codebase-specific agent guide (capped at 200 lines) |
 | `specs/README.md`, `ai_docs/README.md` | Always-on context artifacts |
-| `.pi/agents/<feature>.md` | Generated feature specialists, summarized into GitHub implement/review prompts as routing context |
-| `.pi/prompts/`, `.pi/workflows/`, `.pi/extensions/`, `.pi/skills/` | Deterministically rendered prompt templates, orchestrator workflow specs that are summarized into GitHub implement prompts, expert directories summarized into implement/review prompts, extension candidates, and repo-specific skill candidates when warranted |
-| `app_review/`, `app_docs/`, `app_fix_reports/`, `.pi/conditional_docs.md` | Feedback-loop storage used by the shipped review, document, fix, and implementation skills |
+| `<stateDir>/agents/<feature>.md` | Generated feature specialists, summarized into GitHub implement/review prompts as routing context |
+| `<stateDir>/prompts/`, `<stateDir>/workflows/`, `<stateDir>/extensions/`, `<stateDir>/skills/` | Deterministically rendered prompt templates, orchestrator workflow specs that are summarized into GitHub implement prompts, expert directories summarized into implement/review prompts, extension candidates, and repo-specific skill candidates when warranted |
+| `app_review/`, `app_docs/`, `app_fix_reports/`, `<stateDir>/conditional_docs.md` | Feedback-loop storage used by the shipped review, document, fix, and implementation skills; legacy `.pi` references are symlinked when safe |
 | `<stateDir>/codebase_map.json`, `<stateDir>/manifest.json` | The validated audit map and managed-file manifest |
 | `.agents/skills/`, `.claude/`, `.codex/`, `CLAUDE.md` | Harness exports — only to the targets you picked in the picker (or via `--targets`) |
 | `SETUP.md`, `.github/workflows/*`, `.github/scripts/*` | GitHub runtime scaffold |

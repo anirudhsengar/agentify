@@ -59,6 +59,7 @@ import {
   writeRenderedArtifactsToStaging,
 } from "../generation/staging-bundle.ts";
 import { startSpinner, type SpinnerHandle } from "../ui/spinner.ts";
+import { linkLegacyPiSurface } from "../legacy-surface-links.ts";
 import { persistProjectState, reportGitHubReadiness } from "./project-state-reporter.ts";
 import type { RunArtifactSnapshot, RunContext } from "./run-context.ts";
 
@@ -452,7 +453,7 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
       : readFinalAuditState(options.cwd, stateDir);
 
     cleanupTransientScaffoldingAt(options.cwd, stateDir);
-    const sessionAgentsSnapshotDir = captureSessionAgentFiles(options.cwd);
+    const sessionAgentsSnapshotDir = captureSessionAgentFiles(options.cwd, stateDir);
     const userOwnedAgentsMdEntry = artifactSnapshot.get("AGENTS.md");
     const userOwnedAgentsMd = userOwnedAgentsMdEntry?.ownership === "unmanaged";
     let reportedStatus = finalState.status;
@@ -491,7 +492,7 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
           const metadata = new Map<string, ManagedManifestFile>();
           writeRenderedArtifactsToStaging(stagingRoot, renderResult.artifacts, metadata, "brownfield", stateDir);
           copyCanonicalMapToStaging(options.cwd, stagingRoot, stateDir, metadata);
-          mirrorSessionOutputToStaging(sessionAgentsSnapshotDir, stagingRoot);
+          mirrorSessionOutputToStaging(sessionAgentsSnapshotDir, stagingRoot, stateDir);
           const classification = ProjectClassifier.classify(options.cwd);
           const skillTiers = readPackagedSkillTiers(packageRoot());
           const { shipped: shippedSkills } = skillsForClassification(classification, skillTiers);
@@ -500,6 +501,7 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
             packageRoot: packageRoot(),
             targets: options.targets,
             additionalAgents: options.additionalAgents,
+            stateDir,
             allowedSkills: shippedSkills,
             userOwnedAgentsMd,
           });
@@ -563,6 +565,13 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
               latestLogPath: log.logPath,
             });
           } else {
+            const links = linkLegacyPiSurface(options.cwd, stateDir);
+            if (links.created.length > 0) {
+              options.ui.info(`agentify: linked compatibility paths: ${links.created.join(", ")}.`);
+            }
+            if (links.retained.length > 0) {
+              options.ui.info(`agentify: retained existing compatibility paths: ${links.retained.join(", ")}.`);
+            }
             const repoState = inspectAgentifyRepoState(options.cwd, defaultConfigDir(), stateDir);
             reportedStatus = repoState.status === "ready" ? "success" : "partial";
             removeStaleSkills(

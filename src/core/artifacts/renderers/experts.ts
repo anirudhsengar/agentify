@@ -1,6 +1,6 @@
 import type { ArtifactIntents, CodebaseMap } from "../../audit/schema.ts";
 import { hashCommentArtifact, isKebabName, markdownArtifact, oneLine, yamlScalar, yamlStringArray } from "./artifact-builders.ts";
-import type { RenderedArtifact } from "./types.ts";
+import type { RenderContext, RenderedArtifact } from "./types.ts";
 
 type ExpertDomainIntent = NonNullable<CodebaseMap["expert_evidence"]>["expert_domains"][number];
 type LegacyExpertIntent = ArtifactIntents["experts"][number];
@@ -260,8 +260,8 @@ function legacyExpertToDomain(expert: LegacyExpertIntent): ExpertDomainIntent {
   };
 }
 
-function renderExpertDomainArtifacts(expert: ExpertDomainIntent): RenderedArtifact[] {
-  const basePath = `.pi/prompts/experts/${expert.domain}`;
+function renderExpertDomainArtifacts(expert: ExpertDomainIntent, context: RenderContext): RenderedArtifact[] {
+  const basePath = `${context.stateDir}/prompts/experts/${expert.domain}`;
   return [
     hashCommentArtifact({
       relativePath: `${basePath}/expertise.yaml`,
@@ -305,6 +305,7 @@ export function renderExpertArtifacts(
   map: CodebaseMap,
   intents: ArtifactIntents | undefined,
   errors: string[],
+  context: RenderContext,
 ): RenderedArtifact[] {
   const artifacts: RenderedArtifact[] = [];
   const expertDomains = map.expert_evidence?.expert_domains
@@ -315,7 +316,7 @@ export function renderExpertArtifacts(
       errors.push(`invalid expert domain: ${expert.domain}`);
       continue;
     }
-    artifacts.push(...renderExpertDomainArtifacts(expert));
+    artifacts.push(...renderExpertDomainArtifacts(expert, context));
   }
   return artifacts;
 }

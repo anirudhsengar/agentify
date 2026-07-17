@@ -50,6 +50,24 @@ function testRendersIntentBundleDeterministically(): void {
   ));
 }
 
+function testSelectedHarnessOwnsGeneratedSurface(): void {
+  const result = renderBrownfieldWithContext(makeRendererIntentMap(), {
+    stateDir: ".claude/agentify",
+  });
+  const paths = result.artifacts.map((artifact) => artifact.relativePath);
+  for (const pathName of [
+    ".claude/agentify/agents/payments.md",
+    ".claude/agentify/prompts/db-migration.md",
+    ".claude/agentify/prompts/experts/billing/expertise.yaml",
+    ".claude/agentify/conditional_docs.md",
+    ".claude/agentify/workflows/payments-plan-build-review-fix.json",
+    ".claude/agentify/extensions/migration-check.ts",
+  ]) {
+    assert.ok(paths.includes(pathName), `expected ${pathName}`);
+  }
+  assert.equal(paths.some((pathName) => pathName.startsWith(".pi/")), false);
+}
+
 function testRenderedExpertsAreDiscoverableByRuntime(): void {
   const cwd = tempDir("agentify-rendered-experts-");
   try {
@@ -212,6 +230,7 @@ function testMatchesGoldenRendererOutputs(): void {
 const tests: Array<{ name: string; fn: () => void }> = [
   { name: "matchesGoldenRendererOutputs", fn: testMatchesGoldenRendererOutputs },
   { name: "rendersIntentBundleDeterministically", fn: testRendersIntentBundleDeterministically },
+  { name: "selectedHarnessOwnsGeneratedSurface", fn: testSelectedHarnessOwnsGeneratedSurface },
   { name: "renderedExpertsAreDiscoverableByRuntime", fn: testRenderedExpertsAreDiscoverableByRuntime },
   { name: "renderedProjectWorkflowsAreDiscoverableByRuntime", fn: testRenderedProjectWorkflowsAreDiscoverableByRuntime },
   { name: "rendersFeedbackLoopStorageAndSkillCandidates", fn: testRendersFeedbackLoopStorageAndSkillCandidates },

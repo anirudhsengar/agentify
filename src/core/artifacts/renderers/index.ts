@@ -47,7 +47,7 @@ export function renderBrownfieldArtifacts(
 
   artifacts.push(...renderAgentGuideArtifact(map, intents, errors));
   artifacts.push(...renderAlwaysOnDocs(map, intents));
-  artifacts.push(...renderFeedbackLoopArtifacts(map, intents));
+  artifacts.push(...renderFeedbackLoopArtifacts(map, intents, renderContext));
   artifacts.push(...renderProjectWorkflowArtifacts(map, intents, errors, renderContext));
   artifacts.push(...renderFeatureAgentArtifacts(map, intents, errors, renderContext));
   artifacts.push(...renderPromptTemplateArtifacts(intents, errors, renderContext));
@@ -56,8 +56,9 @@ export function renderBrownfieldArtifacts(
     map,
     new Set(artifacts.map((artifact) => artifact.relativePath)),
     errors,
+    renderContext,
   ));
-  artifacts.push(...renderExpertArtifacts(map, intents, errors));
+  artifacts.push(...renderExpertArtifacts(map, intents, errors, renderContext));
   artifacts.push(...renderSkillCandidateArtifacts(map, errors, renderContext));
   artifacts.push(...renderCustomToolCandidateArtifacts(map, errors, renderContext));
 

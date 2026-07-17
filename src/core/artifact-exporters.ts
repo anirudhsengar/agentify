@@ -26,6 +26,8 @@ export interface ArtifactExporterOptions {
    * exporters.
    */
   additionalAgents?: ReadonlyArray<string>;
+  /** Canonical generated surface owned by the selected harness. */
+  stateDir?: string;
   /**
    * Skill names that may be written to the target repo. Names in
    * `packaged/skills/` not in this set are skipped. When omitted,
@@ -153,8 +155,8 @@ function parseFrontmatter(content: string, fallbackName: string): AgentFile {
   return { name, description, body: body.trim(), filename: `${fallbackName}.md` };
 }
 
-function listFeatureAgents(cwd: string): AgentFile[] {
-  const agentsDir = path.join(cwd, ".pi", "agents");
+function listFeatureAgents(cwd: string, stateDir: string): AgentFile[] {
+  const agentsDir = path.join(cwd, stateDir, "agents");
   if (!fs.existsSync(agentsDir)) return [];
   return fs.readdirSync(agentsDir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && isFeatureAgentFilename(entry.name))
@@ -196,10 +198,10 @@ function asClaudeAgent(agent: AgentFile): string {
   ].join("\n");
 }
 
-function exportCodex(cwd: string, packageRoot: string, allowed?: ReadonlySet<string>): ArtifactExportResult {
+function exportCodex(cwd: string, packageRoot: string, stateDir: string, allowed?: ReadonlySet<string>): ArtifactExportResult {
   const writes: ArtifactWrite[] = [];
   exportSkills(packageRoot, path.join(cwd, ".agents", "skills"), writes, allowed);
-  for (const agent of listFeatureAgents(cwd)) {
+  for (const agent of listFeatureAgents(cwd, stateDir)) {
     writes.push(writeManagedFile(
       path.join(cwd, ".codex", "agents", `${agent.name}.toml`),
       asTomlAgent(agent),
@@ -209,7 +211,7 @@ function exportCodex(cwd: string, packageRoot: string, allowed?: ReadonlySet<str
   return { target: "codex", writes };
 }
 
-function exportClaude(cwd: string, packageRoot: string, allowed?: ReadonlySet<string>): ArtifactExportResult {
+function exportClaude(cwd: string, packageRoot: string, stateDir: string, allowed?: ReadonlySet<string>): ArtifactExportResult {
   const writes: ArtifactWrite[] = [];
   const agentsMd = path.join(cwd, "AGENTS.md");
   if (fs.existsSync(agentsMd)) {
@@ -238,7 +240,7 @@ function exportClaude(cwd: string, packageRoot: string, allowed?: ReadonlySet<st
     }
   }
   exportSkills(packageRoot, path.join(cwd, ".claude", "skills"), writes, allowed);
-  for (const agent of listFeatureAgents(cwd)) {
+  for (const agent of listFeatureAgents(cwd, stateDir)) {
     writes.push(writeManagedFile(
       path.join(cwd, ".claude", "agents", `${agent.name}.md`),
       asClaudeAgent(agent),
@@ -276,13 +278,14 @@ export function exportAgenticSurface(options: ArtifactExporterOptions): Artifact
   const results: ArtifactExportResult[] = [];
   const writtenDirs = new Set<string>();
   const allowed = options.allowedSkills;
+  const stateDir = options.stateDir ?? ".pi";
 
   // Premium exporters — each knows its own skillsDir.
   const userOwnedAgentsMd = options.userOwnedAgentsMd ?? false;
   for (const target of options.targets) {
     switch (target) {
       case "codex":
-        results.push(exportCodex(options.cwd, options.packageRoot, allowed));
+        results.push(exportCodex(options.cwd, options.packageRoot, stateDir, allowed));
         writtenDirs.add(".agents/skills");
         break;
       case "claude":
@@ -296,7 +299,7 @@ export function exportAgenticSurface(options: ArtifactExporterOptions): Artifact
         if (userOwnedAgentsMd) {
           results.push({ target: "claude", writes: [] });
         } else {
-          results.push(exportClaude(options.cwd, options.packageRoot, allowed));
+          results.push(exportClaude(options.cwd, options.packageRoot, stateDir, allowed));
         }
         writtenDirs.add(".claude/skills");
         break;

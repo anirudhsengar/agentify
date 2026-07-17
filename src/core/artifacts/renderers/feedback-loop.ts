@@ -1,9 +1,13 @@
 import { normalizeArtifactPath } from "../generated-surface.ts";
 import type { ArtifactIntents, CodebaseMap } from "../../audit/schema.ts";
 import { REQUIRED_ALWAYS_ON_DOCS, isSafeRelativePath, markdownArtifact, oneLine } from "./artifact-builders.ts";
-import type { RenderedArtifact } from "./types.ts";
+import type { RenderContext, RenderedArtifact } from "./types.ts";
 
-export function renderFeedbackLoopArtifacts(map: CodebaseMap, intents: ArtifactIntents | undefined): RenderedArtifact[] {
+export function renderFeedbackLoopArtifacts(
+  map: CodebaseMap,
+  intents: ArtifactIntents | undefined,
+  context: RenderContext,
+): RenderedArtifact[] {
   const aiDocsEntries = map.meta.documentation.has_ai_docs
     ? ["- `ai_docs/README.md` when repository-wide AI context is useful."]
     : ["- No existing AI docs were detected during bootstrap."];
@@ -83,7 +87,7 @@ export function renderFeedbackLoopArtifacts(map: CodebaseMap, intents: ArtifactI
       ].join("\n"),
     }),
     markdownArtifact({
-      relativePath: ".pi/conditional_docs.md",
+      relativePath: `${context.stateDir}/conditional_docs.md`,
       kind: "audit",
       required: false,
       source: "feedback-loop-renderer",

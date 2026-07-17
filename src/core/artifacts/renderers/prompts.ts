@@ -14,10 +14,10 @@ function validationLines(map: CodebaseMap): string[] {
   ];
 }
 
-function renderIssueTypePrompt(map: CodebaseMap, issueType: string): RenderedArtifact {
+function renderIssueTypePrompt(map: CodebaseMap, issueType: string, context: RenderContext): RenderedArtifact {
   const title = titleCaseName(issueType);
   return markdownArtifact({
-    relativePath: `.pi/prompts/${issueType}.md`,
+    relativePath: `${context.stateDir}/prompts/${issueType}.md`,
     kind: "prompt",
     required: false,
     source: "lifecycle-prompt-renderer",
@@ -60,10 +60,14 @@ function renderIssueTypePrompt(map: CodebaseMap, issueType: string): RenderedArt
   });
 }
 
-function renderPerAreaPrompt(map: CodebaseMap, candidate: PerAreaTemplateCandidateIntent): RenderedArtifact {
+function renderPerAreaPrompt(
+  map: CodebaseMap,
+  candidate: PerAreaTemplateCandidateIntent,
+  context: RenderContext,
+): RenderedArtifact {
   const title = titleCaseName(candidate.area_name);
   return markdownArtifact({
-    relativePath: `.pi/prompts/${candidate.area_name}.md`,
+    relativePath: `${context.stateDir}/prompts/${candidate.area_name}.md`,
     kind: "prompt",
     required: false,
     source: "per-area-prompt-renderer",
@@ -108,16 +112,21 @@ function renderPerAreaPrompt(map: CodebaseMap, candidate: PerAreaTemplateCandida
   });
 }
 
-export function renderLifecyclePromptArtifacts(map: CodebaseMap, existingPaths: Set<string>, errors: string[]): RenderedArtifact[] {
+export function renderLifecyclePromptArtifacts(
+  map: CodebaseMap,
+  existingPaths: Set<string>,
+  errors: string[],
+  context: RenderContext,
+): RenderedArtifact[] {
   const artifacts: RenderedArtifact[] = [];
   for (const issueType of map.meta.lifecycle.issue_types) {
     if (!isPromptName(issueType)) {
       errors.push(`invalid issue type prompt name: ${issueType}`);
       continue;
     }
-    const relativePath = `.pi/prompts/${issueType}.md`;
+    const relativePath = `${context.stateDir}/prompts/${issueType}.md`;
     if (existingPaths.has(relativePath)) continue;
-    const artifact = renderIssueTypePrompt(map, issueType);
+    const artifact = renderIssueTypePrompt(map, issueType, context);
     artifacts.push(artifact);
     existingPaths.add(artifact.relativePath);
   }
@@ -127,9 +136,9 @@ export function renderLifecyclePromptArtifacts(map: CodebaseMap, existingPaths: 
       errors.push(`invalid per-area prompt name: ${candidate.area_name}`);
       continue;
     }
-    const relativePath = `.pi/prompts/${candidate.area_name}.md`;
+    const relativePath = `${context.stateDir}/prompts/${candidate.area_name}.md`;
     if (existingPaths.has(relativePath)) continue;
-    const artifact = renderPerAreaPrompt(map, candidate);
+    const artifact = renderPerAreaPrompt(map, candidate, context);
     artifacts.push(artifact);
     existingPaths.add(artifact.relativePath);
   }
