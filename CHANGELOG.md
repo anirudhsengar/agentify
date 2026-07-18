@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Brownfield audits now make one recovery pass when a model ends normally
+  without issuing the required structured `write_map` call, rather than
+  immediately failing the audit.
+
 - Repositories with user-owned conventional files such as `AGENTS.md`,
   `specs/README.md`, `ai_docs/README.md`, or Agentify-like GitHub paths no
   longer falsely appear as incomplete Agentify setups. Legacy recovery now

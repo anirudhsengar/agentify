@@ -351,85 +351,106 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
     let turnCount = 0;
     let costUsd = 0;
     let spinnerStopped = false;
+    let sawWriteMapCall = false;
     let runtimeResult: Awaited<ReturnType<typeof options.runtime.runSession>>;
     try {
-      runtimeResult = await options.runtime.runSession({
-        cwd: options.cwd,
-        configDir: defaultConfigDir(),
-        config,
-        systemPrompt: promptContent,
-        userPrompt: buildBrownfieldUserPrompt(options.targets, options.additionalAgents),
-        tools: BUILDER_TOOL_ALLOWLIST,
-        executionPolicy: createReadOnlyExecutionPolicy({
+      const runAuditSession = async (
+        userPrompt: string,
+      ): Promise<Awaited<ReturnType<typeof options.runtime.runSession>>> =>
+        options.runtime.runSession({
           cwd: options.cwd,
-          mode: "audit-readonly",
-          tools: BUILDER_TOOL_ALLOWLIST.filter((tool) =>
-            tool === "read" || tool === "grep" || tool === "find" || tool === "ls"
-          ),
-          protectedPaths,
-        }),
-        customTools: [
-          mapTools.writeMapTool,
-          mapTools.writeMapDeltaTool,
-        ],
-        spawnExplorerAgentDir: defaultConfigDir(),
-        spawnExplorerStateDir: stateDir,
-        signal: options.signal,
-        onEvent: (event) => {
-          const piType = (event as { type?: string }).type ?? "unknown";
-          log.sessionEvent({ pi_event_type: piType, event });
-          if (piType === "message_start" && (event as { message?: { role?: string } }).message?.role === "user") {
-            log.recordTurnStart();
-          } else if (piType === "message_start") {
-            spinner.update("Reviewing findings and planning the next analysis step…");
-          } else if (piType === "message_end") {
-            log.incrementTurns();
-            log.recordTurnEnd(extractUsage(event));
-            const usage = extractUsage(event);
-            turnCount += 1;
-            const cost = usage?.cost?.total;
-            if (typeof cost === "number") costUsd += cost;
-            spinner.update(
-              `Analysis pass ${turnCount} complete • estimated spend $${costUsd.toFixed(4)}`,
-            );
-          } else if (piType === "tool_execution_start") {
-            const toolName = (event as { toolName?: string; tool_name?: string }).toolName
-              ?? (event as { tool_name?: string }).tool_name
-              ?? "unknown";
-            spinner.update(auditActivityForTool(toolName));
-          } else if (piType === "tool_execution_end") {
-            const toolEvent = event as { toolName?: string; result?: WriteMapResult };
-            if (toolEvent.toolName === "write_map") {
-              const mapResult = extractWriteMapResult(toolEvent.result);
-              if (mapResult) {
-                log.mapWritten({
-                  path: mapResult.path,
-                  size_bytes: mapResult.size_bytes,
-                  coverage_summary: {
-                    covered: mapResult.covered,
-                    gap: mapResult.gap,
-                    total: mapResult.total,
-                  },
-                  gap_warning: mapResult.gap_warning,
+          configDir: defaultConfigDir(),
+          config,
+          systemPrompt: promptContent,
+          userPrompt,
+          tools: BUILDER_TOOL_ALLOWLIST,
+          executionPolicy: createReadOnlyExecutionPolicy({
+            cwd: options.cwd,
+            mode: "audit-readonly",
+            tools: BUILDER_TOOL_ALLOWLIST.filter((tool) =>
+              tool === "read" || tool === "grep" || tool === "find" || tool === "ls"
+            ),
+            protectedPaths,
+          }),
+          customTools: [
+            mapTools.writeMapTool,
+            mapTools.writeMapDeltaTool,
+          ],
+          spawnExplorerAgentDir: defaultConfigDir(),
+          spawnExplorerStateDir: stateDir,
+          signal: options.signal,
+          onEvent: (event) => {
+            const piType = (event as { type?: string }).type ?? "unknown";
+            log.sessionEvent({ pi_event_type: piType, event });
+            if (piType === "message_start" && (event as { message?: { role?: string } }).message?.role === "user") {
+              log.recordTurnStart();
+            } else if (piType === "message_start") {
+              spinner.update("Reviewing findings and planning the next analysis step…");
+            } else if (piType === "message_end") {
+              log.incrementTurns();
+              log.recordTurnEnd(extractUsage(event));
+              const usage = extractUsage(event);
+              turnCount += 1;
+              const cost = usage?.cost?.total;
+              if (typeof cost === "number") costUsd += cost;
+              spinner.update(
+                `Analysis pass ${turnCount} complete • estimated spend $${costUsd.toFixed(4)}`,
+              );
+            } else if (piType === "tool_execution_start") {
+              const toolName = (event as { toolName?: string; tool_name?: string }).toolName
+                ?? (event as { tool_name?: string }).tool_name
+                ?? "unknown";
+              if (toolName === "write_map") sawWriteMapCall = true;
+              spinner.update(auditActivityForTool(toolName));
+            } else if (piType === "tool_execution_end") {
+              const toolEvent = event as { toolName?: string; result?: WriteMapResult };
+              if (toolEvent.toolName === "write_map") {
+                const mapResult = extractWriteMapResult(toolEvent.result);
+                if (mapResult) {
+                  log.mapWritten({
+                    path: mapResult.path,
+                    size_bytes: mapResult.size_bytes,
+                    coverage_summary: {
+                      covered: mapResult.covered,
+                      gap: mapResult.gap,
+                      total: mapResult.total,
+                    },
+                    gap_warning: mapResult.gap_warning,
+                  });
+                  spinner.update("Codebase map captured — checking coverage and gaps…");
+                }
+              } else if (toolEvent.toolName === "spawn_explorer") {
+                log.subagentSpawned({
+                  tool_name: "spawn_explorer",
+                  details: (toolEvent.result as { details?: unknown } | undefined)?.details ?? null,
+                  is_error: toolEvent.result?.isError ?? false,
                 });
-                spinner.update("Codebase map captured — checking coverage and gaps…");
+                spinner.update("Explorer completed — incorporating its findings…");
               }
-            } else if (toolEvent.toolName === "spawn_explorer") {
-              log.subagentSpawned({
-                tool_name: "spawn_explorer",
-                details: (toolEvent.result as { details?: unknown } | undefined)?.details ?? null,
-                is_error: toolEvent.result?.isError ?? false,
-              });
-              spinner.update("Explorer completed — incorporating its findings…");
+            } else if (piType === "agent_end" && !spinnerStopped) {
+              spinner.update(
+                `Audit analysis complete • ${turnCount} pass(es) • estimated spend $${costUsd.toFixed(4)}`,
+              );
             }
-          } else if (piType === "agent_end" && !spinnerStopped) {
-            spinner.update(
-              `Audit analysis complete • ${turnCount} pass(es) • estimated spend $${costUsd.toFixed(4)}`,
-            );
-          }
-        },
-      });
-      spinner.stop("audit finished", "success");
+          },
+        });
+
+      runtimeResult = await runAuditSession(
+        buildBrownfieldUserPrompt(options.targets, options.additionalAgents),
+      );
+      if (!runtimeResult.aborted && !sawWriteMapCall && !loadCanonicalMapAt(options.cwd, stateDir)) {
+        options.ui.info(
+          "agentify: audit response omitted the required write_map call; requesting one recovery pass.",
+        );
+        spinner.update("Audit response omitted its structured map — requesting a recovery pass…");
+        runtimeResult = await runAuditSession([
+          "This is a recovery pass for an incomplete brownfield audit.",
+          "The prior audit session ended without calling write_map, so no codebase map was recorded.",
+          "Inspect any evidence you need, then submit the complete structured map via write_map.",
+          "Do not return a prose summary instead of the tool call.",
+        ].join(" "));
+      }
+      spinner.stop("audit session finished — validating results", "success");
       spinnerStopped = true;
     } finally {
       if (!spinnerStopped) {

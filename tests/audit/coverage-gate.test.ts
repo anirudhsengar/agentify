@@ -85,6 +85,10 @@ async function run(
   cwd: string,
   write: (cwd: string, stateDir: string) => void,
 ): Promise<SilentUi> {
+  return runWithRuntime(cwd, new ScriptedRuntime(write));
+}
+
+async function runWithRuntime(cwd: string, runtime: AgentRuntime): Promise<SilentUi> {
   const prevHome = process.env["HOME"];
   const tempHome = tempDir("gate-run-home");
   process.env["HOME"] = tempHome;
@@ -95,7 +99,7 @@ async function run(
     await runAgentify({
       cwd,
       ui,
-      runtime: new ScriptedRuntime(write),
+      runtime,
       targets: ["codex"],
       mode: "brownfield",
       githubReadinessOverride: READY_GITHUB,
@@ -104,6 +108,26 @@ async function run(
   } finally {
     if (prevHome === undefined) delete process.env["HOME"];
     else process.env["HOME"] = prevHome;
+  }
+}
+
+class RecoveryRuntime implements AgentRuntime {
+  calls = 0;
+
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    this.calls += 1;
+    if (this.calls === 2) {
+      assert.match(options.userPrompt, /recovery pass/i);
+      assert.ok(options.spawnExplorerStateDir);
+      writeArtifacts(options.cwd, options.spawnExplorerStateDir, {
+        map: makeValidCodebaseMap(),
+      });
+    }
+    return { turns: 1, costUsd: null, aborted: false };
+  }
+
+  async runGreenfield(): Promise<AgentRuntimeResult> {
+    throw new Error("greenfield not used here");
   }
 }
 
@@ -317,6 +341,15 @@ async function testNoMapMeansPartialNoExport(): Promise<void> {
   assert.ok(ui.errors.some((m) => m.includes("did not complete")));
 }
 
+async function testMissingWriteMapGetsOneRecoveryPass(): Promise<void> {
+  const cwd = tempDir("gate-recovery");
+  const runtime = new RecoveryRuntime();
+  const ui = await runWithRuntime(cwd, runtime);
+  assert.equal(runtime.calls, 2, "must make exactly one recovery pass");
+  assert.ok(fs.existsSync(path.join(cwd, ".agents", "agentify", "codebase_map.json")));
+  assert.ok(ui.infos.some((m) => m.includes("recovery pass")));
+}
+
 async function testGapMapMeansPartialNoExport(): Promise<void> {
   const cwd = tempDir("gate-gap");
   const gapMap = makeValidCodebaseMap();
@@ -386,6 +419,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "writeMapReturnsClosureReasons", fn: testWriteMapReturnsClosureReasons },
   { name: "loadCanonicalMapRejectsGarbage", fn: testLoadCanonicalMapAtRejectsGarbage },
   { name: "noMapMeansPartialNoExport", fn: testNoMapMeansPartialNoExport },
+  { name: "missingWriteMapGetsOneRecoveryPass", fn: testMissingWriteMapGetsOneRecoveryPass },
   { name: "gapMapMeansPartialNoExport", fn: testGapMapMeansPartialNoExport },
   { name: "oversizedAgentsMdMeansPartial", fn: testOversizedAgentsMdMeansPartial },
   { name: "fullyCoveredMeansSuccessAndPersistsMap", fn: testFullyCoveredMeansSuccessAndPersistsMap },
