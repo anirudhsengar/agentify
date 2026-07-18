@@ -80,7 +80,7 @@ async function testReadyBrownfield(): Promise<void> {
   }
 }
 
-async function testUnmanagedBrownfieldIsPartial(): Promise<void> {
+async function testUnmanagedConventionalFilesAreNotAgentifyState(): Promise<void> {
   const cwd = tempDir("agentify-repo-status-unmanaged-");
   const configDir = tempDir("agentify-repo-status-config-");
   try {
@@ -88,7 +88,6 @@ async function testUnmanagedBrownfieldIsPartial(): Promise<void> {
       "AGENTS.md",
       "specs/README.md",
       "ai_docs/README.md",
-      ".pi/agentify/codebase_map.json",
       "SETUP.md",
       ".github/workflows/agent-implement.yml",
       ".github/actions/run-pi/action.yml",
@@ -97,30 +96,25 @@ async function testUnmanagedBrownfieldIsPartial(): Promise<void> {
       write(relativePath, cwd);
     }
     const state = inspectAgentifyRepoState(cwd, configDir, ".pi/agentify");
-    assert.equal(state.mode, "brownfield");
-    assert.equal(state.status, "partial");
-    assert.ok(state.missing.some((entry) => entry.includes("(unmanaged)")));
+    assert.equal(state.mode, "unknown");
+    assert.equal(state.status, "uninitialized");
+    assert.deepEqual(state.missing, []);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
     fs.rmSync(configDir, { recursive: true, force: true });
   }
 }
 
-async function testPartialGreenfield(): Promise<void> {
+async function testUnmanagedGreenfieldFilesAreNotAgentifyState(): Promise<void> {
   const cwd = tempDir("agentify-repo-status-greenfield-");
   const configDir = tempDir("agentify-repo-status-config-");
   try {
     write("GOALS.md", cwd);
     write("CONTEXT.md", cwd);
     const state = inspectAgentifyRepoState(cwd, configDir, ".pi/agentify");
-    assert.equal(state.mode, "greenfield");
-    assert.equal(state.status, "partial");
-    assert.ok(state.missing.includes(".github/workflows/agent-implement.yml"));
-    assert.ok(state.missing.includes(".github/actions/run-pi/action.yml"));
-    assert.ok(state.missing.includes(".github/scripts/setup-agentify.sh"));
-    assert.ok(state.missing.includes("SETUP.md"));
-    assert.ok(state.missing.includes("GOALS.md (unmanaged)"));
-    assert.ok(state.missing.includes("CONTEXT.md (unmanaged)"));
+    assert.equal(state.mode, "unknown");
+    assert.equal(state.status, "uninitialized");
+    assert.deepEqual(state.missing, []);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
     fs.rmSync(configDir, { recursive: true, force: true });
@@ -173,8 +167,8 @@ async function testUninitializedRepo(): Promise<void> {
 
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "readyBrownfield", fn: testReadyBrownfield },
-  { name: "unmanagedBrownfieldIsPartial", fn: testUnmanagedBrownfieldIsPartial },
-  { name: "partialGreenfield", fn: testPartialGreenfield },
+  { name: "unmanagedConventionalFilesAreNotAgentifyState", fn: testUnmanagedConventionalFilesAreNotAgentifyState },
+  { name: "unmanagedGreenfieldFilesAreNotAgentifyState", fn: testUnmanagedGreenfieldFilesAreNotAgentifyState },
   { name: "readyGreenfieldManifest", fn: testReadyGreenfieldManifest },
   { name: "uninitializedRepo", fn: testUninitializedRepo },
 ];

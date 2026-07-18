@@ -32,7 +32,8 @@ export function loadMapFromFile(filePath: string, cwd: string): LoadedMapInput {
         const msg = err instanceof Error ? err.message : String(err);
         if (err instanceof Error && (err as NodeJS.ErrnoException).code === "ENOENT") {
             throw new Error(
-                `map_file at ${absolute} does not exist. Make sure you called the \`write\` tool first to create it.`,
+                `map_file at ${absolute} does not exist. Audit sessions cannot create this file; ` +
+                    "submit the map inline with `mode: \"auto\"` instead.",
             );
         }
         throw new Error(`failed to read map_file at ${absolute}: ${msg}`);

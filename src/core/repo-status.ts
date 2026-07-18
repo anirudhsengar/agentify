@@ -183,6 +183,7 @@ function collectFound(cwd: string, relatives: readonly string[]): string[] {
 function fileCarriesExpectedMarker(cwd: string, relativePath: string): boolean {
   const filePath = path.join(cwd, relativePath);
   if (!fs.existsSync(filePath)) return false;
+  if (!fs.statSync(filePath).isFile()) return false;
   const marker = markerForPath(relativePath);
   if (marker === "sha256") return true;
   return fs.readFileSync(filePath, "utf-8").includes(marker);
@@ -192,6 +193,18 @@ function collectUnmanaged(cwd: string, relatives: readonly string[]): string[] {
   return relatives
     .filter((relativePath) => hasPath(cwd, relativePath))
     .filter((relativePath) => !fileCarriesExpectedMarker(cwd, relativePath));
+}
+
+/**
+ * Legacy installs predate manifests, so their readiness must be inferred from
+ * generated files. Do not infer it from conventional repository filenames
+ * alone: AGENTS.md, specs/, ai_docs/, and GitHub workflow paths are all valid
+ * user-owned content in a repository that Agentify has never touched.
+ */
+function hasManagedEvidence(cwd: string, relatives: readonly string[]): boolean {
+  return relatives.some(
+    (relativePath) => hasPath(cwd, relativePath) && fileCarriesExpectedMarker(cwd, relativePath),
+  );
 }
 
 /**
@@ -241,7 +254,7 @@ export function inspectAgentifyRepoState(
   const counts = inspectSurfaceCounts(cwd, stateDir);
   const latestLogPath = findLatestLogPath(cwd, configDir);
 
-  if (brownfieldFound.length > 0) {
+  if (hasManagedEvidence(cwd, brownfieldFound)) {
     const expected = [...requiredBrownfieldFiles(stateDir)];
     const missing = expected.filter((relativePath) => !hasPath(cwd, relativePath));
     const unmanaged = collectUnmanaged(cwd, expected);
@@ -256,7 +269,7 @@ export function inspectAgentifyRepoState(
     };
   }
 
-  if (greenfieldFound.length > 0) {
+  if (hasManagedEvidence(cwd, greenfieldFound)) {
     const expected = [...REQUIRED_GREENFIELD_FILES];
     const missing = expected.filter((relativePath) => !hasPath(cwd, relativePath));
     const unmanaged = collectUnmanaged(cwd, expected);
@@ -271,7 +284,7 @@ export function inspectAgentifyRepoState(
     };
   }
 
-  if (scaffoldFound.length > 0) {
+  if (hasManagedEvidence(cwd, scaffoldFound)) {
     const expected = [...BROWNFIELD_EXPECTED_ROOT, codebaseMapRelativePath(stateDir), ...SCAFFOLD_EXPECTED];
     const missing = expected.filter((relativePath) => !hasPath(cwd, relativePath));
     return {

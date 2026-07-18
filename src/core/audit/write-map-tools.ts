@@ -18,7 +18,6 @@ import {
     getReserveCount,
 } from "./map-observability.ts";
 import {
-    draftPathRelative,
     DEFAULT_MAP_FILENAME,
     readCanonicalMap,
     writeCanonicalMap,
@@ -43,6 +42,61 @@ export interface MapTools {
     historyRelative: string;
 }
 
+type UnknownRecord = Record<string, unknown>;
+
+function isEmptyRecord(value: unknown): value is UnknownRecord {
+    return (
+        value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        Object.keys(value).length === 0
+    );
+}
+
+function normalizeEmptyNullableObject(
+    parent: UnknownRecord | undefined,
+    key: string,
+): void {
+    if (parent && isEmptyRecord(parent[key])) {
+        parent[key] = null;
+    }
+}
+
+/**
+ * Some OpenAI-compatible providers serialize a null value for an object-or-null
+ * field as an empty object. Normalize only those known nullable object fields
+ * before the SDK applies the strict TypeBox parameter schema.
+ */
+function prepareMapArguments<T>(input: unknown): T {
+    if (input === null || typeof input !== "object" || Array.isArray(input)) {
+        return input as T;
+    }
+
+    const prepared = structuredClone(input) as UnknownRecord;
+    const map = isEmptyRecord(prepared.map) ? undefined : prepared.map;
+    const delta = isEmptyRecord(prepared.delta) ? undefined : prepared.delta;
+    const candidate = map ?? delta;
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+        return prepared as T;
+    }
+
+    const codebaseMap = candidate as UnknownRecord;
+    const moduleGraph = codebaseMap.module_graph as UnknownRecord | undefined;
+    const typeContracts = codebaseMap.type_contract_surface as UnknownRecord | undefined;
+    const conventions = codebaseMap.conventions as UnknownRecord | undefined;
+    const operational = codebaseMap.operational_surface as UnknownRecord | undefined;
+
+    normalizeEmptyNullableObject(moduleGraph, "client_server_split");
+    normalizeEmptyNullableObject(moduleGraph, "monorepo_workspace");
+    normalizeEmptyNullableObject(typeContracts, "openapi_or_graphql");
+    normalizeEmptyNullableObject(typeContracts, "one_type_trace");
+    normalizeEmptyNullableObject(conventions, "versioning");
+    normalizeEmptyNullableObject(conventions, "db_migration");
+    normalizeEmptyNullableObject(operational, "deploy");
+
+    return prepared as T;
+}
+
 function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
     return defineTool({
         name: "write_map",
@@ -61,9 +115,9 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
             "Call multiple times during exploration to persist progress; call once with the " +
             "final map before rendering the report.",
         parameters: WriteMapParamsSchema,
+        prepareArguments: prepareMapArguments,
         async execute(_id, params, _signal, _onUpdate, ctx) {
             const mode = params.mode ?? "auto";
-            const configuredDraftPath = draftPathRelative(context).replace(/\\/g, "/");
             const hasInline = params.map !== undefined;
             const hasFile = typeof params.map_file === "string" && params.map_file.length > 0;
 
@@ -75,10 +129,8 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                             text:
                                 "Error: write_map called with empty arguments. Provide either " +
                                 "`map` (inline object) or `map_file` (path to a JSON file). " +
-                                "For large maps, use the file-based mode: build the JSON as a " +
-                                `string, call the \`write\` tool with path="${configuredDraftPath}" ` +
-                                `and content=<the json string>, then call write_map with ` +
-                                `{map_file: "${configuredDraftPath}"}.`,
+                                "Audit sessions cannot create a map file; submit inline `map` with " +
+                                "`mode: \"auto\"` for large maps.",
                         },
                     ],
                     isError: true,
@@ -123,10 +175,8 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                                 type: "text",
                                 text:
                                     "Error: write_map called with `mode: 'file'` and inline `map`. " +
-                                    "Use the file-based mode instead: build the JSON as a string, " +
-                                    `call \`write\` with path="${configuredDraftPath}" and ` +
-                                    `content=<the json string>, then call write_map with ` +
-                                    `{map_file: "${configuredDraftPath}"}.`,
+                                    "Use inline `map` with `mode: \"auto\"`; audit sessions cannot create " +
+                                    "a map file.",
                             },
                         ],
                         isError: true,
@@ -142,10 +192,7 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                                     type: "text",
                                     text:
                                         `Error: inline map is ${inlineSize} bytes, exceeds the ${MAX_INLINE_MAP_BYTES} byte cap. ` +
-                                        `Use the file-based mode instead: build the JSON as a string, ` +
-                                        `call \`write\` with path="${configuredDraftPath}" and ` +
-                                        `content=<the json string>, then call write_map with ` +
-                                        `{map_file: "${configuredDraftPath}"}.`,
+                                        "Retry with `mode: \"auto\"` so agentify can create a private draft.",
                                 },
                             ],
                             isError: true,
@@ -255,6 +302,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             "entry is set to `covered` with the delta's `confidence` and `evidence_summary`. " +
             "Per-dimension gap_filler count is tracked (soft ceiling of 3, no hard cap; observability only).",
         parameters: WriteMapDeltaParamsSchema,
+        prepareArguments: prepareMapArguments,
         async execute(_id, params, _signal, _onUpdate, ctx) {
             const existing = readCanonicalMap(ctx.cwd, context);
             if (existing === null) {

@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { Value } from "typebox/value";
 import {
   CodebaseMapSchema,
   COVERAGE_DIMENSIONS,
@@ -124,6 +125,41 @@ async function testToolDefinitionContract(): Promise<void> {
   assert.ok(CodebaseMapSchema);
 }
 
+async function testNullableObjectTransportCompatibility(): Promise<void> {
+  const { writeMapTool, writeMapDeltaTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
+  const map = cloneMap() as CodebaseMap & Record<string, unknown>;
+  (map.module_graph as Record<string, unknown>).client_server_split = {};
+  (map.module_graph as Record<string, unknown>).monorepo_workspace = {};
+  (map.type_contract_surface as Record<string, unknown>).openapi_or_graphql = {};
+  (map.type_contract_surface as Record<string, unknown>).one_type_trace = {};
+  (map.conventions as Record<string, unknown>).versioning = {};
+  (map.conventions as Record<string, unknown>).db_migration = {};
+  (map.operational_surface as Record<string, unknown>).deploy = {};
+
+  assert.ok(writeMapTool.prepareArguments);
+  const preparedMap = writeMapTool.prepareArguments({ map });
+  assert.equal(Value.Check(WriteMapParamsSchema, preparedMap), true);
+  const normalizedMap = (preparedMap as { map: CodebaseMap }).map;
+  assert.equal(normalizedMap.module_graph.client_server_split, null);
+  assert.equal(normalizedMap.module_graph.monorepo_workspace, null);
+  assert.equal(normalizedMap.type_contract_surface.openapi_or_graphql, null);
+  assert.equal(normalizedMap.type_contract_surface.one_type_trace, null);
+  assert.equal(normalizedMap.conventions.versioning, null);
+  assert.equal(normalizedMap.conventions.db_migration, null);
+  assert.equal(normalizedMap.operational_surface.deploy, null);
+
+  assert.ok(writeMapDeltaTool.prepareArguments);
+  const preparedDelta = writeMapDeltaTool.prepareArguments({
+    delta: { module_graph: { ...map.module_graph, client_server_split: {} } },
+  });
+  assert.equal(Value.Check(WriteMapDeltaParamsSchema, preparedDelta), true);
+  assert.equal(
+    (preparedDelta as { delta: { module_graph: { client_server_split: unknown } } })
+      .delta.module_graph.client_server_split,
+    null,
+  );
+}
+
 async function testInlineDefaultsCoverageAndStorageContract(): Promise<void> {
   const cwd = tempDir("inline");
   const tools = createWriteMapTools({ stateDir: ".claude/agentify" });
@@ -192,7 +228,8 @@ async function testInputLoadingAndDraftContract(): Promise<void> {
   assert.equal(isToolError(missingResult), true);
   assert.equal(
     resultText(missingResult),
-    `Error: map_file at ${missing} does not exist. Make sure you called the \`write\` tool first to create it.`,
+    `Error: map_file at ${missing} does not exist. Audit sessions cannot create this file; ` +
+      "submit the map inline with `mode: \"auto\"` instead.",
   );
 
   const malformed = path.join(cwd, "malformed.json");
@@ -238,9 +275,7 @@ async function testInputLoadingAndDraftContract(): Promise<void> {
   assert.equal(
     resultText(strictResult),
     `Error: inline map is ${inlineSize} bytes, exceeds the ${MAX_INLINE_MAP_BYTES} byte cap. ` +
-      "Use the file-based mode instead: build the JSON as a string, " +
-      `call \`write\` with path="${tools.draftPathRelative}" and content=<the json string>, ` +
-      `then call write_map with {map_file: "${tools.draftPathRelative}"}.`,
+      "Retry with `mode: \"auto\"` so agentify can create a private draft.",
   );
 
   const autoCwd = tempDir("auto");
@@ -260,18 +295,15 @@ async function testInputLoadingAndDraftContract(): Promise<void> {
   assert.equal(
     resultText(fileModeInline),
     "Error: write_map called with `mode: 'file'` and inline `map`. " +
-      "Use the file-based mode instead: build the JSON as a string, " +
-      `call \`write\` with path="${tools.draftPathRelative}" and content=<the json string>, ` +
-      `then call write_map with {map_file: "${tools.draftPathRelative}"}.`,
+      "Use inline `map` with `mode: \"auto\"`; audit sessions cannot create a map file.",
   );
 
   const emptyResult = await executeTool(tools.writeMapTool, {}, cwd);
   assert.equal(
     resultText(emptyResult),
     "Error: write_map called with empty arguments. Provide either `map` (inline object) or " +
-      "`map_file` (path to a JSON file). For large maps, use the file-based mode: build the JSON as a " +
-      `string, call the \`write\` tool with path="${tools.draftPathRelative}" and content=<the json string>, ` +
-      `then call write_map with {map_file: "${tools.draftPathRelative}"}.`,
+      "`map_file` (path to a JSON file). Audit sessions cannot create a map file; submit inline `map` with " +
+      "`mode: \"auto\"` for large maps.",
   );
 
   const bothResult = await executeTool(
@@ -450,6 +482,7 @@ async function testObservabilityAndFactoryContract(): Promise<void> {
 
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "tool definition contract", fn: testToolDefinitionContract },
+  { name: "nullable object transport compatibility", fn: testNullableObjectTransportCompatibility },
   { name: "inline defaults coverage and storage contract", fn: testInlineDefaultsCoverageAndStorageContract },
   { name: "input loading and draft contract", fn: testInputLoadingAndDraftContract },
   { name: "history validation coverage and merge contract", fn: testHistoryValidationCoverageAndMergeContract },

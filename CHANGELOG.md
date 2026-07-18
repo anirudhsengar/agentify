@@ -13,6 +13,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Repositories with user-owned conventional files such as `AGENTS.md`,
+  `specs/README.md`, `ai_docs/README.md`, or Agentify-like GitHub paths no
+  longer falsely appear as incomplete Agentify setups. Legacy recovery now
+  requires a managed marker or Agentify-specific state evidence.
+
 - Scaffold installation now uses syntax-valid markers for JSON and JavaScript/TypeScript assets, preserves source modes, invokes shell helpers through Bash, omits empty extension placeholders, and uses the selected canonical state directory in generated expert and prompt references.
 
 - Generated runtime validation no longer depends on a copied root `tests/` tree.
