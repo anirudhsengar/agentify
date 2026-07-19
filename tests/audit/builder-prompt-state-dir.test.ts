@@ -64,8 +64,8 @@ async function testPromptRequiresInitialMapBeforeExplorers(): Promise<void> {
   const raw = readRawBuilderPrompt();
   assert.match(
     raw,
-    /After the four Phase 0 scout reads,\n  call `write_map_delta` with direct D1 topography evidence.*before\n  calling `spawn_explorer`\./s,
-    "builder prompt must require a D1 checkpoint before explorer dispatch",
+    /After the four Phase 0 scout reads,\n  call `write_map_delta` with direct D1 topography evidence: include a\n  non-empty `skeleton\.top_level_tree`.*before\n  calling `spawn_explorer`\./s,
+    "builder prompt must require complete D1 topology before explorer dispatch",
   );
 }
 

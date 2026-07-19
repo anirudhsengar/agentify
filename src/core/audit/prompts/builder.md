@@ -177,7 +177,8 @@ each section and each feature is discovered, not templated.
   `artifact_intents`.
 - **First checkpoint is mandatory.** A valid gap-marked canonical map is
   already present when this audit starts. After the four Phase 0 scout reads,
-  call `write_map_delta` with direct D1 topography evidence, including at
+  call `write_map_delta` with direct D1 topography evidence: include a
+  non-empty `skeleton.top_level_tree` listing real root-level paths and at
   least one real repository entry point in `skeleton.entry_points` as
   `{ path, role, language, run_command }`, before
   calling `spawn_explorer`. Do not treat the bootstrap map as your checkpoint or defer
