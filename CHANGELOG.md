@@ -13,6 +13,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Inactivity and external cancellation now dispose stalled SDK sessions
+  immediately instead of waiting indefinitely for a provider to become idle.
+
 - D1 deltas now remain open until they include both entry points and the
   fresh-agent reading list required by the topography closure gate.
 

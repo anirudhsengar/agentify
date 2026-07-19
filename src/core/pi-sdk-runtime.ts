@@ -132,13 +132,17 @@ export class PiSdkRuntime implements AgentRuntime {
     const abortSession = (): void => {
       if (aborted) return;
       aborted = true;
-      resolveAbort?.();
       // AgentSession.abort stops the active stream, but leaves queued follow-up
       // turns intact. A provider can queue its next tool continuation before
       // the closure callback runs, which otherwise restarts the audit after a
       // successful map has already been persisted.
       session.clearQueue();
-      void session.abort().catch(() => undefined);
+      // abort() waits for the provider to become idle. A provider can fail to
+      // settle forever, so dispose immediately after signalling cancellation;
+      // this severs SDK listeners and releases the session without waiting on
+      // that untrusted remote state.
+      session.dispose();
+      resolveAbort?.();
     };
     const promptUntilAbort = async (userPrompt: string): Promise<void> => {
       await Promise.race([session.prompt(userPrompt), abortPromise]);
