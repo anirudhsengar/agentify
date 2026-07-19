@@ -552,6 +552,31 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   assert.equal(bootstrapDeltaMap.coverage.D1_topography.status, "gap");
   assert.match(bootstrapDeltaMap.coverage.D1_topography.evidence_summary, /skeleton\.entry_points/);
 
+  const validTopographyResult = await executeTool(
+    bootstrapDeltaTools.writeMapDeltaTool,
+    {
+      delta: {
+        skeleton: {
+          entry_points: [{
+            path: "src/cli.py",
+            role: "Command-line entry point",
+            language: "python",
+            run_command: "uv run package",
+          }],
+        },
+      },
+      dimension: "D1_topography",
+      confidence: "high",
+      evidence_summary: "Confirmed the command-line entry point.",
+    },
+    bootstrapDeltaCwd,
+  );
+  assert.equal(isToolError(validTopographyResult), false);
+  assert.equal(
+    readJson(bootstrapDeltaTools.canonicalMapPath(bootstrapDeltaCwd)).coverage.D1_topography.status,
+    "covered",
+  );
+
   const malformedLogResult = await executeTool(
     bootstrapDeltaTools.writeMapDeltaTool,
     {

@@ -45,6 +45,12 @@ export interface MapTools {
 
 type UnknownRecord = Record<string, unknown>;
 
+function isTopographyEntryPoint(value: unknown): boolean {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+    const entry = value as UnknownRecord;
+    return typeof entry.path === "string" && entry.path.length > 0;
+}
+
 function isBootstrapDraft(map: { exploration_log: ReadonlyArray<{ action: string }> }): boolean {
     return map.exploration_log.some((entry) => entry.action === "draft_bootstrap");
 }
@@ -467,7 +473,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                         `Closed by gap_filler delta (${mergeStrategy}).`;
                     const topographyEntryPoints = (merged.skeleton as UnknownRecord | undefined)?.entry_points;
                     const canCloseTopography = Array.isArray(topographyEntryPoints)
-                        && topographyEntryPoints.some((entry) => typeof entry === "string" && entry.length > 0);
+                        && topographyEntryPoints.some(isTopographyEntryPoint);
                     const coverage = (merged.coverage ?? {}) as Record<string, unknown>;
                     coverage[dim] = {
                         status: dim === "D1_topography" && !canCloseTopography ? "gap" : "covered",
