@@ -352,6 +352,11 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
     let costUsd = 0;
     let spinnerStopped = false;
     let sawWriteMapCall = false;
+    let stoppedAfterCoverageClosure = false;
+    const sessionAbortController = new AbortController();
+    const forwardExternalAbort = (): void => sessionAbortController.abort();
+    if (options.signal?.aborted) forwardExternalAbort();
+    else options.signal?.addEventListener("abort", forwardExternalAbort, { once: true });
     let runtimeResult: Awaited<ReturnType<typeof options.runtime.runSession>>;
     try {
       runtimeResult = await options.runtime.runSession({
@@ -375,7 +380,7 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
           ],
           spawnExplorerAgentDir: defaultConfigDir(),
           spawnExplorerStateDir: stateDir,
-          signal: options.signal,
+          signal: sessionAbortController.signal,
           // A stalled provider must not leave a repository transaction open
           // forever. Normal streamed responses continuously reset this timer.
           inactivityTimeoutMs: 5 * 60 * 1000,
@@ -427,6 +432,10 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
                     gap_warning: mapResult.gap_warning,
                   });
                   spinner.update("Codebase map captured — checking coverage and gaps…");
+                  if (mapResult.covered.length === mapResult.total && mapResult.gap.length === 0) {
+                    stoppedAfterCoverageClosure = true;
+                    sessionAbortController.abort();
+                  }
                 }
               } else if (toolEvent.toolName === "spawn_explorer") {
                 log.subagentSpawned({
@@ -454,7 +463,8 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
       }
     }
 
-    const finalState: FinalAuditState = runtimeResult.aborted
+    options.signal?.removeEventListener("abort", forwardExternalAbort);
+    const finalState: FinalAuditState = runtimeResult.aborted && !stoppedAfterCoverageClosure
       ? {
           status: "aborted",
           covered: 0,
