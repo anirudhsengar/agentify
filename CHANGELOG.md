@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Ensure stalled model-session cancellation releases the audit transaction before best-effort provider cleanup.
+
 - Prevent brownfield full-map writes from discarding evidence already accumulated in a bootstrap audit map; incremental recovery must use structured deltas.
 
 ### Changed

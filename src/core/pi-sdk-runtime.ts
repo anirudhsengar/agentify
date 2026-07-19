@@ -132,17 +132,25 @@ export class PiSdkRuntime implements AgentRuntime {
     const abortSession = (): void => {
       if (aborted) return;
       aborted = true;
+      // Always release the caller first. SDK cleanup reaches provider-owned
+      // abort hooks and must not be allowed to keep a repository transaction
+      // open if one of those hooks stalls or throws.
+      resolveAbort?.();
       // AgentSession.abort stops the active stream, but leaves queued follow-up
       // turns intact. A provider can queue its next tool continuation before
       // the closure callback runs, which otherwise restarts the audit after a
       // successful map has already been persisted.
-      session.clearQueue();
-      // abort() waits for the provider to become idle. A provider can fail to
-      // settle forever, so dispose immediately after signalling cancellation;
-      // this severs SDK listeners and releases the session without waiting on
-      // that untrusted remote state.
-      session.dispose();
-      resolveAbort?.();
+      try {
+        session.clearQueue();
+        // abort() waits for the provider to become idle. A provider can fail
+        // to settle forever, so dispose immediately after signalling
+        // cancellation; this severs SDK listeners without waiting on that
+        // untrusted remote state.
+        session.dispose();
+      } catch {
+        // Cancellation has already released the caller. Cleanup is best-effort
+        // because provider hooks are outside Agentify's trust boundary.
+      }
     };
     const promptUntilAbort = async (userPrompt: string): Promise<void> => {
       await Promise.race([session.prompt(userPrompt), abortPromise]);
