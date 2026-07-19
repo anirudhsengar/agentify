@@ -178,6 +178,23 @@ async function testRepairsProviderMisnestedInlineMap(): Promise<void> {
   assert.equal(prepared.mode, "auto");
 }
 
+async function testDropsWhollyEmptyPrematureArtifactIntents(): Promise<void> {
+  const { writeMapTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
+  const map = cloneMap() as CodebaseMap & Record<string, unknown>;
+  map.artifact_intents = {
+    agent_guide: { title: "Not ready", sections: [] },
+    always_on_docs: [],
+    feature_agents: [],
+    prompt_templates: [],
+    experts: [],
+    extension_candidates: [],
+  };
+  assert.ok(writeMapTool.prepareArguments);
+  const prepared = writeMapTool.prepareArguments({ map }) as { map: CodebaseMap };
+  assert.equal(Value.Check(WriteMapParamsSchema, prepared), true);
+  assert.equal(prepared.map.artifact_intents, undefined);
+}
+
 async function testInlineDefaultsCoverageAndStorageContract(): Promise<void> {
   const cwd = tempDir("inline");
   const tools = createWriteMapTools({ stateDir: ".claude/agentify" });
@@ -502,6 +519,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "tool definition contract", fn: testToolDefinitionContract },
   { name: "nullable object transport compatibility", fn: testNullableObjectTransportCompatibility },
   { name: "provider misnested inline map repair", fn: testRepairsProviderMisnestedInlineMap },
+  { name: "premature empty artifact intents are dropped", fn: testDropsWhollyEmptyPrematureArtifactIntents },
   { name: "inline defaults coverage and storage contract", fn: testInlineDefaultsCoverageAndStorageContract },
   { name: "input loading and draft contract", fn: testInputLoadingAndDraftContract },
   { name: "history validation coverage and merge contract", fn: testHistoryValidationCoverageAndMergeContract },

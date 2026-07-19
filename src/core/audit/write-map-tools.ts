@@ -80,6 +80,20 @@ function normalizeEmptyNullableObject(
     }
 }
 
+function removePrematureEmptyArtifactIntents(map: UnknownRecord): void {
+    const intents = map.artifact_intents;
+    if (intents === null || typeof intents !== "object" || Array.isArray(intents)) return;
+    const record = intents as UnknownRecord;
+    const guide = record.agent_guide;
+    if (guide === null || typeof guide !== "object" || Array.isArray(guide)) return;
+    const sections = (guide as UnknownRecord).sections;
+    if (!Array.isArray(sections) || sections.length !== 0) return;
+    const emptyLists = ["always_on_docs", "feature_agents", "prompt_templates", "experts", "extension_candidates"];
+    if (emptyLists.every((key) => Array.isArray(record[key]) && (record[key] as unknown[]).length === 0)) {
+        delete map.artifact_intents;
+    }
+}
+
 /**
  * Some OpenAI-compatible providers serialize a null value for an object-or-null
  * field as an empty object. Normalize only those known nullable object fields
@@ -112,6 +126,7 @@ function prepareMapArguments<T>(input: unknown): T {
     }
 
     const codebaseMap = candidate as UnknownRecord;
+    removePrematureEmptyArtifactIntents(codebaseMap);
     const moduleGraph = codebaseMap.module_graph as UnknownRecord | undefined;
     const typeContracts = codebaseMap.type_contract_surface as UnknownRecord | undefined;
     const conventions = codebaseMap.conventions as UnknownRecord | undefined;
