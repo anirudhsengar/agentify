@@ -144,7 +144,12 @@ function prepareMapArguments<T>(input: unknown): T {
     // string. Accept only a parsable object; malformed strings still reach the
     // strict schema and produce the normal validation error.
     prepared.map = parseSerializedObject(prepared.map);
+    prepared.codebase_map = parseSerializedObject(prepared.codebase_map);
     prepared.delta = parseSerializedObject(prepared.delta);
+    if (prepared.map === undefined && prepared.codebase_map !== undefined) {
+        prepared.map = prepared.codebase_map;
+    }
+    delete prepared.codebase_map;
     // Some providers occasionally close `map` after its first property and
     // emit the remaining map sections as siblings of the wrapper. Repair only
     // known codebase-map keys before TypeBox validation; never absorb control

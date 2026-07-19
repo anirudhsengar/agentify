@@ -25,8 +25,11 @@ const InlineMapTransportSchema = Type.Object({
   description: "Complete map transport envelope. Agentify strictly validates every nested field before persistence.",
 });
 
+const MapTransportSchema = Type.Union([InlineMapTransportSchema, SerializedMapTransportSchema]);
+
 export const WriteMapParamsSchema = Type.Object({
-  map: Type.Optional(Type.Union([InlineMapTransportSchema, SerializedMapTransportSchema])),
+  map: Type.Optional(MapTransportSchema),
+  codebase_map: Type.Optional(MapTransportSchema),
   map_file: Type.Optional(
     Type.String({
       description:

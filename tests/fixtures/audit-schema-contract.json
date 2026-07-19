@@ -9,8 +9,8 @@
       "bytes": 39982
     },
     "write_map_params": {
-      "sha256": "babdc776be92f323ebb342791ceae91da5902a7ca3385924144e614b1989c876",
-      "bytes": 1498
+      "sha256": "9cb11fa547ba7257c51870ac92d83b0fea6486f8c5439cb91d0e229e100a0edc",
+      "bytes": 2296
     },
     "write_map_delta_params": {
       "sha256": "c37b4426fba795075901b13a4a985953608ad6f1cde4713a6213cebe065f521d",
@@ -92,6 +92,7 @@
     ],
     "write_map_params": [
       "map",
+      "codebase_map",
       "map_file",
       "mode"
     ],

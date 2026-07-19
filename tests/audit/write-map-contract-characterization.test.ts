@@ -188,6 +188,14 @@ async function testRepairsProviderUnwrappedInlineMap(): Promise<void> {
   assert.equal(prepared.mode, "auto");
 }
 
+async function testAcceptsCodebaseMapTransportAlias(): Promise<void> {
+  const { writeMapTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
+  assert.ok(writeMapTool.prepareArguments);
+  const prepared = writeMapTool.prepareArguments({ codebase_map: cloneMap() }) as { map: CodebaseMap };
+  assert.equal(Value.Check(WriteMapParamsSchema, prepared), true);
+  assert.equal(prepared.map.meta.project_type, "test-fixture");
+}
+
 async function testDropsWhollyEmptyPrematureArtifactIntents(): Promise<void> {
   const { writeMapTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
   const map = cloneMap() as CodebaseMap & Record<string, unknown>;
@@ -578,6 +586,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "nullable object transport compatibility", fn: testNullableObjectTransportCompatibility },
   { name: "provider misnested inline map repair", fn: testRepairsProviderMisnestedInlineMap },
   { name: "provider unwrapped inline map repair", fn: testRepairsProviderUnwrappedInlineMap },
+  { name: "codebase map transport alias", fn: testAcceptsCodebaseMapTransportAlias },
   { name: "premature empty artifact intents are dropped", fn: testDropsWhollyEmptyPrematureArtifactIntents },
   { name: "incremental artifact intent lists are completed", fn: testCompletesIncrementalArtifactIntentLists },
   { name: "numeric validation evidence is normalized", fn: testNormalizesNumericValidationEvidence },
