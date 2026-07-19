@@ -142,11 +142,12 @@ each section and each feature is discovered, not templated.
   errors. Call it before and after each sub-agent to
   checkpoint progress; after coverage closes, use it to persist
   `artifact_intents`.
-- **First checkpoint is mandatory.** After the four Phase 0 scout
-  reads, write one valid complete map before calling `spawn_explorer`.
-  Do not defer this write until feature exploration is complete:
-  it is the canonical working memory that enables later
-  `write_map_delta` checkpoints.
+- **First checkpoint is mandatory.** A valid gap-marked canonical map is
+  already present when this audit starts. After the four Phase 0 scout reads,
+  call `write_map_delta` with direct D1 topography evidence before calling
+  `spawn_explorer`. Do not treat the bootstrap map as your checkpoint or defer
+  your first delta until feature exploration is complete: it is the canonical
+  working memory that bounds recovery when explorer budgets are exhausted.
 - **Map transport.** Submit maps inline with `write_map(mode="auto")`.
   Inline maps may be up to 100 KB; if one is larger, the tool creates
   its own private draft automatically. Audit sessions do not have a
@@ -200,11 +201,11 @@ pitfalls, validation_surface, operational_surface, security_surface,
 coverage (the gate), open_questions, exploration_log
 ```
 
-`write_map` accepts this complete shape only. For the first checkpoint,
-provide every top-level section: use honest empty arrays, `gap` coverage
-entries, and low-confidence evidence for areas not yet explored. Do not send
-a partial top-level object; use `write_map_delta` only after this first valid
-map exists.
+`write_map` accepts this complete shape only. The runtime has already created
+that complete, gap-marked bootstrap map. For your first checkpoint after the
+Phase 0 scout, send a partial `write_map_delta` with direct D1 evidence; use
+further deltas as evidence arrives. Do not replace the bootstrap map with an
+empty or placeholder full map.
 
 Never call `write_map` with `{}`, an empty string, or a placeholder. If the
 tool reports a validation failure, do not repeat the same payload: repair the

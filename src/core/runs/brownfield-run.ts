@@ -293,7 +293,8 @@ function buildBrownfieldUserPrompt(
   const allTargets = [...targets, ...(additionalAgents ?? [])];
   return [
     "Audit this existing codebase and bootstrap its agentic surface.",
-    "Explore the codebase, fill the structured codebase map via write_map, and close every coverage area before emitting artifact_intents.",
+    "A gap-marked canonical map has already been created for this audit. After the initial four scout reads, you MUST call write_map_delta with direct evidence for D1_topography before calling spawn_explorer; then checkpoint further direct evidence as you explore.",
+    "Explore the codebase, fill the structured codebase map via write_map_delta, and close every coverage area before emitting artifact_intents.",
     "The map and artifact_intents are internal structured state; TypeScript renderers write user-facing files after validation.",
     "Do not write AGENTS.md, specs/README.md, ai_docs/README.md, .pi/agents, .pi/prompts, .pi/extensions, scaffold, or harness exports directly.",
     "Describe codebase-emergent intelligence in artifact_intents: agent guide sections, always-on docs, feature specialists, prompt templates, expert prompts, and extension candidates when warranted.",

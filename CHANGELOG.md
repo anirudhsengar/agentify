@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Large brownfield audits now explicitly require a direct topography delta
+  before delegating feature exploration, preventing a pre-created bootstrap
+  map from being mistaken for the auditor's first checkpoint.
+
 - Incremental bootstrap-map updates now retain the valid audit trail when a
   provider supplies a malformed exploration log, allowing the remaining
   evidence to be sanitized and persisted instead of failing during logging.
