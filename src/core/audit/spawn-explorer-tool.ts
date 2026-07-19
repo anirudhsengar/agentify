@@ -65,10 +65,13 @@ const EXPLORERS_DIR = path.join(HERE, "prompts", "explorers");
 // for a structured ## Report; anything larger is truncated to
 // prevent context overflow.
 const MAX_REPORT_BYTES = 32_000;
-const DEFAULT_MAX_TOTAL_SPAWNS = 64;
-const DEFAULT_MAX_CONCURRENT_SPAWNS = 4;
-const DEFAULT_SUBAGENT_TIMEOUT_MS = 10 * 60 * 1000;
-const DEFAULT_MAX_TOTAL_COST_USD = 10;
+// A brownfield audit must finish in a useful amount of time even when a
+// provider stalls. These are deliberately conservative defaults: the parent
+// can synthesize from its own scouts and honest gaps after bounded attempts.
+const DEFAULT_MAX_TOTAL_SPAWNS = 16;
+const DEFAULT_MAX_CONCURRENT_SPAWNS = 2;
+const DEFAULT_SUBAGENT_TIMEOUT_MS = 2 * 60 * 1000;
+const DEFAULT_MAX_TOTAL_COST_USD = 5;
 
 // The 9 dimension-shaped modes plus a 10th "custom" mode (Phase 2.10)
 // that takes an inline or file-based system prompt composed by the

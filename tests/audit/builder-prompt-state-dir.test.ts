@@ -83,14 +83,34 @@ async function testPromptUsesConfiguredExplorerModelByDefault(): Promise<void> {
   );
 }
 
+async function testPromptKeepsExplorerDispatchBounded(): Promise<void> {
+  const raw = readRawBuilderPrompt();
+  assert.match(
+    raw,
+    /Start with one high-value feature explorer\. Read and merge\nits report before dispatching the next one/,
+    "builder prompt must gather and use evidence before dispatching more explorers",
+  );
+  assert.match(
+    raw,
+    /at most 16 explorers per\n+audit, two active at once, and two minutes per explorer/,
+    "builder prompt must disclose the finite explorer budget",
+  );
+  assert.doesNotMatch(
+    raw,
+    /There is no\nparallel cap and no hard action limit/,
+    "builder prompt must not invite unbounded explorer dispatch",
+  );
+}
+
 async function main(): Promise<void> {
   await testSourcePromptHasStateDirPlaceholder();
   await testSourcePromptHasNoHardcodedAgentify();
   await testLoadSubstitutesPlaceholder();
   await testPromptRequiresInitialMapBeforeExplorers();
   await testPromptUsesConfiguredExplorerModelByDefault();
+  await testPromptKeepsExplorerDispatchBounded();
   // eslint-disable-next-line no-console
-  console.log("builder-prompt-state-dir: all 5 checks passed");
+  console.log("builder-prompt-state-dir: all 6 checks passed");
 }
 
 await main();

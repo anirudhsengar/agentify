@@ -341,7 +341,7 @@ Persist the feature plan in
 `meta.external_dependencies` (parsed from the manifest in
 Phase 0) via `write_map_delta`.
 
-### Phase 2 — Per-Feature Sub-Agents (soft guidance: 3–4 actions per feature)
+### Phase 2 — Per-Feature Sub-Agents (bounded guidance: 3–4 actions per feature)
 
 For each feature, dispatch a `custom` sub-agent. The flow
 per feature:
@@ -377,10 +377,14 @@ per feature:
 6. Mark the relevant coverage areas `covered` with the
    feature's evidence summary.
 
-You can dispatch multiple sub-agents in parallel in a
-single turn if they are independent features. There is no
-parallel cap and no hard action limit; dispatch as many as
-the feature decomposition needs and the evidence demands.
+Start with one high-value feature explorer. Read and merge
+its report before dispatching the next one; only dispatch a
+second independent explorer when the first report leaves a
+real coverage gap. The tool allows at most 16 explorers per
+audit, two active at once, and two minutes per explorer.
+For a small repository, one feature explorer plus targeted
+coverage work is usually sufficient. Never queue explorers
+just to reach an arbitrary feature count.
 
 ### Phase 3 — Coverage Sweep (soft guidance: 6–8 actions)
 
@@ -432,9 +436,9 @@ closure feedback.
   artifact emission.
 
 There is no prompt-level fixed "reserve" for gap_filler, but
-`spawn_explorer` has a hard dispatch budget. Dispatch as many
-as your judgment says is productive within that budget. If a
-gap can't be closed after 2–3 attempts with different angles, or
+`spawn_explorer` has a hard dispatch budget. Before dispatching,
+check whether the existing map evidence can close the gap
+honestly. If a gap can't be closed after 2–3 attempts with different angles, or
 the tool reports budget exhaustion with `resume.can_continue`,
 persist the strongest partial state with `write_map` /
 `write_map_delta`. The right answer is usually honest `null`,

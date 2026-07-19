@@ -174,8 +174,49 @@ async function testRejectsWhenCostBudgetIsExhausted(): Promise<void> {
   }
 }
 
+async function testDefaultsBoundSmallRepositoryAudits(): Promise<void> {
+  const cwd = tempDir("spawn-budget-defaults");
+  try {
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      stateDir: ".pi/agentify",
+      ...stubExplorerArgs(),
+      createSession: async () => ({
+        session: {
+          messages: [{ role: "assistant", content: "## Report\n\nExploration complete." }],
+          async prompt(): Promise<void> {},
+          dispose(): void {},
+        },
+      }),
+    });
+    const result = await tool.execute(
+      "test-spawn-budget-defaults",
+      { target_path: "." } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    const details = result.details as {
+      max_total_spawns?: number;
+      max_concurrent_spawns?: number;
+      max_subagent_duration_ms?: number;
+      max_total_cost_usd?: number;
+    } | undefined;
+    assert.deepEqual(details, {
+      ...details,
+      max_total_spawns: 16,
+      max_concurrent_spawns: 2,
+      max_subagent_duration_ms: 120_000,
+      max_total_cost_usd: 5,
+    });
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 await testRejectsWhenTotalSpawnBudgetIsExhausted();
 await testRejectsWhenConcurrentSpawnBudgetIsExhausted();
 await testRejectsWhenCostBudgetIsExhausted();
+await testDefaultsBoundSmallRepositoryAudits();
 
 console.log("spawn-explorer budget tests passed.");

@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Brownfield explorer dispatch is now bounded to 16 total explorers, two
+  concurrent explorers, and two minutes per explorer. The builder prompt now
+  directs evidence-first dispatch instead of inviting unbounded parallel work.
+
 - Audit logs now omit repetitive streaming partial-message events, preventing
   long model responses from expanding a single run log by hundreds of
   megabytes while retaining message-boundary and tool-execution evidence.
