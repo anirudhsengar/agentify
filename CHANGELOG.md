@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Audit logs now omit repetitive streaming partial-message events, preventing
+  long model responses from expanding a single run log by hundreds of
+  megabytes while retaining message-boundary and tool-execution evidence.
+
 - Feature explorers now inherit the configured explorer model by default.
   Brownfield audits no longer waste attempts requesting unavailable Anthropic
   model aliases on providers such as MiniMax.

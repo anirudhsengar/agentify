@@ -265,6 +265,11 @@ export class AgentifyLog {
   }
 
   sessionEvent(payload: SessionEventPayload): void {
+    // Streaming updates repeat the complete partial assistant message on every
+    // token. Persisting them makes a single long tool call produce hundreds of
+    // megabytes of cumulative duplicate content. Message boundaries and tool
+    // execution events retain the durable audit trail without that growth.
+    if (payload.pi_event_type === "message_update") return;
     this.write("agentify.session_event", payload);
   }
 
