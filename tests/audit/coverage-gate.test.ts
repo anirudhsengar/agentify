@@ -119,6 +119,7 @@ class RecoveryRuntime implements AgentRuntime {
     assert.ok(options.recoveryPromptIfToolNotCalled);
     assert.equal(options.recoveryPromptIfToolNotCalled.requiredToolName, "write_map_delta");
     assert.equal(options.recoveryPromptIfToolNotCalled.maxAttempts, 2);
+    assert.equal(options.recoveryPromptIfToolNotCalled.shouldRecover?.(), true);
     assert.ok(options.spawnExplorerStateDir);
     writeArtifacts(options.cwd, options.spawnExplorerStateDir, {
       map: makeValidCodebaseMap(),

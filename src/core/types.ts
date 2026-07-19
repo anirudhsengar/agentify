@@ -168,6 +168,11 @@ export interface AgentRuntimeSessionOptions {
     userPrompt: string;
     /** Maximum in-session follow-ups after the initial prompt. */
     maxAttempts: number;
+    /**
+     * Optional owned-state check for recovery after a tool call. This covers
+     * sessions that persisted only partial structured progress before ending.
+     */
+    shouldRecover?: () => boolean;
   };
   /**
    * Which named slot role this session is filling. Defaults to

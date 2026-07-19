@@ -190,16 +190,18 @@ export class PiSdkRuntime implements AgentRuntime {
       resetInactivityTimer();
       await promptUntilAbort(options.userPrompt);
       const recovery = options.recoveryPromptIfToolNotCalled;
+      const recoveryNeeded = (): boolean =>
+        !sawRequiredRecoveryTool || recovery?.shouldRecover?.() === true;
       for (
         let attempt = 0;
-        !aborted && recovery && !sawRequiredRecoveryTool && attempt < recovery.maxAttempts;
+        !aborted && recovery && recoveryNeeded() && attempt < recovery.maxAttempts;
         attempt += 1
       ) {
         const userPrompt = attempt === 0
           ? recovery.userPrompt
           : [
             `Do not send another prose response. Call ${recovery.requiredToolName} now as your only next action.`,
-            "Use the evidence already in this session and submit the complete structured payload.",
+            "Use the evidence already in this session and submit the missing structured payload.",
           ].join(" ");
         await promptUntilAbort(userPrompt);
       }

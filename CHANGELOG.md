@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Brownfield runtime recovery now also checks owned coverage state after a
+  structured map write, so a model that ends with incomplete coverage receives
+  bounded same-session delta recovery prompts instead of being treated as done.
+
 - Brownfield audits now create a transaction-scoped, honest gap-marked map
   before model analysis when no canonical map exists. This lets large audits
   provide evidence through incremental `write_map_delta` calls while retaining
