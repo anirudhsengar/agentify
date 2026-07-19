@@ -550,6 +550,24 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   assert.deepEqual(bootstrapDeltaMap.skeleton.entry_points, []);
   assert.equal(bootstrapDeltaMap.coverage.D1_topography.status, "covered");
 
+  const malformedLogResult = await executeTool(
+    bootstrapDeltaTools.writeMapDeltaTool,
+    {
+      delta: {
+        exploration_log: { invalid: "provider-shaped object" },
+        type_contract_surface: { one_type_trace: { name: "Incomplete trace" } },
+      },
+      dimension: "D3_type_contract",
+      confidence: "medium",
+      evidence_summary: "Attempted a partial type trace.",
+    },
+    bootstrapDeltaCwd,
+  );
+  assert.equal(isToolError(malformedLogResult), false);
+  const malformedLogMap = readJson(bootstrapDeltaTools.canonicalMapPath(bootstrapDeltaCwd));
+  assert.ok(Array.isArray(malformedLogMap.exploration_log));
+  assert.ok(malformedLogMap.exploration_log.some((entry) => entry.action === "gap_filler_delta"));
+
   const appendCwd = tempDir("merge-append");
   const appendTools = createWriteMapTools({ stateDir: ".agents/agentify" });
   const appendBase = cloneMap();

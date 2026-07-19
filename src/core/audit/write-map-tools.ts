@@ -474,7 +474,14 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                     merged.coverage = coverage;
                 }
 
-                const log = (merged.exploration_log ?? []) as Array<Record<string, unknown>>;
+                // A delta is allowed to omit the log, but it must never turn the
+                // application-owned audit trail into an arbitrary object. Some
+                // providers emit a keyed log object while filling a dimension;
+                // retain the last valid trail in that case so the delta can still
+                // pass through the bootstrap sanitizer below.
+                const log = Array.isArray(merged.exploration_log)
+                    ? merged.exploration_log as Array<Record<string, unknown>>
+                    : structuredClone(existing.exploration_log) as Array<Record<string, unknown>>;
                 log.push({
                     ts: new Date().toISOString(),
                     action: "gap_filler_delta",

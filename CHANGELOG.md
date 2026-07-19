@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Incremental bootstrap-map updates now retain the valid audit trail when a
+  provider supplies a malformed exploration log, allowing the remaining
+  evidence to be sanitized and persisted instead of failing during logging.
+
 - Brownfield runtime recovery now also checks owned coverage state after a
   structured map write, so a model that ends with incomplete coverage receives
   bounded same-session delta recovery prompts instead of being treated as done.
