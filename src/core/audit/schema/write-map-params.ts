@@ -1,7 +1,6 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type, type Static } from "typebox";
 import { COVERAGE_DIMENSIONS } from "../coverage.ts";
-import { PartialCodebaseMapSchema } from "./codebase-map.ts";
 
 const SerializedMapTransportSchema = Type.String({
   description:
@@ -26,6 +25,9 @@ const InlineMapTransportSchema = Type.Object({
 });
 
 const MapTransportSchema = Type.Union([InlineMapTransportSchema, SerializedMapTransportSchema]);
+const DeltaTransportSchema = Type.Record(Type.String(), Type.Unknown(), {
+  description: "Incremental map update transport. Agentify merges this into the canonical map and strictly validates the complete result.",
+});
 
 export const WriteMapParamsSchema = Type.Object({
   map: Type.Optional(MapTransportSchema),
@@ -63,7 +65,7 @@ export const WriteMapDeltaParamsSchema = Type.Object({
       description: "1-2 sentence summary of what was found. Used verbatim in AGENTS.md.",
     }),
   ),
-  delta: Type.Union([PartialCodebaseMapSchema, SerializedMapTransportSchema]),
+  delta: Type.Union([DeltaTransportSchema, SerializedMapTransportSchema]),
   merge_strategy: Type.Optional(
     StringEnum(["shallow_overwrite", "deep_merge", "append"] as const, {
       default: "shallow_overwrite",

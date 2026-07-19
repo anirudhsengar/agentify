@@ -25,7 +25,7 @@ import {
     type MapPathConfig,
     type MapToolExecutionContext,
 } from "./map-storage.ts";
-import { validateMap, validatePartialMap } from "./map-validation.ts";
+import { validateMap } from "./map-validation.ts";
 
 export interface MapTools {
     writeMapTool: ToolDefinition;
@@ -392,7 +392,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
         description:
             "Merge a partial delta into the canonical codebase map. Used by `gap_filler` " +
             "sub-agents to close a single dimension's gap without re-persisting the entire " +
-            "map. The delta is schema-validated via PartialCodebaseMapSchema. The merge " +
+            "map. Agentify merges the delta and strictly validates the complete result. The merge " +
             "strategy controls how delta fields are combined with the existing map " +
             "(`shallow_overwrite` = default, `deep_merge` = recursive merge, `append` = " +
             "push onto arrays). If `dimension` is provided, the corresponding coverage " +
@@ -419,10 +419,9 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 };
             }
 
-            const validation = validatePartialMap(prepared.delta as unknown);
-            if (!validation.ok) {
+            if (prepared.delta === null || typeof prepared.delta !== "object" || Array.isArray(prepared.delta)) {
                 return {
-                    content: [{ type: "text", text: `Error: ${validation.error}` }],
+                    content: [{ type: "text", text: "Error: write_map_delta requires an object delta." }],
                     isError: true,
                     details: undefined as unknown as Record<string, unknown>,
                 };
@@ -436,7 +435,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             const strategy = (params.merge_strategy ?? "shallow_overwrite") as MapMergeStrategy;
             const merged = applyMapDelta(
                 existing as unknown as Record<string, unknown>,
-                validation.value,
+                prepared.delta as Record<string, unknown>,
                 strategy,
             );
 
@@ -473,7 +472,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                             type: "text",
                             text:
                                 `Error: merged map failed schema validation. ` +
-                                `This is a bug — the delta itself was valid. ` +
+                                `Correct the reported delta fields and retry. ` +
                                 `${mergedValidation.error}`,
                         },
                     ],

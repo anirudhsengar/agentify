@@ -114,7 +114,7 @@ async function testToolDefinitionContract(): Promise<void> {
     writeMapDeltaTool.description,
     "Merge a partial delta into the canonical codebase map. Used by `gap_filler` " +
       "sub-agents to close a single dimension's gap without re-persisting the entire " +
-      "map. The delta is schema-validated via PartialCodebaseMapSchema. The merge " +
+      "map. Agentify merges the delta and strictly validates the complete result. The merge " +
       "strategy controls how delta fields are combined with the existing map " +
       "(`shallow_overwrite` = default, `deep_merge` = recursive merge, `append` = " +
       "push onto arrays). If `dimension` is provided, the corresponding coverage " +
@@ -458,7 +458,7 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   assert.equal(isToolError(partialResult), true);
   assert.equal(
     resultText(partialResult),
-    "Error: Partial schema validation failed with 1 error(s):\n" +
+    "Error: merged map failed schema validation. Correct the reported delta fields and retry. Schema validation failed with 1 error(s):\n" +
       "  - /pitfalls/0: must have required properties module, what, consequence, line_ref, " +
       "expected unknown",
   );
