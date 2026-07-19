@@ -70,7 +70,10 @@ const MAX_REPORT_BYTES = 32_000;
 // can synthesize from its own scouts and honest gaps after bounded attempts.
 const DEFAULT_MAX_TOTAL_SPAWNS = 16;
 const DEFAULT_MAX_CONCURRENT_SPAWNS = 2;
-const DEFAULT_SUBAGENT_TIMEOUT_MS = 2 * 60 * 1000;
+// Large brownfield feature subtrees can require several model turns even with
+// the explorer's read-only tool budget. Keep the timeout bounded, but leave
+// enough room for a useful structured report rather than repeated retries.
+const DEFAULT_SUBAGENT_TIMEOUT_MS = 3 * 60 * 1000;
 const DEFAULT_MAX_TOTAL_COST_USD = 5;
 
 // The 9 dimension-shaped modes plus a 10th "custom" mode (Phase 2.10)

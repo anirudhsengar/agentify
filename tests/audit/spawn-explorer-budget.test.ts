@@ -206,7 +206,7 @@ async function testDefaultsBoundSmallRepositoryAudits(): Promise<void> {
       ...details,
       max_total_spawns: 16,
       max_concurrent_spawns: 2,
-      max_subagent_duration_ms: 120_000,
+      max_subagent_duration_ms: 180_000,
       max_total_cost_usd: 5,
     });
   } finally {
