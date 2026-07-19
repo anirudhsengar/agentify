@@ -79,7 +79,7 @@ async function testExactVerifiedArtifactIsPublished(): Promise<void> {
   assert.match(verify, /path: \$\{\{ steps\.pack\.outputs\.filename \}\}/);
   assert.doesNotMatch(verify, /agentify-\*\.tgz/);
 
-  assert.match(publish, /actions\/download-artifact@v4/);
+  assert.match(publish, /actions\/download-artifact@v8/);
   assert.match(publish, /shopt -s nullglob/);
   assert.match(publish, /tarballs=\(\.\/release-artifact\/\*\.tgz\)/);
   assert.match(publish, /\$\{#tarballs\[@\]\} != 1/);
@@ -87,7 +87,7 @@ async function testExactVerifiedArtifactIsPublished(): Promise<void> {
   assert.doesNotMatch(publish, /npm\s+(?:pack|run\s+build)/, "publish job must not rebuild or repack");
   assert.doesNotMatch(publish, /agentify-\*\.tgz/);
 
-  assert.match(release, /actions\/download-artifact@v4/);
+  assert.match(release, /actions\/download-artifact@v8/);
   assert.match(release, /tarballs=\(\.\/release-artifact\/\*\.tgz\)/);
   assert.match(release, /\$\{#tarballs\[@\]\} != 1/);
   assert.match(release, /path=%s\\n/);
