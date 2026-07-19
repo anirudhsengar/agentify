@@ -111,6 +111,15 @@ function removePrematureEmptyArtifactIntents(map: UnknownRecord): void {
     }
 }
 
+function normalizePartialArtifactIntents(map: UnknownRecord): void {
+    const intents = map.artifact_intents;
+    if (intents === null || typeof intents !== "object" || Array.isArray(intents)) return;
+    const record = intents as UnknownRecord;
+    for (const key of ["always_on_docs", "feature_agents", "prompt_templates", "experts", "extension_candidates"]) {
+        if (!(key in record)) record[key] = [];
+    }
+}
+
 /**
  * Some OpenAI-compatible providers serialize a null value for an object-or-null
  * field as an empty object. Normalize only those known nullable object fields
@@ -151,6 +160,7 @@ function prepareMapArguments<T>(input: unknown): T {
     }
 
     const codebaseMap = candidate as UnknownRecord;
+    normalizePartialArtifactIntents(codebaseMap);
     removePrematureEmptyArtifactIntents(codebaseMap);
     const moduleGraph = codebaseMap.module_graph as UnknownRecord | undefined;
     const typeContracts = codebaseMap.type_contract_surface as UnknownRecord | undefined;

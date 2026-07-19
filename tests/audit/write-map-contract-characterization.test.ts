@@ -205,6 +205,18 @@ async function testDropsWhollyEmptyPrematureArtifactIntents(): Promise<void> {
   assert.equal(prepared.map.artifact_intents, undefined);
 }
 
+async function testCompletesIncrementalArtifactIntentLists(): Promise<void> {
+  const { writeMapDeltaTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
+  assert.ok(writeMapDeltaTool.prepareArguments);
+  const prepared = writeMapDeltaTool.prepareArguments({
+    delta: { artifact_intents: { agent_guide: { title: "Guide", sections: [{ heading: "Scope", body: "Details." }] } } },
+  }) as { delta: { artifact_intents: Record<string, unknown> } };
+  assert.equal(Value.Check(WriteMapDeltaParamsSchema, prepared), true);
+  for (const key of ["always_on_docs", "feature_agents", "prompt_templates", "experts", "extension_candidates"]) {
+    assert.deepEqual(prepared.delta.artifact_intents[key], []);
+  }
+}
+
 async function testRepairsSerializedInlineMap(): Promise<void> {
   const { writeMapTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
   assert.ok(writeMapTool.prepareArguments);
@@ -557,6 +569,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "provider misnested inline map repair", fn: testRepairsProviderMisnestedInlineMap },
   { name: "provider unwrapped inline map repair", fn: testRepairsProviderUnwrappedInlineMap },
   { name: "premature empty artifact intents are dropped", fn: testDropsWhollyEmptyPrematureArtifactIntents },
+  { name: "incremental artifact intent lists are completed", fn: testCompletesIncrementalArtifactIntentLists },
   { name: "provider serialized inline map repair", fn: testRepairsSerializedInlineMap },
   { name: "provider double-serialized inline map repair", fn: testRepairsDoubleSerializedInlineMap },
   { name: "serialized map executes after transport validation", fn: testExecutesSerializedInlineMapAfterTransportValidation },
