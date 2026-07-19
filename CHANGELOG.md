@@ -13,6 +13,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- The mandatory first topography checkpoint now requires a real entry point,
+  preventing a superficially covered D1 from failing the strict closure gate.
+
 - Session cancellation now clears queued SDK continuations before aborting the
   active stream, preventing post-closure provider reads from extending a
   successfully completed brownfield audit.
