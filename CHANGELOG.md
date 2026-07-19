@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Session cancellation now clears queued SDK continuations before aborting the
+  active stream, preventing post-closure provider reads from extending a
+  successfully completed brownfield audit.
+
 - Large brownfield audits now explicitly require a direct topography delta
   before delegating feature exploration, preventing a pre-created bootstrap
   map from being mistaken for the auditor's first checkpoint.
