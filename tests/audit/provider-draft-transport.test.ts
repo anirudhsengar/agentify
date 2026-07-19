@@ -118,8 +118,8 @@ async function testExistingLegacyDraftIsNotReadOrOverwritten(): Promise<void> {
   }
 }
 
-async function testValidationFailureKeepsScopedDraftAndCleansAtomicTemp(): Promise<void> {
-  const cwd = tempDir("draft-validation-error");
+async function testPartialOversizedEvidenceUsesScopedDraftAndCleansAtomicTemp(): Promise<void> {
+  const cwd = tempDir("draft-partial-evidence");
   const tools = createWriteMapTools({ stateDir: ".agents/agentify" });
   const invalid = oversizedMap("invalid") as unknown as Record<string, unknown>;
   delete invalid.coverage;
@@ -131,10 +131,10 @@ async function testValidationFailureKeepsScopedDraftAndCleansAtomicTemp(): Promi
       undefined,
       { cwd } as never,
     );
-    assert.equal(isToolError(result), true);
+    assert.equal(isToolError(result), false);
     const draftPath = path.join(cwd, tools.draftPathRelative);
     assert.ok(fs.existsSync(draftPath));
-    assert.equal(fs.existsSync(tools.canonicalMapPath(cwd)), false);
+    assert.equal(fs.existsSync(tools.canonicalMapPath(cwd)), true);
     assert.equal(fs.existsSync(path.join(cwd, LEGACY_PI_STATE_RELATIVE_DIR, ".agentify", "draft.json")), false);
     assertNoAtomicTemps(path.dirname(draftPath));
   } finally {
@@ -146,5 +146,5 @@ async function testValidationFailureKeepsScopedDraftAndCleansAtomicTemp(): Promi
 await testProviderFactoriesUseTheirConfiguredDraftPath();
 await testTwoFactoriesDoNotShareDraftTransport();
 await testExistingLegacyDraftIsNotReadOrOverwritten();
-await testValidationFailureKeepsScopedDraftAndCleansAtomicTemp();
+await testPartialOversizedEvidenceUsesScopedDraftAndCleansAtomicTemp();
 console.log("provider-scoped draft transport tests passed.");
