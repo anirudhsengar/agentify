@@ -367,6 +367,25 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
 
             const validMap = validation.value;
             const existingMap = readCanonicalMap(ctx.cwd, context);
+            const closure = formatCoverageClosure(validMap);
+            if (existingMap !== null && isBootstrapDraft(existingMap)) {
+                const existingClosure = formatCoverageClosure(existingMap);
+                if (closure.closed.length < existingClosure.closed.length) {
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text:
+                                    "Error: full map write would discard previously recorded audit evidence " +
+                                    `(${existingClosure.closed.length} closed dimensions would become ${closure.closed.length}). ` +
+                                    "Keep the canonical map intact and use write_map_delta to add or repair a single dimension.",
+                            },
+                        ],
+                        isError: true,
+                        details: undefined as unknown as Record<string, unknown>,
+                    };
+                }
+            }
             if (
                 existingMap !== null
                 && isBootstrapDraft(existingMap)
@@ -375,7 +394,6 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                 const bootstrapEntry = existingMap.exploration_log.find((entry) => entry.action === "draft_bootstrap");
                 if (bootstrapEntry) validMap.exploration_log.unshift(bootstrapEntry);
             }
-            const closure = formatCoverageClosure(validMap);
             let writeResult: { path: string; size_bytes: number };
             try {
                 writeResult = writeCanonicalMap(ctx.cwd, validMap, context);

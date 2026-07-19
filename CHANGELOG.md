@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Prevent brownfield full-map writes from discarding evidence already accumulated in a bootstrap audit map; incremental recovery must use structured deltas.
+
 ### Changed
 
 - GitHub Actions automation is now an explicit opt-in: interactive runs ask before installation or refresh, and scripted runs require `--github-runtime`. Default audits retain codebase intelligence and selected harness exports without adding workflows, secrets guidance, or Agentify implementation tests to the target repository.

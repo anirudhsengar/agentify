@@ -17,6 +17,7 @@ import {
   loadCanonicalMapAt,
   resetReserveCounters,
 } from "../../src/core/audit/write-map-tool.ts";
+import { createGapDraftMap } from "../../src/core/audit/map-draft.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
 const MAX_MAP_FILE_BYTES = 1_000_000;
@@ -692,6 +693,25 @@ async function testObservabilityAndFactoryContract(): Promise<void> {
   assert.equal(loadCanonicalMapAt(piCwd, ".agents/agentify"), null);
 }
 
+async function testBootstrapMapRejectsRegressiveFullWrite(): Promise<void> {
+  const cwd = tempDir("bootstrap-regression");
+  const tools = createWriteMapTools({ stateDir: ".agents/agentify" });
+  const accumulated = cloneMap();
+  accumulated.exploration_log.unshift({
+    ts: new Date().toISOString(),
+    action: "draft_bootstrap",
+    target: ".",
+    observation: "Initial gap-marked audit map.",
+  });
+  const initial = await executeTool(tools.writeMapTool, { map: accumulated }, cwd);
+  assert.equal(isToolError(initial), false);
+
+  const rejected = await executeTool(tools.writeMapTool, { map: createGapDraftMap() }, cwd);
+  assert.equal(isToolError(rejected), true);
+  assert.match(resultText(rejected), /would discard previously recorded audit evidence/);
+  assert.equal(readJson(tools.canonicalMapPath(cwd)).coverage.D1_topography.status, "covered");
+}
+
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "tool definition contract", fn: testToolDefinitionContract },
   { name: "nullable object transport compatibility", fn: testNullableObjectTransportCompatibility },
@@ -709,6 +729,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "input loading and draft contract", fn: testInputLoadingAndDraftContract },
   { name: "history validation coverage and merge contract", fn: testHistoryValidationCoverageAndMergeContract },
   { name: "observability and explicit factory contract", fn: testObservabilityAndFactoryContract },
+  { name: "bootstrap map rejects regressive full write", fn: testBootstrapMapRejectsRegressiveFullWrite },
 ];
 
 let passed = 0;
