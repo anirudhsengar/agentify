@@ -461,7 +461,11 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
                     gap_warning: mapResult.gap_warning,
                   });
                   spinner.update("Codebase map captured — checking coverage and gaps…");
-                  if (mapResult.covered.length === mapResult.total && mapResult.gap.length === 0) {
+                  if (
+                    mapResult.covered.length === mapResult.total
+                    && mapResult.gap.length === 0
+                    && (mapResult.gap_warning?.length ?? 0) === 0
+                  ) {
                     stoppedAfterCoverageClosure = true;
                     sessionAbortController.abort();
                   }
