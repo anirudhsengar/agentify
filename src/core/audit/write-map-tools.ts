@@ -439,38 +439,49 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             }
 
             const strategy = (params.merge_strategy ?? "shallow_overwrite") as MapMergeStrategy;
-            const merged = applyMapDelta(
-                existing as unknown as Record<string, unknown>,
-                prepared.delta as Record<string, unknown>,
-                strategy,
-            );
+            const mergeAndAnnotate = (mergeStrategy: MapMergeStrategy): Record<string, unknown> => {
+                const merged = applyMapDelta(
+                    existing as unknown as Record<string, unknown>,
+                    prepared.delta as Record<string, unknown>,
+                    mergeStrategy,
+                );
 
-            if (params.dimension) {
-                const dim = params.dimension;
-                const confidence = params.confidence ?? "medium";
-                const evidenceSummary =
-                    params.evidence_summary ??
-                    `Closed by gap_filler delta (${strategy}).`;
-                const coverage = (merged.coverage ?? {}) as Record<string, unknown>;
-                coverage[dim] = {
-                    status: "covered",
-                    confidence,
-                    evidence_summary: evidenceSummary,
-                };
-                merged.coverage = coverage;
+                if (params.dimension) {
+                    const dim = params.dimension;
+                    const confidence = params.confidence ?? "medium";
+                    const evidenceSummary =
+                        params.evidence_summary ??
+                        `Closed by gap_filler delta (${mergeStrategy}).`;
+                    const coverage = (merged.coverage ?? {}) as Record<string, unknown>;
+                    coverage[dim] = {
+                        status: "covered",
+                        confidence,
+                        evidence_summary: evidenceSummary,
+                    };
+                    merged.coverage = coverage;
+                }
+
+                const log = (merged.exploration_log ?? []) as Array<Record<string, unknown>>;
+                log.push({
+                    ts: new Date().toISOString(),
+                    action: "gap_filler_delta",
+                    target: params.dimension ?? "(no-dim)",
+                    observation: `merged delta from write_map_delta (strategy=${mergeStrategy})`,
+                });
+                merged.exploration_log = log;
+                return merged;
+            };
+
+            let appliedStrategy = strategy;
+            let merged = mergeAndAnnotate(appliedStrategy);
+            let { map: withDefaults } = applyMapDefaults(merged);
+            let mergedValidation = validateMap(withDefaults);
+            if (!mergedValidation.ok && strategy === "shallow_overwrite") {
+                appliedStrategy = "deep_merge";
+                merged = mergeAndAnnotate(appliedStrategy);
+                ({ map: withDefaults } = applyMapDefaults(merged));
+                mergedValidation = validateMap(withDefaults);
             }
-
-            const log = (merged.exploration_log ?? []) as Array<Record<string, unknown>>;
-            log.push({
-                ts: new Date().toISOString(),
-                action: "gap_filler_delta",
-                target: params.dimension ?? "(no-dim)",
-                observation: `merged delta from write_map_delta (strategy=${strategy})`,
-            });
-            merged.exploration_log = log;
-
-            const { map: withDefaults } = applyMapDefaults(merged);
-            const mergedValidation = validateMap(withDefaults);
             if (!mergedValidation.ok) {
                 return {
                     content: [
@@ -503,7 +514,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
 
             const resultText =
                 `Merged delta into codebase map at ${writeResult.path} (${writeResult.size_bytes} bytes). ` +
-                `Strategy: ${strategy}. Dimension: ${params.dimension ?? "(none)"}. ` +
+                `Strategy: ${appliedStrategy}. Dimension: ${params.dimension ?? "(none)"}. ` +
                 `Gap-filler count for ${params.dimension ?? "n/a"}: ${params.dimension ? getReserveCount(params.dimension) : 0} (soft ceiling: ${GAP_FILLER_SOFT_CEILING}). ` +
                 `${closure.line}` +
                 (reserveWarning ? ` Note: ${reserveWarning}` : "");
@@ -514,7 +525,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                     path: writeResult.path,
                     size_bytes: writeResult.size_bytes,
                     dimension: params.dimension ?? null,
-                    merge_strategy: strategy,
+                    merge_strategy: appliedStrategy,
                     gap_filler_count: params.dimension ? getReserveCount(params.dimension) : 0,
                     gap_filler_soft_ceiling: GAP_FILLER_SOFT_CEILING,
                     coverage_summary: {

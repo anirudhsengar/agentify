@@ -18,6 +18,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   provide evidence through incremental `write_map_delta` calls while retaining
   the same strict coverage gate before any artifacts are rendered.
 
+- Partial nested map deltas now automatically retry as a deep merge when the
+  declared default shallow merge would erase required existing evidence.
+
 - Brownfield session timeouts now race pending provider prompts, so an SDK
   abort that never settles cannot keep the audit process or its state
   transaction open indefinitely.

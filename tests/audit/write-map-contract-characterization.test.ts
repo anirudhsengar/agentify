@@ -505,6 +505,20 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   assert.equal(resultDetails(shallowResult).merge_strategy, "shallow_overwrite");
   assert.deepEqual(readJson(shallowTools.canonicalMapPath(shallowCwd)).pitfalls, [newPitfall]);
 
+  const partialNestedCwd = tempDir("merge-partial-nested");
+  const partialNestedTools = createWriteMapTools({ stateDir: ".claude/agentify" });
+  await executeTool(partialNestedTools.writeMapTool, { map: cloneMap() }, partialNestedCwd);
+  const partialNestedResult = await executeTool(
+    partialNestedTools.writeMapDeltaTool,
+    { delta: { skeleton: { top_level_tree: ["src/"] } } },
+    partialNestedCwd,
+  );
+  assert.equal(isToolError(partialNestedResult), false);
+  assert.equal(resultDetails(partialNestedResult).merge_strategy, "deep_merge");
+  const partialNestedMap = readJson(partialNestedTools.canonicalMapPath(partialNestedCwd));
+  assert.deepEqual(partialNestedMap.skeleton.top_level_tree, ["src/"]);
+  assert.equal(partialNestedMap.skeleton.code_test_mirror.observed, true);
+
   const appendCwd = tempDir("merge-append");
   const appendTools = createWriteMapTools({ stateDir: ".agents/agentify" });
   const appendBase = cloneMap();
