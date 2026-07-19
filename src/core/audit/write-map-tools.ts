@@ -120,6 +120,15 @@ function normalizePartialArtifactIntents(map: UnknownRecord): void {
     }
 }
 
+function normalizeNumericEvidence(map: UnknownRecord): void {
+    const validation = map.validation_surface;
+    if (validation === null || typeof validation !== "object" || Array.isArray(validation)) return;
+    const record = validation as UnknownRecord;
+    if (typeof record.test_count === "string" && /^\d+$/.test(record.test_count)) {
+        record.test_count = Number(record.test_count);
+    }
+}
+
 /**
  * Some OpenAI-compatible providers serialize a null value for an object-or-null
  * field as an empty object. Normalize only those known nullable object fields
@@ -161,6 +170,7 @@ function prepareMapArguments<T>(input: unknown): T {
 
     const codebaseMap = candidate as UnknownRecord;
     normalizePartialArtifactIntents(codebaseMap);
+    normalizeNumericEvidence(codebaseMap);
     removePrematureEmptyArtifactIntents(codebaseMap);
     const moduleGraph = codebaseMap.module_graph as UnknownRecord | undefined;
     const typeContracts = codebaseMap.type_contract_surface as UnknownRecord | undefined;

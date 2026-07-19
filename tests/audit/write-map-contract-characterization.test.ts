@@ -217,6 +217,16 @@ async function testCompletesIncrementalArtifactIntentLists(): Promise<void> {
   }
 }
 
+async function testNormalizesNumericValidationEvidence(): Promise<void> {
+  const { writeMapTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
+  const map = cloneMap();
+  (map.validation_surface as Record<string, unknown>).test_count = "12";
+  assert.ok(writeMapTool.prepareArguments);
+  const prepared = writeMapTool.prepareArguments({ map }) as { map: CodebaseMap };
+  assert.equal(Value.Check(WriteMapParamsSchema, prepared), true);
+  assert.equal(prepared.map.validation_surface.test_count, 12);
+}
+
 async function testRepairsSerializedInlineMap(): Promise<void> {
   const { writeMapTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
   assert.ok(writeMapTool.prepareArguments);
@@ -570,6 +580,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "provider unwrapped inline map repair", fn: testRepairsProviderUnwrappedInlineMap },
   { name: "premature empty artifact intents are dropped", fn: testDropsWhollyEmptyPrematureArtifactIntents },
   { name: "incremental artifact intent lists are completed", fn: testCompletesIncrementalArtifactIntentLists },
+  { name: "numeric validation evidence is normalized", fn: testNormalizesNumericValidationEvidence },
   { name: "provider serialized inline map repair", fn: testRepairsSerializedInlineMap },
   { name: "provider double-serialized inline map repair", fn: testRepairsDoubleSerializedInlineMap },
   { name: "serialized map executes after transport validation", fn: testExecutesSerializedInlineMapAfterTransportValidation },
