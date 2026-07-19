@@ -32,6 +32,7 @@ test("managed marker values and compatibility exports are exact", () => {
   assert.deepEqual(AGENTIFY_MANAGED_MARKERS, {
     markdown: "<!-- agentify:managed -->",
     toml: "# agentify:managed",
+    slash: "// agentify:managed",
   });
   assert.equal(MARKDOWN_MANAGED_MARKER, "<!-- agentify:managed -->");
   assert.equal(TOML_MANAGED_MARKER, "# agentify:managed");
