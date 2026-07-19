@@ -100,6 +100,21 @@ persist via `write_map`, and use coverage as the gate. After
 coverage closes, add `artifact_intents` to the map; do not write
 the user-facing files directly.
 
+Before dispatching any broad `custom` feature explorer, secure the
+two cross-cutting evidence domains with the focused fixed modes:
+
+1. Call `spawn_explorer(mode="module_graph", target_path=".")` and
+   merge at least one real import/state/RPC edge to close D2.
+2. Call `spawn_explorer(mode="type_tracer", target_path=".",
+   focus="<a real high-leverage model or contract name>")` and merge
+   its concrete type evidence to close D3.
+
+These are short, bounded evidence-gathering tasks. Do not substitute
+a broad feature report, a status-only coverage claim, or a guessed
+edge/type for them. Only after their results are persisted may you
+fan out to `custom` feature explorers for user-facing feature
+intelligence.
+
 The audit is **fully codebase-emergent** — the content of
 each section and each feature is discovered, not templated.
 

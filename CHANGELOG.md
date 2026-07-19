@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Make brownfield audits establish focused module-graph and type-contract evidence before dispatching broad custom feature explorers.
+
 - Extend the bounded explorer timeout to three minutes so large brownfield feature audits can return structured evidence instead of repeatedly timing out.
 
 - Ensure stalled model-session cancellation releases the audit transaction before best-effort provider cleanup.
