@@ -530,7 +530,9 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             }
 
             const validMap = mergedValidation.value;
-            if (params.dimension === "D1_topography" && validMap.skeleton.entry_points.length === 0) {
+            const needsTopographyEntryPoint =
+                params.dimension === "D1_topography" && validMap.skeleton.entry_points.length === 0;
+            if (needsTopographyEntryPoint) {
                 validMap.coverage.D1_topography = {
                     status: "gap",
                     confidence: params.confidence ?? "medium",
@@ -557,6 +559,9 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 `Strategy: ${appliedStrategy}. Dimension: ${params.dimension ?? "(none)"}. ` +
                 `Gap-filler count for ${params.dimension ?? "n/a"}: ${params.dimension ? getReserveCount(params.dimension) : 0} (soft ceiling: ${GAP_FILLER_SOFT_CEILING}). ` +
                 `${closure.line}` +
+                (needsTopographyEntryPoint
+                    ? " To close D1, retry with `delta: { skeleton: { entry_points: [{ path: \"path/to/entry\", role: \"what it starts\", language: \"language\", run_command: \"documented command\" }] } }`."
+                    : "") +
                 (reserveWarning ? ` Note: ${reserveWarning}` : "");
 
             return {

@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Topography-gap responses now include a copyable schema-valid entry-point
+  delta, giving compatible providers a direct repair path without weakening
+  evidence validation.
+
 - Topography guidance and validation feedback now state the complete entry
   point object shape, preventing string-only paths from being sanitized away.
 

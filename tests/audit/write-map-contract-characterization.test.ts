@@ -546,6 +546,7 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
     bootstrapDeltaCwd,
   );
   assert.equal(isToolError(bootstrapDeltaResult), false);
+  assert.match(resultText(bootstrapDeltaResult), /entry_points: \[\{ path: "path\/to\/entry", role:/);
   const bootstrapDeltaMap = readJson(bootstrapDeltaTools.canonicalMapPath(bootstrapDeltaCwd));
   assert.deepEqual(bootstrapDeltaMap.skeleton.entry_points, []);
   assert.equal(bootstrapDeltaMap.coverage.D1_topography.status, "gap");
