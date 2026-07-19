@@ -376,6 +376,9 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
           spawnExplorerAgentDir: defaultConfigDir(),
           spawnExplorerStateDir: stateDir,
           signal: options.signal,
+          // A stalled provider must not leave a repository transaction open
+          // forever. Normal streamed responses continuously reset this timer.
+          inactivityTimeoutMs: 5 * 60 * 1000,
           recoveryPromptIfToolNotCalled: {
             requiredToolName: "write_map",
             maxAttempts: 2,

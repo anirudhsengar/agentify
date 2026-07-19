@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Brownfield audits now abort a session after five minutes without any SDK
+  event, preventing a stalled provider from leaving repository state
+  transactions open indefinitely while allowing normal streamed responses.
+
 - Brownfield map writes now accept a complete inline map serialized as a JSON
   object string by compatible model transports, while rejecting malformed or
   non-object strings through the existing strict schema.

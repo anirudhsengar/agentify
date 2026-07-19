@@ -125,7 +125,18 @@ export class PiSdkRuntime implements AgentRuntime {
     let sawCost = false;
     let aborted = false;
     let sawRequiredRecoveryTool = false;
+    let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
+    const resetInactivityTimer = (): void => {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      if (options.inactivityTimeoutMs && options.inactivityTimeoutMs > 0) {
+        inactivityTimer = setTimeout(() => {
+          aborted = true;
+          void session.abort();
+        }, options.inactivityTimeoutMs);
+      }
+    };
     const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
+      resetInactivityTimer();
       options.onEvent?.(event);
       const eventLike = event as MessageEndEventLike;
       if (eventLike.type === "message_end") {
@@ -167,6 +178,7 @@ export class PiSdkRuntime implements AgentRuntime {
           void session.abort();
         }, options.timeoutMs);
       }
+      resetInactivityTimer();
       await session.prompt(options.userPrompt);
       const recovery = options.recoveryPromptIfToolNotCalled;
       for (
@@ -185,6 +197,7 @@ export class PiSdkRuntime implements AgentRuntime {
       return { turns, costUsd: sawCost ? costUsd : null, aborted };
     } finally {
       if (timer) clearTimeout(timer);
+      if (inactivityTimer) clearTimeout(inactivityTimer);
       unsubscribe();
       session.dispose();
     }

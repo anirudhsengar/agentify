@@ -155,6 +155,8 @@ export interface AgentRuntimeSessionOptions {
    * aborted. Undefined = no timeout.
    */
   timeoutMs?: number;
+  /** Abort when the SDK emits no session event for this duration. */
+  inactivityTimeoutMs?: number;
   /**
    * Optional in-session recovery. After the initial prompt ends normally, the
    * runtime sends this follow-up through the same session only when the named
