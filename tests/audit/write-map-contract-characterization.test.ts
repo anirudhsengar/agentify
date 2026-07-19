@@ -211,6 +211,16 @@ async function testRepairsDoubleSerializedInlineMap(): Promise<void> {
   assert.equal(prepared.map.meta.project_type, "test-fixture");
 }
 
+async function testExecutesSerializedInlineMapAfterTransportValidation(): Promise<void> {
+  const cwd = tempDir("serialized-transport");
+  const { writeMapTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
+  const serialized = JSON.stringify(JSON.stringify(cloneMap()));
+  assert.equal(Value.Check(WriteMapParamsSchema, { map: serialized }), true);
+  const result = await executeTool(writeMapTool, { map: serialized }, cwd);
+  assert.equal(isToolError(result), false);
+  assert.equal(readJson(path.join(cwd, ".pi/agentify/codebase_map.json")).meta.project_type, "test-fixture");
+}
+
 async function testInlineDefaultsCoverageAndStorageContract(): Promise<void> {
   const cwd = tempDir("inline");
   const tools = createWriteMapTools({ stateDir: ".claude/agentify" });
@@ -538,6 +548,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "premature empty artifact intents are dropped", fn: testDropsWhollyEmptyPrematureArtifactIntents },
   { name: "provider serialized inline map repair", fn: testRepairsSerializedInlineMap },
   { name: "provider double-serialized inline map repair", fn: testRepairsDoubleSerializedInlineMap },
+  { name: "serialized map executes after transport validation", fn: testExecutesSerializedInlineMapAfterTransportValidation },
   { name: "inline defaults coverage and storage contract", fn: testInlineDefaultsCoverageAndStorageContract },
   { name: "input loading and draft contract", fn: testInputLoadingAndDraftContract },
   { name: "history validation coverage and merge contract", fn: testHistoryValidationCoverageAndMergeContract },

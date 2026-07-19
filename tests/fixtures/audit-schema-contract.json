@@ -9,12 +9,12 @@
       "bytes": 39982
     },
     "write_map_params": {
-      "sha256": "7dfcc2581307f71434585d79faea852b0f7429310bb047b53e1593caacae00b0",
-      "bytes": 41267
+      "sha256": "66f0b736222c4584d6c229a69da23b93a0168e725c16b553171e9ad8c31fc053",
+      "bytes": 41472
     },
     "write_map_delta_params": {
-      "sha256": "235e368c13f3d72372f85d2204145b6208649422d64d66e0b155cf1e1a2b327c",
-      "bytes": 41015
+      "sha256": "c37b4426fba795075901b13a4a985953608ad6f1cde4713a6213cebe065f521d",
+      "bytes": 41220
     }
   },
   "required": {

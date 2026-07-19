@@ -6,8 +6,13 @@ import {
   PartialCodebaseMapSchema,
 } from "./codebase-map.ts";
 
+const SerializedMapTransportSchema = Type.String({
+  description:
+    "Compatibility transport for a JSON-serialized map object. Use an inline object normally; agentify parses this form and applies the same strict map validation.",
+});
+
 export const WriteMapParamsSchema = Type.Object({
-  map: Type.Optional(CodebaseMapSchema),
+  map: Type.Optional(Type.Union([CodebaseMapSchema, SerializedMapTransportSchema])),
   map_file: Type.Optional(
     Type.String({
       description:
@@ -41,7 +46,7 @@ export const WriteMapDeltaParamsSchema = Type.Object({
       description: "1-2 sentence summary of what was found. Used verbatim in AGENTS.md.",
     }),
   ),
-  delta: PartialCodebaseMapSchema,
+  delta: Type.Union([PartialCodebaseMapSchema, SerializedMapTransportSchema]),
   merge_strategy: Type.Optional(
     StringEnum(["shallow_overwrite", "deep_merge", "append"] as const, {
       default: "shallow_overwrite",

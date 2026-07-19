@@ -185,9 +185,10 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
         parameters: WriteMapParamsSchema,
         prepareArguments: prepareMapArguments,
         async execute(_id, params, _signal, _onUpdate, ctx) {
-            const mode = params.mode ?? "auto";
-            const hasInline = params.map !== undefined;
-            const hasFile = typeof params.map_file === "string" && params.map_file.length > 0;
+            const prepared = prepareMapArguments<typeof params>(params);
+            const mode = prepared.mode ?? "auto";
+            const hasInline = prepared.map !== undefined;
+            const hasFile = typeof prepared.map_file === "string" && prepared.map_file.length > 0;
 
             if (!hasInline && !hasFile) {
                 return {
@@ -224,7 +225,7 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
 
             if (hasFile) {
                 try {
-                    const loaded = loadMapFromFile(params.map_file!, ctx.cwd);
+                    const loaded = loadMapFromFile(prepared.map_file!, ctx.cwd);
                     mapInput = loaded.map;
                     sourcePath = loaded.absolutePath;
                 } catch (err) {
@@ -251,7 +252,7 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                         details: undefined as unknown as Record<string, unknown>,
                     };
                 }
-                const inlineSize = Buffer.byteLength(JSON.stringify(params.map), "utf8");
+                const inlineSize = Buffer.byteLength(JSON.stringify(prepared.map), "utf8");
                 if (inlineSize > MAX_INLINE_MAP_BYTES) {
                     if (mode === "inline") {
                         return {
@@ -270,7 +271,7 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                     try {
                         const draftPath = writeDraftAtomically(
                             ctx.cwd,
-                            JSON.stringify(params.map, null, 2),
+                            JSON.stringify(prepared.map, null, 2),
                             context,
                         );
                         const loaded = loadMapFromFile(draftPath, ctx.cwd);
@@ -293,7 +294,7 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                         };
                     }
                 } else {
-                    mapInput = params.map;
+                    mapInput = prepared.map;
                     sourcePath = "(inline)";
                 }
             }
@@ -372,6 +373,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
         parameters: WriteMapDeltaParamsSchema,
         prepareArguments: prepareMapArguments,
         async execute(_id, params, _signal, _onUpdate, ctx) {
+            const prepared = prepareMapArguments<typeof params>(params);
             const existing = readCanonicalMap(ctx.cwd, context);
             if (existing === null) {
                 return {
@@ -389,7 +391,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 };
             }
 
-            const validation = validatePartialMap(params.delta as unknown);
+            const validation = validatePartialMap(prepared.delta as unknown);
             if (!validation.ok) {
                 return {
                     content: [{ type: "text", text: `Error: ${validation.error}` }],
