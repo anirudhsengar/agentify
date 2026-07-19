@@ -8,6 +8,7 @@ import {
 } from "./schema.ts";
 import { formatCoverageClosure } from "./map-coverage.ts";
 import { applyMapDelta, type MapMergeStrategy } from "./map-delta.ts";
+import { createGapDraftMap } from "./map-draft.ts";
 import {
     loadMapFromFile,
     MAX_INLINE_MAP_BYTES,
@@ -328,7 +329,17 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
             }
 
             const { map: withDefaults, injectedDefaults } = applyMapDefaults(mapInput);
-            const validation = validateMap(withDefaults);
+            let validation = validateMap(withDefaults);
+            if (!validation.ok && mapInput !== null && typeof mapInput === "object" && !Array.isArray(mapInput)) {
+                const draft = createGapDraftMap();
+                const merged = applyMapDelta(
+                    draft as unknown as Record<string, unknown>,
+                    mapInput as Record<string, unknown>,
+                    "deep_merge",
+                );
+                validation = validateMap(merged);
+                if (validation.ok) sourcePath = `${sourcePath}:draft-merged`;
+            }
             if (!validation.ok) {
                 return {
                     content: [{ type: "text", text: `Error: ${validation.error}` }],
