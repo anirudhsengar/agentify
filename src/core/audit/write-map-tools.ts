@@ -8,7 +8,7 @@ import {
 } from "./schema.ts";
 import { formatCoverageClosure } from "./map-coverage.ts";
 import { applyMapDelta, type MapMergeStrategy } from "./map-delta.ts";
-import { mergeEvidenceIntoGapDraft } from "./map-draft.ts";
+import { mergeEvidenceIntoGapDraft, mergeEvidenceIntoMap } from "./map-draft.ts";
 import {
     loadMapFromFile,
     MAX_INLINE_MAP_BYTES,
@@ -44,6 +44,10 @@ export interface MapTools {
 }
 
 type UnknownRecord = Record<string, unknown>;
+
+function isBootstrapDraft(map: { exploration_log: ReadonlyArray<{ action: string }> }): boolean {
+    return map.exploration_log.some((entry) => entry.action === "draft_bootstrap");
+}
 
 const MAP_TOP_LEVEL_KEYS = new Set([
     "schema_version",
@@ -480,6 +484,11 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 appliedStrategy = "deep_merge";
                 merged = mergeAndAnnotate(appliedStrategy);
                 ({ map: withDefaults } = applyMapDefaults(merged));
+                mergedValidation = validateMap(withDefaults);
+            }
+            if (!mergedValidation.ok && isBootstrapDraft(existing)) {
+                const sanitized = mergeEvidenceIntoMap(merged, existing);
+                ({ map: withDefaults } = applyMapDefaults(sanitized));
                 mergedValidation = validateMap(withDefaults);
             }
             if (!mergedValidation.ok) {

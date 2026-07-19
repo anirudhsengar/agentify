@@ -519,6 +519,24 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   assert.deepEqual(partialNestedMap.skeleton.top_level_tree, ["src/"]);
   assert.equal(partialNestedMap.skeleton.code_test_mirror.observed, true);
 
+  const bootstrapDeltaCwd = tempDir("bootstrap-delta-sanitize");
+  const bootstrapDeltaTools = createWriteMapTools({ stateDir: ".agents/agentify" });
+  await executeTool(bootstrapDeltaTools.writeMapTool, { map: {} }, bootstrapDeltaCwd);
+  const bootstrapDeltaResult = await executeTool(
+    bootstrapDeltaTools.writeMapDeltaTool,
+    {
+      delta: { skeleton: { entry_points: ["src/cli.py"] } },
+      dimension: "D1_topography",
+      confidence: "high",
+      evidence_summary: "Examined the repository tree and command entry points.",
+    },
+    bootstrapDeltaCwd,
+  );
+  assert.equal(isToolError(bootstrapDeltaResult), false);
+  const bootstrapDeltaMap = readJson(bootstrapDeltaTools.canonicalMapPath(bootstrapDeltaCwd));
+  assert.deepEqual(bootstrapDeltaMap.skeleton.entry_points, []);
+  assert.equal(bootstrapDeltaMap.coverage.D1_topography.status, "covered");
+
   const appendCwd = tempDir("merge-append");
   const appendTools = createWriteMapTools({ stateDir: ".agents/agentify" });
   const appendBase = cloneMap();

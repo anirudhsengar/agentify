@@ -21,6 +21,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Partial nested map deltas now automatically retry as a deep merge when the
   declared default shallow merge would erase required existing evidence.
 
+- Incremental evidence sent to Agentify-created bootstrap drafts now preserves
+  valid prior state and discards malformed optional fields, while existing-map
+  deltas continue to reject malformed data strictly.
+
 - Brownfield session timeouts now race pending provider prompts, so an SDK
   abort that never settles cannot keep the audit process or its state
   transaction open indefinitely.

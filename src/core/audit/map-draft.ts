@@ -87,7 +87,14 @@ export function createGapDraftMap(): CodebaseMap {
 
 export function mergeEvidenceIntoGapDraft(evidence: Record<string, unknown>): CodebaseMap {
   const draft = createGapDraftMap();
-  const merged = sanitizeEvidence(CodebaseMapSchema, evidence, draft) as CodebaseMap;
+  return mergeEvidenceIntoMap(evidence, draft);
+}
+
+export function mergeEvidenceIntoMap(
+  evidence: Record<string, unknown>,
+  fallback: CodebaseMap,
+): CodebaseMap {
+  const merged = sanitizeEvidence(CodebaseMapSchema, evidence, fallback) as CodebaseMap;
   if (!Value.Check(CodebaseMapSchema, merged)) {
     throw new Error("Internal error: sanitized audit evidence does not satisfy CodebaseMapSchema");
   }
