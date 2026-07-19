@@ -156,6 +156,18 @@ export interface AgentRuntimeSessionOptions {
    */
   timeoutMs?: number;
   /**
+   * Optional in-session recovery. After the initial prompt ends normally, the
+   * runtime sends this follow-up through the same session only when the named
+   * tool was never called. This preserves the model's gathered context while
+   * avoiding an unbounded retry loop.
+   */
+  recoveryPromptIfToolNotCalled?: {
+    requiredToolName: string;
+    userPrompt: string;
+    /** Maximum in-session follow-ups after the initial prompt. */
+    maxAttempts: number;
+  };
+  /**
    * Which named slot role this session is filling. Defaults to
    * `"primary"` when unset. See `ModelRole`.
    */

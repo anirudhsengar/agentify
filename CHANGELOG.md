@@ -13,9 +13,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
-- Brownfield audits now make one recovery pass when a model ends normally
-  without issuing the required structured `write_map` call, rather than
-  immediately failing the audit.
+- Brownfield audits now make up to two in-session recovery passes when a model
+  ends normally without issuing the required structured `write_map` call,
+  rather than immediately failing the audit.
+
+- State-transaction cleanup now removes an empty repository `.agentify/`
+  container after the final transaction completes, while retaining it whenever
+  it contains other state.
 
 - Repositories with user-owned conventional files such as `AGENTS.md`,
   `specs/README.md`, `ai_docs/README.md`, or Agentify-like GitHub paths no

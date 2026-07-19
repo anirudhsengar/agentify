@@ -354,15 +354,12 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
     let sawWriteMapCall = false;
     let runtimeResult: Awaited<ReturnType<typeof options.runtime.runSession>>;
     try {
-      const runAuditSession = async (
-        userPrompt: string,
-      ): Promise<Awaited<ReturnType<typeof options.runtime.runSession>>> =>
-        options.runtime.runSession({
+      runtimeResult = await options.runtime.runSession({
           cwd: options.cwd,
           configDir: defaultConfigDir(),
           config,
           systemPrompt: promptContent,
-          userPrompt,
+          userPrompt: buildBrownfieldUserPrompt(options.targets, options.additionalAgents),
           tools: BUILDER_TOOL_ALLOWLIST,
           executionPolicy: createReadOnlyExecutionPolicy({
             cwd: options.cwd,
@@ -379,6 +376,15 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
           spawnExplorerAgentDir: defaultConfigDir(),
           spawnExplorerStateDir: stateDir,
           signal: options.signal,
+          recoveryPromptIfToolNotCalled: {
+            requiredToolName: "write_map",
+            maxAttempts: 2,
+            userPrompt: [
+              "Your audit response ended without calling write_map, so no codebase map was recorded.",
+              "Continue from the evidence already gathered and submit the complete structured map via write_map.",
+              "Do not return a prose summary instead of the tool call.",
+            ].join(" "),
+          },
           onEvent: (event) => {
             const piType = (event as { type?: string }).type ?? "unknown";
             log.sessionEvent({ pi_event_type: piType, event });
@@ -429,27 +435,13 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
               }
             } else if (piType === "agent_end" && !spinnerStopped) {
               spinner.update(
-                `Audit analysis complete • ${turnCount} pass(es) • estimated spend $${costUsd.toFixed(4)}`,
+                sawWriteMapCall
+                  ? `Audit analysis complete • ${turnCount} pass(es) • estimated spend $${costUsd.toFixed(4)}`
+                  : "Map not recorded yet — continuing the audit…",
               );
             }
           },
         });
-
-      runtimeResult = await runAuditSession(
-        buildBrownfieldUserPrompt(options.targets, options.additionalAgents),
-      );
-      if (!runtimeResult.aborted && !sawWriteMapCall && !loadCanonicalMapAt(options.cwd, stateDir)) {
-        options.ui.info(
-          "agentify: audit response omitted the required write_map call; requesting one recovery pass.",
-        );
-        spinner.update("Audit response omitted its structured map — requesting a recovery pass…");
-        runtimeResult = await runAuditSession([
-          "This is a recovery pass for an incomplete brownfield audit.",
-          "The prior audit session ended without calling write_map, so no codebase map was recorded.",
-          "Inspect any evidence you need, then submit the complete structured map via write_map.",
-          "Do not return a prose summary instead of the tool call.",
-        ].join(" "));
-      }
       spinner.stop("audit session finished — validating results", "success");
       spinnerStopped = true;
     } finally {

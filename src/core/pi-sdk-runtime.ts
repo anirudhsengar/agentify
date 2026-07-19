@@ -124,26 +124,24 @@ export class PiSdkRuntime implements AgentRuntime {
     let costUsd = 0;
     let sawCost = false;
     let aborted = false;
-
-    const done = new Promise<void>((resolve) => {
-      const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
-        options.onEvent?.(event);
-        const eventLike = event as MessageEndEventLike;
-        if (eventLike.type === "message_end") {
-          turns += 1;
-          const cost = eventLike.message?.usage?.cost?.total;
-          if (typeof cost === "number") {
-            costUsd += cost;
-            sawCost = true;
-          }
-        } else if ((event as { type?: string }).type === "agent_end") {
-          const willRetry = (event as { willRetry?: boolean }).willRetry ?? false;
-          if (!willRetry) {
-            unsubscribe();
-            resolve();
-          }
+    let sawRequiredRecoveryTool = false;
+    const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
+      options.onEvent?.(event);
+      const eventLike = event as MessageEndEventLike;
+      if (eventLike.type === "message_end") {
+        turns += 1;
+        const cost = eventLike.message?.usage?.cost?.total;
+        if (typeof cost === "number") {
+          costUsd += cost;
+          sawCost = true;
         }
-      });
+      }
+      const recovery = options.recoveryPromptIfToolNotCalled;
+      const toolName = (event as { toolName?: string; tool_name?: string }).toolName
+        ?? (event as { tool_name?: string }).tool_name;
+      if (recovery && toolName === recovery.requiredToolName) {
+        sawRequiredRecoveryTool = true;
+      }
     });
 
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -170,10 +168,24 @@ export class PiSdkRuntime implements AgentRuntime {
         }, options.timeoutMs);
       }
       await session.prompt(options.userPrompt);
-      await done;
+      const recovery = options.recoveryPromptIfToolNotCalled;
+      for (
+        let attempt = 0;
+        !aborted && recovery && !sawRequiredRecoveryTool && attempt < recovery.maxAttempts;
+        attempt += 1
+      ) {
+        const userPrompt = attempt === 0
+          ? recovery.userPrompt
+          : [
+            `Do not send another prose response. Call ${recovery.requiredToolName} now as your only next action.`,
+            "Use the evidence already in this session and submit the complete structured payload.",
+          ].join(" ");
+        await session.prompt(userPrompt);
+      }
       return { turns, costUsd: sawCost ? costUsd : null, aborted };
     } finally {
       if (timer) clearTimeout(timer);
+      unsubscribe();
       session.dispose();
     }
   }

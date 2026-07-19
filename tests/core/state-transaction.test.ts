@@ -26,6 +26,10 @@ function transactionRoot(cwd: string): string {
   return path.join(cwd, ".agentify", "state-transactions");
 }
 
+function transactionContainer(cwd: string): string {
+  return path.join(cwd, ".agentify");
+}
+
 async function testRollbackRestoresProviderState(): Promise<void> {
   const cwd = tempDir("agentify-state-rollback-");
   try {
@@ -68,6 +72,45 @@ async function testCommitKeepsNewProviderState(): Promise<void> {
     assert.ok(!fs.existsSync(transactionRoot(cwd)));
     transaction.commit();
     transaction.rollback();
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testCommitRemovesEmptyTransactionContainer(): Promise<void> {
+  const cwd = tempDir("agentify-state-empty-container-");
+  try {
+    const transaction = beginStateTransaction({
+      cwd,
+      sourceRelativeDir: ".agents/agentify",
+      destinationRelativeDir: ".agents/agentify",
+      runId: "empty-container",
+    });
+    write(cwd, ".agents/agentify/codebase_map.json", "new-map\n");
+    transaction.commit();
+
+    assert.ok(!fs.existsSync(transactionRoot(cwd)));
+    assert.ok(!fs.existsSync(transactionContainer(cwd)));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testCommitRetainsNonEmptyTransactionContainer(): Promise<void> {
+  const cwd = tempDir("agentify-state-retain-container-");
+  try {
+    write(cwd, ".agentify/webhooks.json", "{}\n");
+    const transaction = beginStateTransaction({
+      cwd,
+      sourceRelativeDir: ".agents/agentify",
+      destinationRelativeDir: ".agents/agentify",
+      runId: "retain-container",
+    });
+    write(cwd, ".agents/agentify/codebase_map.json", "new-map\n");
+    transaction.commit();
+
+    assert.ok(!fs.existsSync(transactionRoot(cwd)));
+    assert.equal(read(cwd, ".agentify/webhooks.json"), "{}\n");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -200,6 +243,8 @@ async function testRejectsEscapingPathsAndUnsafeRunIds(): Promise<void> {
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "rollbackRestoresProviderState", fn: testRollbackRestoresProviderState },
   { name: "commitKeepsNewProviderState", fn: testCommitKeepsNewProviderState },
+  { name: "commitRemovesEmptyTransactionContainer", fn: testCommitRemovesEmptyTransactionContainer },
+  { name: "commitRetainsNonEmptyTransactionContainer", fn: testCommitRetainsNonEmptyTransactionContainer },
   { name: "legacyCrossDirectoryMovesAreRetired", fn: testLegacyCrossDirectoryMovesAreRetired },
   { name: "interruptedTransactionRecovery", fn: testInterruptedTransactionRecovery },
   { name: "rollbackRemovesNewStateWhenNoPreviousState", fn: testRollbackRemovesNewStateWhenNoPreviousState },

@@ -116,13 +116,13 @@ class RecoveryRuntime implements AgentRuntime {
 
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     this.calls += 1;
-    if (this.calls === 2) {
-      assert.match(options.userPrompt, /recovery pass/i);
-      assert.ok(options.spawnExplorerStateDir);
-      writeArtifacts(options.cwd, options.spawnExplorerStateDir, {
-        map: makeValidCodebaseMap(),
-      });
-    }
+    assert.ok(options.recoveryPromptIfToolNotCalled);
+    assert.equal(options.recoveryPromptIfToolNotCalled.requiredToolName, "write_map");
+    assert.equal(options.recoveryPromptIfToolNotCalled.maxAttempts, 2);
+    assert.ok(options.spawnExplorerStateDir);
+    writeArtifacts(options.cwd, options.spawnExplorerStateDir, {
+      map: makeValidCodebaseMap(),
+    });
     return { turns: 1, costUsd: null, aborted: false };
   }
 
@@ -344,10 +344,9 @@ async function testNoMapMeansPartialNoExport(): Promise<void> {
 async function testMissingWriteMapGetsOneRecoveryPass(): Promise<void> {
   const cwd = tempDir("gate-recovery");
   const runtime = new RecoveryRuntime();
-  const ui = await runWithRuntime(cwd, runtime);
-  assert.equal(runtime.calls, 2, "must make exactly one recovery pass");
+  await runWithRuntime(cwd, runtime);
+  assert.equal(runtime.calls, 1, "recovery must remain within the original session");
   assert.ok(fs.existsSync(path.join(cwd, ".agents", "agentify", "codebase_map.json")));
-  assert.ok(ui.infos.some((m) => m.includes("recovery pass")));
 }
 
 async function testGapMapMeansPartialNoExport(): Promise<void> {

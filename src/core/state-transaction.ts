@@ -253,11 +253,21 @@ function readJournal(filePath: string): StateTransactionJournal {
 
 function removeTransactionDirectory(cwd: string, runId: string): void {
   fs.rmSync(transactionDir(cwd, runId), { recursive: true, force: true });
+  const root = transactionRoot(cwd);
+  const container = path.dirname(root);
   try {
-    fs.rmdirSync(transactionRoot(cwd));
-    fsyncDirectory(path.dirname(transactionRoot(cwd)));
+    fs.rmdirSync(root);
   } catch {
     // Other transactions may remain, or the directory may already be gone.
+  }
+  try {
+    // The repository-level .agentify directory can also contain user-owned
+    // runtime state, so remove it only when state-transactions was its last
+    // entry. rmdirSync leaves non-empty directories untouched.
+    fs.rmdirSync(container);
+    fsyncDirectory(cwd);
+  } catch {
+    // User-owned Agentify state remains, or the directory is already gone.
   }
 }
 
