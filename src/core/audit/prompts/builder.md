@@ -346,16 +346,15 @@ Phase 0) via `write_map_delta`.
 For each feature, dispatch a `custom` sub-agent. The flow
 per feature:
 
-1. Read `_template.md` (1 `read` call — but cache it; the
-   file is loaded into context once, not per-feature).
-2. Compose the system prompt by substituting the
-   11-section placeholders. The sub-agent's `## Report`
+1. Compose the system prompt inline from the feature evidence.
+   Do **not** try to read `_template.md`, `GRADE2_DIR`, or
+   any Agentify package path: audit reads are jailed to the
+   target repository and those internal assets are unavailable.
+2. Include the 11-section intent directly in that prompt. The sub-agent's `## Report`
    schema is **feature-intelligence**: scope, key types,
    conventions, pitfalls, use_when, not_use_when. For
-   prompts under ~16 KB, pass inline via `system_prompt`.
-   For longer prompts, `write` the composed prompt to a
-   file in `GRADE2_DIR/subagents/<feature>.md` first, then
-   pass `system_prompt_file`.
+   all prompts, pass the composed prompt inline via
+   `system_prompt`; audit sessions have no general write tool.
 3. Call `spawn_explorer` with:
    - `mode="custom"`
    - `target_path=<feature directory>`

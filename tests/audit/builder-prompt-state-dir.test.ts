@@ -102,6 +102,20 @@ async function testPromptKeepsExplorerDispatchBounded(): Promise<void> {
   );
 }
 
+async function testPromptDoesNotRequestUnavailableInternalTemplate(): Promise<void> {
+  const raw = readRawBuilderPrompt();
+  assert.match(
+    raw,
+    /Do \*\*not\*\* try to read `_template\.md`, `GRADE2_DIR`/,
+    "builder prompt must not ask a target-jailed audit to read package assets",
+  );
+  assert.doesNotMatch(
+    raw,
+    /Read `_template\.md` \(1 `read` call/,
+    "builder prompt must not prescribe an impossible internal template read",
+  );
+}
+
 async function main(): Promise<void> {
   await testSourcePromptHasStateDirPlaceholder();
   await testSourcePromptHasNoHardcodedAgentify();
@@ -109,8 +123,9 @@ async function main(): Promise<void> {
   await testPromptRequiresInitialMapBeforeExplorers();
   await testPromptUsesConfiguredExplorerModelByDefault();
   await testPromptKeepsExplorerDispatchBounded();
+  await testPromptDoesNotRequestUnavailableInternalTemplate();
   // eslint-disable-next-line no-console
-  console.log("builder-prompt-state-dir: all 6 checks passed");
+  console.log("builder-prompt-state-dir: all 7 checks passed");
 }
 
 await main();

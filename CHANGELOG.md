@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Custom feature explorers no longer attempt to read internal prompt-template
+  files from the target repository; their prompts are composed inline within
+  the audit's read-only boundary.
+
 - Audit logs now store compact, parseable summaries of tool and model events,
   retaining tool outcomes while avoiding truncated nested JSON payloads.
 
