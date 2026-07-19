@@ -13,6 +13,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Topography guidance and validation feedback now state the complete entry
+  point object shape, preventing string-only paths from being sanitized away.
+
 - D1 map deltas now retain a gap state until they include a non-empty
   `skeleton.entry_points` record, enforcing the topography closure invariant
   at the structured-output boundary.

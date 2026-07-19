@@ -536,7 +536,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                     confidence: params.confidence ?? "medium",
                     evidence_summary:
                         `${params.evidence_summary ?? "Topography evidence was submitted."} ` +
-                        "Add skeleton.entry_points before closing D1_topography.",
+                        "Add skeleton.entry_points objects with path, role, language, and run_command before closing D1_topography.",
                 };
             }
             const closure = formatCoverageClosure(validMap);

@@ -145,7 +145,8 @@ each section and each feature is discovered, not templated.
 - **First checkpoint is mandatory.** A valid gap-marked canonical map is
   already present when this audit starts. After the four Phase 0 scout reads,
   call `write_map_delta` with direct D1 topography evidence, including at
-  least one real repository entry point in `skeleton.entry_points`, before
+  least one real repository entry point in `skeleton.entry_points` as
+  `{ path, role, language, run_command }`, before
   calling `spawn_explorer`. Do not treat the bootstrap map as your checkpoint or defer
   your first delta until feature exploration is complete: it is the canonical
   working memory that bounds recovery when explorer budgets are exhausted.
