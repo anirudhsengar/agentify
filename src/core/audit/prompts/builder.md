@@ -122,6 +122,17 @@ edge/type for them. Only after their results are persisted may you
 fan out to `custom` feature explorers for user-facing feature
 intelligence.
 
+Before broad custom feature exploration, also close the remaining
+cross-cutting coverage with the focused fixed modes: `conventions`
+(D4), `pitfalls` (D5), `validation` (D6), `operational` (D7), and
+`security` (D8). Use the scout's documented process and documentation
+evidence to close D9 and D10. Persist each supported result with
+`write_map_delta`. A custom feature report is supplementary
+feature-agent intelligence; it must never be the only route to a
+coverage dimension. If custom explorers time out, retain the closed
+map and continue deterministically to rendering rather than retrying
+the same broad subtree.
+
 The audit is **fully codebase-emergent** — the content of
 each section and each feature is discovered, not templated.
 

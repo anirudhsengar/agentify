@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Route brownfield cross-cutting coverage through focused fixed explorers before optional broad custom feature exploration.
+
 - Require focused module-graph exploration to use the primary source root rather than the whole repository.
 
 - Require brownfield type tracing to target the selected type's owning directory instead of the entire repository.
