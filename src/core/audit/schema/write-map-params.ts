@@ -1,18 +1,32 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type, type Static } from "typebox";
 import { COVERAGE_DIMENSIONS } from "../coverage.ts";
-import {
-  CodebaseMapSchema,
-  PartialCodebaseMapSchema,
-} from "./codebase-map.ts";
+import { PartialCodebaseMapSchema } from "./codebase-map.ts";
 
 const SerializedMapTransportSchema = Type.String({
   description:
     "Compatibility transport for a JSON-serialized map object. Use an inline object normally; agentify parses this form and applies the same strict map validation.",
 });
 
+const InlineMapTransportSchema = Type.Object({
+  meta: Type.Unknown(),
+  skeleton: Type.Unknown(),
+  module_graph: Type.Unknown(),
+  type_contract_surface: Type.Unknown(),
+  conventions: Type.Unknown(),
+  pitfalls: Type.Unknown(),
+  validation_surface: Type.Unknown(),
+  operational_surface: Type.Unknown(),
+  security_surface: Type.Unknown(),
+  coverage: Type.Unknown(),
+  open_questions: Type.Unknown(),
+  exploration_log: Type.Unknown(),
+}, {
+  description: "Complete map transport envelope. Agentify strictly validates every nested field before persistence.",
+});
+
 export const WriteMapParamsSchema = Type.Object({
-  map: Type.Optional(Type.Union([CodebaseMapSchema, SerializedMapTransportSchema])),
+  map: Type.Optional(Type.Union([InlineMapTransportSchema, SerializedMapTransportSchema])),
   map_file: Type.Optional(
     Type.String({
       description:
