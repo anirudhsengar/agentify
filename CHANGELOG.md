@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Feature explorers now inherit the configured explorer model by default.
+  Brownfield audits no longer waste attempts requesting unavailable Anthropic
+  model aliases on providers such as MiniMax.
+
 - Brownfield audits now make up to two in-session recovery passes when a model
   ends normally without issuing the required structured `write_map` call,
   rather than immediately failing the audit.

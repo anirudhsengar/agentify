@@ -362,7 +362,9 @@ per feature:
    - `system_prompt=<composed>` (or
      `system_prompt_file=<path>`)
    - `summary=<one-line focus>`
-   - `model` = sonnet for most features, haiku for trivial
+   - omit `model` so the explorer uses the configured explorer slot;
+     never request `haiku`, `sonnet`, or `opus` unless that provider
+     and model are known to be available for this run
    - `max_reads=8` for small features, 12 for large
 4. Receive the structured `## Report` from the sub-agent.
    This report is the **intelligence for the feature agent

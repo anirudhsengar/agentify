@@ -69,13 +69,28 @@ async function testPromptRequiresInitialMapBeforeExplorers(): Promise<void> {
   );
 }
 
+async function testPromptUsesConfiguredExplorerModelByDefault(): Promise<void> {
+  const raw = readRawBuilderPrompt();
+  assert.match(
+    raw,
+    /omit `model` so the explorer uses the configured explorer slot/,
+    "builder prompt must keep explorer dispatches on the configured model slot by default",
+  );
+  assert.doesNotMatch(
+    raw,
+    /`model` = sonnet for most features, haiku for trivial/,
+    "builder prompt must not hard-code Anthropic model literals",
+  );
+}
+
 async function main(): Promise<void> {
   await testSourcePromptHasStateDirPlaceholder();
   await testSourcePromptHasNoHardcodedAgentify();
   await testLoadSubstitutesPlaceholder();
   await testPromptRequiresInitialMapBeforeExplorers();
+  await testPromptUsesConfiguredExplorerModelByDefault();
   // eslint-disable-next-line no-console
-  console.log("builder-prompt-state-dir: all 4 checks passed");
+  console.log("builder-prompt-state-dir: all 5 checks passed");
 }
 
 await main();
