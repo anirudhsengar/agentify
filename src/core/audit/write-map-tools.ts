@@ -465,11 +465,17 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                     const evidenceSummary =
                         params.evidence_summary ??
                         `Closed by gap_filler delta (${mergeStrategy}).`;
+                    const topographyEntryPoints = (merged.skeleton as UnknownRecord | undefined)?.entry_points;
+                    const canCloseTopography = Array.isArray(topographyEntryPoints)
+                        && topographyEntryPoints.some((entry) => typeof entry === "string" && entry.length > 0);
                     const coverage = (merged.coverage ?? {}) as Record<string, unknown>;
                     coverage[dim] = {
-                        status: "covered",
+                        status: dim === "D1_topography" && !canCloseTopography ? "gap" : "covered",
                         confidence,
-                        evidence_summary: evidenceSummary,
+                        evidence_summary:
+                            dim === "D1_topography" && !canCloseTopography
+                                ? `${evidenceSummary} Add skeleton.entry_points before closing D1_topography.`
+                                : evidenceSummary,
                     };
                     merged.coverage = coverage;
                 }
@@ -524,6 +530,15 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             }
 
             const validMap = mergedValidation.value;
+            if (params.dimension === "D1_topography" && validMap.skeleton.entry_points.length === 0) {
+                validMap.coverage.D1_topography = {
+                    status: "gap",
+                    confidence: params.confidence ?? "medium",
+                    evidence_summary:
+                        `${params.evidence_summary ?? "Topography evidence was submitted."} ` +
+                        "Add skeleton.entry_points before closing D1_topography.",
+                };
+            }
             const closure = formatCoverageClosure(validMap);
             let writeResult: { path: string; size_bytes: number };
             try {

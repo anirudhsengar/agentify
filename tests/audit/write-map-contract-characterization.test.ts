@@ -548,7 +548,8 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   assert.equal(isToolError(bootstrapDeltaResult), false);
   const bootstrapDeltaMap = readJson(bootstrapDeltaTools.canonicalMapPath(bootstrapDeltaCwd));
   assert.deepEqual(bootstrapDeltaMap.skeleton.entry_points, []);
-  assert.equal(bootstrapDeltaMap.coverage.D1_topography.status, "covered");
+  assert.equal(bootstrapDeltaMap.coverage.D1_topography.status, "gap");
+  assert.match(bootstrapDeltaMap.coverage.D1_topography.evidence_summary, /skeleton\.entry_points/);
 
   const malformedLogResult = await executeTool(
     bootstrapDeltaTools.writeMapDeltaTool,

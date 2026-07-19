@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- D1 map deltas now retain a gap state until they include a non-empty
+  `skeleton.entry_points` record, enforcing the topography closure invariant
+  at the structured-output boundary.
+
 - The mandatory first topography checkpoint now requires a real entry point,
   preventing a superficially covered D1 from failing the strict closure gate.
 
