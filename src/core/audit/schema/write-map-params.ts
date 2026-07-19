@@ -7,21 +7,8 @@ const SerializedMapTransportSchema = Type.String({
     "Compatibility transport for a JSON-serialized map object. Use an inline object normally; agentify parses this form and applies the same strict map validation.",
 });
 
-const InlineMapTransportSchema = Type.Object({
-  meta: Type.Unknown(),
-  skeleton: Type.Unknown(),
-  module_graph: Type.Unknown(),
-  type_contract_surface: Type.Unknown(),
-  conventions: Type.Unknown(),
-  pitfalls: Type.Unknown(),
-  validation_surface: Type.Unknown(),
-  operational_surface: Type.Unknown(),
-  security_surface: Type.Unknown(),
-  coverage: Type.Unknown(),
-  open_questions: Type.Unknown(),
-  exploration_log: Type.Unknown(),
-}, {
-  description: "Complete map transport envelope. Agentify strictly validates every nested field before persistence.",
+const InlineMapTransportSchema = Type.Record(Type.String(), Type.Unknown(), {
+  description: "Map transport envelope. Agentify repairs compatible provider layouts and strictly validates the complete map before persistence.",
 });
 
 const MapTransportSchema = Type.Union([InlineMapTransportSchema, SerializedMapTransportSchema]);
