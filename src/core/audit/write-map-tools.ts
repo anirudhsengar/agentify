@@ -71,6 +71,18 @@ function isEmptyRecord(value: unknown): value is UnknownRecord {
     );
 }
 
+function parseSerializedObject(value: unknown): unknown {
+    if (typeof value !== "string") return value;
+    try {
+        const parsed: unknown = JSON.parse(value);
+        return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+            ? parsed
+            : value;
+    } catch {
+        return value;
+    }
+}
+
 function normalizeEmptyNullableObject(
     parent: UnknownRecord | undefined,
     key: string,
@@ -105,6 +117,11 @@ function prepareMapArguments<T>(input: unknown): T {
     }
 
     const prepared = structuredClone(input) as UnknownRecord;
+    // Some OpenAI-compatible transports encode a structured argument as a JSON
+    // string. Accept only a parsable object; malformed strings still reach the
+    // strict schema and produce the normal validation error.
+    prepared.map = parseSerializedObject(prepared.map);
+    prepared.delta = parseSerializedObject(prepared.delta);
     // Some providers occasionally close `map` after its first property and
     // emit the remaining map sections as siblings of the wrapper. Repair only
     // known codebase-map keys before TypeBox validation; never absorb control
