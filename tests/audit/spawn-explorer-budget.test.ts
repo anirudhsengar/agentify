@@ -214,9 +214,42 @@ async function testDefaultsBoundSmallRepositoryAudits(): Promise<void> {
   }
 }
 
+async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
+  const cwd = tempDir("spawn-budget-timeout");
+  try {
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      stateDir: ".pi/agentify",
+      maxSubagentDurationMs: 20,
+      ...stubExplorerArgs(),
+      createSession: async () => ({
+        session: {
+          messages: [],
+          async prompt(): Promise<void> {
+            await new Promise<void>(() => {});
+          },
+          dispose(): void {},
+        },
+      }),
+    });
+    const result = await tool.execute(
+      "test-spawn-budget-timeout",
+      { target_path: "." } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((result as { isError?: boolean }).isError, true);
+    assert.match(textFrom(result), /exceeded timeout of 20ms/i);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 await testRejectsWhenTotalSpawnBudgetIsExhausted();
 await testRejectsWhenConcurrentSpawnBudgetIsExhausted();
 await testRejectsWhenCostBudgetIsExhausted();
 await testDefaultsBoundSmallRepositoryAudits();
+await testSubagentTimeoutReturnsControlToAudit();
 
 console.log("spawn-explorer budget tests passed.");
