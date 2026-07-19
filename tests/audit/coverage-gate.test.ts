@@ -82,6 +82,19 @@ class ScriptedRuntime implements AgentRuntime {
   }
 }
 
+class CoverageClosureRuntime implements AgentRuntime {
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    writeArtifacts(options.cwd, options.spawnExplorerStateDir ?? ".agents/agentify", {
+      map: makeValidCodebaseMap(),
+    });
+    options.onEvent?.({ type: "message_end" } as never);
+    return { turns: 1, costUsd: null, aborted: true };
+  }
+  async runGreenfield(): Promise<AgentRuntimeResult> {
+    throw new Error("greenfield not used here");
+  }
+}
+
 async function run(
   cwd: string,
   write: (cwd: string, stateDir: string) => void,
@@ -157,6 +170,13 @@ async function runWithState(
   cwd: string,
   write: (cwd: string, stateDir: string) => void,
 ): Promise<{ ui: SilentUi; configDir: string }> {
+  return runWithRuntimeState(cwd, new ScriptedRuntime(write));
+}
+
+async function runWithRuntimeState(
+  cwd: string,
+  runtime: AgentRuntime,
+): Promise<{ ui: SilentUi; configDir: string }> {
   const prevHome = process.env["HOME"];
   const tempHome = tempDir("gate-state-home");
   process.env["HOME"] = tempHome;
@@ -168,7 +188,7 @@ async function runWithState(
     await runAgentify({
       cwd,
       ui,
-      runtime: new ScriptedRuntime(write),
+      runtime,
       targets: ["codex", "claude", "pi"],
       mode: "brownfield",
       githubReadinessOverride: READY_GITHUB,
@@ -414,6 +434,25 @@ async function testFullyCoveredMeansSuccessAndPersistsMap(): Promise<void> {
   assert.ok(ui.infos.some((m) => m.includes("audit complete")));
 }
 
+async function testIntentionalCoverageClosureIsNotReportedAsAbort(): Promise<void> {
+  const cwd = tempDir("gate-coverage-stop");
+  const { ui, configDir } = await runWithRuntimeState(cwd, new CoverageClosureRuntime());
+  assert.ok(ui.infos.some((m) => m.includes("audit complete")));
+  const state = readProjectState(configDir, cwd);
+  assert.equal(state?.repoStatus, "ready");
+  assert.ok(state?.latestLogPath);
+  const entries = fs.readFileSync(state.latestLogPath, "utf-8").trim().split("\n")
+    .map((line) => JSON.parse(line) as { event: string; payload: string });
+  let sessionEnd: { event: string; payload: string } | undefined;
+  let runEnd: { event: string; payload: string } | undefined;
+  for (const entry of entries) {
+    if (entry.event === "agentify.session_end") sessionEnd = entry;
+    if (entry.event === "agentify.run_end") runEnd = entry;
+  }
+  assert.equal(JSON.parse(sessionEnd?.payload ?? "{}").was_aborted, false);
+  assert.equal(JSON.parse(runEnd?.payload ?? "{}").exit_code, 0);
+}
+
 async function testUserOwnedAgentsMdUsesAlongsideGuide(): Promise<void> {
   const cwd = tempDir("gate-user-agents");
   fs.writeFileSync(path.join(cwd, "AGENTS.md"), "# User owned\n");
@@ -454,6 +493,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "gapMapMeansPartialNoExport", fn: testGapMapMeansPartialNoExport },
   { name: "userOwnedOversizedAgentsMdDoesNotBlockAudit", fn: testUserOwnedOversizedAgentsMdDoesNotBlockAudit },
   { name: "fullyCoveredMeansSuccessAndPersistsMap", fn: testFullyCoveredMeansSuccessAndPersistsMap },
+  { name: "intentionalCoverageClosureIsNotReportedAsAbort", fn: testIntentionalCoverageClosureIsNotReportedAsAbort },
   { name: "userOwnedAgentsMdUsesAlongsideGuide", fn: testUserOwnedAgentsMdUsesAlongsideGuide },
   { name: "userOwnedWorkflowConflictPersistsPartial", fn: testUserOwnedWorkflowConflictPersistsPartial },
 ];

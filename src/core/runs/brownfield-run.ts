@@ -677,13 +677,14 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
       });
     }
 
+    const intentionallyStoppedAfterCoverage = runtimeResult.aborted && stoppedAfterCoverageClosure;
     log.sessionEnd({
       duration_ms: Date.now() - start,
-      was_aborted: runtimeResult.aborted,
+      was_aborted: runtimeResult.aborted && !intentionallyStoppedAfterCoverage,
       status: reportedStatus,
     });
     log.runEnd({
-      exit_code: runtimeResult.aborted ? -1 : 0,
+      exit_code: runtimeResult.aborted && !intentionallyStoppedAfterCoverage ? -1 : 0,
       status: reportedStatus,
       coverage: {
         covered: finalState.covered,
