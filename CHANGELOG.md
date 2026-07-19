@@ -22,8 +22,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   transactions open indefinitely while allowing normal streamed responses.
 
 - Brownfield map writes now accept a complete inline map serialized as a JSON
-  object string by compatible model transports, while rejecting malformed or
-  non-object strings through the existing strict schema.
+  object string by compatible model transports, including bounded
+  double-serialization, while rejecting malformed or non-object strings
+  through the existing strict schema.
 
 - Custom feature explorers no longer attempt to read internal prompt-template
   files from the target repository; their prompts are composed inline within

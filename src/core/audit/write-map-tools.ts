@@ -72,15 +72,20 @@ function isEmptyRecord(value: unknown): value is UnknownRecord {
 }
 
 function parseSerializedObject(value: unknown): unknown {
-    if (typeof value !== "string") return value;
-    try {
-        const parsed: unknown = JSON.parse(value);
-        return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-            ? parsed
-            : value;
-    } catch {
-        return value;
+    let candidate = value;
+    // OpenAI-compatible transports may stringify a tool argument twice. Keep
+    // this deliberately bounded: only an object reached within two JSON layers
+    // is accepted; all other values continue to strict TypeBox validation.
+    for (let layer = 0; layer < 2 && typeof candidate === "string"; layer += 1) {
+        try {
+            candidate = JSON.parse(candidate) as unknown;
+        } catch {
+            return value;
+        }
     }
+    return candidate !== null && typeof candidate === "object" && !Array.isArray(candidate)
+        ? candidate
+        : value;
 }
 
 function normalizeEmptyNullableObject(
