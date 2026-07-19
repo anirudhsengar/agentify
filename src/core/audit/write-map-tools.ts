@@ -140,6 +140,17 @@ function normalizeNumericEvidence(map: UnknownRecord): void {
     }
 }
 
+function normalizePitfallLineReferences(map: UnknownRecord): void {
+    if (!Array.isArray(map.pitfalls)) return;
+    for (const pitfall of map.pitfalls) {
+        if (pitfall === null || typeof pitfall !== "object" || Array.isArray(pitfall)) continue;
+        const record = pitfall as UnknownRecord;
+        if (typeof record.line_ref !== "string") continue;
+        const match = /\d+/.exec(record.line_ref);
+        if (match) record.line_ref = Number(match[0]);
+    }
+}
+
 /**
  * Some OpenAI-compatible providers serialize a null value for an object-or-null
  * field as an empty object. Normalize only those known nullable object fields
@@ -187,6 +198,7 @@ function prepareMapArguments<T>(input: unknown): T {
     const codebaseMap = candidate as UnknownRecord;
     normalizePartialArtifactIntents(codebaseMap);
     normalizeNumericEvidence(codebaseMap);
+    normalizePitfallLineReferences(codebaseMap);
     removePrematureEmptyArtifactIntents(codebaseMap);
     const moduleGraph = codebaseMap.module_graph as UnknownRecord | undefined;
     const typeContracts = codebaseMap.type_contract_surface as UnknownRecord | undefined;

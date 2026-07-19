@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Pitfall line references such as `"line 42"` are now normalized to the
+  schema-required numeric form before strict validation, preserving otherwise
+  substantive large-audit evidence from compatible providers.
+
 - D1 delta closure now recognizes the schema's object-shaped entry points;
   valid `{ path, role, language, run_command }` evidence is no longer treated
   as missing.
