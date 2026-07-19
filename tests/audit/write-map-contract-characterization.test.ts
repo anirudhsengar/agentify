@@ -178,6 +178,16 @@ async function testRepairsProviderMisnestedInlineMap(): Promise<void> {
   assert.equal(prepared.mode, "auto");
 }
 
+async function testRepairsProviderUnwrappedInlineMap(): Promise<void> {
+  const { writeMapTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
+  const map = cloneMap() as CodebaseMap & Record<string, unknown>;
+  assert.ok(writeMapTool.prepareArguments);
+  const prepared = writeMapTool.prepareArguments({ ...map, mode: "auto" }) as { map: CodebaseMap; mode: string };
+  assert.equal(Value.Check(WriteMapParamsSchema, prepared), true);
+  assert.equal(prepared.map.meta.project_type, "test-fixture");
+  assert.equal(prepared.mode, "auto");
+}
+
 async function testDropsWhollyEmptyPrematureArtifactIntents(): Promise<void> {
   const { writeMapTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
   const map = cloneMap() as CodebaseMap & Record<string, unknown>;
@@ -545,6 +555,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "tool definition contract", fn: testToolDefinitionContract },
   { name: "nullable object transport compatibility", fn: testNullableObjectTransportCompatibility },
   { name: "provider misnested inline map repair", fn: testRepairsProviderMisnestedInlineMap },
+  { name: "provider unwrapped inline map repair", fn: testRepairsProviderUnwrappedInlineMap },
   { name: "premature empty artifact intents are dropped", fn: testDropsWhollyEmptyPrematureArtifactIntents },
   { name: "provider serialized inline map repair", fn: testRepairsSerializedInlineMap },
   { name: "provider double-serialized inline map repair", fn: testRepairsDoubleSerializedInlineMap },

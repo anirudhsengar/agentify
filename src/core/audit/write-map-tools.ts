@@ -131,14 +131,17 @@ function prepareMapArguments<T>(input: unknown): T {
     // emit the remaining map sections as siblings of the wrapper. Repair only
     // known codebase-map keys before TypeBox validation; never absorb control
     // fields such as mode or map_file.
-    if (prepared.map !== null && typeof prepared.map === "object" && !Array.isArray(prepared.map)) {
-        const inlineMap = prepared.map as UnknownRecord;
-        for (const key of MAP_TOP_LEVEL_KEYS) {
-            if (key in prepared && !(key in inlineMap)) {
-                inlineMap[key] = prepared[key];
-                delete prepared[key];
-            }
+    const inlineMap = prepared.map !== null && typeof prepared.map === "object" && !Array.isArray(prepared.map)
+        ? prepared.map as UnknownRecord
+        : {};
+    for (const key of MAP_TOP_LEVEL_KEYS) {
+        if (key in prepared && !(key in inlineMap)) {
+            inlineMap[key] = prepared[key];
+            delete prepared[key];
         }
+    }
+    if (Object.keys(inlineMap).length > 0) {
+        prepared.map = inlineMap;
     }
     const map = isEmptyRecord(prepared.map) ? undefined : prepared.map;
     const delta = isEmptyRecord(prepared.delta) ? undefined : prepared.delta;
