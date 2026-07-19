@@ -348,6 +348,15 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
             }
 
             const validMap = validation.value;
+            const existingMap = readCanonicalMap(ctx.cwd, context);
+            if (
+                existingMap !== null
+                && isBootstrapDraft(existingMap)
+                && !isBootstrapDraft(validMap)
+            ) {
+                const bootstrapEntry = existingMap.exploration_log.find((entry) => entry.action === "draft_bootstrap");
+                if (bootstrapEntry) validMap.exploration_log.unshift(bootstrapEntry);
+            }
             const closure = formatCoverageClosure(validMap);
             let writeResult: { path: string; size_bytes: number };
             try {

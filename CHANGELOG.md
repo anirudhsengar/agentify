@@ -41,6 +41,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   provider replaces the exploration log, so later malformed incremental
   evidence still receives the bootstrap-only transport repair.
 
+- A fully valid provider map replacement now also retains the transaction's
+  bootstrap marker, so later malformed incremental evidence remains repairable
+  throughout the same large audit.
+
 - Brownfield session timeouts now race pending provider prompts, so an SDK
   abort that never settles cannot keep the audit process or its state
   transaction open indefinitely.

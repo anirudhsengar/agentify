@@ -456,6 +456,18 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   assert.equal(malformedMap.meta.lifecycle.documentation_loop.present, false);
   assert.ok(malformedMap.exploration_log.some((entry) => entry.action === "draft_bootstrap"));
 
+  const replacementCwd = tempDir("draft-marker-replacement");
+  await executeTool(draftTools.writeMapTool, { map: {} }, replacementCwd);
+  await executeTool(draftTools.writeMapTool, { map: cloneMap() }, replacementCwd);
+  const replacementMap = readJson(draftTools.canonicalMapPath(replacementCwd));
+  assert.ok(replacementMap.exploration_log.some((entry) => entry.action === "draft_bootstrap"));
+  const malformedReplacementDelta = await executeTool(
+    draftTools.writeMapDeltaTool,
+    { delta: { type_contract_surface: { one_type_trace: { name: "Incomplete trace" } } } },
+    replacementCwd,
+  );
+  assert.equal(isToolError(malformedReplacementDelta), false);
+
   const partialCwd = tempDir("partial-invalid");
   const partialTools = createWriteMapTools({ stateDir: ".claude/agentify" });
   await executeTool(partialTools.writeMapTool, { map: cloneMap() }, partialCwd);
