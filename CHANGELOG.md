@@ -33,6 +33,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   valid prior state and discards malformed optional fields, while existing-map
   deltas continue to reject malformed data strictly.
 
+- Bootstrap map sanitization now retains its internal draft marker after a
+  provider replaces the exploration log, so later malformed incremental
+  evidence still receives the bootstrap-only transport repair.
+
 - Brownfield session timeouts now race pending provider prompts, so an SDK
   abort that never settles cannot keep the audit process or its state
   transaction open indefinitely.

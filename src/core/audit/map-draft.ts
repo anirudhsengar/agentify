@@ -87,7 +87,14 @@ export function createGapDraftMap(): CodebaseMap {
 
 export function mergeEvidenceIntoGapDraft(evidence: Record<string, unknown>): CodebaseMap {
   const draft = createGapDraftMap();
-  return mergeEvidenceIntoMap(evidence, draft);
+  const merged = mergeEvidenceIntoMap(evidence, draft);
+  if (!merged.exploration_log.some((entry) => entry.action === "draft_bootstrap")) {
+    merged.exploration_log.unshift(draft.exploration_log[0]!);
+  }
+  if (!Value.Check(CodebaseMapSchema, merged)) {
+    throw new Error("Internal error: bootstrap audit evidence does not satisfy CodebaseMapSchema");
+  }
+  return merged;
 }
 
 export function mergeEvidenceIntoMap(

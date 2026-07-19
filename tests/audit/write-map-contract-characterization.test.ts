@@ -454,6 +454,7 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   assert.equal(malformedMap.meta.project_type, "research");
   assert.equal(malformedMap.skeleton.top_level_tree[0], "src/");
   assert.equal(malformedMap.meta.lifecycle.documentation_loop.present, false);
+  assert.ok(malformedMap.exploration_log.some((entry) => entry.action === "draft_bootstrap"));
 
   const partialCwd = tempDir("partial-invalid");
   const partialTools = createWriteMapTools({ stateDir: ".claude/agentify" });
