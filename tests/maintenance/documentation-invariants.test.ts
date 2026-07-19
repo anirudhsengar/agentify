@@ -113,11 +113,11 @@ test("dependency compatibility matrix preserves the upgrade gate and group owner
     assert.ok(matrix.includes(`#${issueNumber}`), `compatibility matrix must include #${issueNumber}`);
   }
 
-  assert.match(matrix, /Issues #32 and #33 must be merged before any dependency version changes/);
-  assert.match(matrix, /TypeScript 7\.0\.2.*not approved/s);
-  assert.match(matrix, /TypeBox.*hard-blocked until Issue #33 merges/s);
-  assert.match(matrix, /Pi 0\.80\.6 pair \| 0 \| 0 \| 0/);
-  assert.match(matrix, /No engine change approved/);
+  assert.match(matrix, /Completed groups may change only their owned manifest, lockfile, configuration, documentation, and characterization surfaces/);
+  assert.match(matrix, /TypeScript 6\.0\.3/);
+  assert.match(matrix, /TypeBox.*1\.3\.6/s);
+  assert.match(matrix, /Pi runtime pair.*0\.80\.7/s);
+  assert.match(matrix, /make no Node 26 support claim/);
 });
 
 test("package guidance files referenced by shipped docs are published", () => {
