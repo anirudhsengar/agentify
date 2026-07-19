@@ -109,7 +109,7 @@ test("legacy Pi state migrates to the provider-selected path and is retained", (
   }
 });
 
-test("identical provider-selected and legacy paths use canonical without deletion", () => {
+test("empty provider-selected and legacy paths use canonical without deletion", () => {
   for (const scenario of STATE_MATRIX.filter((entry) => entry.provider !== "pi")) {
     const cwd = makeParityTempDir("agentify-parity-state-existing-");
     try {
@@ -121,7 +121,7 @@ test("identical provider-selected and legacy paths use canonical without deletio
         scenario.additionalAgents,
       );
       assert.equal(resolved.absoluteDir, path.join(cwd, scenario.relativeDir));
-      assert.equal(resolved.layout.kind, "dual_identical");
+      assert.equal(resolved.layout.kind, "empty");
       assert.equal(resolved.layout.fallback, false);
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
