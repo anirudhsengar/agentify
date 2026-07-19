@@ -206,6 +206,12 @@ entries, and low-confidence evidence for areas not yet explored. Do not send
 a partial top-level object; use `write_map_delta` only after this first valid
 map exists.
 
+Never call `write_map` with `{}`, an empty string, or a placeholder. If the
+tool reports a validation failure, do not repeat the same payload: repair the
+reported missing sections and resubmit one complete map. A rejected call does
+not create a checkpoint, so `write_map_delta` remains unavailable until a
+complete initial map succeeds.
+
 The coverage block is the gate:
 
 ```
