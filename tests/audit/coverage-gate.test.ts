@@ -7,7 +7,6 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
-  AGENTS_MD_MAX_LINES,
   assessCoverageClosure,
   COVERAGE_DIMENSIONS,
 } from "../../src/core/audit/schema.ts";
@@ -51,14 +50,16 @@ class SilentUi implements AgentifyUi {
 function writeArtifacts(
   cwd: string,
   stateDir: string,
-  opts: { map?: unknown; agentsMdLines?: number } = {},
+  opts: { map?: unknown; agentsMdLines?: number; writeAgentsMd?: boolean } = {},
 ): void {
   fs.mkdirSync(path.join(cwd, "specs"), { recursive: true });
   fs.mkdirSync(path.join(cwd, "ai_docs"), { recursive: true });
   fs.mkdirSync(path.join(cwd, ".pi", "agents"), { recursive: true });
   fs.mkdirSync(path.join(cwd, stateDir), { recursive: true });
-  const lines = opts.agentsMdLines ?? 5;
-  fs.writeFileSync(path.join(cwd, "AGENTS.md"), Array.from({ length: lines }, (_, i) => `line ${i}`).join("\n") + "\n");
+  if (opts.writeAgentsMd !== false) {
+    const lines = opts.agentsMdLines ?? 5;
+    fs.writeFileSync(path.join(cwd, "AGENTS.md"), Array.from({ length: lines }, (_, i) => `line ${i}`).join("\n") + "\n");
+  }
   fs.writeFileSync(path.join(cwd, "specs", "README.md"), "# Specs\n");
   fs.writeFileSync(path.join(cwd, "ai_docs", "README.md"), "# AI Docs\n");
   if (opts.map !== undefined) {
@@ -385,13 +386,15 @@ async function testGapMapMeansPartialNoExport(): Promise<void> {
   assert.ok(ui.errors.some((m) => m.includes("D6_validation")));
 }
 
-async function testOversizedAgentsMdMeansPartial(): Promise<void> {
-  const cwd = tempDir("gate-oversize");
-  const ui = await run(cwd, (c, stateDir) =>
-    writeArtifacts(c, stateDir, { map: makeValidCodebaseMap(), agentsMdLines: AGENTS_MD_MAX_LINES + 5 }),
+async function testUserOwnedOversizedAgentsMdDoesNotBlockAudit(): Promise<void> {
+  const cwd = tempDir("gate-user-owned-oversize");
+  const original = Array.from({ length: 205 }, (_, i) => `user instruction ${i}`).join("\n") + "\n";
+  fs.writeFileSync(path.join(cwd, "AGENTS.md"), original);
+  await run(cwd, (c, stateDir) =>
+    writeArtifacts(c, stateDir, { map: makeValidCodebaseMap(), writeAgentsMd: false }),
   );
-  assert.ok(!fs.existsSync(path.join(cwd, ".codex")), "oversized AGENTS.md must not export");
-  assert.ok(ui.errors.some((m) => m.includes("line cap")));
+  assert.ok(fs.existsSync(path.join(cwd, ".codex")), "user-owned AGENTS.md must not block export");
+  assert.equal(fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf-8"), original);
 }
 
 async function testFullyCoveredMeansSuccessAndPersistsMap(): Promise<void> {
@@ -411,7 +414,7 @@ async function testFullyCoveredMeansSuccessAndPersistsMap(): Promise<void> {
   assert.ok(ui.infos.some((m) => m.includes("audit complete")));
 }
 
-async function testUserOwnedAgentsMdBlocksClaudeExport(): Promise<void> {
+async function testUserOwnedAgentsMdUsesAlongsideGuide(): Promise<void> {
   const cwd = tempDir("gate-user-agents");
   fs.writeFileSync(path.join(cwd, "AGENTS.md"), "# User owned\n");
   const { ui, configDir } = await runWithState(cwd, (c, stateDir) => {
@@ -419,8 +422,9 @@ async function testUserOwnedAgentsMdBlocksClaudeExport(): Promise<void> {
   });
   assert.equal(fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf-8"), "# User owned\n");
   assert.ok(!fs.existsSync(path.join(cwd, "CLAUDE.md")), "must not copy user-owned AGENTS.md to CLAUDE.md");
-  assert.ok(ui.errors.some((m) => m.includes("required generated file conflict")));
-  assert.equal(readProjectState(configDir, cwd)?.repoStatus, "partial");
+  assert.ok(fs.existsSync(path.join(cwd, "AGENTS.agentify.md")), "generated guide must be saved alongside user-owned AGENTS.md");
+  assert.ok(ui.infos.some((m) => m.includes("audit complete")));
+  assert.equal(readProjectState(configDir, cwd)?.repoStatus, "ready");
 }
 
 async function testUserOwnedWorkflowConflictPersistsPartial(): Promise<void> {
@@ -448,9 +452,9 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "missingWriteMapGetsOneRecoveryPass", fn: testMissingWriteMapGetsOneRecoveryPass },
   { name: "auditBootstrapsGapDraftForIncrementalMapWrites", fn: testAuditBootstrapsGapDraftForIncrementalMapWrites },
   { name: "gapMapMeansPartialNoExport", fn: testGapMapMeansPartialNoExport },
-  { name: "oversizedAgentsMdMeansPartial", fn: testOversizedAgentsMdMeansPartial },
+  { name: "userOwnedOversizedAgentsMdDoesNotBlockAudit", fn: testUserOwnedOversizedAgentsMdDoesNotBlockAudit },
   { name: "fullyCoveredMeansSuccessAndPersistsMap", fn: testFullyCoveredMeansSuccessAndPersistsMap },
-  { name: "userOwnedAgentsMdBlocksClaudeExport", fn: testUserOwnedAgentsMdBlocksClaudeExport },
+  { name: "userOwnedAgentsMdUsesAlongsideGuide", fn: testUserOwnedAgentsMdUsesAlongsideGuide },
   { name: "userOwnedWorkflowConflictPersistsPartial", fn: testUserOwnedWorkflowConflictPersistsPartial },
 ];
 

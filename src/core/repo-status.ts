@@ -225,8 +225,13 @@ export function inspectAgentifyRepoState(
       ? [...requiredBrownfieldFiles(stateDir)]
       : [...REQUIRED_GREENFIELD_FILES];
     const manifestUnmanaged = new Set(manifestVerification.unmanaged);
+    const preservedAlongside = new Set(
+      manifestVerification.manifest.files
+        .filter((file) => file.alongsidePath !== undefined)
+        .map((file) => file.path),
+    );
     const unmanagedExpected = collectUnmanaged(cwd, expectedSurface)
-      .filter((entry) => !manifestUnmanaged.has(entry));
+      .filter((entry) => !manifestUnmanaged.has(entry) && !preservedAlongside.has(entry));
     const missing = [
       ...manifestVerification.missing,
       ...manifestVerification.unmanaged.map((entry) => `${entry} (unmanaged)`),

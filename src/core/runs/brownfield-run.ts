@@ -26,7 +26,6 @@ import type { AgentifyTarget } from "../types.ts";
 import { AgentifyLog } from "../audit/log.ts";
 import { loadBuilderPrompt } from "../audit/prompt.ts";
 import {
-  AGENTS_MD_MAX_LINES,
   COVERAGE_DIMENSIONS,
   assessCoverageClosure,
 } from "../audit/schema.ts";
@@ -47,7 +46,7 @@ import {
   collectAuditArtifactSnapshot,
   rollbackGeneratedSurface,
 } from "../generation/artifact-snapshot.ts";
-import { applyStagedBundle, withAbortOnRequired } from "../generation/apply-bundle.ts";
+import { applyStagedBundle } from "../generation/apply-bundle.ts";
 import { formatApplyReport } from "../generation/apply-report.ts";
 import {
   captureSessionAgentFiles,
@@ -127,19 +126,6 @@ function cleanupTransientScaffoldingAt(cwd: string, stateDir: string): void {
     } catch {
       // Best effort cleanup.
     }
-  }
-}
-
-function countFileLines(filePath: string): number {
-  try {
-    const content = fs.readFileSync(filePath, "utf-8");
-    if (content.length === 0) return 0;
-    const withoutTrailingNewline = content.endsWith("\n")
-      ? content.slice(0, -1)
-      : content;
-    return withoutTrailingNewline.split("\n").length;
-  } catch {
-    return 0;
   }
 }
 
@@ -263,15 +249,6 @@ function readFinalAuditState(cwd: string, stateDir: string): FinalAuditState {
       gapReasons.push(`${dimension}: ${closure.reasons[dimension] ?? "not closed"}`);
     }
   }
-  if (agentsMdExists) {
-    const lines = countFileLines(agentsMdPath);
-    if (lines > AGENTS_MD_MAX_LINES) {
-      gapReasons.push(
-        `legacy AGENTS.md write is ${lines} lines, exceeds the ${AGENTS_MD_MAX_LINES}-line cap`,
-      );
-    }
-  }
-
   const success = gapReasons.length === 0;
   return {
     status: success ? "success" : "partial",
@@ -599,9 +576,7 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
             metadata,
             agentifyVersion: readPackageVersion(packageRoot()),
             mode: "brownfield",
-            policy: userOwnedAgentsMd
-              ? withAbortOnRequired(resolveApplyPolicy(options.cwd, stateDir))
-              : resolveApplyPolicy(options.cwd, stateDir),
+            policy: resolveApplyPolicy(options.cwd, stateDir),
             runId,
             stateDir,
             manifestStateDir: stateDirResolved.layout.fallback ? null : stateDir,
