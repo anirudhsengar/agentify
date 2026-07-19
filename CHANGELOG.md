@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Coverage recovery now supplies exact D2 module-edge and D3 type-contract
+  payload shapes, preventing otherwise rich large audits from looping on
+  missing structured evidence.
+
 - Inactivity and external cancellation now dispose stalled SDK sessions
   immediately instead of waiting indefinitely for a provider to become idle.
 

@@ -414,6 +414,8 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
                   "Leave genuinely unsupported dimensions as gaps; otherwise submit the structured delta now.",
                   "For D5, use `pitfalls: [{ module, what, consequence, line_ref }]` with a numeric line_ref.",
                   "For D8, use `security_surface: { damage_control_rules: [\"specific operational rule\"] }`; do not invent another field name.",
+                  "For D2, use `module_graph: { edges: [{ from, to, kind: \"import\"|\"state\"|\"rpc\" }] }` with at least one real edge.",
+                  "For D3, use `type_contract_surface: { pydantic_models: [{ path, name, fields: [\"field\"] }] }` or another concrete type-contract entry.",
                 ].join(" ")
                 : "Continue from the evidence already gathered and submit the complete structured map via write_map.",
               "Do not return a prose summary instead of the tool call.",
