@@ -13,6 +13,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Brownfield audits now create a transaction-scoped, honest gap-marked map
+  before model analysis when no canonical map exists. This lets large audits
+  provide evidence through incremental `write_map_delta` calls while retaining
+  the same strict coverage gate before any artifacts are rendered.
+
 - Brownfield session timeouts now race pending provider prompts, so an SDK
   abort that never settles cannot keep the audit process or its state
   transaction open indefinitely.

@@ -39,6 +39,8 @@ import {
   createWriteMapTools,
   loadCanonicalMapAt,
 } from "../audit/write-map-tool.ts";
+import { createGapDraftMap } from "../audit/map-draft.ts";
+import { DEFAULT_MAP_FILENAME, writeCanonicalMap } from "../audit/map-storage.ts";
 import { createReadOnlyExecutionPolicy } from "../security/execution-policy.ts";
 import { beginStateTransaction } from "../state-transaction.ts";
 import {
@@ -345,13 +347,21 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
       tool_allowlist: BUILDER_TOOL_ALLOWLIST,
     });
 
+    const bootstrappedGapDraft = loadCanonicalMapAt(options.cwd, stateDir) === null;
+    if (bootstrappedGapDraft) {
+      writeCanonicalMap(options.cwd, createGapDraftMap(), {
+        stateDir,
+        mapFilename: DEFAULT_MAP_FILENAME,
+      });
+    }
+
     options.ui.status("agentify: auditing existing codebase");
     setAgentifySessionActive(sessionId, true);
     const spinner: SpinnerHandle = startSpinner("starting audit…");
     let turnCount = 0;
     let costUsd = 0;
     let spinnerStopped = false;
-    let sawWriteMapCall = false;
+    let sawMapWriteCall = false;
     let stoppedAfterCoverageClosure = false;
     const sessionAbortController = new AbortController();
     const forwardExternalAbort = (): void => sessionAbortController.abort();
@@ -364,7 +374,14 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
           configDir: defaultConfigDir(),
           config,
           systemPrompt: promptContent,
-          userPrompt: buildBrownfieldUserPrompt(options.targets, options.additionalAgents),
+          userPrompt: [
+            buildBrownfieldUserPrompt(options.targets, options.additionalAgents),
+            ...(bootstrappedGapDraft ? [
+              "Agentify has already persisted an honest 0/10 gap-marked canonical map for this audit. " +
+              "Do not submit another initial write_map. Use write_map_delta to add evidence and close dimensions " +
+              "incrementally; only mark a dimension covered when the repository evidence supports it.",
+            ] : []),
+          ].join(" "),
           tools: BUILDER_TOOL_ALLOWLIST,
           executionPolicy: createReadOnlyExecutionPolicy({
             cwd: options.cwd,
@@ -385,11 +402,15 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
           // forever. Normal streamed responses continuously reset this timer.
           inactivityTimeoutMs: 5 * 60 * 1000,
           recoveryPromptIfToolNotCalled: {
-            requiredToolName: "write_map",
+            requiredToolName: bootstrappedGapDraft ? "write_map_delta" : "write_map",
             maxAttempts: 2,
             userPrompt: [
-              "Your audit response ended without calling write_map, so no codebase map was recorded.",
-              "Continue from the evidence already gathered and submit the complete structured map via write_map.",
+              bootstrappedGapDraft
+                ? "Your audit response ended without calling write_map_delta, so the canonical map still contains only its initial gaps."
+                : "Your audit response ended without calling write_map, so no codebase map was recorded.",
+              bootstrappedGapDraft
+                ? "Continue from the evidence already gathered and use write_map_delta to close supported dimensions."
+                : "Continue from the evidence already gathered and submit the complete structured map via write_map.",
               "Do not return a prose summary instead of the tool call.",
             ].join(" "),
           },
@@ -414,11 +435,11 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
               const toolName = (event as { toolName?: string; tool_name?: string }).toolName
                 ?? (event as { tool_name?: string }).tool_name
                 ?? "unknown";
-              if (toolName === "write_map") sawWriteMapCall = true;
+              if (toolName === "write_map" || toolName === "write_map_delta") sawMapWriteCall = true;
               spinner.update(auditActivityForTool(toolName));
             } else if (piType === "tool_execution_end") {
               const toolEvent = event as { toolName?: string; result?: WriteMapResult };
-              if (toolEvent.toolName === "write_map") {
+              if (toolEvent.toolName === "write_map" || toolEvent.toolName === "write_map_delta") {
                 const mapResult = extractWriteMapResult(toolEvent.result);
                 if (mapResult) {
                   log.mapWritten({
@@ -447,7 +468,7 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
               }
             } else if (piType === "agent_end" && !spinnerStopped) {
               spinner.update(
-                sawWriteMapCall
+                sawMapWriteCall
                   ? `Audit analysis complete • ${turnCount} pass(es) • estimated spend $${costUsd.toFixed(4)}`
                   : "Map not recorded yet — continuing the audit…",
               );

@@ -117,12 +117,32 @@ class RecoveryRuntime implements AgentRuntime {
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     this.calls += 1;
     assert.ok(options.recoveryPromptIfToolNotCalled);
-    assert.equal(options.recoveryPromptIfToolNotCalled.requiredToolName, "write_map");
+    assert.equal(options.recoveryPromptIfToolNotCalled.requiredToolName, "write_map_delta");
     assert.equal(options.recoveryPromptIfToolNotCalled.maxAttempts, 2);
     assert.ok(options.spawnExplorerStateDir);
     writeArtifacts(options.cwd, options.spawnExplorerStateDir, {
       map: makeValidCodebaseMap(),
     });
+    return { turns: 1, costUsd: null, aborted: false };
+  }
+
+  async runGreenfield(): Promise<AgentRuntimeResult> {
+    throw new Error("greenfield not used here");
+  }
+}
+
+class BootstrapRuntime implements AgentRuntime {
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    const stateDir = options.spawnExplorerStateDir;
+    assert.ok(stateDir);
+    const draft = JSON.parse(fs.readFileSync(path.join(options.cwd, stateDir, "codebase_map.json"), "utf-8")) as {
+      coverage?: Record<string, { status?: string }>;
+    };
+    assert.equal(Object.keys(draft.coverage ?? {}).length, COVERAGE_DIMENSIONS.length);
+    assert.ok(Object.values(draft.coverage ?? {}).every((entry) => entry.status === "gap"));
+    assert.match(options.userPrompt, /write_map_delta/);
+    assert.equal(options.recoveryPromptIfToolNotCalled?.requiredToolName, "write_map_delta");
+    writeArtifacts(options.cwd, stateDir, { map: makeValidCodebaseMap() });
     return { turns: 1, costUsd: null, aborted: false };
   }
 
@@ -349,6 +369,12 @@ async function testMissingWriteMapGetsOneRecoveryPass(): Promise<void> {
   assert.ok(fs.existsSync(path.join(cwd, ".agents", "agentify", "codebase_map.json")));
 }
 
+async function testAuditBootstrapsGapDraftForIncrementalMapWrites(): Promise<void> {
+  const cwd = tempDir("gate-bootstrap");
+  await runWithRuntime(cwd, new BootstrapRuntime());
+  assert.ok(fs.existsSync(path.join(cwd, ".agents", "agentify", "codebase_map.json")));
+}
+
 async function testGapMapMeansPartialNoExport(): Promise<void> {
   const cwd = tempDir("gate-gap");
   const gapMap = makeValidCodebaseMap();
@@ -419,6 +445,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "loadCanonicalMapRejectsGarbage", fn: testLoadCanonicalMapAtRejectsGarbage },
   { name: "noMapMeansPartialNoExport", fn: testNoMapMeansPartialNoExport },
   { name: "missingWriteMapGetsOneRecoveryPass", fn: testMissingWriteMapGetsOneRecoveryPass },
+  { name: "auditBootstrapsGapDraftForIncrementalMapWrites", fn: testAuditBootstrapsGapDraftForIncrementalMapWrites },
   { name: "gapMapMeansPartialNoExport", fn: testGapMapMeansPartialNoExport },
   { name: "oversizedAgentsMdMeansPartial", fn: testOversizedAgentsMdMeansPartial },
   { name: "fullyCoveredMeansSuccessAndPersistsMap", fn: testFullyCoveredMeansSuccessAndPersistsMap },
