@@ -71,7 +71,7 @@ const ALLOWED_SCHEMA_IMPORTS: ReadonlyMap<SchemaFile, readonly SchemaFile[]> = n
   ["skeleton.ts", []],
   ["type-contract.ts", []],
   ["validation-surface.ts", []],
-  ["write-map-params.ts", ["codebase-map.ts"]],
+  ["write-map-params.ts", []],
 ]);
 
 const ALLOWED_EXTERNAL_RELATIVE_IMPORTS: ReadonlyMap<SchemaFile, readonly string[]> = new Map([
