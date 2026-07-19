@@ -161,7 +161,16 @@ function prepareMapArguments<T>(input: unknown): T {
         return input as T;
     }
 
-    const prepared = structuredClone(input) as UnknownRecord;
+    let prepared: UnknownRecord;
+    try {
+        prepared = structuredClone(input) as UnknownRecord;
+    } catch {
+        // Direct tool calls and provider adapters can supply proxy-backed
+        // objects that are not structured-cloneable. Continue with normal
+        // property access so their original validation or access error is
+        // preserved instead of replacing it with DataCloneError.
+        prepared = input as UnknownRecord;
+    }
     // Some OpenAI-compatible transports encode a structured argument as a JSON
     // string. Accept only a parsable object; malformed strings still reach the
     // strict schema and produce the normal validation error.
