@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Require brownfield type tracing to target the selected type's owning directory instead of the entire repository.
+
 - Make brownfield audits establish focused module-graph and type-contract evidence before dispatching broad custom feature explorers.
 
 - Extend the bounded explorer timeout to three minutes so large brownfield feature audits can return structured evidence instead of repeatedly timing out.

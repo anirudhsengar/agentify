@@ -105,9 +105,12 @@ two cross-cutting evidence domains with the focused fixed modes:
 
 1. Call `spawn_explorer(mode="module_graph", target_path=".")` and
    merge at least one real import/state/RPC edge to close D2.
-2. Call `spawn_explorer(mode="type_tracer", target_path=".",
-   focus="<a real high-leverage model or contract name>")` and merge
-   its concrete type evidence to close D3.
+2. Select a real high-leverage model or contract from the scout pass,
+   then call `spawn_explorer(mode="type_tracer",
+   target_path="<the directory that owns that type>",
+   focus="<that exact type name>")`. Never use `target_path="."` for
+   type tracing: its report must follow one concrete type in its
+   bounded owning subtree. Merge the resulting type evidence to close D3.
 
 These are short, bounded evidence-gathering tasks. Do not substitute
 a broad feature report, a status-only coverage claim, or a guessed
