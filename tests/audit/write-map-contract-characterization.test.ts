@@ -445,6 +445,16 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
     0,
   );
 
+  const malformedCwd = tempDir("draft-sanitize");
+  const malformedResult = await executeTool(draftTools.writeMapTool, {
+    map: { meta: { project_type: "research", languages: ["python"], lifecycle: "invalid" }, skeleton: { top_level_tree: ["src/"] } },
+  }, malformedCwd);
+  assert.equal(isToolError(malformedResult), false);
+  const malformedMap = readJson(draftTools.canonicalMapPath(malformedCwd));
+  assert.equal(malformedMap.meta.project_type, "research");
+  assert.equal(malformedMap.skeleton.top_level_tree[0], "src/");
+  assert.equal(malformedMap.meta.lifecycle.documentation_loop.present, false);
+
   const partialCwd = tempDir("partial-invalid");
   const partialTools = createWriteMapTools({ stateDir: ".claude/agentify" });
   await executeTool(partialTools.writeMapTool, { map: cloneMap() }, partialCwd);

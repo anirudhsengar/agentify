@@ -31,6 +31,38 @@ function draftValue(node: unknown): unknown {
   return null;
 }
 
+function schemaMatches(node: unknown, value: unknown): boolean {
+  try {
+    return Value.Check(node as never, value);
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeEvidence(node: unknown, candidate: unknown, fallback: unknown): unknown {
+  if (!isRecord(node)) return fallback;
+  const options = node.anyOf;
+  if (Array.isArray(options) && options.length > 0) {
+    const matching = options.find((option) => schemaMatches(option, candidate));
+    return matching === undefined ? fallback : sanitizeEvidence(matching, candidate, fallback);
+  }
+  if (node.type === "object") {
+    if (!isRecord(candidate) || !isRecord(fallback)) return fallback;
+    const properties = isRecord(node.properties) ? node.properties : {};
+    const output = structuredClone(fallback);
+    for (const [key, property] of Object.entries(properties)) {
+      if (key in candidate) output[key] = sanitizeEvidence(property, candidate[key], output[key]);
+    }
+    return output;
+  }
+  if (node.type === "array") {
+    if (!Array.isArray(candidate)) return fallback;
+    const items = node.items;
+    return items === undefined ? candidate : candidate.filter((item) => schemaMatches(items, item));
+  }
+  return schemaMatches(node, candidate) ? candidate : fallback;
+}
+
 export function createGapDraftMap(): CodebaseMap {
   const draft = draftValue(CodebaseMapSchema) as CodebaseMap;
   draft.schema_version = "1";
@@ -51,4 +83,13 @@ export function createGapDraftMap(): CodebaseMap {
     throw new Error("Internal error: generated audit draft does not satisfy CodebaseMapSchema");
   }
   return draft;
+}
+
+export function mergeEvidenceIntoGapDraft(evidence: Record<string, unknown>): CodebaseMap {
+  const draft = createGapDraftMap();
+  const merged = sanitizeEvidence(CodebaseMapSchema, evidence, draft) as CodebaseMap;
+  if (!Value.Check(CodebaseMapSchema, merged)) {
+    throw new Error("Internal error: sanitized audit evidence does not satisfy CodebaseMapSchema");
+  }
+  return merged;
 }
