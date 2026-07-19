@@ -17,6 +17,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   structured map write, so a model that ends with incomplete coverage receives
   bounded same-session delta recovery prompts instead of being treated as done.
 
+- Coverage recovery prompts now include the exact minimal payload shapes for
+  substantive pitfalls and security damage-control evidence, preventing
+  otherwise well-evidenced large audits from stopping on schema recall errors.
+
 - Brownfield audits now create a transaction-scoped, honest gap-marked map
   before model analysis when no canonical map exists. This lets large audits
   provide evidence through incremental `write_map_delta` calls while retaining

@@ -409,7 +409,11 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
                 ? "The canonical map still has coverage gaps. Do not explore further or write prose. Read the current map, then use write_map_delta to add the strongest evidence already gathered and close every supportable dimension."
                 : "Your audit response ended without calling write_map, so no codebase map was recorded.",
               bootstrappedGapDraft
-                ? "Leave genuinely unsupported dimensions as gaps; otherwise submit the structured delta now."
+                ? [
+                  "Leave genuinely unsupported dimensions as gaps; otherwise submit the structured delta now.",
+                  "For D5, use `pitfalls: [{ module, what, consequence, line_ref }]` with a numeric line_ref.",
+                  "For D8, use `security_surface: { damage_control_rules: [\"specific operational rule\"] }`; do not invent another field name.",
+                ].join(" ")
                 : "Continue from the evidence already gathered and submit the complete structured map via write_map.",
               "Do not return a prose summary instead of the tool call.",
             ].join(" "),
