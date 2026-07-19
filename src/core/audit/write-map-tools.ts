@@ -548,15 +548,19 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             }
 
             const validMap = mergedValidation.value;
-            const needsTopographyEntryPoint =
-                params.dimension === "D1_topography" && validMap.skeleton.entry_points.length === 0;
-            if (needsTopographyEntryPoint) {
+            const needsTopographyEvidence =
+                params.dimension === "D1_topography"
+                && (
+                    validMap.skeleton.entry_points.length === 0
+                    || validMap.skeleton.first_5_files_for_fresh_agent.length === 0
+                );
+            if (needsTopographyEvidence) {
                 validMap.coverage.D1_topography = {
                     status: "gap",
                     confidence: params.confidence ?? "medium",
                     evidence_summary:
                         `${params.evidence_summary ?? "Topography evidence was submitted."} ` +
-                        "Add skeleton.entry_points objects with path, role, language, and run_command before closing D1_topography.",
+                        "Add skeleton.entry_points objects with path, role, language, and run_command plus first_5_files_for_fresh_agent objects with path and why before closing D1_topography.",
                 };
             }
             const closure = formatCoverageClosure(validMap);
@@ -577,8 +581,8 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 `Strategy: ${appliedStrategy}. Dimension: ${params.dimension ?? "(none)"}. ` +
                 `Gap-filler count for ${params.dimension ?? "n/a"}: ${params.dimension ? getReserveCount(params.dimension) : 0} (soft ceiling: ${GAP_FILLER_SOFT_CEILING}). ` +
                 `${closure.line}` +
-                (needsTopographyEntryPoint
-                    ? " To close D1, retry with `delta: { skeleton: { entry_points: [{ path: \"path/to/entry\", role: \"what it starts\", language: \"language\", run_command: \"documented command\" }] } }`."
+                (needsTopographyEvidence
+                    ? " To close D1, retry with `delta: { skeleton: { entry_points: [{ path: \"path/to/entry\", role: \"what it starts\", language: \"language\", run_command: \"documented command\" }], first_5_files_for_fresh_agent: [{ path: \"README.md\", why: \"starting context\" }] } }`."
                     : "") +
                 (reserveWarning ? ` Note: ${reserveWarning}` : "");
 

@@ -572,6 +572,10 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
             language: "python",
             run_command: "uv run package",
           }],
+          first_5_files_for_fresh_agent: [{
+            path: "README.md",
+            why: "Explains the project entry point.",
+          }],
         },
       },
       dimension: "D1_topography",

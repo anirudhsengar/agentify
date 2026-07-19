@@ -13,6 +13,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- D1 deltas now remain open until they include both entry points and the
+  fresh-agent reading list required by the topography closure gate.
+
 - Pitfall line references such as `"line 42"` are now normalized to the
   schema-required numeric form before strict validation, preserving otherwise
   substantive large-audit evidence from compatible providers.
