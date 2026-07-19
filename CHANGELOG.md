@@ -13,6 +13,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Audit logs now store compact, parseable summaries of tool and model events,
+  retaining tool outcomes while avoiding truncated nested JSON payloads.
+
 - Brownfield map writes now discard wholly empty, premature artifact-intent
   placeholders so in-progress coverage updates can continue; substantive
   artifact intents remain schema-validated for final rendering.

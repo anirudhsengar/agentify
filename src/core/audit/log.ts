@@ -181,6 +181,36 @@ function truncate(text: string, limit: number): string {
   return `${text.slice(0, limit)}[TRUNCATED: ${omitted} bytes omitted]`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function summarizeSessionEvent(event: unknown): unknown {
+  if (!isRecord(event)) return event;
+  const type = typeof event.type === "string" ? event.type : "unknown";
+  if (type === "turn_end" || type === "agent_end") return { type };
+  if (type === "tool_execution_start") {
+    return { type, toolName: event.toolName ?? event.tool_name ?? "unknown", toolCallId: event.toolCallId ?? null };
+  }
+  if (type === "tool_execution_end") {
+    const result = isRecord(event.result) ? event.result : {};
+    const content = Array.isArray(result.content) ? result.content[0] : undefined;
+    const text = isRecord(content) && typeof content.text === "string" ? truncate(content.text, 2_000) : null;
+    return {
+      type,
+      toolName: event.toolName ?? event.tool_name ?? "unknown",
+      toolCallId: event.toolCallId ?? null,
+      isError: result.isError === true,
+      resultText: text,
+    };
+  }
+  if (type === "message_end") {
+    const message = isRecord(event.message) ? event.message : {};
+    return { type, role: message.role ?? null, stopReason: message.stopReason ?? null, usage: message.usage ?? null };
+  }
+  return { type };
+}
+
 function serializeEvent(event: AgentifyEvent): string {
   let payloadJson: string;
   try {
@@ -270,7 +300,7 @@ export class AgentifyLog {
     // megabytes of cumulative duplicate content. Message boundaries and tool
     // execution events retain the durable audit trail without that growth.
     if (payload.pi_event_type === "message_update") return;
-    this.write("agentify.session_event", payload);
+    this.write("agentify.session_event", { ...payload, event: summarizeSessionEvent(payload.event) });
   }
 
   fileWritten(payload: FileWrittenPayload): void {
