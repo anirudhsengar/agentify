@@ -439,6 +439,11 @@ export async function runBrownfieldAudit(context: RunContext): Promise<void> {
               spinner.update(
                 `Analysis pass ${turnCount} complete • estimated spend $${costUsd.toFixed(4)}`,
               );
+              const currentMap = loadCanonicalMapAt(options.cwd, stateDir);
+              if (currentMap && assessCoverageClosure(currentMap).unresolved.length === 0) {
+                stoppedAfterCoverageClosure = true;
+                sessionAbortController.abort();
+              }
             } else if (piType === "tool_execution_start") {
               const toolName = (event as { toolName?: string; tool_name?: string }).toolName
                 ?? (event as { tool_name?: string }).tool_name
