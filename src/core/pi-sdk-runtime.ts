@@ -125,13 +125,25 @@ export class PiSdkRuntime implements AgentRuntime {
     let sawCost = false;
     let aborted = false;
     let sawRequiredRecoveryTool = false;
+    let resolveAbort: (() => void) | undefined;
+    const abortPromise = new Promise<void>((resolve) => {
+      resolveAbort = resolve;
+    });
+    const abortSession = (): void => {
+      if (aborted) return;
+      aborted = true;
+      resolveAbort?.();
+      void session.abort().catch(() => undefined);
+    };
+    const promptUntilAbort = async (userPrompt: string): Promise<void> => {
+      await Promise.race([session.prompt(userPrompt), abortPromise]);
+    };
     let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
     const resetInactivityTimer = (): void => {
       if (inactivityTimer) clearTimeout(inactivityTimer);
       if (options.inactivityTimeoutMs && options.inactivityTimeoutMs > 0) {
         inactivityTimer = setTimeout(() => {
-          aborted = true;
-          void session.abort();
+          abortSession();
         }, options.inactivityTimeoutMs);
       }
     };
@@ -159,14 +171,12 @@ export class PiSdkRuntime implements AgentRuntime {
     try {
       if (options.signal) {
         if (options.signal.aborted) {
-          aborted = true;
-          await session.abort();
+          abortSession();
         } else {
           options.signal.addEventListener(
             "abort",
             () => {
-              aborted = true;
-              void session.abort();
+              abortSession();
             },
             { once: true },
           );
@@ -174,12 +184,11 @@ export class PiSdkRuntime implements AgentRuntime {
       }
       if (options.timeoutMs && options.timeoutMs > 0) {
         timer = setTimeout(() => {
-          aborted = true;
-          void session.abort();
+          abortSession();
         }, options.timeoutMs);
       }
       resetInactivityTimer();
-      await session.prompt(options.userPrompt);
+      await promptUntilAbort(options.userPrompt);
       const recovery = options.recoveryPromptIfToolNotCalled;
       for (
         let attempt = 0;
@@ -192,7 +201,7 @@ export class PiSdkRuntime implements AgentRuntime {
             `Do not send another prose response. Call ${recovery.requiredToolName} now as your only next action.`,
             "Use the evidence already in this session and submit the complete structured payload.",
           ].join(" ");
-        await session.prompt(userPrompt);
+        await promptUntilAbort(userPrompt);
       }
       return { turns, costUsd: sawCost ? costUsd : null, aborted };
     } finally {

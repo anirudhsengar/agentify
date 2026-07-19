@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Brownfield session timeouts now race pending provider prompts, so an SDK
+  abort that never settles cannot keep the audit process or its state
+  transaction open indefinitely.
+
 - Brownfield audits now abort a session after five minutes without any SDK
   event, preventing a stalled provider from leaving repository state
   transactions open indefinitely while allowing normal streamed responses.
