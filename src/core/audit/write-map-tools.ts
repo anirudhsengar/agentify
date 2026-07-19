@@ -44,6 +44,24 @@ export interface MapTools {
 
 type UnknownRecord = Record<string, unknown>;
 
+const MAP_TOP_LEVEL_KEYS = new Set([
+    "schema_version",
+    "generated_at",
+    "meta",
+    "skeleton",
+    "module_graph",
+    "type_contract_surface",
+    "conventions",
+    "pitfalls",
+    "validation_surface",
+    "operational_surface",
+    "security_surface",
+    "coverage",
+    "open_questions",
+    "exploration_log",
+    "artifact_intents",
+]);
+
 function isEmptyRecord(value: unknown): value is UnknownRecord {
     return (
         value !== null &&
@@ -73,6 +91,19 @@ function prepareMapArguments<T>(input: unknown): T {
     }
 
     const prepared = structuredClone(input) as UnknownRecord;
+    // Some providers occasionally close `map` after its first property and
+    // emit the remaining map sections as siblings of the wrapper. Repair only
+    // known codebase-map keys before TypeBox validation; never absorb control
+    // fields such as mode or map_file.
+    if (prepared.map !== null && typeof prepared.map === "object" && !Array.isArray(prepared.map)) {
+        const inlineMap = prepared.map as UnknownRecord;
+        for (const key of MAP_TOP_LEVEL_KEYS) {
+            if (key in prepared && !(key in inlineMap)) {
+                inlineMap[key] = prepared[key];
+                delete prepared[key];
+            }
+        }
+    }
     const map = isEmptyRecord(prepared.map) ? undefined : prepared.map;
     const delta = isEmptyRecord(prepared.delta) ? undefined : prepared.delta;
     const candidate = map ?? delta;

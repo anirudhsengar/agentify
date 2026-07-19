@@ -160,6 +160,24 @@ async function testNullableObjectTransportCompatibility(): Promise<void> {
   );
 }
 
+async function testRepairsProviderMisnestedInlineMap(): Promise<void> {
+  const { writeMapTool } = createWriteMapTools({ stateDir: ".pi/agentify" });
+  const map = cloneMap();
+  const { meta, skeleton, module_graph, ...remaining } = map;
+  assert.ok(writeMapTool.prepareArguments);
+  const prepared = writeMapTool.prepareArguments({
+    map: { meta },
+    skeleton,
+    module_graph,
+    ...remaining,
+    mode: "auto",
+  }) as { map: CodebaseMap; mode: string };
+  assert.equal(Value.Check(WriteMapParamsSchema, prepared), true);
+  assert.deepEqual(prepared.map.skeleton, skeleton);
+  assert.deepEqual(prepared.map.module_graph, module_graph);
+  assert.equal(prepared.mode, "auto");
+}
+
 async function testInlineDefaultsCoverageAndStorageContract(): Promise<void> {
   const cwd = tempDir("inline");
   const tools = createWriteMapTools({ stateDir: ".claude/agentify" });
@@ -483,6 +501,7 @@ async function testObservabilityAndFactoryContract(): Promise<void> {
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "tool definition contract", fn: testToolDefinitionContract },
   { name: "nullable object transport compatibility", fn: testNullableObjectTransportCompatibility },
+  { name: "provider misnested inline map repair", fn: testRepairsProviderMisnestedInlineMap },
   { name: "inline defaults coverage and storage contract", fn: testInlineDefaultsCoverageAndStorageContract },
   { name: "input loading and draft contract", fn: testInputLoadingAndDraftContract },
   { name: "history validation coverage and merge contract", fn: testHistoryValidationCoverageAndMergeContract },

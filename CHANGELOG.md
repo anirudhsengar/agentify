@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Brownfield map writes now repair a provider serialization quirk that places
+  known map sections beside the `map` wrapper, preserving strict validation
+  while allowing the complete intended payload to be recorded.
+
 - Brownfield explorer dispatch is now bounded to 16 total explorers, two
   concurrent explorers, and two minutes per explorer. The builder prompt now
   directs evidence-first dispatch instead of inviting unbounded parallel work.
