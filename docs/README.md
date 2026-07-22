@@ -16,6 +16,7 @@ public product contract.
 | Generation architecture and trust boundary | `docs/architecture.md` |
 | FDE operating-system living roadmap | `docs/roadmaps/agentify-fde-operating-system.md` |
 | FDE engagement records, schemas, scoring, and CLI | `docs/architecture/fde-engagement-foundation.md` |
+| Supported FDE evaluation tasks, trials, graders, aggregation, and evidence | `docs/eval-architecture.md` |
 | Verified FDE Milestone 0 baseline | `docs/benchmarks/fde-baseline.md` |
 | Modernization parity baseline and behavior contract | `docs/refactors/modernization-baseline.md` |
 | Runtime reachability roots and deletion evidence | `docs/refactors/runtime-reachability.md` |
@@ -44,6 +45,7 @@ not make an internal module a supported package API.
 - **Execution policy** — `src/core/security/execution-policy.ts`.
 - **Transactional state** — `src/core/state-dir.ts`,
   `src/core/state-transaction.ts`.
+- **Supported FDE evaluation foundation** — `src/core/evals/`.
 - **Build and package boundary** — `scripts/build.mjs`, `bin/agentify.js`,
   `src/core/package-root.ts`, `tests/package/installed-cli-smoke.mjs`.
 - **Experimental runtime lifecycle decisions** —

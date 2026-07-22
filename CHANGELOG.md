@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Add a supported, engagement-scoped FDE evaluation foundation with strict task,
+  suite, trial, grader, and result schemas; controlled failure taxonomy;
+  resumable imported-result runs; JSONL evidence; precise aggregation; and
+  deterministic JSON/Markdown reporting.
+
 - Add the supported `agentify engage init|status|validate|report` CLI family for
   deterministic local FDE engagement records and Markdown analysis reports.
 
