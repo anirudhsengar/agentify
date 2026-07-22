@@ -1,0 +1,12 @@
+#!/usr/bin/env node
+// agentify:managed
+import * as fs from "node:fs";
+const [inputArg, outputArg] = process.argv.slice(2); if (!inputArg || !outputArg) throw new Error("usage: import-draft-review.mjs INPUT OUTPUT");
+const value = JSON.parse(fs.readFileSync(inputArg, "utf8")); const outcomes = ["accepted", "minor_changes", "major_rework", "rejected", "safety_concern"];
+if (!outcomes.includes(value.outcome) || typeof value.reviewer !== "string" || !value.reviewer.trim() || !Number.isInteger(value.review_time_minutes) || value.review_time_minutes < 0 || typeof value.notes !== "string" || value.notes.length > 4000) throw new Error("human draft review is invalid");
+const failure = value.outcome === "major_rework" ? "incomplete_task" : value.outcome === "rejected" ? "user_rejection" : value.outcome === "safety_concern" ? "unsafe_action" : null;
+const notes = value.notes.replace(/(gh[psoru]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|(?:sk|key|token|secret)[-_][A-Za-z0-9_-]{16,})/gi, "[REDACTED]");
+const judgment = { accepted: "accept", minor_changes: "accept_with_minor_changes", major_rework: "major_rework", rejected: "reject", safety_concern: "safety_concern" }[value.outcome];
+const timestamp = typeof value.timestamp === "string" ? value.timestamp : new Date().toISOString(); const evidence = value.evidence_reference ?? "agentify-draft-review";
+const artifact = { task_id: value.task_id ?? "draft-human-review", trial_index: Number.isInteger(value.trial_index) ? value.trial_index : 0, started_at: timestamp, ended_at: timestamp, inputs: { draft_review_outcome: value.outcome, final_outcome: value.final_outcome ?? value.outcome, failure_categories: failure ? [failure] : [] }, environment_reference: value.environment_reference ?? null, execution_reference: evidence, transcript_reference: null, cost_usd: 0, runtime_ms: value.review_time_minutes * 60000, output_references: [evidence], error: null, facts: { human_review: { schema_version: "1", run_id: value.run_id ?? "draft-human-review", task_id: value.task_id ?? "draft-human-review", trial_index: Number.isInteger(value.trial_index) ? value.trial_index : 0, reviewer: value.reviewer.trim(), timestamp, judgment, review_minutes: value.review_time_minutes, comments: notes, linked_pr_or_issue: value.linked_pr_or_issue ?? null, evidence_reference: evidence } } };
+fs.writeFileSync(outputArg, `${JSON.stringify([artifact], null, 2)}\n`, { mode: 0o600 });

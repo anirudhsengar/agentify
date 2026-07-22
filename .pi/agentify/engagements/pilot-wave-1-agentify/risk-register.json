@@ -1,0 +1,51 @@
+{
+  "schema_version": "1",
+  "engagement_id": "pilot-wave-1-agentify",
+  "risks": [
+    {
+      "risk_id": "shadow_source_mutation",
+      "category": "technical",
+      "description": "Shadow workflow may inadvertently modify tracked source code.",
+      "likelihood": 1,
+      "impact": 5,
+      "severity": "moderate",
+      "mitigation": "Workflow runs with contents:read and refuses dirty checkout before exit.",
+      "owner_id": "pilot-operator",
+      "status": "mitigating",
+      "detection_method": "git status check inside run-shadow.mjs before producing evidence",
+      "rollback_or_fallback": "Discard the run; do not commit evidence.",
+      "related_step_ids": ["shadow_workflow"],
+      "evidence": ["docs/pilots/pilot-wave-1/risk-and-stop-conditions.md"]
+    },
+    {
+      "risk_id": "branch_or_pr_creation",
+      "category": "operational",
+      "description": "Shadow workflow may push a branch or open a PR.",
+      "likelihood": 1,
+      "impact": 5,
+      "severity": "moderate",
+      "mitigation": "Workflow has no push, no PR, no merge step; contents:read only.",
+      "owner_id": "pilot-operator",
+      "status": "mitigating",
+      "detection_method": "Explicit policy.source_files_modified/branch_created_or_pushed/pull_request_created fields in evidence packet.",
+      "rollback_or_fallback": "Delete branch and close PR if any are created; stop the pilot.",
+      "related_step_ids": ["shadow_workflow"],
+      "evidence": ["docs/pilots/pilot-wave-1/risk-and-stop-conditions.md"]
+    },
+    {
+      "risk_id": "credential_leak_via_validation",
+      "category": "security",
+      "description": "Validation output may include secret-shaped strings from local environment.",
+      "likelihood": 1,
+      "impact": 4,
+      "severity": "low",
+      "mitigation": "Validation runs structured checks; raw output is not persisted.",
+      "owner_id": "pilot-operator",
+      "status": "mitigating",
+      "detection_method": "redact() in run-shadow.mjs replaces tokens, keys, and PEM blocks.",
+      "rollback_or_fallback": "Drop evidence artifact; report incident.",
+      "related_step_ids": ["shadow_workflow"],
+      "evidence": ["docs/pilots/pilot-wave-1/risk-and-stop-conditions.md"]
+    }
+  ]
+}

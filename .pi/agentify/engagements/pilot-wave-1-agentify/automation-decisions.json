@@ -1,0 +1,42 @@
+{
+  "schema_version": "1",
+  "engagement_id": "pilot-wave-1-agentify",
+  "decisions": [
+    {
+      "decision_id": "shadow_label_classification",
+      "workflow_id": "pilot-wave-1-agentify",
+      "step_id": "shadow_workflow",
+      "mode": "llm_classification",
+      "rationale": "Readiness classification is performed by deterministic Agentify shadow script using structured issue-text heuristics; no model invocation is required at the current autonomy level.",
+      "simpler_approaches_rejected": ["manual_triage_only", "rule_engine_per_label"],
+      "failure_impact": "Misclassification of readiness may delay human review but does not modify source code.",
+      "reversibility": "Operator can re-classify by editing the issue or by adding human context; no code is changed.",
+      "human_control_checkpoint": "Operator reviews evidence-packet.json before any later draft implementation.",
+      "fallback": "Default to needs_information when uncertain.",
+      "required_evidence": ["issue-body", "git-tracked-files", "engagement-charter"],
+      "maximum_cost_usd": 0,
+      "confidence": "medium",
+      "uncertainty": ["candidate-file scoring is heuristic"],
+      "approval_owner_id": "pilot-operator",
+      "security_restrictions": ["contents:read-only"]
+    },
+    {
+      "decision_id": "implementation_publication",
+      "workflow_id": "pilot-wave-1-agentify",
+      "step_id": "metrics_record",
+      "mode": "prohibited",
+      "rationale": "Pilot Wave 1 does not publish draft PRs in this prompt. Implementation is explicitly excluded until draft promotion is evaluated and per-run approval is granted.",
+      "simpler_approaches_rejected": ["auto_publish_draft"],
+      "failure_impact": "Implementation cannot run.",
+      "reversibility": "Fully reversible; no branch or PR exists.",
+      "human_control_checkpoint": null,
+      "fallback": "Engagement stops at shadow evidence; no further action.",
+      "required_evidence": ["shadow_evidence"],
+      "maximum_cost_usd": null,
+      "confidence": "high",
+      "uncertainty": [],
+      "approval_owner_id": "pilot-operator",
+      "security_restrictions": ["no_branch_push", "no_pr_creation", "no_merge"]
+    }
+  ]
+}

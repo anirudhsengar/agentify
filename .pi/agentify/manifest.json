@@ -1,0 +1,1108 @@
+{
+  "schema_version": "2",
+  "agentify_version": "0.2.1",
+  "generated_at": "2026-07-22T16:52:46.612Z",
+  "mode": "brownfield",
+  "run_id": "70dc92bb-a715-4ccb-a77a-83d77436defc",
+  "files": [
+    {
+      "path": ".github/actions/run-pi/action.yml",
+      "kind": "scaffold",
+      "required": true,
+      "marker": "# agentify:managed",
+      "sha256": "05faa98ccf7bcccca19f432976c918b7caedb5b5fcce493e2b294ae52ff1f860",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/actions/setup-pi/action.yml",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "721fc21c4a9a6baf15e0510f432bbda5e757971a732cb5bc988fb435e1d34d91",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/agent-prompts/drill-me-issue.md",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "936a3f14f3784e8699d5a899eab96cb8890ec241844e174bacd2beaf031e90ba",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/agent-prompts/implement-pr.md",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "eb3cf5b0e87789a05ca29a97d6c7fbc9d2c85479b837a08fa76b9b7dc03cb483",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/agent-prompts/implement.md",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "0cc8d0559e624621a67b2536eaaaf5609fc5ed77d1865da5848b07412632172e",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/agent-prompts/orchestrate-issue.md",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "0da74c7b92f38cd00bdbce1bb239e857df308b5dd38239913ab738130075aa8c",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/agent-prompts/refresh-surface.md",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "f4ab28041e53ca346feb7a2f53a33308fa0f1578a64bfdbd7c504afb541309ea",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/agent-prompts/review.md",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "815a48d7fed08efe295571db1a690235b0c99e03a01a947e6277cd62d705b912",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/agent-prompts/update-branch.md",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "e9866772bbc29cc741b73b8d04bd946e902b3a30b63c2289c4d87446e7e298c7",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/agent-prompts/write-pr.md",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "a179629afe34440d47109ce8765ee7802dd898c72ea4b5c198df0d596cc03ee3",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/agent-state-machine.json",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "sha256",
+      "sha256": "3829218fe6e2a0dd39cd8bcd837d771ea518d92f4cc55a482b4679b3258f6157",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/agentify-shadow.json",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "sha256",
+      "sha256": "337ba1d098ab00461610fb2e4ebc2079bdeefb1e345cea853ab9fac163b2f15c",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/extensions/draft-budget.ts",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "// agentify:managed",
+      "sha256": "78ecfabb6395bb675f322b1fb47968c601b1a1aa6d7b6099d7560f7c3b7da1c7",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/apply-drill-issues.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "472d9955250c5803fae44d5ce27d82143fa55039ea705dbbdc6c2d6d71fc7518",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/build-draft-evidence.mjs",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "// agentify:managed",
+      "sha256": "916a238c95c46ed892233b7afc6cfb2f0841963626c87da54cc3218afd211c55",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/capture-issue-context.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "5dfe5c77de58ad88293b155cebd323e053b22211ca4527cc2973b6c7bd880470",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/capture-pr-context.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "6e603f0b3c01ad041823292c9c6613c13796a75d34f2f28455c355aad015d158",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/check-draft-gates.mjs",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "// agentify:managed",
+      "sha256": "aa207b23b6af071b6d139577e36cad76c6a08b08d17ada1c3d15e5ac117bc4e5",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/check-existing-issue-pr.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "8cdab2cf90600d1533bb5c18d50c382ca72d777a6e24ecd3ebd2439b8bf69b81",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/check-issue-ready.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "927224182723e5530f542914fec30b3e791be2e672b05f5001ce2898418cc2e2",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/cleanup-draft-branch.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "3c6b9c8b3dd604c8f2c089d18bda42867ba4a5c02fe3eaa38c06b625d3cc47d3",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/complete-implementation-handoff.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "a8415324aef793d0cd6d55fd741a720f2629c0c32ebb03f9613ccc390099b4ef",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/complete-review-handoff.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "26dfa34d3e0e217cca27e4dc5a34da55a3f8c84bf80bf6d410c1a16f59be304a",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/compute-implementation-branch.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "b49288a73d0691b4e25ae1a30e7f8ce9f8d2352846b6a7d0ab783ca5e175a533",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/detect-stale-experts.mjs",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "// agentify:managed",
+      "sha256": "4a403fab4f3a326d6bf83fdba6c0f8683c49180d5c36e616c67f73ecdfbc9fd7",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/draft-run-control.mjs",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "// agentify:managed",
+      "sha256": "27548b2ad1b54900fb1521d64646b7511a33df2e944f0c1b50948a492d9ec10d",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/extract-orchestration-plan.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "cf5ee47ee25de6136cb8aeee906179ee411bafaf719440cff00aa1845018ef0a",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/extract-output.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "24b0729cae178faf5adcd1cb842e47016c8e54a6edc45acd392f01e9e7a7d367",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/extract-pr-meta.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "8b7c4d1e3348f1a18fb28cc8d528fe11b21b3a5b57f755bad9ce7e89d0cf10d6",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/extract-review-verdict.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "0942792abbcea1b1c95ca8986834c0d32ef6c57c3eb6be84081c8ec8e5a1d6d7",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/extract-update-branch-comment.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "a996cf8c39b1cfc62446e2562c1a50b5dacd910baee4b1f7b25d2b50864a984e",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/finalize-draft-validation.mjs",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "// agentify:managed",
+      "sha256": "94e7acd8fbf1a1c80b5349f0e2e4cc7e51b679f47dcd82a789b1d52de54d8519",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/import-draft-review.mjs",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "// agentify:managed",
+      "sha256": "3a72f1c0695b2de85b2776f7d04daf62f4ff7eac8557d782459dfff7b1c9aff7",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/mark-implementation-failure.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "a86bc6734168e08bc6980d8e290eefc527d78a25da34d7a923e9009269d4d911",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/mark-pr-workflow-failure.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "0d3c816db1a78a10fc885b5d3a1887f5123f97582498bc77e663ffe0ca340bee",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/publish-implementation-pr.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "7b8c10b81d8bdf4c59bcfaadaf0bc32051f10c341969a59cd77435662b6c97f9",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/push-updated-branch.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "c22b2719bb7b095eec44cfe8b1a769c8b238894ffd422eabcc37233a06b3d7b3",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/record-pilot-metrics.mjs",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "// agentify:managed",
+      "sha256": "d02ab12d3daf34211357377e8f177caf4ecbf56539a1757d14d9f4671cb3186e",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/refresh-managed-manifest.mjs",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "// agentify:managed",
+      "sha256": "ee5ca4c2f34037678b0b8cb2f4fa842eb1bc1375f978a1aca1940fa616226df5",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/render-drill-reply.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "866d88bb132ab6decaf65db9cccacc0caa36cbc2570668d38bdfe1063ed3558e",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/render-expert-context.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "4248567b08325fcb076c53332a9152523432fd5907b2e42ea5c1acf6f3e3b410",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/render-formation-resume-context.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "efd239271c1eef9a4eb9477150ed4dc4ff49bef220c1536cbdad7189cd9285f8",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/render-specialist-context.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "1afae5285ce930f445639730d58fbd81dcbc1a77f46f663b2c3f0d1d222edce8",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/render-workflow-context.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "cac04615cf44a5a4f7ebda1c49026126495928d8e91f960a1e53c21d9b68445d",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/resolve-state-dir.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "cd4c627298ffad60d3a67c5470482a829a6c94c39a1bf082596fcf1ff970a2d6",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/route-agent-command.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "575be61a1f9e91752fe48a228ff961724c908b41918b00bd72ff25e5cbf70a00",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/run-issue-readiness.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "1581a602e1f70dc0710e4b33231266a2e381d266ac30cd71d5997e8e6867adf2",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/run-pi-safe.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "577f29b7050adce1a87fe694a4a97fb3be849a8d570fdd378950269b2ddcf0a2",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/run-shadow.mjs",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "// agentify:managed",
+      "sha256": "1896d8834707832d36f4f31c08d1591d956d3d5721b7ea533af408d0a923bc6e",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/setup-agentify.sh",
+      "kind": "scaffold",
+      "required": true,
+      "marker": "# agentify:managed",
+      "sha256": "feb37bdd93c901bd752af3e48e21de9233c537b3f81cdbf2a3c7dba46795c3cc",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/smoke-drill-github-runtime.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "c738c42cd42a67192d788d3a1283221d4a8e547c84fb269639a5d7697bfcc6b6",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/smoke-evidence.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "159d47daf6101b9e34222e24acfd9a0434a277706a02123d2a68a082cd61a35a",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/smoke-github-runtime.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "6c283299edf5f3c63f759ed4632be69cba964dde6c5069e2bf2101755cdeea80",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/smoke-model-github-runtime.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "6c7f8dd1765ea724850ba1a7b5c3c149ce89c556debf6a9ecd3219721fb685cc",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/smoke-refresh-github-runtime.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "1b298e2b1304e11b775f455afcfe96fa6436cf866c66bf3d1e7dfd62af7b58bc",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/smoke-retry-github-runtime.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "cff24b6ffa423d01a5e4db5673fb4aba53cfa4395b6abda437065dd0abf1089f",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/smoke-review-github-runtime.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "4b672ec306e708e5e56aa402de1490b32b00a91eeda6c0c3e89d404b62cd3bcd",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/validate-draft-run.mjs",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "// agentify:managed",
+      "sha256": "e5b83f78949b5030afc883095fc6550cbca730667cfe84ac0b8c23e9755bad9a",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/validate-refresh-surface.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "8190be22a039017c8daeb50071e204faf57293a7134ac338f629c17c29ecce1a",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/validate-repository.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "e631346412d8ff0fbba1a2211f327a42ddbe1b7cf4629a33db365cabd77c185b",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/verify-diff-routing-evidence.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "bc7d0c89814404caf1084aceabc0e084bfbdac4b6ef7d976d774d7156b488bf7",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/verify-implementation-commits.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "b2da8f399aa69ef65a4e315b13e286e86021b18eb90fec9789e253615d452c44",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/scripts/verify-routing-evidence.sh",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "204ca0bd4e8d5bf4fa4ea1906d23e5ede1c8e7eb2b03b381cc9eb416140f8e97",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/workflows/agent-command.yml",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "486b53b1a9e700afa8941efa550b08860bc84a282266b0246916e2fe7453827e",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/workflows/agent-draft-review.yml",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "b9d8ad2d124492f4758ba577f74033114c44c390d3572e4ebf01679b80fbbe8f",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/workflows/agent-drill-me-issue.yml",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "3d2b910742ce739e397a81d54382de93b31ef290d090e3c2c16688830d996f46",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/workflows/agent-implement-pr.yml",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "61fdf6331f8955eb07e309d931e636c88c3268696b36c363cdf395d6f450498d",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/workflows/agent-implement.yml",
+      "kind": "scaffold",
+      "required": true,
+      "marker": "# agentify:managed",
+      "sha256": "429cb8335e7d07351c92620aa01a66dd2b5a52c4c0ab065b3468180de8c3ffa5",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/workflows/agent-refresh-surface.yml",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "f75d0ba5353ed6b2cdd982cc9d5b886ed484959ec4e96ca7d6f8a99ad4826233",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/workflows/agent-review.yml",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "df362c0d7db0d03cf4e810d594e9557299e266432daa9ae641acec98b10c5740",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/workflows/agent-shadow.yml",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "b7e13ededaba174fab7d2f3f03a7a55e3484d2c4e6e87d2b4d00d7bf8ef89d6e",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/workflows/agent-update-branch.yml",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "495c2e59ca7ec00dcaa2b1153984d8a6a42eda78bdb0d216de723fd3c9c68185",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".github/workflows/validate-agentify.yml",
+      "kind": "scaffold",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "3f5f8767a7dc21d8f58ccdc902211ffa350c09430990a85f7048810bc2cf93b2",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": ".pi/agentify/agents/audit-pipeline.md",
+      "kind": "audit",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "e3151e363df0185c0d00b2cc48d6feab74951535c66b361093b1bd478d8fe228",
+      "source": "fallback-feature-agent-renderer"
+    },
+    {
+      "path": ".pi/agentify/agents/engagement-records.md",
+      "kind": "audit",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "231a638cc4b72a9220c7f81cd7471dcdea55cdafac6c640f65806b38a38feac0",
+      "source": "fallback-feature-agent-renderer"
+    },
+    {
+      "path": ".pi/agentify/agents/evaluation-engine.md",
+      "kind": "audit",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "7fe8814341c1221a7820b0e1aab70cf2a5fce01d9ae503720094a6f2836dc935",
+      "source": "fallback-feature-agent-renderer"
+    },
+    {
+      "path": ".pi/agentify/agents/github-runtime.md",
+      "kind": "audit",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "6257a68bab6f49fcc9b6d9ea705c9afcaaf7fdc897fade835920f626e31a26f8",
+      "source": "fallback-feature-agent-renderer"
+    },
+    {
+      "path": ".pi/agentify/agents/state-lifecycle.md",
+      "kind": "audit",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "ec93d765e7d52a88b70da2c1a5bc8906df332a086044d5ca450f7401b292478c",
+      "source": "fallback-feature-agent-renderer"
+    },
+    {
+      "path": ".pi/agentify/codebase_map.json",
+      "kind": "state",
+      "required": true,
+      "marker": "sha256",
+      "sha256": "bc76ab8f9a3ae9e37f010a7843842fb990cbc37490fb914bf402372961c118e2",
+      "source": "write_map"
+    },
+    {
+      "path": ".pi/agentify/conditional_docs.md",
+      "kind": "audit",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "407e771e744fca5f7f8c8c1b805f978ed63fa3cff11867b83f3d6e7e95196b35",
+      "source": "feedback-loop-renderer"
+    },
+    {
+      "path": ".pi/agentify/prompts/audit-schema-change.md",
+      "kind": "prompt",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "76ea328685e63b4f2bae67c145035279fd72c294cdfa69eba1f8fc17f91e0560",
+      "source": "per-area-prompt-renderer"
+    },
+    {
+      "path": ".pi/agentify/prompts/bug.md",
+      "kind": "prompt",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "413b93149663767a1b261bf6ae5bbe222b9fd997e2413b6913fac1b8195e19ac",
+      "source": "lifecycle-prompt-renderer"
+    },
+    {
+      "path": ".pi/agentify/prompts/chore_deps.md",
+      "kind": "prompt",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "ed095482cea3a9b2872ad179bacd89ceea18c7e2ac3b0d5d181f7c483339a128",
+      "source": "lifecycle-prompt-renderer"
+    },
+    {
+      "path": ".pi/agentify/prompts/chore.md",
+      "kind": "prompt",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "47f8bf9853fce345b2cddae5cd6338999594b6c59ca2b29c1f11d57e6943fd57",
+      "source": "lifecycle-prompt-renderer"
+    },
+    {
+      "path": ".pi/agentify/prompts/docs.md",
+      "kind": "prompt",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "85928ac724a91e6ea799bbc5878fdd090f1b5dbc2ee2167b6ca32541346fc409",
+      "source": "lifecycle-prompt-renderer"
+    },
+    {
+      "path": ".pi/agentify/prompts/feature.md",
+      "kind": "prompt",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "0fbf489a116ef49b98022dc7676d74e58a9cbcd4924542436b0d92f0b8a3058a",
+      "source": "lifecycle-prompt-renderer"
+    },
+    {
+      "path": ".pi/agentify/prompts/refactor.md",
+      "kind": "prompt",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "652ee1883528da818cc2bc430b0ab60bbbd2410dded47a5e6524088e13a60788",
+      "source": "lifecycle-prompt-renderer"
+    },
+    {
+      "path": ".pi/agentify/prompts/security.md",
+      "kind": "prompt",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "874c15753d1274cdc4b2444fa389ec9af6eb010848b259fc84cd5eb7a3103857",
+      "source": "lifecycle-prompt-renderer"
+    },
+    {
+      "path": ".pi/agentify/prompts/state-migration.md",
+      "kind": "prompt",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "8b7bf5078c9de35d78d4b377841e9d06dd74c14168d86735ad1b0fb9f85ade07",
+      "source": "per-area-prompt-renderer"
+    },
+    {
+      "path": ".pi/agentify/prompts/test.md",
+      "kind": "prompt",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "7875bf4dc65a0312cceef5b88bb82e43254ffb8d29cf7acc3d2814ce3c6a3ac5",
+      "source": "lifecycle-prompt-renderer"
+    },
+    {
+      "path": ".pi/agentify/workflows/audit-pipeline-plan-build-review-fix.json",
+      "kind": "workflow",
+      "required": false,
+      "marker": "sha256",
+      "sha256": "1d57a744ef798ebea21bd1189e7a9c00a79821530d8df434c942017b6a20213d",
+      "source": "specialist-workflow-renderer"
+    },
+    {
+      "path": ".pi/agentify/workflows/engagement-records-plan-build-review-fix.json",
+      "kind": "workflow",
+      "required": false,
+      "marker": "sha256",
+      "sha256": "3efac895c1bc210e6b380aead3eb36ce1897b4e63a1ac355217484f78d742f6a",
+      "source": "specialist-workflow-renderer"
+    },
+    {
+      "path": ".pi/agentify/workflows/evaluation-engine-plan-build-review-fix.json",
+      "kind": "workflow",
+      "required": false,
+      "marker": "sha256",
+      "sha256": "3864553bb55ef7b122cc15ef5e6594b9b7fa959c9acce28e8b98960ebd5ab556",
+      "source": "specialist-workflow-renderer"
+    },
+    {
+      "path": ".pi/agentify/workflows/github-runtime-plan-build-review-fix.json",
+      "kind": "workflow",
+      "required": false,
+      "marker": "sha256",
+      "sha256": "742df461cbb79def9d53ccf9ce8ab3d356d68dd657cbf4b19a5b3882a67e5832",
+      "source": "specialist-workflow-renderer"
+    },
+    {
+      "path": ".pi/agentify/workflows/state-lifecycle-plan-build-review-fix.json",
+      "kind": "workflow",
+      "required": false,
+      "marker": "sha256",
+      "sha256": "63dc8850f8470a7993386b4f3a20f3492c3ac25631d3f876df46b7e3abc9e474",
+      "source": "specialist-workflow-renderer"
+    },
+    {
+      "path": ".pi/skills/codebase-design/DEEPENING.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "0cddaa038314a24c03d1b06cf4316a737dea2e1e42e8cccaeb209e372afb06c2",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/codebase-design/DESIGN-IT-TWICE.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "606ce8be2f57699726acfc981a8b3db1a3a33136ee9d38e5eac1b5a32eb4ad5e",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/codebase-design/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "3cedee6a23385849e6572f11dc24e6137f18ccb7f88310ff7e264fd9b0458cd8",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/diagnosing-bugs/scripts/hitl-loop.template.sh",
+      "kind": "skill",
+      "required": false,
+      "marker": "# agentify:managed",
+      "sha256": "66d229deb499cac662b7be5e1424b914b554eb834ec74b3190b5c93c71a36b9e",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/diagnosing-bugs/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "357312d00e8dd0ccdbd260ab60408ac2946a0ca12a1621980bb7d66d112a12de",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/document/NOTES.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "2a6a703777119326ea41c49f24717a288145f7ff3cce0456afa60858a4152947",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/document/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "4847949950af29d6f0735a20dfef0df370dcaae41c34bf0a572a5efcf21046c6",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/domain-modeling/ADR-FORMAT.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "d8733a5839d669a35386e13c647e942cd50ccf5aa4ccc7c4a743b015a98bce3a",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/domain-modeling/CONTEXT-FORMAT.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "4ee2b91d6444ddef6475229eda281f18053af9a5a40adf732a6f7884e9266e35",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/domain-modeling/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "30db309d85f38ec971ba630d65a6aff37fa19e178e7a42ceb9678b81e7da0445",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/drill-me/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "65b1b5a9bc68daee3b723eb05da8947706c3f7cda9a347946e713e6c82926121",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/fix/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "ca980a9f21615250b53d1e03d728bc626b3a8f59ef56240677611fc5466da81e",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/implement/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "cefd883b5c343fe33bd41af2e361303aa5ffb6ae93b0be8e862817fcc7d8eb85",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/improve-codebase-architecture/HTML-REPORT.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "f454774f44f145fdd58228b45c67b2fb0ee422955e6256f772fab9afb4536ee8",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/improve-codebase-architecture/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "298ff10a713c6c6d4a0838b8a5c4bb4055b8f7a9f53f1a586ffacf310a7511c4",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/plan-build/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "a9d8cfa9183f50eea7e0ab59637b89fc9e314272a380d20d4f0fcecf43b32c60",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/refresh-surface/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "187f529de90bf324b68c2505173d9e21b193c9e8e84d7837b29c481d6449c62f",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/resolving-merge-conflicts/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "ca4be8df2fd145a8c328545b437d10671f37e2afa5e483d0a738977a18c732b6",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/review/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "9b6ecc4ceefe050a37f18dc5408f3edf2d375549ebf40d7dfb441f059265f0ff",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/scaffold-ci/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "db5432f8ef7a0c8befcfc9043ceb76821643b64523ead618452eb5d9d005c964",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/scout-then-plan/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "710243bb81768d4eae76cb55fdfb90c4aceeeb02732caace5aa6c6cb2b1b6e15",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/scout/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "026804abfa1a1a82c4ebe2355ccdab36c9ff5fafd0fcf402c1ff500e6b9035a0",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/spec/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "e1d34d2554cb6562b976612a610bc013be02dadfd1e795f5e800cd6a34399fe5",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/tdd/mocking.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "737d87f6d2134c64df960d9c750ab87dae783637358a028bf124a07a150ac6cd",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/tdd/refactoring.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "8f94e1b15629660b4fa69a67b6046bf71fb52aa877787dd387d385842ab8948f",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/tdd/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "10d9f2bde79cd36d76bfc7abb2fb797c711f4af03b3272ac2074105dbea1c1be",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/tdd/tests.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "1a2977fe99bd39343d775501729e3e52c58dbeec22be3e55ac92a1e026dc5b57",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/test/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "59d1b7c8c8f5a106e8af1bb14bdb84cebcd8de0c12a1d26def14b047655f54a9",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/to-goals/GOALS-FORMAT.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "b09232a64a44e844d5ab5ec374a1181c385d57a53124795956e0e6754cde778c",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/to-goals/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "f28a17c599ce6e0b3469fa06fbe8946b86c4c1fae1a5118bf174e0abc7131cea",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/to-issues/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "8300482e81190c07cff028a449a32f214edf60c1e57cd3a36aee74b879160d73",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/to-plan/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "8098e79222d3add1df04f35bab5a14acd7ac8cfe3a07262ca8c68f4956540442",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": ".pi/skills/to-prd/SKILL.md",
+      "kind": "skill",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "1bced3f14572ca74bdbb077c9a594d4f0d5415a2fba59627dbd8499a8abd519d",
+      "source": "harness-export:pi"
+    },
+    {
+      "path": "AGENTS.md",
+      "kind": "audit",
+      "required": true,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "50657fd04ecd3c37da9344f534a56e022d2469e9d60e9550f0617e6d60ce324b",
+      "source": "fallback-agent-guide-renderer",
+      "alongsidePath": "AGENTS.agentify.md",
+      "preservedSha256": "a2dc61b7a53fb95411669981d92722c399d302e86f9f35432ee4d435b04f9ec6"
+    },
+    {
+      "path": "ai_docs/README.md",
+      "kind": "audit",
+      "required": true,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "0f7edf41f59addde1a8a040aaed937ec2705aaea53d59d8e225bd994212bd8eb",
+      "source": "fallback-ai-docs-renderer"
+    },
+    {
+      "path": "app_docs/agentic_kpis.md",
+      "kind": "audit",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "05d956b461215ef463f2da4f49275d95936807ff26807e10820c8a2ed94caabf",
+      "source": "feedback-loop-renderer"
+    },
+    {
+      "path": "app_docs/README.md",
+      "kind": "audit",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "0e9a81835cf76489544446adff91c6a88ebd0bb8dd2ab9eb03b3da2dc1a17ce2",
+      "source": "feedback-loop-renderer"
+    },
+    {
+      "path": "app_fix_reports/README.md",
+      "kind": "audit",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "b37962af751d7caf7d6993e004c5aac373a4ac8f0c4917ace3c9b7723f917494",
+      "source": "feedback-loop-renderer"
+    },
+    {
+      "path": "app_review/README.md",
+      "kind": "audit",
+      "required": false,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "ab0607bc04d2a0548c0c5beb19ddb545fd8e33de471e26a5dad75a3b63ae6097",
+      "source": "feedback-loop-renderer"
+    },
+    {
+      "path": "SETUP.md",
+      "kind": "scaffold",
+      "required": true,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "f8c00b05b4e1e90f1e46909b4e233d773cb5ff309e69f88fb301d459db8569d0",
+      "source": "scaffold-installer"
+    },
+    {
+      "path": "specs/README.md",
+      "kind": "audit",
+      "required": true,
+      "marker": "<!-- agentify:managed -->",
+      "sha256": "eba5e1e9c38491801aaf9677d8d767c7a8fcf2501ca5f2b71c98582fd5f0607b",
+      "source": "fallback-specs-renderer"
+    },
+    {
+      "path": "tests/draft-run-control.test.mjs",
+      "kind": "audit",
+      "required": false,
+      "marker": "// agentify:managed",
+      "sha256": "25ed32d0c5134556dd58370ca7751059e595fe5a0be9f69437cc1ddc0a96d05f",
+      "source": "scaffold-installer"
+    }
+  ],
+  "state_dir": ".pi/agentify"
+}

@@ -1,0 +1,49 @@
+{
+  "name": "evaluation_engine_plan_build_review_fix",
+  "description": "Scout with the Evaluation Engine specialist, then run the canonical plan-build-review-fix AIW loop.",
+  "tags": [
+    "agentify",
+    "specialist",
+    "evaluation-engine"
+  ],
+  "inputs": {
+    "prompt": {
+      "type": "string",
+      "description": "The Evaluation Engine work request to plan, build, review, and fix."
+    },
+    "change_type": {
+      "type": "string",
+      "default": "feature",
+      "values": [
+        "chore",
+        "bug",
+        "feature"
+      ]
+    }
+  },
+  "parallelism": "sequential",
+  "max_runtime_minutes": 120,
+  "steps": [
+    {
+      "id": "scout",
+      "description": "Gather Evaluation Engine context before implementation.",
+      "handler": "subagent",
+      "subagent_template": "evaluation-engine",
+      "domain": [
+        "evaluation-engine"
+      ],
+      "user_prompt": "Scout the evaluation-engine area for this request: ${inputs.prompt}\nReturn concrete files, invariants, pitfalls, and validation commands.\nRepository validation surface: npm run typecheck; npm test; npm run test:unit; npm run test:maintenance; npm run test:all; npm run test:parity; npm run test:package; npm run test:generated-output; npm run test:security-redteam; npm audit --omit=dev --audit-level=high."
+    },
+    {
+      "id": "implement",
+      "description": "Run the canonical AIW after specialist reconnaissance.",
+      "handler": "aiw",
+      "workflow_type": "plan_build_review_fix",
+      "prompt": "${inputs.prompt}\n\nSpecialist scout context:\n${agents[scout].result_text}",
+      "change_type": "${inputs.change_type}",
+      "depends_on": [
+        "scout"
+      ]
+    }
+  ]
+}

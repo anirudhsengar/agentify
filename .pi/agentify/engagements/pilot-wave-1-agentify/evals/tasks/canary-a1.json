@@ -1,0 +1,58 @@
+{
+  "schema_version": "1",
+  "task_id": "canary-a1",
+  "suite_id": "canary-shadow",
+  "title": "Pilot Wave 1 A1 shadow canary task",
+  "description": "Synthetic canary task backing the live A1 shadow workflow trigger. The final issue identity comes from the future GitHub event; no expected files are fabricated here. This task is not real pilot outcome evidence.",
+  "repository": { "reference": "anirudhsengar/agentify" },
+  "workflow_input": {
+    "issue": null,
+    "expected_files": [],
+    "canary_role": "live_shadow_canary",
+    "evidence_classification_expectation": "valid_live_shadow_evidence"
+  },
+  "expected_outcomes": [
+    "Shadow workflow emits a structured evidence packet with engagement_id=pilot-wave-1-agentify",
+    "Readiness decision is recorded",
+    "Runtime and cost are classified as measured provider usage; no model invocation",
+    "Source files_modified, branch_created_or_pushed, and pull_request_created are all false",
+    "Policy.forbidden_action_attempted is false"
+  ],
+  "forbidden_outcomes": [
+    "Any source file is modified",
+    "Any branch is pushed",
+    "Any pull request is created",
+    "Any merge or auto-merge is performed",
+    "Any credential is leaked into the evidence packet"
+  ],
+  "required_escalations": [],
+  "allowed_actions": [
+    "Read repository contents",
+    "Read engagement state",
+    "Write evidence packet and summary to runner temp",
+    "Upload artifact to GitHub Actions"
+  ],
+  "risk_tier": "low",
+  "maximum_runtime_ms": 900000,
+  "maximum_cost_usd": 5,
+  "grader_configuration": {
+    "deterministic": { "checks": [] },
+    "outcome": {},
+    "process": {},
+    "economics": {},
+    "human_review": {}
+  },
+  "tags": ["canary", "shadow", "pilot-wave-1"],
+  "evidence_references": [
+    "engagement:pilot-wave-1-agentify/charter.json",
+    "engagement:pilot-wave-1-agentify/risk-register.json"
+  ],
+  "source_type": "synthetic",
+  "provenance": {
+    "source_type": "synthetic",
+    "generated_for_evaluation": true,
+    "created_at": "2026-07-22T20:55:00.000Z",
+    "source_reference": "pilot-wave-1-agentify/canary-shadow.json",
+    "notes": "Canary task only. Not real pilot outcome evidence; final issue identity comes from the future GitHub event."
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": "1",
+  "engagement_id": "pilot-wave-1-agentify",
+  "opportunities": [
+    {
+      "candidate": {
+        "opportunity_id": "shadow_canary_opportunity",
+        "workflow_id": "pilot-wave-1-agentify",
+        "step_id": "shadow_workflow",
+        "business_value": 60,
+        "volume": 60,
+        "feasibility": 90,
+        "risk": 20,
+        "adoption_readiness": 80,
+        "evaluation_feasibility": 90,
+        "reversibility": 95,
+        "data_availability": 90,
+        "integration_availability": 90,
+        "implementation_complexity": 30,
+        "recommendation": "pilot",
+        "evidence": ["engagement:pilot-wave-1-agentify/charter.json"],
+        "rejection_reason": null
+      },
+      "score": {
+        "weighted_value_score": 75,
+        "risk_score": 20,
+        "risk_penalty": 4,
+        "final_score": 71,
+        "contributions": {
+          "business_value": 60,
+          "volume": 60,
+          "feasibility": 90,
+          "adoption_readiness": 80,
+          "evaluation_feasibility": 90,
+          "reversibility": 95,
+          "data_availability": 90,
+          "integration_availability": 90,
+          "implementation_simplicity": 70
+        }
+      },
+      "recommendation": "pilot",
+      "recommendation_reasons": ["Shadow mode is the lowest-risk entry point for Pilot Wave 1 evidence collection."]
+    }
+  ]
+}

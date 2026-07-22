@@ -1,0 +1,62 @@
+# agentify:managed
+name: Agent Draft Human Review
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Draft pull request number
+        required: true
+        type: string
+      outcome:
+        description: Human outcome
+        required: true
+        type: choice
+        options: [accepted, minor_changes, major_rework, rejected, safety_concern]
+      review_time_minutes:
+        description: Review time in minutes
+        required: true
+        type: number
+      reviewer_notes:
+        description: Bounded reviewer notes; do not include secrets
+        required: true
+        type: string
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify draft PR and record structured review evidence
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pull_request }}
+          OUTCOME: ${{ inputs.outcome }}
+          REVIEW_MINUTES: ${{ inputs.review_time_minutes }}
+          REVIEW_NOTES: ${{ inputs.reviewer_notes }}
+          REVIEWER: ${{ github.actor }}
+        run: |
+          test "$(gh pr view "$PR_NUMBER" --json isDraft --jq .isDraft)" = true
+          jq -n --arg reviewer "$REVIEWER" --arg outcome "$OUTCOME" \
+            --argjson review_time_minutes "$REVIEW_MINUTES" --arg notes "$REVIEW_NOTES" \
+            --arg evidence_reference "github-pr:$PR_NUMBER" \
+            --arg linked_pr_or_issue "github-pr:$PR_NUMBER" \
+            --arg task_id "$(jq -r .task_id .github/agentify-shadow.json)" \
+            --arg run_id "draft-review:${GITHUB_RUN_ID}" \
+            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
+            '{reviewer:$reviewer,outcome:$outcome,review_time_minutes:$review_time_minutes,notes:$notes,evidence_reference:$evidence_reference,linked_pr_or_issue:$linked_pr_or_issue,task_id:$task_id,run_id:$run_id,timestamp:$timestamp}' \
+            > "$RUNNER_TEMP/review-input.json"
+          node .github/scripts/import-draft-review.mjs \
+            "$RUNNER_TEMP/review-input.json" "$RUNNER_TEMP/human-review.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentify-draft-review-${{ inputs.pull_request }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/human-review.json
+          if-no-files-found: error
+          retention-days: 90

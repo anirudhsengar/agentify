@@ -1,0 +1,23 @@
+{
+  "schema_version": "1",
+  "suite_id": "canary-shadow",
+  "version": "2026-07-22",
+  "description": "Pilot Wave 1 canary evaluation suite for anirudhsengar/agentify. Single-trial canary task used by the supported GitHub shadow workflow.",
+  "task_references": ["canary-a1"],
+  "required_graders": [
+    "deterministic",
+    "outcome",
+    "process",
+    "economics",
+    "human_review"
+  ],
+  "number_of_trials": 1,
+  "concurrency_limit": 1,
+  "environment_requirements": ["github-actions:ubuntu-latest"],
+  "aggregation_policy": { "task_success": "all_trials" },
+  "release_gate_eligible": false,
+  "provenance": {
+    "source_reference": "pilot-wave-1-agentify/charter.json",
+    "created_at": "2026-07-22T20:55:00.000Z"
+  }
+}

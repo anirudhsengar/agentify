@@ -1,0 +1,67 @@
+{
+  "repository": {
+    "root": "/home/anirudh/Projects/agentify",
+    "remote": "https://github.com/anirudhsengar/agentify"
+  },
+  "workflow_name": "pilot-wave-1-agentify-shadow",
+  "workflow_owner": "Anirudh Sengar",
+  "intended_users": [
+    "internal-agentify-operator",
+    "internal-fde-pilot-reviewer"
+  ],
+  "systems_involved": [
+    "agentify-cli",
+    "github-actions",
+    "engagement-state",
+    "metrics-recorder"
+  ],
+  "problem_statement": "Pilot Wave 1 collects shadow evidence on Agentify's own dogfood repository before broader rollout. Engagement is shadow-only at the current autonomy level; draft mode is not promoted.",
+  "workflow_frequency": "one shadow run per canary issue",
+  "baseline_metrics": [
+    {
+      "name": "issues_completed",
+      "unit": "count",
+      "value": 40
+    },
+    {
+      "name": "shadow_runs_planned",
+      "unit": "count",
+      "value": 1
+    }
+  ],
+  "desired_primary_outcome": "Shadow recommendations consistently identify scope, missing information, and unsuitable items without modifying source.",
+  "target": {
+    "direction": "increase",
+    "value": 1,
+    "unit": "valid_shadow_evidence_packets"
+  },
+  "guardrail_metrics": [
+    {
+      "name": "shadow_source_mutation_count",
+      "unit": "count",
+      "value": 0
+    }
+  ],
+  "forbidden_actions": [
+    "merge_pull_request",
+    "enable_auto_merge",
+    "push_to_default_branch",
+    "force_push_remote_branch"
+  ],
+  "requires_human_approval": true,
+  "maximum_cost_usd": 5,
+  "maximum_runtime_minutes": 15,
+  "business_owner": "Anirudh Sengar",
+  "technical_owner": "Anirudh Sengar",
+  "evidence_references": [
+    "docs/pilots/pilot-wave-1/baseline-summary.md",
+    "docs/pilots/pilot-wave-1/issue-selection.md"
+  ],
+  "schema_version": "1",
+  "revision": 1,
+  "engagement_id": "pilot-wave-1-agentify",
+  "created_at": "2026-07-22T16:55:18.308Z",
+  "updated_at": "2026-07-22T16:55:18.308Z",
+  "status": "draft",
+  "stop_reason": null
+}

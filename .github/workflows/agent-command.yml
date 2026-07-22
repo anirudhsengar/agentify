@@ -1,0 +1,50 @@
+# agentify:managed
+name: Agent Command Router
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  route:
+    if: startsWith(github.event.comment.body, '/agent ')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Authorize actor
+        env:
+          AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+        run: |
+          set -euo pipefail
+          case "$AUTHOR_ASSOCIATION" in
+            OWNER|MEMBER|COLLABORATOR)
+              ;;
+            *)
+              echo "Actor association '$AUTHOR_ASSOCIATION' is not trusted for agent commands." >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout trusted runtime
+        uses: actions/checkout@v4
+        with:
+          path: .agentify-runtime
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Route command
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_PAT }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          IS_PR: ${{ github.event.issue.pull_request && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          : "${GH_TOKEN:?AGENT_PAT is required - see SETUP.md}"
+          bash .agentify-runtime/.github/scripts/route-agent-command.sh "$COMMENT_BODY" "$ISSUE_NUMBER" "$IS_PR"

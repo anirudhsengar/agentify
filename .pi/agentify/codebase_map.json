@@ -1,0 +1,1095 @@
+{
+  "meta": {
+    "project_type": "TypeScript Node.js CLI and code-generation/audit platform",
+    "languages": [
+      "TypeScript",
+      "JavaScript",
+      "Shell"
+    ],
+    "frameworks": [
+      "Node.js 22 ESM",
+      "TypeBox",
+      "Pi coding-agent SDK"
+    ],
+    "domain_hypothesis": "A standalone CLI that audits or forms repositories, renders codebase-specific agent intelligence, exports harness surfaces, and optionally installs a GitHub-driven agent runtime.",
+    "lifecycle": {
+      "sdlc_model": "issue/branch -> focused implementation + regression test -> layered validation -> pull-request review -> changelog/docs update -> tag-only verified release",
+      "issue_types": [
+        "chore",
+        "bug",
+        "feature",
+        "refactor",
+        "security",
+        "docs",
+        "test",
+        "chore_deps"
+      ],
+      "review_loop": {
+        "present": true,
+        "kind": "multi_tier"
+      },
+      "documentation_loop": {
+        "present": true,
+        "kind": "full"
+      },
+      "conditional_docs": {
+        "present": false,
+        "path": null,
+        "last_updated": null,
+        "entries_count": 0
+      },
+      "aiw_scripts": [
+        {
+          "name": "GitHub Actions agent command runtime",
+          "path": "scaffold/.github/workflows/agent-command.yml",
+          "trigger": "event"
+        },
+        {
+          "name": "GitHub Actions shadow runtime",
+          "path": "scaffold/.github/workflows/agent-shadow.yml",
+          "trigger": "event"
+        }
+      ],
+      "agent_definitions": {
+        "count": 25,
+        "paths": [
+          "packaged/skills/",
+          "scaffold/.github/agent-prompts/"
+        ]
+      },
+      "per_area_template_candidates": [
+        {
+          "area_name": "audit-schema-change",
+          "issue_type": "refactor",
+          "trigger_phrases": [
+            "When changing CodebaseMap or audit schema contracts",
+            "When moving schema ownership across domain files"
+          ],
+          "rationale": "Schema structure, ordering, ownership, and golden compatibility form a specialized recurring workflow.",
+          "source_feature_agent": ".pi/agentify/agents/audit-pipeline.md"
+        },
+        {
+          "area_name": "state-migration",
+          "issue_type": "feature",
+          "trigger_phrases": [
+            "When changing provider-scoped state selection or migration",
+            "When changing crash recovery or transaction semantics"
+          ],
+          "rationale": "State changes require transaction, rollback, symlink, fingerprint, and legacy compatibility checks.",
+          "source_feature_agent": ".pi/agentify/agents/state-lifecycle.md"
+        }
+      ],
+      "has_review_loop": true,
+      "has_documentation_loop": true,
+      "has_conditional_docs": false
+    },
+    "documentation": {
+      "agents_md": "AGENTS.md",
+      "agents_md_line_count": 113,
+      "has_ai_docs": false,
+      "has_app_docs": false,
+      "has_specs": false,
+      "conditional_docs_path": null,
+      "readme_metrics": {
+        "present": true,
+        "line_count": 430,
+        "section_count": 17
+      },
+      "ai_docs_freshness": {
+        "last_updated": null,
+        "file_count": 0
+      },
+      "specs_archive": {
+        "present": false,
+        "file_count": 0,
+        "date_range": null
+      },
+      "postmortems_dir": null,
+      "changelog_present": true,
+      "existing_pi_extensions": [],
+      "existing_pi_skills": [],
+      "existing_pi_prompts": []
+    },
+    "external_dependencies": {
+      "runtime": [
+        {
+          "name": "@clack/prompts",
+          "version": "^0.7.0"
+        },
+        {
+          "name": "@earendil-works/pi-ai",
+          "version": "^0.80.7"
+        },
+        {
+          "name": "@earendil-works/pi-coding-agent",
+          "version": "^0.80.7"
+        },
+        {
+          "name": "typebox",
+          "version": "^1.3.6"
+        }
+      ],
+      "dev": [
+        {
+          "name": "@types/node",
+          "version": "^22.20.1"
+        },
+        {
+          "name": "esbuild",
+          "version": "^0.28.1"
+        },
+        {
+          "name": "tsx",
+          "version": "^4.23.1"
+        },
+        {
+          "name": "typescript",
+          "version": "^6.0.3"
+        }
+      ]
+    },
+    "suggested_subagent_domains": [
+      "audit-pipeline",
+      "state-lifecycle",
+      "engagement-records",
+      "evaluation-engine",
+      "github-runtime"
+    ],
+    "existing_planning_artifact": {
+      "present": true,
+      "path": "docs/roadmaps/agentify-fde-operating-system.md",
+      "format_hint": "Living roadmap under docs/roadmaps with staged FDE operating-system direction."
+    }
+  },
+  "skeleton": {
+    "top_level_tree": [
+      "bin/ — public executable shim",
+      "src/ — TypeScript CLI and core runtime",
+      "tests/ — unit, integration, parity, security, and package tests",
+      "scaffold/ — stampable GitHub Actions runtime",
+      "packaged/skills/ — canonical shipped skill pack",
+      "scripts/ — build tooling",
+      "docs/ — architecture and operator documentation",
+      "dist/ — generated distribution output",
+      ".pi/agentify/ — Pi-scoped audit state"
+    ],
+    "entry_points": [
+      {
+        "path": "bin/agentify.js",
+        "role": "npm executable entrypoint that loads the built CLI",
+        "language": "JavaScript",
+        "run_command": "node bin/agentify.js"
+      },
+      {
+        "path": "src/cli.ts",
+        "role": "source CLI entrypoint and command dispatcher",
+        "language": "TypeScript",
+        "run_command": "npx tsx src/cli.ts"
+      }
+    ],
+    "code_test_mirror": {
+      "observed": true,
+      "pattern": "src/core feature areas are mirrored by tests/<area>/ and top-level *.test.ts files; scaffold has its own scaffold/tests suite"
+    },
+    "first_5_files_for_fresh_agent": [
+      {
+        "path": "README.md",
+        "why": "Product boundary, supported command surface, repository layout, and operator workflow."
+      },
+      {
+        "path": "package.json",
+        "why": "Runtime requirements, public bin entry, dependencies, build/test/typecheck commands."
+      },
+      {
+        "path": "src/cli.ts",
+        "why": "Source command-line entrypoint and top-level dispatch."
+      },
+      {
+        "path": "src/core/agentify-app.ts",
+        "why": "Primary application seam behind the public CLI."
+      },
+      {
+        "path": "src/core/audit/schema.ts",
+        "why": "Canonical structured contracts for audit maps and artifact intents."
+      }
+    ],
+    "app_vs_agentic_layer": {
+      "app_layer": "src/cli.ts and src/core implement the published CLI; bin/agentify.js loads dist/cli.js",
+      "agentic_layer": "src/core/audit, packaged/skills, scaffold/.github, and artifact renderers generate or ship agent surfaces",
+      "bleed_risk_paths": [
+        "dist/",
+        "scaffold/",
+        "packaged/skills/",
+        ".pi/agentify/"
+      ]
+    }
+  },
+  "module_graph": {
+    "edges": [
+      {
+        "from": "src/cli.ts",
+        "to": "src/core/agentify-app.ts",
+        "kind": "import"
+      },
+      {
+        "from": "src/core/agentify-app.ts",
+        "to": "src/core/run-agentify.ts",
+        "kind": "import"
+      },
+      {
+        "from": "src/core/run-agentify.ts",
+        "to": "src/core/runs/brownfield-run.ts",
+        "kind": "import"
+      },
+      {
+        "from": "src/core/runs/brownfield-run.ts",
+        "to": "src/core/audit/",
+        "kind": "import"
+      },
+      {
+        "from": "src/core/audit/spawn-explorer-tool.ts",
+        "to": "src/core/pi-sdk-runtime.ts",
+        "kind": "rpc"
+      },
+      {
+        "from": "src/core/webhook/worker.ts",
+        "to": "src/core/webhook/queue.ts",
+        "kind": "state"
+      },
+      {
+        "from": "src/core/aiw/worker.ts",
+        "to": "src/core/aiw/state.ts",
+        "kind": "state"
+      }
+    ],
+    "parallelizable_subtrees": [
+      [
+        "src/core/audit/",
+        "src/core/generation/"
+      ],
+      [
+        "src/core/engagement/",
+        "src/core/evals/"
+      ],
+      [
+        "src/core/webhook/",
+        "src/core/aiw/"
+      ],
+      [
+        "src/core/ui/"
+      ]
+    ],
+    "shared_state": [
+      "process.env for provider auth and runtime feature flags",
+      "provider-scoped <cwd>/.claude|.agents|.pi/agentify state directories resolved by src/core/state-dir.ts",
+      "~/.agentify configuration/auth storage",
+      "orchestrator agent/workflow event and cost files",
+      "greenfield CONTEXT.md, GOALS.md, docs and specs artifacts"
+    ],
+    "client_server_split": null,
+    "shared_abstractions": [
+      "src/core/types.ts — cross-cutting runtime/UI/export contracts",
+      "src/core/state-dir.ts — canonical provider-scoped state resolution",
+      "src/core/security/execution-policy.ts — read/write policy enforcement",
+      "src/core/models/resolver.ts — primary/explorer/lite model-slot resolution",
+      "src/core/ui/ — UI implementations used by public entrypoints"
+    ]
+  },
+  "type_contract_surface": {
+    "pydantic_models": [],
+    "typescript_interfaces": [
+      {
+        "path": "src/core/audit/schema/codebase-map.ts:27",
+        "name": "CodebaseMapSchema",
+        "fields": [
+          "schema_version",
+          "generated_at",
+          "meta",
+          "skeleton",
+          "module_graph",
+          "type_contract_surface",
+          "conventions",
+          "pitfalls",
+          "validation_surface",
+          "operational_surface",
+          "security_surface",
+          "coverage",
+          "open_questions",
+          "exploration_log",
+          "customization_evidence",
+          "expert_evidence",
+          "artifact_intents"
+        ]
+      },
+      {
+        "path": "src/core/audit/schema/codebase-map.ts:57",
+        "name": "CodebaseMap",
+        "fields": [
+          "Static<typeof CodebaseMapSchema>"
+        ]
+      },
+      {
+        "path": "src/core/audit/schema/write-map-params.ts:19",
+        "name": "WriteMapParamsSchema",
+        "fields": [
+          "map",
+          "codebase_map",
+          "map_file",
+          "mode"
+        ]
+      },
+      {
+        "path": "src/core/audit/schema/write-map-params.ts:39",
+        "name": "WriteMapDeltaParamsSchema",
+        "fields": [
+          "dimension",
+          "delta",
+          "merge_strategy",
+          "confidence",
+          "evidence_summary"
+        ]
+      }
+    ],
+    "db_models": [],
+    "idks": [
+      "CodebaseMapSchema",
+      "CodebaseMap",
+      "PartialCodebaseMapSchema",
+      "WriteMapParamsSchema",
+      "WriteMapDeltaParamsSchema",
+      "validateMap",
+      "writeCanonicalMap",
+      "renderValidatedBrownfieldArtifacts"
+    ],
+    "stable_types": [
+      "CodebaseMapSchema property ordering and serialized shape are frozen by golden tests",
+      "WriteMapParamsSchema and WriteMapDeltaParamsSchema define tool ingress contracts"
+    ],
+    "volatile_types": [
+      "Artifact intents and optional evidence extensions evolve under compatibility-controlled schema additions"
+    ],
+    "one_type_trace": {
+      "name": "CodebaseMap",
+      "flow": [
+        "src/core/audit/schema/codebase-map.ts",
+        "src/core/audit/schema/index.ts",
+        "src/core/audit/schema.ts",
+        "src/core/audit/map-input.ts",
+        "src/core/audit/map-validation.ts",
+        "src/core/audit/map-storage.ts",
+        "src/core/artifacts/renderers/index.ts",
+        "src/core/artifacts/renderers/always-on-docs.ts"
+      ]
+    },
+    "synced_types": {
+      "synced": [
+        "CodebaseMapSchema -> CodebaseMap static TypeScript type",
+        "Persisted codebase_map.json -> schema-validated renderer input"
+      ],
+      "unsynced": []
+    },
+    "synced_types_observed": true,
+    "idk_coverage": {
+      "min_required": 3,
+      "actual": 8
+    }
+  },
+  "conventions": {
+    "naming": {
+      "files": "kebab-case.ts",
+      "classes": "PascalCase descriptive nouns/types",
+      "functions": "camelCase, usually verb-led operations",
+      "branches": "not observed",
+      "commits": "not observed"
+    },
+    "error_handling": {
+      "raise_vs_return": "mixed",
+      "custom_exceptions": true,
+      "log_then_throw": false
+    },
+    "logging": {
+      "pattern": "Structured JSONL agentify.<event> records; summarize/redact/truncate before append",
+      "observed": true
+    },
+    "state_passing": "mixed",
+    "file_size": {
+      "observed_avg": 340,
+      "observed_max": 876
+    },
+    "patterns": [
+      {
+        "name": "discriminated-state-classification",
+        "where": "src/core/state-layout.ts:7",
+        "description": "Expected filesystem/layout outcomes use literal-union statuses and rich inspection objects before command boundaries throw."
+      },
+      {
+        "name": "copy-verify-atomic-install",
+        "where": "src/core/state-transaction.ts:641",
+        "description": "State migration journals durable phases, avoids symlinks, verifies fingerprints, atomically renames, and supports crash recovery."
+      },
+      {
+        "name": "repository-relative-path-hardening",
+        "where": "src/core/state-layout.ts:74",
+        "description": "Paths are normalized, checked against repository escape and symlink ancestors, then rejected on unsafe layouts."
+      },
+      {
+        "name": "structured-redacted-observability",
+        "where": "src/core/audit/log.ts:174",
+        "description": "Audit events are summarized, secret-redacted, truncated, serialized, and appended to run-scoped JSONL."
+      },
+      {
+        "name": "session-keyed-module-state",
+        "where": "src/core/audit/state.ts:48",
+        "description": "Audit runtime flags use an explicit session-keyed Map with cleanup to isolate concurrent sessions."
+      }
+    ],
+    "comment_style": {
+      "docstring": "JSDoc/doc comments explain public contracts and compatibility constraints",
+      "inline": "Comments explain safety rationale, transaction phases, or non-obvious behavior rather than syntax"
+    },
+    "import_ordering": {
+      "style": "stdlib_first",
+      "enforced_by": null
+    },
+    "type_hint_coverage_pct": 95,
+    "test_naming": "*.test.ts grouped under tests/ plus shell test-* scripts",
+    "versioning": {
+      "kind": "semver",
+      "config_file": "package.json"
+    },
+    "db_migration": null
+  },
+  "pitfalls": [
+    {
+      "module": "state transactions",
+      "what": "Transaction cleanup is best-effort and can leave orphaned journal directories after filesystem errors.",
+      "consequence": "Later runs may repeatedly enter interrupted-transaction recovery until the stale transaction is handled.",
+      "line_ref": 286
+    },
+    {
+      "module": "model resolution",
+      "what": "An explicit but unresolvable inherited primary model falls through silently to legacy provider/model resolution.",
+      "consequence": "Explorer or lite sessions can unexpectedly use a different model without a warning at the pure resolver layer.",
+      "line_ref": 156
+    },
+    {
+      "module": "generated artifact application",
+      "what": "Generated user-facing files must be rendered from a validated, fully closed map rather than written during the audit.",
+      "consequence": "Direct writes bypass schema, coverage, conflict, transaction, and user-ownership protections.",
+      "line_ref": 276
+    },
+    {
+      "module": "audit schema",
+      "what": "CodebaseMap schema property order and serialization are compatibility-tested contracts.",
+      "consequence": "Reordering or casually changing schema composition breaks golden contract tests and persisted-map compatibility.",
+      "line_ref": 26
+    },
+    {
+      "module": "expert prompts",
+      "what": "Pi does not auto-discover nested expert prompt directories.",
+      "consequence": "Generated expert commands remain invisible unless the expert prompt path is added to Pi settings.",
+      "line_ref": 1410
+    },
+    {
+      "module": "state paths",
+      "what": "Provider-scoped state selection and retained-state migration are distinct; migration requires explicit targets and approval.",
+      "consequence": "Treating legacy and provider-scoped trees as interchangeable risks ambiguous ownership or unsafe state movement.",
+      "line_ref": 128
+    }
+  ],
+  "validation_surface": {
+    "test_command": "npm test",
+    "test_runtime_seconds_estimate": 180,
+    "lint_command": null,
+    "typecheck_command": "npm run typecheck",
+    "e2e_command": null,
+    "spec_compliance_evidence": [
+      "npm run test:package proves the packed npm artifact installs and the CLI runs",
+      "npm run test:parity verifies CLI, generated bundle, and state-directory contracts",
+      "npm run test:generated-output validates deterministic rendered surfaces and release evidence",
+      "npm run test:security-redteam exercises defense hardening and workflow simulation"
+    ],
+    "severity_taxonomy": [
+      "blocker",
+      "tech_debt",
+      "skippable",
+      "critical"
+    ],
+    "per_change_type": {
+      "chore": {
+        "mandatory": [
+          "npm run typecheck",
+          "npm run test:unit",
+          "npm run test:maintenance"
+        ],
+        "optional": [
+          "npm run build",
+          "npm run test:parity"
+        ]
+      },
+      "bug": {
+        "mandatory": [
+          "npm run typecheck",
+          "npm run test:unit"
+        ],
+        "optional": [
+          "npm run test:parity",
+          "npm run test:generated-output",
+          "npm run test:package",
+          "npm run test:security-redteam"
+        ]
+      },
+      "feature": {
+        "mandatory": [
+          "npm run typecheck",
+          "npm run test:all",
+          "npm run test:parity",
+          "npm run test:package",
+          "npm run test:generated-output",
+          "npm run test:maintenance"
+        ],
+        "optional": [
+          "npm run test:security-redteam",
+          "npm run test:scaffold-e2e",
+          "npm audit --omit=dev --audit-level=high"
+        ]
+      },
+      "refactor": {
+        "mandatory": [
+          "npm run typecheck",
+          "npm run test:unit",
+          "npm run test:maintenance"
+        ],
+        "optional": [
+          "npm run test:parity"
+        ]
+      },
+      "security": {
+        "mandatory": [
+          "npm run typecheck",
+          "npm run test:security-redteam",
+          "npm audit --omit=dev --audit-level=high"
+        ],
+        "optional": [
+          "npm test",
+          "CodeQL review"
+        ]
+      }
+    },
+    "code_coverage_pct": null,
+    "mutation_testing": {
+      "present": false,
+      "tool": null
+    },
+    "test_failure_summary": null,
+    "ci_gates": [
+      {
+        "name": "typecheck",
+        "command": "npm run typecheck",
+        "required": true,
+        "on_events": [
+          "push",
+          "pull_request"
+        ],
+        "run_time_s": 30
+      },
+      {
+        "name": "tests",
+        "command": "npm run test:all",
+        "required": true,
+        "on_events": [
+          "push",
+          "pull_request"
+        ],
+        "run_time_s": 180
+      },
+      {
+        "name": "dependency-audit",
+        "command": "npm audit --omit=dev --audit-level=high",
+        "required": true,
+        "on_events": [
+          "push",
+          "pull_request"
+        ],
+        "run_time_s": 30
+      },
+      {
+        "name": "package-smoke",
+        "command": "npm run test:parity && npm run test:package && npm run test:maintenance && npm run test:generated-output && npm run test:security-redteam",
+        "required": true,
+        "on_events": [
+          "push",
+          "pull_request"
+        ],
+        "run_time_s": 300
+      }
+    ],
+    "e2e_test_files": [
+      "scaffold/tests/run.sh",
+      "scaffold/tests/test-draft-mode.sh",
+      "scaffold/tests/test-shadow-mode.sh",
+      "scaffold/tests/test-workflow-simulation.sh",
+      "scaffold/tests/test-formation-drill-flow.sh"
+    ],
+    "e2e_config_path": null
+  },
+  "operational_surface": {
+    "build": {
+      "command": "npm run build",
+      "recipe_file": "scripts/build.mjs"
+    },
+    "run": {
+      "command": "node bin/agentify.js",
+      "env_vars_required": [
+        "one configured provider credential or existing Pi OAuth credentials"
+      ],
+      "ports": [],
+      "services": [],
+      "dependencies": [
+        "node >=22.19.0",
+        "npm"
+      ]
+    },
+    "deploy": {
+      "target": "npm registry from verified v*.*.* tag",
+      "command": "npm publish from CI-packed tarball with provenance"
+    },
+    "env_vars": [
+      {
+        "name": "OPENAI_API_KEY",
+        "required": false,
+        "secret": true,
+        "public": false,
+        "per_host": true
+      },
+      {
+        "name": "ANTHROPIC_API_KEY",
+        "required": false,
+        "secret": true,
+        "public": false,
+        "per_host": true
+      },
+      {
+        "name": "ANTHROPIC_OAUTH_TOKEN",
+        "required": false,
+        "secret": true,
+        "public": false,
+        "per_host": true
+      },
+      {
+        "name": "PI_BIN",
+        "required": false,
+        "secret": false,
+        "public": false,
+        "per_host": true
+      },
+      {
+        "name": "AGENTIFY_OLD_UI",
+        "required": false,
+        "secret": false,
+        "public": false,
+        "per_host": true
+      },
+      {
+        "name": "HOME",
+        "required": true,
+        "secret": false,
+        "public": false,
+        "per_host": false
+      },
+      {
+        "name": "NPM_TOKEN",
+        "required": false,
+        "secret": true,
+        "public": false,
+        "per_host": true
+      },
+      {
+        "name": "GITHUB_TOKEN",
+        "required": false,
+        "secret": true,
+        "public": false,
+        "per_host": true
+      }
+    ],
+    "ci_cd": {
+      "triggers": [
+        "push to main/master",
+        "pull_request",
+        "workflow_dispatch",
+        "v*.*.* tag",
+        "weekly CodeQL cron"
+      ],
+      "gates": [
+        "npm run typecheck",
+        "npm run test:all on Node 22.19 and 24",
+        "npm audit --omit=dev --audit-level=high",
+        "npm run test:parity",
+        "npm run test:package",
+        "npm run test:maintenance",
+        "npm run test:generated-output",
+        "npm run test:security-redteam",
+        "CodeQL"
+      ],
+      "artifacts": [
+        "npm-pack tarball retained by release workflow and published to npm"
+      ]
+    },
+    "git_workflow": {
+      "main_branch": "main",
+      "branch_naming": "feat/, fix/, docs/, refactor/, ci/ descriptive branches",
+      "worktree_pattern": "not observed",
+      "cleanup": "not observed"
+    },
+    "port_ranges": {
+      "dev": "none; published surface is a CLI",
+      "prod": "8787 is the loopback webhook subsystem default, not the primary CLI"
+    },
+    "shutdown_procedure": {
+      "script": null,
+      "commands": [
+        "RunningServer.close() for webhook subsystem",
+        "CLI exits nonzero on uncaught entrypoint errors"
+      ],
+      "fallback_behavior": "No long-running primary app process; close embedded webhook server explicitly when used."
+    },
+    "spawned_subprocesses": [
+      {
+        "name": "pi -p <prompt> --cwd <cwd>",
+        "binary": "pi or $PI_BIN",
+        "role": "Runs expert question/self-improve sessions"
+      },
+      {
+        "name": "node tests/scripts/run-test-files.mjs",
+        "binary": "node",
+        "role": "Discovers and executes TypeScript test files"
+      },
+      {
+        "name": "npm run <script>",
+        "binary": "npm",
+        "role": "Build, test, parity, package, and release gate driver"
+      },
+      {
+        "name": "npm pack / npm publish",
+        "binary": "npm",
+        "role": "Release packing and registry publication"
+      }
+    ],
+    "deploy_targets": [
+      {
+        "target": "npm registry",
+        "command": "npm publish"
+      }
+    ],
+    "env_var_purposes": {
+      "provider API keys": "Optional secret credential; one provider auth route is needed for model-backed runs",
+      "PI_BIN": "Override Pi executable for expert subprocesses",
+      "AGENTIFY_OLD_UI": "Select legacy UI",
+      "HOME": "Locate user-scoped Agentify state",
+      "NPM_TOKEN": "npm publication credential in CI"
+    },
+    "port_determinism": {
+      "is_deterministic": true,
+      "range": "No primary port; optional webhook defaults to loopback 8787."
+    },
+    "build_recipe": {
+      "steps": [
+        "npm ci",
+        "npm run typecheck",
+        "npm run build"
+      ],
+      "env": {},
+      "dependencies": [
+        "Node >=22.19.0",
+        "npm",
+        "esbuild"
+      ]
+    },
+    "package_json_scripts": {
+      "test:unit": "node tests/scripts/run-test-files.mjs --exclude tests/generation-pipeline.test.ts",
+      "test:all": "npm run build && npm run test:generation-pipeline && npm run test:unit && bash tests/run.sh",
+      "test": "npm run typecheck && npm run test:all",
+      "test:generation-pipeline": "tsx tests/generation-pipeline.test.ts",
+      "test:package": "node tests/package/installed-cli-smoke.mjs",
+      "test:parity": "npm run build && npm run test:parity:cli && npm run test:parity:generated && npm run test:parity:state && npm run test:package",
+      "test:maintenance": "tsx tests/maintenance/documentation-invariants.test.ts && tsx tests/maintenance/schema-boundaries.test.ts && tsx tests/maintenance/reachability-invariants.test.ts && tsx tests/maintenance/module-boundaries.test.ts && tsx tests/maintenance/legacy-state-consumers.test.ts && tsx tests/release-safety.test.ts",
+      "test:generated-output": "tsx tests/artifacts-renderers.test.ts && tsx tests/generated-output-quality.test.ts && tsx tests/core/expert-outcome.test.ts && tsx tests/core/smoke-evidence.test.ts && tsx tests/core/release-qualification.test.ts",
+      "test:security-redteam": "tsx tests/audit/defense-hardening.test.ts && bash scaffold/tests/test-workflow-simulation.sh",
+      "release:check": "npm run typecheck && npm run test:all && npm run test:package",
+      "typecheck": "tsc --noEmit",
+      "build": "node scripts/build.mjs",
+      "prepack": "npm run build"
+    },
+    "scripts_dir_files": [
+      "scripts/build.mjs"
+    ],
+    "typescript_environment": {
+      "has_tsconfig": true,
+      "has_bun": false,
+      "has_pnpm": false,
+      "has_npm": true,
+      "has_yarn": false,
+      "package_manager": "npm",
+      "node_version": null
+    },
+    "prepare_app": {
+      "reset_db": null,
+      "start": null,
+      "stop": null,
+      "health_check_url": null,
+      "app_url": null
+    }
+  },
+  "security_surface": {
+    "paths": {
+      "zero_access": [
+        "**/.env",
+        "**/.env.* except sample/example/template",
+        "**/secrets.* except sample/example/template",
+        "**/.ssh/**",
+        "**/id_rsa*",
+        "**/id_ed25519*",
+        "**/.aws/credentials",
+        "**/.npmrc",
+        "~/.agentify/auth.json",
+        "~/.agentify/config.json"
+      ],
+      "read_only": [
+        "src/** during audit",
+        "tests/** during audit",
+        "scaffold/** during audit",
+        "docs/**",
+        "package.json",
+        "skills-lock.json",
+        ".git/**"
+      ],
+      "no_delete": [
+        ".git/**",
+        ".github/**",
+        "LICENSE",
+        "user-owned target files",
+        "secret and credential paths"
+      ],
+      "fully_writable": [
+        "transaction-owned staging paths",
+        "provider-scoped state paths owned by Agentify",
+        "specs/** and ai_docs/** only when renderer ownership/conflict policy permits",
+        "src/** and tests/** only in explicitly write-capable implementation sessions"
+      ]
+    },
+    "bash_safe_patterns": [],
+    "bash_blocked_patterns": [
+      "compound shell operators (&&, ||, ;, pipes, substitutions, redirects)",
+      "recursive/forced deletion and find -delete",
+      "git push --force, reset --hard, clean -f",
+      "destructive SQL without safe predicates",
+      "permission/ownership escalation and system service mutation",
+      "curl/wget piped to interpreters or uploads",
+      "inline interpreter eval (-c/-e)",
+      "package-manager installs from raw URLs",
+      "env/credential dumping and secret-file reads",
+      "sudo, filesystem formatting, mount, reboot, device writes"
+    ],
+    "banned_interpreters": [
+      "python",
+      "node",
+      "bash",
+      "sh",
+      "ruby",
+      "perl",
+      "powershell",
+      "zsh",
+      "fish",
+      "other"
+    ],
+    "env_allowlist": [
+      "provider credential variable names selected by provider-auth.ts",
+      "PI_BIN",
+      "AGENTIFY_OLD_UI",
+      "HOME",
+      "USERPROFILE",
+      "AGENTIFY_WEBHOOK_SECRET"
+    ],
+    "production_credentials": [
+      {
+        "name": "provider API/OAuth keys",
+        "category": "llm"
+      },
+      {
+        "name": "AWS_ACCESS_KEY_ID / AWS_BEARER_TOKEN_BEDROCK",
+        "category": "cloud"
+      },
+      {
+        "name": "COPILOT_GITHUB_TOKEN / GITHUB_TOKEN",
+        "category": "ci"
+      },
+      {
+        "name": "AGENTIFY_WEBHOOK_SECRET",
+        "category": "ci"
+      },
+      {
+        "name": "NPM_TOKEN / NODE_AUTH_TOKEN",
+        "category": "ci"
+      },
+      {
+        "name": "~/.agentify/auth.json",
+        "category": "other"
+      }
+    ],
+    "damage_control_rules": [
+      "Reject compound shell before command matching",
+      "Never expose zero-access secret/config paths",
+      "Domain locks may narrow but never widen execution-policy roots",
+      "Audit and review sessions deny shell mutation",
+      "User-owned protected files cannot be overwritten",
+      "Script contents are re-scanned for blocked operations",
+      "Externally triggered sessions remain read-only"
+    ],
+    "security_checklist": {
+      "tools": [
+        "Audit: read, grep, find, ls plus trusted write_map/write_map_delta/spawn_explorer only",
+        "Write-capable sessions require explicit readable/writable roots and protected paths",
+        "create_agent remains orchestrator-only"
+      ],
+      "commands": [
+        "Pin npm, tsx, node, and bash invocations to known package scripts/files",
+        "Reject compound or blacklisted commands",
+        "Use execFile-style argv execution rather than shell parsing"
+      ],
+      "paths": [
+        "Normalize and repository-jail all tool paths",
+        "Deny zero-access patterns and ~/.agentify credential/config files",
+        "Honor protected user-owned files and per-session roots"
+      ],
+      "env": [
+        "Pass only provider-selected credential names where possible",
+        "Never log secret values; log safe key names only",
+        "Treat AGENTIFY_WEBHOOK_SECRET and provider keys as production credentials"
+      ],
+      "blocks": [
+        "No destructive git/filesystem/database operations",
+        "No inline interpreter evaluation or network-to-shell pipes",
+        "No secret reads, env dumps, privilege escalation, or external path access"
+      ],
+      "logs": [
+        "Structured agentify.* JSONL events",
+        "Redact provider keys, GitHub/AWS tokens, JWTs, PEM material, and authorization headers",
+        "Record tool allowlists, prompt hashes, map transitions, sub-agent dispatch, and external-path attempts"
+      ]
+    },
+    "damage_control_rules_typed": {
+      "bash_tool_patterns": [
+        "compound operators",
+        "destructive filesystem/git/database/system commands",
+        "inline eval and network-to-shell",
+        "credential exfiltration"
+      ],
+      "zero_access_paths": [
+        "**/.env*",
+        "**/secrets.*",
+        "**/.ssh/**",
+        "**/.aws/credentials",
+        "**/.npmrc",
+        "~/.agentify/auth.json"
+      ],
+      "read_only_paths": [
+        "repository evidence during brownfield audit"
+      ],
+      "no_delete_paths": [
+        ".git/**",
+        ".github/**",
+        "LICENSE",
+        "user-owned files"
+      ]
+    },
+    "escape_hatch": {
+      "blocking_unblock_path": "Escalate through the host/user; do not weaken execution policy or defense hooks.",
+      "escalation_contact": null
+    },
+    "external_network_calls": [
+      {
+        "host": "configured LLM provider endpoints",
+        "purpose": "Model-backed audit, explorer, greenfield, and expert sessions"
+      },
+      {
+        "host": "registry.npmjs.org",
+        "purpose": "Dependency install/audit and verified package publication"
+      },
+      {
+        "host": "api.github.com / GitHub Actions",
+        "purpose": "Optional GitHub runtime issue, PR, and workflow operations"
+      }
+    ]
+  },
+  "coverage": {
+    "D1_topography": {
+      "status": "covered",
+      "confidence": "high",
+      "evidence_summary": "Root inventory and manifest identify real CLI entrypoints, source/test mirroring, generated boundaries, and five concrete orientation files."
+    },
+    "D2_module_boundaries": {
+      "status": "covered",
+      "confidence": "high",
+      "evidence_summary": "Bounded src analysis traced concrete CLI/import, audit/runtime RPC, and worker/state edges; provider-scoped state and common types/security/state-dir modules are shared abstractions, while audit, evals, engagement, webhook/AIW, and UI are separable subtrees."
+    },
+    "D3_type_contract": {
+      "status": "covered",
+      "confidence": "high",
+      "evidence_summary": "CodebaseMap is traced end-to-end from TypeBox schema/static type through bounded JSON parsing, validation, canonical persistence, coverage closure, and deterministic renderers; four concrete schema/type contracts and eight grep-able identifiers are recorded."
+    },
+    "D4_conventions": {
+      "status": "covered",
+      "confidence": "high",
+      "evidence_summary": "Production TypeScript uses kebab-case files, PascalCase contracts, verb-led camelCase functions, layered result/exception handling, structured redacted JSONL logging, explicit state parameters, and durable path/transaction patterns."
+    },
+    "D5_pitfalls": {
+      "status": "covered",
+      "confidence": "high",
+      "evidence_summary": "Six concrete footguns are source-referenced: orphaned transaction recovery, silent model fallback, renderer-only artifact writes, schema-order compatibility, nested expert discovery, and provider-state migration ambiguity."
+    },
+    "D6_validation": {
+      "status": "covered",
+      "confidence": "high",
+      "evidence_summary": "npm test is the aggregate gate; TypeScript checks, generation/unit/shell suites, parity, installed-package smoke, maintenance invariants, generated-output quality, security red-team, dependency audit, and CodeQL form layered validation; no standalone linter or browser E2E config exists."
+    },
+    "D7_operational": {
+      "status": "covered",
+      "confidence": "high",
+      "evidence_summary": "Node 22/npm builds with scripts/build.mjs, runs via node bin/agentify.js, publishes verified tags to npm, has a deep CI gate stack, optional provider credential envs, no primary app port, and an npm/tsconfig extension-ready environment."
+    },
+    "D8_security": {
+      "status": "covered",
+      "confidence": "high",
+      "evidence_summary": "Defense is layered through repository jail, zero-access secret paths, explicit session roots/tool sets, protected user ownership, compound/destructive command blocks, script rescanning, credential classification, structured redacted logs, and read-only external-trigger posture."
+    },
+    "D9_process": {
+      "status": "covered",
+      "confidence": "high",
+      "evidence_summary": "CONTRIBUTING, GitHub templates/workflows, CI, changelog policy, packaged review/document skills, and tag-only release docs define an issue/branch→implementation/test→PR review→documentation→verified release lifecycle."
+    },
+    "D10_documentation": {
+      "status": "covered",
+      "confidence": "high",
+      "evidence_summary": "Repository documentation is extensive: README, 113-line AGENTS guide, indexed architecture/security/state/release/operator docs, CONTRIBUTING and CHANGELOG; ai_docs/app_docs/specs/conditional-docs and existing Pi custom surfaces are honestly absent."
+    }
+  },
+  "open_questions": [
+    "Initial draft: gather repository evidence before closing coverage."
+  ],
+  "exploration_log": [
+    {
+      "ts": "2026-07-22T16:58:00.000Z",
+      "action": "documentation_scout",
+      "target": "README.md, AGENTS.md, docs/, .pi/",
+      "observation": "Found a root product README, 113-line repository AGENTS guide, 24-file documentation tree/index, changelog and contributing/security docs; no ai_docs, app_docs, specs, conditional docs, or existing Pi extension/skill/prompt surfaces."
+    },
+    {
+      "ts": "2026-07-22T16:52:46.583Z",
+      "action": "gap_filler_delta",
+      "target": "D10_documentation",
+      "observation": "merged delta from write_map_delta (strategy=deep_merge)"
+    }
+  ],
+  "schema_version": "1",
+  "generated_at": "2026-07-22T16:38:42.705Z"
+}

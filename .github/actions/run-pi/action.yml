@@ -1,0 +1,69 @@
+# agentify:managed
+name: Run Pi
+description: >
+  Invoke the Pi coding agent (https://github.com/earendil-works/pi) non-interactively
+  on a pre-rendered prompt file and capture its raw stdout transcript.
+
+inputs:
+  prompt-file:
+    description: Path to a fully-rendered prompt file (no placeholders left) to send as the initial message.
+    required: true
+  api-key:
+    description: Provider API key. Maps to Pi's --api-key, which works regardless of provider.
+    required: true
+  provider:
+    description: Provider name, e.g. anthropic, openai, google. See docs/providers.md in the Pi repo.
+    required: false
+    default: anthropic
+  model:
+    description: Model ID or pattern, e.g. claude-sonnet-4-6.
+    required: true
+  thinking:
+    description: Reasoning effort — off, minimal, low, medium, high, xhigh.
+    required: false
+    default: high
+  draft-state-file:
+    description: Durable draft-run budget and deadline record.
+    required: true
+  draft-config-file:
+    description: Trusted draft configuration containing limits and pricing policy.
+    required: true
+  draft-step:
+    description: Bounded name of the active model step.
+    required: true
+
+outputs:
+  output-file:
+    description: Path to a file containing Pi's raw stdout for this run.
+    value: ${{ steps.run.outputs.output-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run pi
+      id: run
+      shell: bash
+      env:
+        PI_API_KEY: ${{ inputs.api-key }}
+        PI_PROVIDER: ${{ inputs.provider }}
+        PI_MODEL: ${{ inputs.model }}
+        PI_THINKING: ${{ inputs.thinking }}
+        PROMPT_FILE: ${{ inputs.prompt-file }}
+        AGENTIFY_DRAFT_STATE_FILE: ${{ inputs.draft-state-file }}
+        AGENTIFY_DRAFT_CONFIG_FILE: ${{ inputs.draft-config-file }}
+        AGENTIFY_DRAFT_STEP: ${{ inputs.draft-step }}
+      run: |
+        set -euo pipefail
+        : "${PI_API_KEY:?PI_API_KEY is required — see SETUP.md}"
+        : "${PI_MODEL:?PI_MODEL repository variable is required — see SETUP.md}"
+
+        out="${RUNNER_TEMP}/pi-output-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}.txt"
+        runner="${GITHUB_ACTION_PATH}/../../scripts/run-pi-safe.sh"
+
+        set +e
+        bash "$runner" | tee "$out"
+        status=${PIPESTATUS[0]}
+        set -e
+
+        echo "output-file=$out" >> "$GITHUB_OUTPUT"
+        exit "$status"

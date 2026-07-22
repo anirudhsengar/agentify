@@ -1,0 +1,9 @@
+{
+  "schema_version": "1",
+  "engagement_id": "pilot-wave-1-agentify",
+  "status": "conditionally_qualified",
+  "reasons": [
+    { "code": "missing_workflow_evidence", "blocking": false },
+    { "code": "missing_adoption_owner", "blocking": false }
+  ]
+}

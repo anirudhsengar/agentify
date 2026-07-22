@@ -1,0 +1,26 @@
+{
+  "schema_version": "1",
+  "engagement_id": "pilot-wave-1-agentify",
+  "stakeholders": [
+    {
+      "stakeholder_id": "pilot-operator",
+      "name": "Anirudh Sengar",
+      "roles": ["workflow_owner", "business_owner", "technical_owner", "maintainer"],
+      "decision_rights": ["approve draft runs", "apply agent:shadow label", "apply agent:implement label"],
+      "escalation_contact": true,
+      "goals": ["collect factual pilot evidence", "preserve safety boundaries"],
+      "concerns": ["avoid leaking private pilot data into public repository"]
+    },
+    {
+      "stakeholder_id": "pilot-reviewer",
+      "name": "Internal FDE pilot reviewer",
+      "roles": ["approver", "security_reviewer"],
+      "decision_rights": ["review shadow evidence"],
+      "escalation_contact": false,
+      "goals": ["verify evidence classification", "confirm no source modification"],
+      "concerns": ["false positives in shadow recommendations"]
+    }
+  ],
+  "workflow_owner_id": "pilot-operator",
+  "adoption_owner_id": "pilot-operator"
+}

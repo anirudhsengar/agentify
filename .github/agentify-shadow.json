@@ -1,0 +1,22 @@
+{
+  "schema_version": "1",
+  "mode": "shadow",
+  "comment_on_issue": false,
+  "engagement_id": "pilot-wave-1-agentify",
+  "eval_suite_id": "canary-shadow",
+  "task_id": "canary-a1",
+  "validation_policy": "configured-eval-suite",
+  "maximum_runtime_ms": 900000,
+  "maximum_cost_usd": 5,
+  "require_measured_cost": true,
+  "maximum_input_tokens": 200000,
+  "maximum_output_tokens": 8192,
+  "pricing_policy": {
+    "version": "2026-07-22",
+    "models": []
+  },
+  "allow_failed_draft": false,
+  "allow_dependency_changes": false,
+  "forbidden_paths": [".github/workflows", ".git", ".agentify", ".pi/agentify/engagements"],
+  "validation_checks": []
+}

@@ -1,0 +1,75 @@
+{
+  "schema_version": "1",
+  "engagement_id": "pilot-wave-1-agentify",
+  "workflow_id": "pilot-wave-1-agentify",
+  "name": "Pilot Wave 1 shadow analysis on Agentify dogfood",
+  "variant": "target",
+  "trigger": "manual",
+  "actors": ["pilot-operator"],
+  "systems": ["github-issues", "github-actions", "agentify-runtime"],
+  "data_sources": ["github-issues-api", "engagement-state-directory"],
+  "source_of_truth_system": "engagement-state-directory",
+  "baseline_metrics": [
+    { "name": "shadow_runs_target", "unit": "count", "value": 1 }
+  ],
+  "evidence": ["engagement:pilot-wave-1-agentify/charter.json"],
+  "steps": [
+    {
+      "step_id": "shadow_label",
+      "name": "Operator applies agent:shadow label",
+      "actors": ["pilot-operator"],
+      "systems": ["github-issues"],
+      "data_sources": ["github-issues-api"],
+      "inputs": ["issue_number"],
+      "outputs": ["labeled_issue_event"],
+      "decisions": [
+        { "description": "Operator confirms the issue is a Pilot Wave 1 candidate", "outcomes": ["proceed", "abort"] }
+      ],
+      "handoff_to_step_ids": ["shadow_workflow"],
+      "approvals": ["operator_human"],
+      "waiting_period_minutes": 0,
+      "exceptions": [],
+      "workarounds": [],
+      "failure_modes": ["label_not_applied"],
+      "evidence": ["github-event:issue"]
+    },
+    {
+      "step_id": "shadow_workflow",
+      "name": "GitHub Actions agent-shadow workflow",
+      "actors": ["github-runner"],
+      "systems": ["github-actions", "agentify-runtime"],
+      "data_sources": [".github/agentify-shadow.json", ".pi/agentify/engagements/pilot-wave-1-agentify/"],
+      "inputs": ["github_issue_event", "engagement_state"],
+      "outputs": ["evidence-packet.json", "summary.md"],
+      "decisions": [
+        { "description": "Deterministic readiness classification from issue text", "outcomes": ["ready", "needs_information", "rejected", "requires_human_decision"] }
+      ],
+      "handoff_to_step_ids": ["metrics_record"],
+      "approvals": ["contents:read-only"],
+      "waiting_period_minutes": 0,
+      "exceptions": ["disabled_mode_noop", "invalid_state_refuses"],
+      "workarounds": [],
+      "failure_modes": ["state_corrupt", "config_invalid"],
+      "evidence": ["evidence-packet.json", "summary.md"]
+    },
+    {
+      "step_id": "metrics_record",
+      "name": "Operator downloads evidence and records review",
+      "actors": ["pilot-operator"],
+      "systems": ["agentify-engage-cli"],
+      "data_sources": ["workflow-artifact", "engagement-state"],
+      "inputs": ["evidence-packet.json"],
+      "outputs": ["review-event"],
+      "decisions": [
+        { "description": "Operator classifies evidence as valid, incomplete, or invalid", "outcomes": ["accept", "request_changes", "reject"] }
+      ],
+      "handoff_to_step_ids": [],
+      "approvals": ["operator_human"],
+      "waiting_period_minutes": 0,
+      "exceptions": [],
+      "workarounds": [],
+      "failure_modes": ["artifact_unavailable"],
+      "evidence": ["record-review.json"]
+    }
+  ]
+}
