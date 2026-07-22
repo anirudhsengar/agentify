@@ -5,12 +5,18 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 detector="$repo_root/.github/scripts/detect-stale-experts.mjs"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+state_dir=".pi/agentify"
+
+mkdir -p "$tmp/$state_dir"
+cat > "$tmp/$state_dir/manifest.json" <<'JSON'
+{"schema_version":"2","state_dir":".pi/agentify","files":[]}
+JSON
 
 setup_expert() {
   local domain=$1
   local updated=$2
   local primary=$3
-  local dir="$tmp/.pi/prompts/experts/$domain"
+  local dir="$tmp/$state_dir/prompts/experts/$domain"
   mkdir -p "$dir"
   cat > "$dir/expertise.yaml" <<EOF
 domain: $domain
