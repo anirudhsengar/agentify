@@ -189,15 +189,19 @@ async function withTempHome<T>(fn: (configDir: string) => Promise<T>): Promise<T
   }
 }
 
-async function withInteractiveStdin<T>(fn: () => Promise<T>): Promise<T> {
+async function withStdinTty<T>(isTTY: boolean, fn: () => Promise<T>): Promise<T> {
   const descriptor = Object.getOwnPropertyDescriptor(input, "isTTY");
-  Object.defineProperty(input, "isTTY", { value: true, configurable: true });
+  Object.defineProperty(input, "isTTY", { value: isTTY, configurable: true });
   try {
     return await fn();
   } finally {
     if (descriptor) Object.defineProperty(input, "isTTY", descriptor);
     else delete (input as { isTTY?: boolean }).isTTY;
   }
+}
+
+async function withInteractiveStdin<T>(fn: () => Promise<T>): Promise<T> {
+  return withStdinTty(true, fn);
 }
 
 async function testRejectsLegacySubcommands(): Promise<void> {
@@ -229,14 +233,15 @@ async function testRunsThroughSingleEntrypoint(): Promise<void> {
 
       const ui = new TestUi();
       const runtime = new BrownfieldFakeRuntime();
-      await runAgentifyApp({
+      await withStdinTty(false, () => runAgentifyApp({
         args: [],
         cwd,
         ui,
         runtime,
         mode: "brownfield",
+        targets: ["codex", "claude", "pi"],
         githubReadinessOverride: READY_GITHUB,
-      });
+      }));
 
       assert.equal(runtime.sessionCalls, 1);
       assert.ok(fs.existsSync(path.join(cwd, "AGENTS.md")));
@@ -256,13 +261,14 @@ async function testAttachesToInitializedRepoWithoutRerun(): Promise<void> {
       const ui = new TestUi();
       const runtime = new BrownfieldFakeRuntime();
 
-      await runAgentifyApp({
+      await withStdinTty(false, () => runAgentifyApp({
         args: [],
         cwd,
         ui,
         runtime,
+        targets: ["pi"],
         githubReadinessOverride: READY_GITHUB,
-      });
+      }));
 
       assert.equal(runtime.sessionCalls, 0);
       assert.ok(ui.statuses.some((message) => message.includes("attached to initialized brownfield repo")));
