@@ -41,3 +41,4 @@ export { deriveRiskSeverity, validateRiskRegister } from "./risk-register.ts";
 export { qualifyEngagement } from "./qualification.ts";
 export { renderEngagementReport, renderEngagementSummary } from "./report.ts";
 export { validateAutomationDecisionRegister, validateOpportunityMatrix, validateStakeholderRegister } from "./registers.ts";
+export * from "./metrics/index.ts";

@@ -128,6 +128,8 @@ agentify engage status --id invoice-review
 agentify engage validate --id invoice-review
 agentify engage report --id invoice-review --stdout
 agentify engage promotion status --id invoice-review
+agentify engage metrics status --id invoice-review
+agentify engage metrics report --id invoice-review --stdout
 ```
 
 `init` prompts for required facts in an interactive terminal or accepts a strict
@@ -139,6 +141,9 @@ implicit autonomy promotion. Promotion is recorded separately through
 `agentify engage promotion status|evaluate|approve|revoke`. Only `observe` is
 currently operational, and promotion records do not enable GitHub behavior.
 See [the autonomy and promotion guide](docs/autonomy-and-promotion.md).
+Pilot instrumentation records factual, engagement-local shadow, draft, baseline,
+review, and adoption evidence. It does not prove business value or authorize
+broader autonomy. See [the pilot observability guide](docs/pilot-observability.md).
 
 After valid shadow evidence and explicit promotion, human-approved `draft`
 mode can implement in an isolated GitHub Actions checkout and publish an

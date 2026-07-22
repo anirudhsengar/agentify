@@ -192,6 +192,10 @@ writeAtomic(path.join(runDir, "shadow-classification.json"), `${JSON.stringify({
 fs.mkdirSync(artifactDir, { recursive: true });
 writeAtomic(path.join(artifactDir, "evidence-packet.json"), `${JSON.stringify(packet, null, 2)}\n`);
 writeAtomic(path.join(artifactDir, "summary.md"), markdown);
+const metricRecorder = path.join(root, ".github/scripts/record-pilot-metrics.mjs");
+// Legacy test fixtures and pre-6A installations may not contain the recorder;
+// newly generated supported runtimes always copy it with the scaffold.
+if (fs.existsSync(metricRecorder)) execFileSync(process.execPath, [metricRecorder, "shadow", stateDir, engagementId, packetPath], { stdio: "inherit" });
 const afterStatus = git(["status", "--porcelain=v1", "--untracked-files=all"]);
 const finalBranch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
 const finalRemoteRefs = git(["for-each-ref", "--format=%(refname):%(objectname)", "refs/remotes"]);

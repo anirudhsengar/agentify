@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Add engagement-local factual pilot instrumentation with closed provenance-aware
+  events, idempotent JSONL storage, automatic shadow/draft measurements, explicit
+  human evidence recording, deterministic aggregates, and redacted reports.
+  This records pilots; it does not claim business value or product readiness.
+
 - Enforce human-approved draft model budgets with versioned pricing, per-call
   reservations and measured/estimated usage; actively cancel draft execution
   at one application deadline; recover draft PR publication idempotently; and

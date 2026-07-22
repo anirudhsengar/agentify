@@ -156,7 +156,8 @@ try {
   assert.match(positional.stderr, /Known subcommands: login, logout, models, revert, engage, eval/);
 
   const engageHelp = run(bin, ["engage", "help"], { cwd: installRoot, env, timeout: 30_000 });
-  assert.match(engageHelp.stdout, /agentify engage <init\|status\|validate\|report\|promotion>/);
+  assert.match(engageHelp.stdout, /agentify engage <init\|status\|validate\|report\|promotion\|metrics>/);
+  assert.match(engageHelp.stdout, /metrics <status\|record-baseline\|record-review\|record-adoption\|report>/);
   assert.match(engageHelp.stdout, /promotion <status\|evaluate\|approve\|revoke>/);
   assert.match(engageHelp.stdout, /agentify engage init --input engagement\.json --yes/);
   assert.equal(engageHelp.stderr, "");

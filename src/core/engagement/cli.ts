@@ -23,6 +23,7 @@ import { validateWorkflowMap } from "./workflow-map.ts";
 import { PromotionActualsSchema, PromotionPolicySchema, type PromotionActuals, type PromotionPolicy } from "./schema/promotion.ts";
 import { appendPromotionRecord, assertEngagementPromotable, createPromotionState, currentAutonomyLevel, evaluatePromotion, promotionReportPath, promotionStatePath, readPromotionState, renderPromotionReport, revokePromotion } from "./promotion.ts";
 import { writeEngagementJsonAtomic } from "./state.ts";
+import { aggregatePilotEvents, metricsDirectory, readMetricEvents, recordMetricEvent, renderPilotReport, type MetricEventInput } from "./metrics/index.ts";
 
 export interface EngageCommandContext {
   cwd: string; configDir: string; ui: AgentifyUi;
@@ -209,23 +210,42 @@ async function promotionCommand(argv: readonly string[], ctx: EngageCommandConte
 }
 
 function usageError(ctx: EngageCommandContext, action: string, message: string): number { ctx.err.write(`agentify: engage ${action}: ${message}\n`); return 1; }
+async function metricsCommand(argv: readonly string[], ctx: EngageCommandContext): Promise<number> {
+  const action = argv[0]; const flags = parse(argv.slice(1));
+  if (!action || !["status", "record-baseline", "record-review", "record-adoption", "report"].includes(action)) return usageError(ctx, "metrics", "Usage: agentify engage metrics <status|record-baseline|record-review|record-adoption|report>");
+  if (flags.errors.length || flags.positionals.length) return usageError(ctx, `metrics ${action}`, flags.errors[0] ?? "unexpected argument");
+  const stateDir = resolveEngagementStateDir(ctx); const charter = await selectEngagement(ctx, stateDir, flags.id); const id = charter.engagement_id;
+  if (action.startsWith("record-")) {
+    if (!flags.input) return usageError(ctx, `metrics ${action}`, "--input <json> is required");
+    if (!flags.yes) return usageError(ctx, `metrics ${action}`, "human-entered measurements require explicit confirmation with --yes");
+    const parsed = JSON.parse(fs.readFileSync(path.resolve(ctx.cwd, flags.input), "utf8")) as MetricEventInput;
+    const expected = action === "record-baseline" ? "baseline_recorded" : action === "record-review" ? "human_review_recorded" : "adoption_recorded";
+    if (parsed.event_type !== expected || parsed.engagement_id !== id || parsed.source !== "operator" || parsed.provenance.quality !== "human_supplied") throw new Error(`input must be a ${expected} event with matching engagement, operator source, and human_supplied provenance`);
+    const result = recordMetricEvent(stateDir, parsed); ctx.out.write(`${result.created ? "Recorded" : "Already recorded"} ${result.event.event_type} ${result.event.event_id}\nProvenance: ${result.event.provenance.quality} — ${result.event.provenance.method}\n`); return 0;
+  }
+  const events = readMetricEvents(stateDir, id); const aggregates = aggregatePilotEvents(events);
+  if (action === "status") { ctx.out.write(`Engagement: ${id}\nMetric events: ${events.length}\nRuns: ${aggregates.runs.total}\nMeasured cost USD: ${aggregates.costs.measured_usd ?? "unavailable"}\nEstimated cost USD: ${aggregates.costs.estimated_usd ?? "unavailable"}\nWarning: ${aggregates.sample_warning ?? "none"}\n`); return 0; }
+  const directory = metricsDirectory(stateDir, id); writeEngagementJsonAtomic(path.join(directory, "aggregates.json"), aggregates); const report = renderPilotReport(charter, events); const target = path.join(directory, "pilot-report.md"); fs.mkdirSync(directory, { recursive: true, mode: 0o700 }); const temporary = `${target}.tmp-${process.pid}-${crypto.randomUUID()}`; fs.writeFileSync(temporary, report, { encoding: "utf8", mode: 0o600, flag: "wx" }); fs.renameSync(temporary, target); ctx.out.write(`Report: ${target}\n`); if (flags.stdout) ctx.out.write(report); return 0;
+}
 export async function engageCommand(argv: readonly string[], ctx: EngageCommandContext): Promise<number> {
   const action = argv[0];
-  if (!action || action === "help") { printEngageHelp(ctx.out); return action ? 0 : usageError(ctx, "", "missing action. Usage: agentify engage <init|status|validate|report|promotion>"); }
+  if (!action || action === "help") { printEngageHelp(ctx.out); return action ? 0 : usageError(ctx, "", "missing action. Usage: agentify engage <init|status|validate|report|promotion|metrics>"); }
   try {
     if (action === "init") return await initCommand(argv.slice(1), ctx);
     if (action === "status") return await statusCommand(argv.slice(1), ctx);
     if (action === "validate") return await validateCommand(argv.slice(1), ctx);
     if (action === "report") return await reportCommand(argv.slice(1), ctx);
     if (action === "promotion") return await promotionCommand(argv.slice(1), ctx);
-    return usageError(ctx, "", `unknown action '${action}'. Valid: init, status, validate, report, promotion`);
+    if (action === "metrics") return await metricsCommand(argv.slice(1), ctx);
+    return usageError(ctx, "", `unknown action '${action}'. Valid: init, status, validate, report, promotion, metrics`);
   } catch (error) { ctx.err.write(`agentify: engage ${action}: ${error instanceof Error ? error.message : String(error)}\n`); return 1; }
 }
 export function printEngageHelp(out: NodeJS.WritableStream): void {
-  out.write("Usage: agentify engage <init|status|validate|report|promotion> [options]\n\n");
+  out.write("Usage: agentify engage <init|status|validate|report|promotion|metrics> [options]\n\n");
   out.write("  agentify engage init [--id <id>] [--input <json>] [--yes]\n");
   out.write("  agentify engage status [--id <id>]\n  agentify engage validate [--id <id>]\n");
   out.write("  agentify engage report [--id <id>] [--stdout]\n\n");
   out.write("  agentify engage promotion <status|evaluate|approve|revoke> [options]\n\n");
+  out.write("  agentify engage metrics <status|record-baseline|record-review|record-adoption|report> [options]\n\n");
   out.write("Examples:\n  agentify engage init --input engagement.json --yes\n  agentify engage status --id invoice-review\n");
 }

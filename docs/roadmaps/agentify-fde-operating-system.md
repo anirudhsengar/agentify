@@ -100,6 +100,10 @@ The initial lifecycle is:
    Milestone 5D hardening is complete: draft execution has measured/reserved
    budget admission, an active application deadline, idempotent PR recovery,
    and operator-confirmed owned-orphan cleanup. This does not begin Milestone 6.
+   Milestone 6A pilot instrumentation is complete: engagement-local factual
+   events, aggregates, human evidence input, and reports now support repeated
+   measured pilots. No pilot outcome, business-value, autonomy, or
+   productization conclusion is implied; repeated real pilots remain required.
 7. **Milestone 6 — productization decision.** Graduate only evidence-backed
    capabilities through explicit architecture, security, package, and release
    review.

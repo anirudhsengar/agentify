@@ -22,6 +22,7 @@ public product contract.
 | Human-approved isolated implementation and unmerged draft PR operation | `docs/github-draft-mode.md` |
 | Draft model cost accounting and versioned pricing | `docs/draft-cost-accounting.md` |
 | Draft runtime deadline and cancellation | `docs/draft-runtime-cancellation.md` |
+| Local pilot metrics, provenance, baselines, reviews, privacy, and reporting | `docs/pilot-observability.md` |
 | FDE deterministic grader configuration and evidence contracts | `docs/eval-grader-authoring.md` |
 | Verified FDE Milestone 0 baseline | `docs/benchmarks/fde-baseline.md` |
 | Modernization parity baseline and behavior contract | `docs/refactors/modernization-baseline.md` |

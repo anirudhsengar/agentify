@@ -364,6 +364,12 @@ jobs:
             "${RUNNER_TEMP}/failure_reason.txt" \
             "$RUN_URL"
 
+      - name: Record factual draft pilot metrics
+        if: always()
+        run: |
+          if [ -s "$RUNNER_TEMP/draft-gate.json" ] && [ -s "$RUNNER_TEMP/draft-validation.json" ] && [ -s "$RUNNER_TEMP/draft-run-state.json" ]; then
+            node .agentify-runtime/.github/scripts/record-pilot-metrics.mjs draft "${{ steps.draft_gate.outputs.state_dir }}" "$(jq -r .engagement_id "$RUNNER_TEMP/draft-gate.json")" "$RUNNER_TEMP/draft-gate.json" "$RUNNER_TEMP/draft-validation.json" "$RUNNER_TEMP/draft-run-state.json"
+          fi
       - name: Preserve final draft run control state
         if: always() && steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
         uses: actions/upload-artifact@v4
