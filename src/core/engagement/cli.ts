@@ -20,12 +20,15 @@ import { WorkflowMapSchema, type WorkflowMap } from "./schema/workflow-map.ts";
 import { createEngagement, listEngagements, readEngagement, type CreateEngagementInput } from "./state.ts";
 import { validateRiskRegister } from "./risk-register.ts";
 import { validateWorkflowMap } from "./workflow-map.ts";
+import { PromotionActualsSchema, PromotionPolicySchema, type PromotionActuals, type PromotionPolicy } from "./schema/promotion.ts";
+import { appendPromotionRecord, assertEngagementPromotable, createPromotionState, currentAutonomyLevel, evaluatePromotion, promotionReportPath, promotionStatePath, readPromotionState, renderPromotionReport, revokePromotion } from "./promotion.ts";
+import { writeEngagementJsonAtomic } from "./state.ts";
 
 export interface EngageCommandContext {
   cwd: string; configDir: string; ui: AgentifyUi;
   out: NodeJS.WritableStream; err: NodeJS.WritableStream; stdinIsTTY?: boolean;
 }
-interface Flags { id?: string; input?: string; yes: boolean; stdout: boolean; positionals: string[]; errors: string[] }
+interface Flags { id?: string; input?: string; actor?: string; reason?: string; yes: boolean; stdout: boolean; positionals: string[]; errors: string[] }
 const ARTIFACTS = ["stakeholders.json", "current-workflow.json", "target-workflow.json", "opportunity-matrix.json", "automation-decisions.json", "risk-register.json", "qualification.json"] as const;
 
 function parse(argv: readonly string[]): Flags {
@@ -34,10 +37,10 @@ function parse(argv: readonly string[]): Flags {
     const token = argv[index]!;
     if (token === "--yes") result.yes = true;
     else if (token === "--stdout") result.stdout = true;
-    else if (token === "--id" || token === "--input") {
+    else if (token === "--id" || token === "--input" || token === "--actor" || token === "--reason") {
       const value = argv[index + 1];
       if (!value || value.startsWith("--")) result.errors.push(`${token} requires a value`);
-      else { if (token === "--id") result.id = value; else result.input = value; index += 1; }
+      else { if (token === "--id") result.id = value; else if (token === "--input") result.input = value; else if (token === "--actor") result.actor = value; else result.reason = value; index += 1; }
     } else if (token.startsWith("--")) result.errors.push(`unknown flag ${token}`);
     else result.positionals.push(token);
   }
@@ -140,7 +143,8 @@ function qualificationText(stateDir: string, id: string): string {
 async function statusCommand(argv: readonly string[], ctx: EngageCommandContext): Promise<number> {
   const flags = parse(argv); if (flags.errors.length || flags.positionals.length || flags.input || flags.yes || flags.stdout) return usageError(ctx, "status", flags.errors[0] ?? "unsupported option or argument");
   const stateDir = resolveEngagementStateDir(ctx); const charter = await selectEngagement(ctx, stateDir, flags.id); const missing = missingArtifacts(stateDir, charter.engagement_id);
-  ctx.out.write(`Engagement: ${charter.engagement_id}\nWorkflow: ${charter.workflow_name}\nLifecycle: ${charter.status}\nQualification: ${qualificationText(stateDir, charter.engagement_id)}\nRevision: ${charter.revision}\nLatest update: ${charter.updated_at}\nAutonomy: not recorded\nMissing artifacts: ${missing.join(", ") || "none"}\n`);
+  const autonomy = fs.existsSync(promotionStatePath(stateDir, charter.engagement_id)) ? currentAutonomyLevel(readPromotionState(stateDir, charter.engagement_id)) : "not recorded";
+  ctx.out.write(`Engagement: ${charter.engagement_id}\nWorkflow: ${charter.workflow_name}\nLifecycle: ${charter.status}\nQualification: ${qualificationText(stateDir, charter.engagement_id)}\nRevision: ${charter.revision}\nLatest update: ${charter.updated_at}\nAutonomy: ${autonomy}\nMissing artifacts: ${missing.join(", ") || "none"}\n`);
   return 0;
 }
 
@@ -179,22 +183,49 @@ async function reportCommand(argv: readonly string[], ctx: EngageCommandContext)
   ctx.out.write(`Report: ${reportPath}\n`); if (flags.stdout) ctx.out.write(report); return 0;
 }
 
+function readPromotionInput(cwd: string, input: string): { policy: PromotionPolicy; actual_condition_results: PromotionActuals } {
+  const parsed = JSON.parse(fs.readFileSync(path.resolve(cwd, input), "utf8")) as Record<string, unknown>;
+  if (!Value.Check(PromotionPolicySchema, parsed.policy) || !Value.Check(PromotionActualsSchema, parsed.actual_condition_results)) throw new Error("promotion input must contain valid policy and actual_condition_results objects");
+  return parsed as { policy: PromotionPolicy; actual_condition_results: PromotionActuals };
+}
+function writePromotionReport(stateDir: string, id: string, report: string): string { const target = promotionReportPath(stateDir, id); fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 }); const temporary = `${target}.tmp-${process.pid}-${crypto.randomUUID()}`; fs.writeFileSync(temporary, report, { encoding: "utf8", mode: 0o600, flag: "wx" }); fs.renameSync(temporary, target); return target; }
+async function promotionCommand(argv: readonly string[], ctx: EngageCommandContext): Promise<number> {
+  const action = argv[0]; const flags = parse(argv.slice(1)); if (!action || !["status", "evaluate", "approve", "revoke"].includes(action)) return usageError(ctx, "promotion", "Usage: agentify engage promotion <status|evaluate|approve|revoke>");
+  if (flags.errors.length || flags.positionals.length) return usageError(ctx, `promotion ${action}`, flags.errors[0] ?? "unexpected argument");
+  const stateDir = resolveEngagementStateDir(ctx); const charter = await selectEngagement(ctx, stateDir, flags.id); const id = charter.engagement_id;
+  if (action === "status") { const state = readPromotionState(stateDir, id); ctx.out.write(renderPromotionReport(state)); return 0; }
+  assertEngagementPromotable(stateDir, id);
+  if (action === "evaluate") {
+    if (!flags.input) return usageError(ctx, "promotion evaluate", "--input <json> is required");
+    const input = readPromotionInput(ctx.cwd, flags.input); if (input.policy.engagement_id !== id) throw new Error("promotion policy engagement ID does not match --id");
+    let state; if (!fs.existsSync(promotionStatePath(stateDir, id))) { state = createPromotionState(input.policy); writeEngagementJsonAtomic(promotionStatePath(stateDir, id), state); } else { state = readPromotionState(stateDir, id); if (JSON.stringify(state.policy) !== JSON.stringify(input.policy)) throw new Error("stored promotion policy differs; policy history cannot be replaced"); }
+    const record = evaluatePromotion(state.policy, input.actual_condition_results, new Date().toISOString()); state = appendPromotionRecord(stateDir, state, record, state.revision); const report = renderPromotionReport(state, record); const reportPath = writePromotionReport(stateDir, id, report); ctx.out.write(`Decision: ${record.decision}\nReport: ${reportPath}\n`); return record.decision === "approved" ? 0 : 2;
+  }
+  const state = readPromotionState(stateDir, id);
+  if (!flags.actor?.trim()) return usageError(ctx, `promotion ${action}`, "--actor <name> is required");
+  if (!flags.yes) return usageError(ctx, `promotion ${action}`, "explicit confirmation requires --yes");
+  if (action === "approve") { const evaluated = [...state.records].reverse().find((record) => record.decision !== "revoked"); if (!evaluated) throw new Error("evaluate promotion evidence before approval"); const record = evaluatePromotion(state.policy, evaluated.actual_condition_results, new Date().toISOString(), flags.actor.trim()); const next = appendPromotionRecord(stateDir, state, record, state.revision); writePromotionReport(stateDir, id, renderPromotionReport(next, record)); ctx.out.write(`Decision: ${record.decision}\nCurrent level: ${currentAutonomyLevel(next)}\nGitHub behavior: unchanged\n`); return record.decision === "approved" ? 0 : 2; }
+  if (!flags.reason?.trim()) return usageError(ctx, "promotion revoke", "--reason <text> is required"); const next = revokePromotion(stateDir, state, flags.actor.trim(), new Date().toISOString(), flags.reason.trim()); writePromotionReport(stateDir, id, renderPromotionReport(next)); ctx.out.write(`Decision: revoked\nCurrent level: ${currentAutonomyLevel(next)}\n`); return 0;
+}
+
 function usageError(ctx: EngageCommandContext, action: string, message: string): number { ctx.err.write(`agentify: engage ${action}: ${message}\n`); return 1; }
 export async function engageCommand(argv: readonly string[], ctx: EngageCommandContext): Promise<number> {
   const action = argv[0];
-  if (!action || action === "help") { printEngageHelp(ctx.out); return action ? 0 : usageError(ctx, "", "missing action. Usage: agentify engage <init|status|validate|report>"); }
+  if (!action || action === "help") { printEngageHelp(ctx.out); return action ? 0 : usageError(ctx, "", "missing action. Usage: agentify engage <init|status|validate|report|promotion>"); }
   try {
     if (action === "init") return await initCommand(argv.slice(1), ctx);
     if (action === "status") return await statusCommand(argv.slice(1), ctx);
     if (action === "validate") return await validateCommand(argv.slice(1), ctx);
     if (action === "report") return await reportCommand(argv.slice(1), ctx);
-    return usageError(ctx, "", `unknown action '${action}'. Valid: init, status, validate, report`);
+    if (action === "promotion") return await promotionCommand(argv.slice(1), ctx);
+    return usageError(ctx, "", `unknown action '${action}'. Valid: init, status, validate, report, promotion`);
   } catch (error) { ctx.err.write(`agentify: engage ${action}: ${error instanceof Error ? error.message : String(error)}\n`); return 1; }
 }
 export function printEngageHelp(out: NodeJS.WritableStream): void {
-  out.write("Usage: agentify engage <init|status|validate|report> [options]\n\n");
+  out.write("Usage: agentify engage <init|status|validate|report|promotion> [options]\n\n");
   out.write("  agentify engage init [--id <id>] [--input <json>] [--yes]\n");
   out.write("  agentify engage status [--id <id>]\n  agentify engage validate [--id <id>]\n");
   out.write("  agentify engage report [--id <id>] [--stdout]\n\n");
+  out.write("  agentify engage promotion <status|evaluate|approve|revoke> [options]\n\n");
   out.write("Examples:\n  agentify engage init --input engagement.json --yes\n  agentify engage status --id invoice-review\n");
 }

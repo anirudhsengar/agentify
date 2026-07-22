@@ -20,6 +20,8 @@ export * from "./schema/opportunity.ts";
 export * from "./schema/automation-decision.ts";
 export * from "./schema/risk-register.ts";
 export * from "./schema/qualification.ts";
+export * from "./schema/promotion.ts";
+export * from "./promotion.ts";
 export {
   createEngagement,
   listEngagements,

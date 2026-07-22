@@ -16,6 +16,7 @@ public product contract.
 | Generation architecture and trust boundary | `docs/architecture.md` |
 | FDE operating-system living roadmap | `docs/roadmaps/agentify-fde-operating-system.md` |
 | FDE engagement records, schemas, scoring, and CLI | `docs/architecture/fde-engagement-foundation.md` |
+| FDE autonomy levels, evidence gates, approval, revocation, and rollback | `docs/autonomy-and-promotion.md` |
 | Supported FDE evaluation tasks, trials, graders, aggregation, and evidence | `docs/eval-architecture.md` |
 | GitHub shadow-mode operation, security, evidence, and migration | `docs/github-shadow-mode.md` |
 | FDE deterministic grader configuration and evidence contracts | `docs/eval-grader-authoring.md` |

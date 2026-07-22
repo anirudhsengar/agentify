@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Add a typed, deterministic FDE autonomy model with engagement-scoped,
+  revisioned promotion policies; append-preserved decisions; explicit human
+  approval and revocation; fail-closed evidence and safety gates; deterministic
+  reports; and a CLI that does not activate GitHub behavior.
+
 - Add opt-in GitHub FDE shadow mode with deterministic issue readiness,
   evidence-backed candidate scope and plans, redacted evidence packets,
   analysis-only live evidence attestation and evaluation, artifact upload, and

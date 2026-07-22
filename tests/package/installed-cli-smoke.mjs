@@ -65,6 +65,7 @@ try {
     "docs/experimental-surfaces.md",
     "docs/eval-architecture.md",
     "docs/eval-grader-authoring.md",
+    "docs/autonomy-and-promotion.md",
     "docs/refactors/modernization-baseline.md",
     "docs/refactors/runtime-reachability.md",
     "SECURITY.md",
@@ -154,7 +155,8 @@ try {
   assert.match(positional.stderr, /Known subcommands: login, logout, models, revert, engage, eval/);
 
   const engageHelp = run(bin, ["engage", "help"], { cwd: installRoot, env, timeout: 30_000 });
-  assert.match(engageHelp.stdout, /agentify engage <init\|status\|validate\|report>/);
+  assert.match(engageHelp.stdout, /agentify engage <init\|status\|validate\|report\|promotion>/);
+  assert.match(engageHelp.stdout, /promotion <status\|evaluate\|approve\|revoke>/);
   assert.match(engageHelp.stdout, /agentify engage init --input engagement\.json --yes/);
   assert.equal(engageHelp.stderr, "");
 

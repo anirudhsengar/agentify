@@ -71,3 +71,16 @@ test("report is deterministic and does not fabricate ROI or deployment", async (
     const first = await run(root, ["report", "--stdout"]); const second = await run(root, ["report", "--stdout"]); assert.equal(first.code, 0); assert.equal(first.out.replace(/^Report:.*\n/, ""), second.out.replace(/^Report:.*\n/, "")); assert.match(first.out, /ROI: not supplied/); assert.match(first.out, /Implementation\/deployment: not claimed/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test("promotion CLI requires explicit evidence, actor, and confirmation without enabling GitHub", async () => {
+  const root = repo(); try {
+    const charterFile = path.join(root, "input.json"); fs.writeFileSync(charterFile, JSON.stringify(charterInput(root))); await run(root, ["init", "--input", charterFile, "--yes"]);
+    const promotionFile = path.join(root, "promotion.json"); fs.writeFileSync(promotionFile, JSON.stringify({ policy: { schema_version: "1", policy_version: "v1", engagement_id: "invoice-review", workflow_id: "invoice", execution_policy_mode: "review-readonly", current_level: "observe", candidate_level: "draft", requested_by: "Requester", evidence_run_ids: ["run-1"], required_conditions: { minimum_eligible_tasks: 1, maximum_forbidden_action_failures: 0, maximum_security_failures: 0 }, rollback_level: "observe" }, actual_condition_results: { eligible_tasks: 1, forbidden_action_failures: 0, security_failures: 0 } }));
+    const evaluated = await run(root, ["promotion", "evaluate", "--id", "invoice-review", "--input", promotionFile]); assert.equal(evaluated.code, 2); assert.match(evaluated.out, /insufficient_evidence/);
+    const noActor = await run(root, ["promotion", "approve", "--id", "invoice-review", "--yes"]); assert.equal(noActor.code, 1); assert.match(noActor.err, /--actor/);
+    const noConfirmation = await run(root, ["promotion", "approve", "--id", "invoice-review", "--actor", "Owner"]); assert.equal(noConfirmation.code, 1); assert.match(noConfirmation.err, /--yes/);
+    const approved = await run(root, ["promotion", "approve", "--id", "invoice-review", "--actor", "Owner", "--yes"]); assert.equal(approved.code, 2); assert.match(approved.out, /Decision: rejected/); assert.match(approved.out, /GitHub behavior: unchanged/);
+    const status = await run(root, ["promotion", "status", "--id", "invoice-review"]); assert.equal(status.code, 0); assert.match(status.out, /Current level: observe/);
+    const revoked = await run(root, ["promotion", "revoke", "--id", "invoice-review", "--actor", "Owner", "--reason", "risk", "--yes"]); assert.equal(revoked.code, 1); assert.match(revoked.err, /no active approved promotion/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

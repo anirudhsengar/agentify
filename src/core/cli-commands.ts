@@ -916,7 +916,7 @@ export function printSubcommandHelp(out: NodeJS.WritableStream): void {
   out.write(`    shot, not a history. --keep-alongside preserves the\n`);
   out.write(`    alongside files.\n`);
   out.write(`\nEngagement record and analysis subcommands:\n`);
-  out.write(`  agentify engage <init|status|validate|report> [options]\n`);
+  out.write(`  agentify engage <init|status|validate|report|promotion> [options]\n`);
   out.write(`    Create, inspect, validate, or deterministically report an\n`);
   out.write(`    FDE engagement record. No LLM or implementation is invoked.\n`);
   out.write(`\nFDE evaluation subcommands:\n`);

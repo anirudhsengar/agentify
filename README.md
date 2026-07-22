@@ -63,7 +63,8 @@ package APIs or hidden command families. See
 - **Internal control plane:** orchestrators, specialists, experts, and
   workflows remain implementation machinery, not separate public command
   families.
-- **FDE engagement records:** `agentify engage init|status|validate|report`
+- **FDE engagement records:** `agentify engage init|status|validate|report` and
+  explicit `agentify engage promotion status|evaluate|approve|revoke`
   creates and analyzes deterministic local engagement records without invoking
   an LLM, implementing code, or claiming deployment.
 - **GitHub-first async loop:** after bootstrap, issues, comments, and
@@ -126,6 +127,7 @@ agentify engage init --input engagement.json --yes
 agentify engage status --id invoice-review
 agentify engage validate --id invoice-review
 agentify engage report --id invoice-review --stdout
+agentify engage promotion status --id invoice-review
 ```
 
 `init` prompts for required facts in an interactive terminal or accepts a strict
@@ -133,7 +135,10 @@ charter-input JSON file for automation. Reports are deterministic Markdown at
 `<stateDir>/engagements/<engagementId>/reports/engagement-summary.md`. This is an
 engagement-record and analysis surface, not an autonomous FDE: it performs no
 workflow discovery, model call, evaluation, implementation, deployment, or
-autonomy promotion.
+implicit autonomy promotion. Promotion is recorded separately through
+`agentify engage promotion status|evaluate|approve|revoke`. Only `observe` is
+currently operational, and promotion records do not enable GitHub behavior.
+See [the autonomy and promotion guide](docs/autonomy-and-promotion.md).
 
 ## FDE evaluations
 
