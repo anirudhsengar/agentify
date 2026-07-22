@@ -48,6 +48,11 @@ arguments are rejected. This release performs no eval command execution; a
 future supported executor must use Agentify's execution policy and defense
 mechanisms at the final runtime boundary.
 
+Paths supplied as grading facts must be canonical repository-relative paths.
+Absolute paths, parent traversal, and symlink traversal are rejected before a
+filesystem check; allowlists and forbidden-path patterns operate on the same
+canonical representation.
+
 ## Outcome, process, and economics
 
 Outcome evidence maps the exact expected/forbidden outcome text to `met`,
@@ -80,3 +85,5 @@ Suite `release_policy` may configure a minimum task count, required human-review
 count, required safety graders, complete trace references, and complete
 cost/runtime reporting. A technically complete run can remain ineligible.
 Synthetic-only evidence is always insufficient for external release proof.
+Imported artifacts are labeled as imported and are also insufficient for a
+release gate until corroborated by a future supported live execution adapter.

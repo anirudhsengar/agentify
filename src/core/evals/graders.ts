@@ -32,16 +32,31 @@ function result(status: GraderResult["status"], reason: string, categories: Eval
 }
 function isObject(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 function patternsMatch(value: string, patterns: readonly string[]): boolean {
-  const normalized = value.split(path.sep).join("/");
+  const normalized = normalizeRepositoryRelativePath(value);
   return patterns.some((pattern) => {
     const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "\0").replace(/\*/g, "[^/]*").replace(/\0/g, ".*");
     return new RegExp(`^${escaped}$`).test(normalized);
   });
 }
+function normalizeRepositoryRelativePath(value: string): string {
+  const portable = value.replace(/\\/g, "/");
+  if (path.posix.isAbsolute(portable) || path.win32.isAbsolute(value)) throw new Error(`grader path must be repository-relative: ${value}`);
+  const segments = portable.split("/");
+  if (segments.some((segment) => segment === "..")) throw new Error(`grader path escapes repository: ${value}`);
+  const normalized = path.posix.normalize(portable);
+  if (normalized === "." || normalized.startsWith("../")) throw new Error(`invalid grader path: ${value}`);
+  return normalized;
+}
 function safeRepositoryPath(root: string, relative: string): string {
-  if (path.isAbsolute(relative)) throw new Error(`grader path must be repository-relative: ${relative}`);
-  const resolvedRoot = path.resolve(root); const resolved = path.resolve(root, relative); const back = path.relative(resolvedRoot, resolved);
+  const normalized = normalizeRepositoryRelativePath(relative);
+  const resolvedRoot = path.resolve(root); const resolved = path.resolve(root, normalized); const back = path.relative(resolvedRoot, resolved);
   if (back.startsWith("..") || path.isAbsolute(back)) throw new Error(`grader path escapes repository: ${relative}`);
+  const parts = back.split(path.sep).filter(Boolean);
+  for (let index = 0; index <= parts.length; index += 1) {
+    const cursor = path.join(resolvedRoot, ...parts.slice(0, index));
+    try { if (fs.lstatSync(cursor).isSymbolicLink()) throw new Error(`grader path cannot contain symlinks: ${relative}`); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  }
   return resolved;
 }
 function parseChecks(value: unknown): Check[] {

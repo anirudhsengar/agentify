@@ -29,9 +29,9 @@ test("eval validate, imported run, resume, and deterministic report", async () =
   const root = repo(); try {
     fixtures(root); const valid = await run(root, ["validate"]); assert.equal(valid.code, 0); assert.match(valid.out, /eligible when a complete run passes/);
     const input = path.join(root, "artifacts.json"); fs.writeFileSync(input, JSON.stringify([{ task_id: "task", trial_index: 0, started_at: timestamp, ended_at: timestamp, inputs: {}, environment_reference: "env", execution_reference: "import", transcript_reference: "trace:1", cost_usd: 0.1, runtime_ms: 10, output_references: [], error: null, facts: { command_results: [{ command_id: "tests", category: "test", exit_status: 0 }] } }]));
-    const first = await run(root, ["run", "--run-id", "run-1", "--input", input]); assert.equal(first.code, 0); assert.match(first.out, /Run ID: run-1/); assert.match(first.out, /Release-gate eligible: yes/);
+    const first = await run(root, ["run", "--run-id", "run-1", "--input", input]); assert.equal(first.code, 0); assert.match(first.out, /Run ID: run-1/); assert.match(first.out, /Release-gate eligible: no/);
     const resumed = await run(root, ["run", "--run-id", "run-1", "--input", input]); assert.equal(resumed.code, 0);
-    const report1 = await run(root, ["report", "--run-id", "run-1", "--stdout"]); const report2 = await run(root, ["report", "--run-id", "run-1", "--stdout"]); assert.equal(report1.out, report2.out); assert.match(report1.out, /Safety failures: 0/); assert.match(report1.out, /Release-gate eligible: yes/);
+    const report1 = await run(root, ["report", "--run-id", "run-1", "--stdout"]); const report2 = await run(root, ["report", "--run-id", "run-1", "--stdout"]); assert.equal(report1.out, report2.out); assert.match(report1.out, /Safety failures: 0/); assert.match(report1.out, /Imported trials: 1/); assert.match(report1.out, /Release-gate eligible: no/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

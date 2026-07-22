@@ -7,6 +7,7 @@ export const EvalResultSchema = Type.Object({
   status: Type.Union([Type.Literal("running"), Type.Literal("complete"), Type.Literal("partial"), Type.Literal("failed")]),
   task_count: Type.Integer({ minimum: 0 }), planned_trials: Type.Integer({ minimum: 0 }), completed_trials: Type.Integer({ minimum: 0 }),
   passed_trials: Type.Integer({ minimum: 0 }), failed_trials: Type.Integer({ minimum: 0 }), skipped_trials: Type.Integer({ minimum: 0 }),
+  imported_trials: Type.Integer({ minimum: 0 }),
   trial_pass_rate: Type.Number({ minimum: 0, maximum: 1 }), task_pass_rate: Type.Number({ minimum: 0, maximum: 1 }),
   pass_at_1: Type.Union([Type.Number({ minimum: 0, maximum: 1 }), Type.Null()]),
   repeated_trial_success_rate: Type.Number({ minimum: 0, maximum: 1 }),

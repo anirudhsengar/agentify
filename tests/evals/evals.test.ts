@@ -17,7 +17,7 @@ function task(id = "task-a", source: "synthetic" | "historical" | "live" = "hist
   const provenance = source === "synthetic" ? { source_type: source, created_at: timestamp, source_reference: "fixture:a", generated_for_evaluation: true as const } : source === "historical" ? { source_type: source, created_at: timestamp, source_reference: "ticket:a", historical_record_reference: "ticket:a" } : { source_type: source, created_at: timestamp, source_reference: "live:a", authorization_reference: "approval:a" };
   return { schema_version: "1", task_id: id, suite_id: "fde", title: "Fix issue", description: "Fix the supplied issue", repository: { fixture: "fixtures/repo" }, workflow_input: { issue: "broken" }, expected_outcomes: ["tests pass"], forbidden_outcomes: ["unsafe write"], required_escalations: ["ask before deployment"], allowed_actions: ["edit fixture"], risk_tier: "medium", maximum_runtime_ms: 1_000, maximum_cost_usd: 1, grader_configuration: { deterministic: {} }, tags: ["fde"], evidence_references: ["ticket:a"], source_type: source, provenance };
 }
-function trial(index: number, passed: boolean, categories: EvalTrial["failure_categories"] = []): EvalTrial { return { schema_version: "1", run_id: "run-1", task_id: "task-a", trial_index: index, started_at: timestamp, ended_at: timestamp, status: passed ? "passed" : "failed", inputs: {}, environment_reference: "env:a", execution_reference: "exec:a", transcript_reference: "audit:a", cost_usd: 0.25, runtime_ms: 100, output_references: [], error: null, grader_results: [{ schema_version: "1", run_id: "run-1", task_id: "task-a", trial_index: index, grader_id: "deterministic", grader_version: "1", status: passed ? "pass" : "fail", passed, score: passed ? 1 : 0, reason: "deterministic", failure_categories: categories, evidence_references: [], error: null, duration_ms: 0, confidence: 1 }], passed, failure_categories: categories }; }
+function trial(index: number, passed: boolean, categories: EvalTrial["failure_categories"] = []): EvalTrial { return { schema_version: "1", run_id: "run-1", task_id: "task-a", trial_index: index, started_at: timestamp, ended_at: timestamp, status: passed ? "passed" : "failed", evidence_origin: "imported", inputs: {}, environment_reference: "env:a", execution_reference: "exec:a", transcript_reference: "audit:a", cost_usd: 0.25, runtime_ms: 100, output_references: [], error: null, grader_results: [{ schema_version: "1", run_id: "run-1", task_id: "task-a", trial_index: index, grader_id: "deterministic", grader_version: "1", status: passed ? "pass" : "fail", passed, score: passed ? 1 : 0, reason: "deterministic", failure_categories: categories, evidence_references: [], error: null, duration_ms: 0, confidence: 1 }], passed, failure_categories: categories }; }
 function root(): string { return fs.mkdtempSync(path.join(os.tmpdir(), "agentify-evals-")); }
 
 test("all eval schemas are strict and reject invalid limits, statuses, and arbitrary failures", () => {
@@ -37,6 +37,7 @@ test("planning is stable and rejects missing and duplicate task IDs, including e
   assert.deepEqual(resolveTrialPlan(suite({ task_references: [] }), [], "run-1"), []);
   assert.throws(() => resolveTrialPlan(suite(), [], "run-1"), /missing task reference/);
   assert.throws(() => resolveTrialPlan(suite(), [task(), task()], "run-1"), /duplicate task ID/);
+  assert.throws(() => resolveTrialPlan(suite({ number_of_trials: 1, aggregation_policy: { task_success: "all_trials", all_k: 2 } }), [task()], "run-1"), /all_k cannot exceed/);
 });
 
 test("aggregation formulas expose partial, safety, grader failure, cost, and provenance", () => {
@@ -64,7 +65,7 @@ test("imported mode persists deterministic evidence and resumes without rerunnin
     const artifact = (trial_index: number) => ({ task_id: "task-a", trial_index, started_at: timestamp, ended_at: timestamp, inputs: {}, environment_reference: "env:a", execution_reference: "import:a", transcript_reference: "audit:a", cost_usd: 0.1, runtime_ms: 10, output_references: ["out:a"], error: null });
     let calls = 0; const graders = { deterministic: () => { calls += 1; return { grader_version: "1", status: "pass" as const, passed: true, score: 1, reason: "ok", failure_categories: [], evidence_references: [], error: null, duration_ms: 0, confidence: 1 }; } };
     const options = { stateDir: state, engagementId: "eng", suiteId: "fde", runId: "run-1", mode: "imported" as const, importedArtifacts: [artifact(0), artifact(1)], graders };
-    const first = runEvaluation(options); assert.equal(first.passed_trials, 2); assert.equal(calls, 2);
+    const first = runEvaluation(options); assert.equal(first.passed_trials, 2); assert.equal(first.imported_trials, 2); assert.equal(first.release_gate_eligible, false); assert.equal(calls, 2);
     const runDir = evalRunPath(state, "eng", "run-1");
     const report = fs.readFileSync(path.join(runDir, "report.md"), "utf8"); assert.equal(report, renderEvalReport(first));
     fs.unlinkSync(path.join(runDir, "grader-results.jsonl"));
@@ -74,10 +75,22 @@ test("imported mode persists deterministic evidence and resumes without rerunnin
   } finally { fs.rmSync(state, { recursive: true, force: true }); }
 });
 
+test("imported artifacts cannot override identities, duplicate trials, or inject unknown state", () => {
+  const state = root();
+  try {
+    writeJsonAtomic(evalSuitePath(state, "eng", "fde"), suite({ number_of_trials: 1, aggregation_policy: { task_success: "any_trial", all_k: 1 } })); writeJsonAtomic(evalTaskPath(state, "eng", "task-a"), task());
+    const base = { task_id: "task-a", trial_index: 0, started_at: timestamp, ended_at: timestamp, inputs: {}, environment_reference: null, execution_reference: null, transcript_reference: null, cost_usd: 0, runtime_ms: 0, output_references: [], error: null };
+    const options = { stateDir: state, engagementId: "eng", suiteId: "fde", runId: "run-safe", mode: "imported" as const, graders: { deterministic: () => ({ grader_version: "1", status: "pass" as const, passed: true, score: 1, reason: "ok", failure_categories: [], evidence_references: [], error: null, duration_ms: 0, confidence: 1 }) } };
+    assert.throws(() => runEvaluation({ ...options, importedArtifacts: [{ ...base, run_id: "forged" } as never] }), /schema validation/);
+    assert.throws(() => runEvaluation({ ...options, importedArtifacts: [base, base] }), /duplicate imported artifact/);
+    assert.throws(() => runEvaluation({ ...options, importedArtifacts: [{ ...base, trial_index: 9 }] }), /outside the trial plan/);
+  } finally { fs.rmSync(state, { recursive: true, force: true }); }
+});
+
 test("no-execution records skipped trials, missing graders fail visibly, and execution is unavailable", () => {
   const state = root();
   try {
-    writeJsonAtomic(evalSuitePath(state, "eng", "fde"), suite({ number_of_trials: 1 })); writeJsonAtomic(evalTaskPath(state, "eng", "task-a"), task());
+    writeJsonAtomic(evalSuitePath(state, "eng", "fde"), suite({ number_of_trials: 1, aggregation_policy: { task_success: "any_trial", all_k: 1 } })); writeJsonAtomic(evalTaskPath(state, "eng", "task-a"), task());
     const skipped = runEvaluation({ stateDir: state, engagementId: "eng", suiteId: "fde", runId: "skip", mode: "no-execution" }); assert.equal(skipped.skipped_trials, 1);
     const artifact = { task_id: "task-a", trial_index: 0, started_at: timestamp, ended_at: timestamp, inputs: {}, environment_reference: null, execution_reference: null, transcript_reference: null, cost_usd: 0, runtime_ms: 0, output_references: [], error: null };
     const failed = runEvaluation({ stateDir: state, engagementId: "eng", suiteId: "fde", runId: "grader-error", mode: "imported", importedArtifacts: [artifact] }); assert.equal(failed.grader_errors, 1); assert.equal(failed.failure_distribution.grader_failure, 1);

@@ -27,6 +27,10 @@ test("deterministic grader covers file, path, schema, command, diff, dependency,
     assert.equal(fail.status, "fail"); assert.ok(fail.failure_categories.includes("unsafe_action")); assert.ok(fail.failure_categories.includes("incorrect_scope")); assert.ok(fail.failure_categories.includes("test_failure"));
     assert.throws(() => validateGraderConfiguration(task({ deterministic: { checks: [{ type: "command_status", command: "rm -rf ." }] } }), ["deterministic"]), /raw command strings|unsupported/);
     assert.throws(() => deterministicGrader(task({ deterministic: { checks: [{ type: "file_exists", value: "../escape" }] } }), artifact({ facts: { repository_root: root } })), /escapes repository/);
+    assert.throws(() => deterministicGrader(task({ deterministic: { checks: [{ type: "allowed_paths", values: ["src/**"] }] } }), artifact({ facts: { modified_paths: ["src/../.github/workflows/publish.yml"] } })), /escapes repository/);
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-grader-outside-"));
+    try { fs.writeFileSync(path.join(outside, "secret"), "value"); fs.symlinkSync(outside, path.join(root, "linked")); assert.throws(() => deterministicGrader(task({ deterministic: { checks: [{ type: "file_exists", value: "linked/secret" }] } }), artifact({ facts: { repository_root: root } })), /cannot contain symlinks/); }
+    finally { fs.rmSync(outside, { recursive: true, force: true }); }
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

@@ -10,6 +10,7 @@ import { readValidatedJson } from "./storage.ts";
 export interface ValidatedEvalSuite { suite: EvalSuite; tasks: EvalTask[]; releaseEligibilityWarnings: string[] }
 export function loadAndValidateEvalSuite(stateDir: string, engagementId: string, suiteId: string): ValidatedEvalSuite {
   const suite = readValidatedJson<EvalSuite>(evalSuitePath(stateDir, engagementId, suiteId), EvalSuiteSchema, "eval suite");
+  if (suite.aggregation_policy.all_k !== undefined && suite.aggregation_policy.all_k > suite.number_of_trials) throw new Error("all_k cannot exceed number_of_trials");
   const seen = new Set<string>(); const tasks = suite.task_references.map((reference) => {
     const file = evalTaskPath(stateDir, engagementId, reference); if (!fs.existsSync(file)) throw new Error(`missing task reference: ${reference}`);
     const task = readValidatedJson<EvalTask>(file, EvalTaskSchema, "eval task");

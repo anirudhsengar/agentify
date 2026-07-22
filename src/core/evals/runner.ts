@@ -27,6 +27,16 @@ export interface ImportedTrialArtifact {
   error: string | null;
   facts?: import("./graders.ts").EvalArtifactFacts;
 }
+const ImportedTrialArtifactSchema = Type.Object({
+  task_id: Type.String({ minLength: 1, maxLength: 128 }), trial_index: Type.Integer({ minimum: 0 }),
+  started_at: Type.String({ format: "date-time" }), ended_at: Type.String({ format: "date-time" }),
+  inputs: Type.Record(Type.String(), Type.Unknown()), environment_reference: Type.Union([Type.String({ minLength: 1, maxLength: 2_000 }), Type.Null()]),
+  execution_reference: Type.Union([Type.String({ minLength: 1, maxLength: 2_000 }), Type.Null()]),
+  transcript_reference: Type.Union([Type.String({ minLength: 1, maxLength: 2_000 }), Type.Null()]),
+  cost_usd: Type.Number({ minimum: 0 }), runtime_ms: Type.Integer({ minimum: 0 }),
+  output_references: Type.Array(Type.String({ minLength: 1, maxLength: 2_000 }), { maxItems: 500 }),
+  error: Type.Union([Type.String({ minLength: 1, maxLength: 8_000 }), Type.Null()]), facts: Type.Optional(Type.Unknown()),
+}, { additionalProperties: false });
 export type GraderAdapter = (task: EvalTask, artifact: ImportedTrialArtifact, plan: TrialPlanItem) => Omit<GraderResult, "schema_version" | "run_id" | "task_id" | "trial_index" | "grader_id">;
 export interface RunEvalOptions {
   stateDir: string; engagementId: string; suiteId: string; runId: string;
@@ -35,6 +45,7 @@ export interface RunEvalOptions {
 }
 
 export function resolveTrialPlan(suite: EvalSuite, tasks: readonly EvalTask[], runId: string): TrialPlanItem[] {
+  if (suite.aggregation_policy.all_k !== undefined && suite.aggregation_policy.all_k > suite.number_of_trials) throw new Error("all_k cannot exceed number_of_trials");
   const ids = new Set<string>();
   for (const task of tasks) { if (ids.has(task.task_id)) throw new Error(`duplicate task ID: ${task.task_id}`); ids.add(task.task_id); }
   for (const reference of suite.task_references) if (!ids.has(reference)) throw new Error(`missing task reference: ${reference}`);
@@ -72,6 +83,8 @@ export function aggregateEvalResult(suite: EvalSuite, tasks: readonly EvalTask[]
   if (graderErrorCount) reasons.push("one or more graders failed");
   if (unresolvedGraders) reasons.push("one or more graders are unresolved");
   if (failed.length || skipped.length) reasons.push("one or more trials did not pass");
+  const importedTrials = completed.filter((trial) => trial.evidence_origin === "imported").length;
+  if (importedTrials) reasons.push("imported evidence is not trusted as live execution automatically");
   const policy = suite.release_policy;
   if (policy?.minimum_task_count !== undefined && tasks.length < policy.minimum_task_count) reasons.push(`minimum task count is ${policy.minimum_task_count}`);
   const passedHumanReviews = completed.flatMap((trial) => trial.grader_results).filter((grader) => grader.grader_id === "human_review" && grader.status === "pass").length;
@@ -84,6 +97,7 @@ export function aggregateEvalResult(suite: EvalSuite, tasks: readonly EvalTask[]
     status: completed.length === suite.task_references.length * suite.number_of_trials ? "complete" : "partial",
     task_count: suite.task_references.length, planned_trials: suite.task_references.length * suite.number_of_trials, completed_trials: completed.length,
     passed_trials: passed.length, failed_trials: failed.length, skipped_trials: skipped.length,
+    imported_trials: importedTrials,
     trial_pass_rate: completed.length ? passed.length / completed.length : 0,
     task_pass_rate: suite.task_references.length ? taskPassed / suite.task_references.length : 0,
     pass_at_1: firstTrials.length === suite.task_references.length && firstTrials.length > 0 ? firstTrials.filter((trial) => trial.passed).length / firstTrials.length : null,
@@ -99,7 +113,7 @@ export function aggregateEvalResult(suite: EvalSuite, tasks: readonly EvalTask[]
 }
 
 function skippedTrial(plan: TrialPlanItem, task: EvalTask, reason: string): EvalTrial {
-  return { schema_version: "1", ...plan, started_at: new Date(0).toISOString(), ended_at: new Date(0).toISOString(), status: "skipped", inputs: task.workflow_input, environment_reference: null, execution_reference: null, transcript_reference: null, cost_usd: 0, runtime_ms: 0, output_references: [], error: reason, grader_results: [], passed: false, failure_categories: ["environment_failure"] };
+  return { schema_version: "1", ...plan, started_at: new Date(0).toISOString(), ended_at: new Date(0).toISOString(), status: "skipped", evidence_origin: "no_execution", inputs: task.workflow_input, environment_reference: null, execution_reference: null, transcript_reference: null, cost_usd: 0, runtime_ms: 0, output_references: [], error: reason, grader_results: [], passed: false, failure_categories: ["environment_failure"] };
 }
 export function runEvaluation(options: RunEvalOptions): EvalResult {
   if (options.mode === "execute") throw new Error("no supported execution adapter is available; use imported or no-execution mode");
@@ -124,7 +138,15 @@ export function runEvaluation(options: RunEvalOptions): EvalResult {
     const key = `${grader.task_id}:${grader.trial_index}:${grader.grader_id}`;
     if (!graderKeys.has(key)) { appendJsonLine(gradersFile, grader); graderKeys.add(key); }
   }
-  const artifacts = new Map((options.importedArtifacts ?? []).map((artifact) => [`${artifact.task_id}:${artifact.trial_index}`, artifact]));
+  const artifacts = new Map<string, ImportedTrialArtifact>();
+  const plannedKeys = new Set(plan.map((item) => `${item.task_id}:${item.trial_index}`));
+  for (const candidate of options.importedArtifacts ?? []) {
+    const artifact = validateEvalValue<ImportedTrialArtifact>(ImportedTrialArtifactSchema, candidate, "imported trial artifact");
+    const key = `${artifact.task_id}:${artifact.trial_index}`;
+    if (!plannedKeys.has(key)) throw new Error(`imported artifact is outside the trial plan: ${key}`);
+    if (artifacts.has(key)) throw new Error(`duplicate imported artifact: ${key}`);
+    artifacts.set(key, artifact);
+  }
   for (const item of plan) {
     const key = `${item.task_id}:${item.trial_index}`; if (completedKeys.has(key)) continue;
     const task = tasks.find((candidate) => candidate.task_id === item.task_id)!;
@@ -134,15 +156,21 @@ export function runEvaluation(options: RunEvalOptions): EvalResult {
       const adapter = options.graders?.[graderId];
       if (!adapter) return { schema_version: "1", ...item, grader_id: graderId, grader_version: "1", status: "error", passed: null, score: null, reason: "grader adapter unavailable", failure_categories: ["grader_failure"], evidence_references: [], error: "grader adapter unavailable", duration_ms: 0, confidence: null };
       try { return validateEvalValue<GraderResult>(GraderResultSchema, { schema_version: "1", ...item, grader_id: graderId, ...adapter(task, artifact, item) }, "grader result"); }
-      catch (error) { return { schema_version: "1", ...item, grader_id: graderId, grader_version: "1", status: "error", passed: null, score: null, reason: "grader adapter failed", failure_categories: ["grader_failure"], evidence_references: [], error: error instanceof Error ? error.message : String(error), duration_ms: 0, confidence: null }; }
+      catch { return { schema_version: "1", ...item, grader_id: graderId, grader_version: "1", status: "error", passed: null, score: null, reason: "grader adapter failed", failure_categories: ["grader_failure"], evidence_references: [], error: "grader adapter failed; sensitive exception details were redacted", duration_ms: 0, confidence: null }; }
     });
     const limitCategories: EvalFailureCategory[] = [];
     if (artifact.cost_usd > task.maximum_cost_usd) limitCategories.push("excessive_cost");
     if (artifact.runtime_ms > task.maximum_runtime_ms) limitCategories.push("timeout");
     const isPassed = limitCategories.length === 0 && graderResults.length > 0 && graderResults.every((grader) => grader.status === "pass" && grader.passed === true);
     const categories = [...new Set([...graderResults.flatMap((grader) => grader.failure_categories), ...limitCategories])];
-    const { facts: artifactFacts, ...persistedArtifact } = artifact; void artifactFacts;
-    const trial: EvalTrial = validateEvalValue(EvalTrialSchema, { schema_version: "1", ...item, ...persistedArtifact, status: isPassed ? "passed" : "failed", grader_results: graderResults, passed: isPassed, failure_categories: categories }, "eval trial");
+    const trial: EvalTrial = validateEvalValue(EvalTrialSchema, {
+      schema_version: "1", ...item, started_at: artifact.started_at, ended_at: artifact.ended_at,
+      status: isPassed ? "passed" : "failed", evidence_origin: "imported", inputs: artifact.inputs,
+      environment_reference: artifact.environment_reference, execution_reference: artifact.execution_reference,
+      transcript_reference: artifact.transcript_reference, cost_usd: artifact.cost_usd, runtime_ms: artifact.runtime_ms,
+      output_references: artifact.output_references, error: artifact.error, grader_results: graderResults,
+      passed: isPassed, failure_categories: categories,
+    }, "eval trial");
     appendJsonLine(trialsFile, trial); existing.push(trial);
     for (const grader of graderResults) { appendJsonLine(gradersFile, grader); graderKeys.add(`${grader.task_id}:${grader.trial_index}:${grader.grader_id}`); }
   }

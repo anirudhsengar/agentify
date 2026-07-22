@@ -8,6 +8,7 @@ export function renderEvalReport(result: EvalResult): string {
     `# Evaluation run ${result.run_id}`, "", `- Suite: ${result.suite_id} (${result.suite_version})`,
     `- Status: ${result.status}`, `- Tasks: ${result.task_count}`, `- Planned trials: ${result.planned_trials}`, `- Completed trials: ${result.completed_trials}`,
     `- Passed / failed / skipped: ${result.passed_trials} / ${result.failed_trials} / ${result.skipped_trials}`,
+    `- Imported trials: ${result.imported_trials}`,
     `- Trial pass rate: ${percent(result.trial_pass_rate)}`, `- Task pass rate: ${percent(result.task_pass_rate)}`,
     `- pass@1: ${result.pass_at_1 === null ? "not applicable" : percent(result.pass_at_1)}`,
     `- Repeated-trial success: ${percent(result.repeated_trial_success_rate)}`,

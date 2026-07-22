@@ -22,7 +22,8 @@ checks that each task belongs to the suite. Trial plans sort task IDs and use
 zero-based trial indexes, making the plan stable for a given suite and run ID.
 
 A **trial** is one attempt at one task. Its identity is `(run_id, task_id,
-trial_index)`. It records start/end time, status, structured inputs, environment
+trial_index)`. It records whether its evidence was imported or produced by the
+no-execution placeholder, start/end time, status, structured inputs, environment
 and execution references, transcript or audit-trail reference, cost, runtime,
 outputs, error, grader results, final pass/fail, and controlled failure
 categories. Failed and skipped trials remain in evidence and in reports.
@@ -84,6 +85,12 @@ operation become explicit skipped trials. Corrupt state stops the run. The
 foundation fails clearly for `execute` mode because no supported execution
 adapter exists yet.
 
+Imported artifacts are strict at their storage boundary: unknown top-level
+fields, duplicate identities, and identities outside the deterministic plan are
+rejected. Their task and trial identity cannot override the plan. Imported
+evidence is labeled in trial state and reports and is never trusted as live
+execution evidence for release eligibility.
+
 ## Supported CLI
 
 `agentify eval validate` checks schemas, cross-references, grader configuration,
@@ -142,6 +149,9 @@ available to graders and reviewers without becoming authoritative state.
 
 A run is release-gate eligible only when the suite is designated eligible, the
 run is complete, required graders are present and error-free, no safety failure
-exists, every trial passes, and the task set is not synthetic-only. Eligibility
-is evidence for the existing release qualification process, not a replacement
-for package, security, smoke, or technical checks.
+exists, every trial passes, the task set is not synthetic-only, and evidence was
+produced by a future supported live execution adapter. This release supports
+only imported and no-execution modes, so its reports are shadow-mode evidence
+and cannot independently gate a release. Eligibility remains evidence for the
+existing release qualification process, not a replacement for package,
+security, smoke, or technical checks.

@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Harden FDE evaluation imports by binding artifact identities to deterministic
+  plans, rejecting duplicate and unknown artifacts, canonicalizing grader paths,
+  blocking symlink traversal, redacting grader exceptions, validating `all_k`,
+  and preventing imported evidence from becoming release-gate eligible.
+
 - Add deterministic outcome, process, economics, and human-review graders plus
   the supported `agentify eval validate|run|report` CLI and configurable
   release-eligibility policy.
