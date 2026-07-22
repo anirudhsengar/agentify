@@ -29,10 +29,42 @@ export function readMetricEvents(stateDir: string, engagementId: string): Metric
   const ids = new Set<string>(); for (const event of events) { if (event.engagement_id !== engagementId) throw new EngagementError("corrupt_state", "metric engagement identity does not match storage path"); if (ids.has(event.event_id)) throw new EngagementError("corrupt_state", `duplicate metric event ${event.event_id}`); ids.add(event.event_id); }
   return events.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.event_id.localeCompare(b.event_id));
 }
+/**
+ * Walks every MeasuredNumber field in a payload and enforces the invariant that
+ * `value: null` requires `quality: "unavailable"` and that any present value is
+ * not labelled unavailable. The earlier substring check could not verify the
+ * per-field invariant if a single payload contained both a correctly-marked
+ * unavailable field and an inconsistent one.
+ */
+function assertMeasuredQualityInvariants(payload: unknown, path: string): void {
+  if (payload === null || typeof payload !== "object") return;
+  for (const [key, child] of Object.entries(payload as Record<string, unknown>)) {
+    const childPath = `${path}.${key}`;
+    if (Array.isArray(child)) { assertMeasuredQualityInvariants(child, childPath); continue; }
+    if (child === null || typeof child !== "object") continue;
+    const field = child as { value?: unknown; quality?: unknown };
+    if ("value" in field && "quality" in field) {
+      if (field.value === null && field.quality !== "unavailable") {
+        throw new EngagementError("invalid_artifact", `${childPath}: missing value must use quality "unavailable"`);
+      }
+      if (field.value !== null && field.quality === "unavailable") {
+        throw new EngagementError("invalid_artifact", `${childPath}: present value must not be marked "unavailable"`);
+      }
+    }
+    assertMeasuredQualityInvariants(field, childPath);
+  }
+}
+
 export function recordMetricEvent(stateDir: string, input: MetricEventInput): { event: MetricEvent; created: boolean } {
   const event = { ...input, event_id: metricEventId(input) } as MetricEvent; const existing = readMetricEvents(stateDir, input.engagement_id).find(({ event_id }) => event_id === event.event_id);
   if (existing) return { event: existing, created: false };
-  if (!Value.Check(MetricEventSchema, event)) throw new EngagementError("invalid_artifact", "metric event failed schema validation");
-  const values = JSON.stringify(event.payload).matchAll(/"value":(null|-?[0-9.]+)/g); for (const match of values) { if (match[1] === "null" && !JSON.stringify(event.payload).includes('"quality":"unavailable"')) throw new EngagementError("invalid_artifact", "missing metric values must be unavailable"); }
+  if (!Value.Check(MetricEventSchema, event)) {
+    const detail = [...Value.Errors(MetricEventSchema, event)].slice(0, 8).map((error) => {
+      const located = error as { path?: string; instancePath?: string; message: string };
+      return `${located.path ?? located.instancePath ?? "(root)"}: ${located.message}`;
+    }).join("; ");
+    throw new EngagementError("invalid_artifact", `metric event failed schema validation: ${detail}`);
+  }
+  assertMeasuredQualityInvariants(event.payload, "payload");
   const file = metricFile(stateDir, input.engagement_id, streamFor(event.event_type)); appendJsonLine(file, event); return { event, created: true };
 }

@@ -58,9 +58,11 @@ Operational subcommands (mutate the repo):
     alongside files.
 
 Engagement record and analysis subcommands:
-  agentify engage <init|status|validate|report|promotion> [options]
+  agentify engage <init|status|validate|report|promotion|metrics> [options]
     Create, inspect, validate, or deterministically report an
-    FDE engagement record. No LLM or implementation is invoked.
+    FDE engagement record. Metrics records shadow, draft, baseline,
+    review, intervention, incident, and adoption evidence locally;
+    no LLM or implementation is invoked.
 
 FDE evaluation subcommands:
   agentify eval <run|report|validate> [options]

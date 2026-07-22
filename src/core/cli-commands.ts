@@ -916,9 +916,11 @@ export function printSubcommandHelp(out: NodeJS.WritableStream): void {
   out.write(`    shot, not a history. --keep-alongside preserves the\n`);
   out.write(`    alongside files.\n`);
   out.write(`\nEngagement record and analysis subcommands:\n`);
-  out.write(`  agentify engage <init|status|validate|report|promotion> [options]\n`);
+  out.write(`  agentify engage <init|status|validate|report|promotion|metrics> [options]\n`);
   out.write(`    Create, inspect, validate, or deterministically report an\n`);
-  out.write(`    FDE engagement record. No LLM or implementation is invoked.\n`);
+  out.write(`    FDE engagement record. Metrics records shadow, draft, baseline,\n`);
+  out.write(`    review, intervention, incident, and adoption evidence locally;\n`);
+  out.write(`    no LLM or implementation is invoked.\n`);
   out.write(`\nFDE evaluation subcommands:\n`);
   out.write(`  agentify eval <run|report|validate> [options]\n`);
   out.write(`    Validate suites, grade imported structured trial evidence, and\n`);
