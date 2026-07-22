@@ -39,9 +39,65 @@ supplied state directory. The domain performs no network access, model calls, or
 writes outside established Agentify state. It is not exported by the package or
 reachable through the public CLI and does not depend on experimental runtimes.
 
+## Deterministic engagement artifacts
+
+An engagement may additionally persist `stakeholders.json`,
+`current-workflow.json`, `target-workflow.json`, `opportunity-matrix.json`,
+`automation-decisions.json`, `risk-register.json`, and `qualification.json` in
+the same engagement directory. All files are strict TypeBox contracts with
+unknown properties rejected. Current and target maps share one schema and each
+ordered workflow step has a stable ID. Cross-artifact validators reject
+duplicate IDs and references to missing workflow steps, stakeholders, or
+workflows. Evidence is recorded only as caller-supplied references; this layer
+does not collect, synthesize, or infer evidence.
+
+## Opportunity scoring
+
+All scoring inputs are explicit numbers from 0 through 100. The positive score
+is `25% business value + 10% volume + 15% feasibility + 10% adoption readiness
++ 10% evaluation feasibility + 5% reversibility + 10% data availability + 5%
+integration availability + 10% implementation simplicity`, where simplicity is
+`100 - implementation complexity`. The separately reported risk penalty is 25%
+of the risk score. The final score is the positive score minus that penalty,
+clamped to 0–100 and rounded to two decimals.
+
+Risk at 90 or above, or an explicit rejection reason, yields `reject`; risk at
+70 or above yields `defer`. Otherwise scores at least 70 with evaluation
+feasibility at least 60 yield `prioritize`; scores at least 55 with evaluation
+feasibility at least 50 yield `pilot`; scores at least 35 yield `investigate`;
+lower scores yield `defer`. ROI is reported only when supplied as numeric data.
+Scoring supports human judgment and prioritization; it does not replace it.
+
+## Qualification rules
+
+Qualification checks a named workflow owner, clear problem, measurable outcome,
+workflow evidence, sufficient frequency or explicit strategic justification,
+data accessibility, technical and evaluation feasibility, acceptable risk or a
+defined human control, an adoption owner, and absence of unresolved prohibited
+conditions. Results are `qualified`, `conditionally_qualified`,
+`insufficient_evidence`, or `rejected` with machine-readable reason codes.
+Inaccessible data, technical infeasibility, uncontrolled unacceptable risk, and
+prohibited conditions reject. Missing or unclear evidence produces
+`insufficient_evidence`; other remediable gaps are conditional.
+
+## Automation taxonomy and risk
+
+Each step can remain unchanged, use deterministic software or rules, use
+traditional ML, LLM classification or generation, agentic execution, remain a
+human decision or approval, or be prohibited. AI choices must state why simpler
+approaches were rejected. Agentic execution and human approval require an
+explicit human-control checkpoint. A prohibited decision cannot define an
+execution checkpoint. Every record also carries failure impact, reversibility,
+fallback, required evidence, uncertainty, approval ownership, security
+restrictions, and an optional maximum cost. Selecting no AI is a first-class
+valid outcome.
+
+Risk severity is derived from the product of 1–5 likelihood and impact: 1–4 is
+low, 5–9 moderate, 10–16 high, and 17–25 critical. Risks identify detection,
+mitigation, ownership, rollback/fallback, related steps, and evidence.
+
 ## Non-goals and follow-up
 
-This milestone does not implement workflow maps, opportunity scoring, evaluation,
-GitHub integration, scaffold behavior, or a UI. A follow-up milestone can add the
-workflow-map domain and consume charters through an explicitly reviewed internal
-composition root while retaining the same state and concurrency boundaries.
+This milestone does not implement model-backed interviews, workflow discovery,
+an evaluation engine, GitHub integration, scaffold behavior, implementation
+automation, or a UI. The domain remains an internal composition building block.

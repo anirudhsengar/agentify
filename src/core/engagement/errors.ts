@@ -7,6 +7,10 @@ export type EngagementErrorCode =
   | "revision_conflict"
   | "corrupt_state"
   | "invalid_transition"
+  | "invalid_artifact"
+  | "invalid_reference"
+  | "duplicate_id"
+  | "invalid_score"
   | "persistence_failed";
 
 export class EngagementError extends Error {

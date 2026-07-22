@@ -44,10 +44,20 @@ export function engagementRootPath(resolvedStateDir: string): string {
 }
 
 export function engagementCharterPath(resolvedStateDir: string, engagementId: string): string {
+  return engagementArtifactPath(resolvedStateDir, engagementId, "charter.json");
+}
+
+const ARTIFACT_NAMES = [
+  "charter.json", "stakeholders.json", "current-workflow.json", "target-workflow.json",
+  "opportunity-matrix.json", "automation-decisions.json", "risk-register.json", "qualification.json",
+] as const;
+export type EngagementArtifactName = typeof ARTIFACT_NAMES[number];
+
+export function engagementArtifactPath(resolvedStateDir: string, engagementId: string, artifactName: EngagementArtifactName): string {
   validateEngagementId(engagementId);
   const stateRoot = path.resolve(resolvedStateDir);
   const root = engagementRootPath(resolvedStateDir);
-  const charterPath = path.resolve(root, engagementId, "charter.json");
+  const charterPath = path.resolve(root, engagementId, artifactName);
   const relative = path.relative(stateRoot, charterPath);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new EngagementError("invalid_id", `engagement path escapes the resolved state directory: ${engagementId}`);

@@ -73,15 +73,14 @@ function fsyncDirectory(directory: string): void {
   }
 }
 
-function writeCharterAtomic(filePath: string, charter: EngagementCharter, options?: EngagementStateOptions): void {
-  validateEngagementCharter(charter);
+export function writeEngagementJsonAtomic(filePath: string, value: unknown, options?: EngagementStateOptions): void {
   const directory = path.dirname(filePath);
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   const temporary = `${filePath}.tmp-${process.pid}-${crypto.randomUUID()}`;
   let descriptor: number | undefined;
   try {
     descriptor = fs.openSync(temporary, "wx", 0o600);
-    fs.writeFileSync(descriptor, `${JSON.stringify(charter, null, 2)}\n`, "utf-8");
+    fs.writeFileSync(descriptor, `${JSON.stringify(value, null, 2)}\n`, "utf-8");
     fs.fsyncSync(descriptor);
     fs.closeSync(descriptor);
     descriptor = undefined;
@@ -94,6 +93,11 @@ function writeCharterAtomic(filePath: string, charter: EngagementCharter, option
     if (error instanceof EngagementError) throw error;
     throw new EngagementError("persistence_failed", `failed to persist engagement charter at ${filePath}`, { cause: error });
   }
+}
+
+function writeCharterAtomic(filePath: string, charter: EngagementCharter, options?: EngagementStateOptions): void {
+  validateEngagementCharter(charter);
+  writeEngagementJsonAtomic(filePath, charter, options);
 }
 
 export function createEngagement(

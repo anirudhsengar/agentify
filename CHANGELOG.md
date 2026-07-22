@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Add deterministic internal FDE stakeholder, workflow, opportunity scoring,
+  automation-decision, risk, and qualification models with atomic engagement
+  artifact persistence and strict cross-reference validation.
+
 - Add a private typed FDE engagement charter domain with safe provider-scoped
   storage, optimistic revisions, atomic persistence, and validated lifecycle
   transitions.
