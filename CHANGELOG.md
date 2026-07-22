@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Harden human-approved draft publication by rejecting validation-time or post-validation repository mutations and omitting untrusted validation output from persisted evidence artifacts.
+
 ### Added
 
 - Add human-approved FDE draft mode with promotion/evidence admission gates,

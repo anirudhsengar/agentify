@@ -47,6 +47,7 @@ AGENT_PAT="secret-token" \
     "agent/draft-42-900-1-billing-export" \
     "main" \
     "base123" \
+    "abc123" \
     "$title_file" \
     "$description_file" \
     "$output_file"
@@ -69,13 +70,13 @@ grep -q '^pr_number=123$' "$output_file" || {
 }
 
 if CALLS_LOG="$calls" PATH="$bin_dir:$PATH" AGENT_PAT="secret-token" \
-  bash "$publisher" "main" "main" "base123" "$title_file" "$description_file" "$output_file" >/dev/null 2>&1; then
+  bash "$publisher" "main" "main" "base123" "abc123" "$title_file" "$description_file" "$output_file" >/dev/null 2>&1; then
   echo "expected non-agent branch publication to fail" >&2
   exit 1
 fi
 
 if CALLS_LOG="$calls" PATH="$bin_dir:$PATH" \
-  bash "$publisher" "agent/draft-42-900-1-billing-export" "main" "base123" "$title_file" "$description_file" "$output_file" >/dev/null 2>&1; then
+  bash "$publisher" "agent/draft-42-900-1-billing-export" "main" "base123" "abc123" "$title_file" "$description_file" "$output_file" >/dev/null 2>&1; then
   echo "expected missing AGENT_PAT to fail" >&2
   exit 1
 fi
@@ -89,6 +90,7 @@ if CALLS_LOG="$calls" \
     "agent/draft-42-900-1-billing-export" \
     "main" \
     "base123" \
+    "abc123" \
     "$title_file" \
     "$description_file" \
     "$bad_output_file" >/dev/null 2>&1; then
@@ -101,12 +103,12 @@ if [ -f "$bad_output_file" ] && grep -q '^pr_number=' "$bad_output_file"; then
 fi
 
 if CALLS_LOG="$calls" PATH="$bin_dir:$PATH" AGENT_PAT="secret-token" REMOTE_SHA="different" \
-  bash "$publisher" "agent/draft-42-901-1-collision" "main" "base123" "$title_file" "$description_file" "$bad_output_file" >/dev/null 2>&1; then
+  bash "$publisher" "agent/draft-42-901-1-collision" "main" "base123" "abc123" "$title_file" "$description_file" "$bad_output_file" >/dev/null 2>&1; then
   echo "expected a branch collision to stop publication" >&2
   exit 1
 fi
 if CALLS_LOG="$calls" PATH="$bin_dir:$PATH" AGENT_PAT="secret-token" BASE_SHA="moved" \
-  bash "$publisher" "agent/draft-42-902-1-base-moved" "main" "base123" "$title_file" "$description_file" "$bad_output_file" >/dev/null 2>&1; then
+  bash "$publisher" "agent/draft-42-902-1-base-moved" "main" "base123" "abc123" "$title_file" "$description_file" "$bad_output_file" >/dev/null 2>&1; then
   echo "expected moved base branch to stop publication" >&2
   exit 1
 fi
@@ -117,7 +119,13 @@ fi
 before_pushes=$(grep -c 'git push' "$calls" || true)
 resume_output="$tmp/resume-output.txt"
 CALLS_LOG="$calls" PATH="$bin_dir:$PATH" AGENT_PAT="secret-token" REMOTE_SHA="abc123" \
-  bash "$publisher" "agent/draft-42-903-1-resume" "main" "base123" "$title_file" "$description_file" "$resume_output"
+  bash "$publisher" "agent/draft-42-903-1-resume" "main" "base123" "abc123" "$title_file" "$description_file" "$resume_output"
 after_pushes=$(grep -c 'git push' "$calls" || true)
 [ "$before_pushes" -eq "$after_pushes" ] || { echo "matching partial push should resume without another push" >&2; exit 1; }
 grep -q '^pr_number=123$' "$resume_output"
+
+if CALLS_LOG="$calls" PATH="$bin_dir:$PATH" AGENT_PAT="secret-token" \
+  bash "$publisher" "agent/draft-42-904-1-stale" "main" "base123" "validated456" "$title_file" "$description_file" "$bad_output_file" >/dev/null 2>&1; then
+  echo "expected a post-validation head change to stop publication" >&2
+  exit 1
+fi

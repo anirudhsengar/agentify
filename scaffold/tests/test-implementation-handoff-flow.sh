@@ -77,6 +77,7 @@ AGENT_PAT="agent-token" \
     "$branch" \
     "main" \
     "base123" \
+    "abc123" \
     "$tmp/pr-meta/pr_title.txt" \
     "$tmp/pr-meta/pr_description.txt" \
     "$github_output"

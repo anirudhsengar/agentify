@@ -10,7 +10,7 @@ Draft mode is disabled in new installations. Before enabling it:
 2. Run GitHub shadow mode on the exact intended base commit and retain a `valid_live_shadow_evidence` packet whose readiness is `ready` and whose required graders pass.
 3. Configure engagement-specific promotion conditions, evaluate them, and run `agentify engage promotion approve --actor "Human Name" --yes`. The active promotion must resolve the autonomy level to `draft` and must not be expired, due for review, or revoked.
 4. Ensure the risk register has no unresolved critical risk.
-5. Configure `.github/agentify-shadow.json` with `mode: "draft"`, explicit cost/runtime limits, forbidden paths, dependency policy, and argv-vector checks for build, tests, typecheck, lint, and security. Empty checks fail closed. Failed validation is not publishable unless `allow_failed_draft` is explicitly set; its safe default is `false`.
+5. Configure `.github/agentify-shadow.json` with `mode: "draft"`, explicit cost/runtime limits, forbidden paths, dependency policy, and argv-vector checks for build, tests, typecheck, lint, and security. Empty checks fail closed. Failed validation commands are not publishable unless `allow_failed_draft` is explicitly set; its safe default is `false`. That override never permits a structural safety-policy failure such as forbidden changes, ownership violations, repository mutation, or cost/runtime overrun.
 6. Configure `PI_API_KEY`, `AGENT_PAT`, model variables, and an `AGENT_PAT` that can create branches and draft PRs. The workflow declares `contents: write`, `pull-requests: write`, `issues: write`, and `actions: read`; admission rejects a weaker declared permission packet.
 
 The promotion record and shadow evidence authorize eligibility, not execution. A maintainer with write permission provides the separate per-run approval by applying `agent:implement`. Bot identities are rejected as human approvers. The approval is bound to the issue, actor, workflow run, expiry, and exact base commit and is retained in the evidence artifact.
@@ -23,13 +23,13 @@ The credential-free implementation agent receives the captured issue and accepta
 
 ## Validation and evidence
 
-Trusted validation executes configured command argument arrays directly, without a shell. Results are structured by kind: build, tests, typecheck, lint, and security. The validator also checks the diff, forbidden paths, dependency manifests/locks, generated-file ownership, non-empty changes, cost, and runtime. Missing checks, timeout, failed commands, forbidden changes, undeclared dependency changes, ownership failures, cost overrun, or runtime overrun block publication by default.
+Trusted validation executes configured command argument arrays directly, without a shell. Results are structured by kind: build, tests, typecheck, lint, and security; raw command output is not persisted because repository-controlled checks may print secrets. The validator also checks the diff, forbidden paths, dependency manifests/locks, generated-file ownership, non-empty changes, cost, runtime, and that validation commands left both `HEAD` and the worktree unchanged. Missing checks, timeout, failed commands, forbidden changes, undeclared dependency changes, ownership failures, validation-time mutation, cost overrun, or runtime overrun block publication by default.
 
 The redacted evidence artifact contains the engagement and issue, base and branch, approved plan, changed files and diff summary, validation and eval results, reserved cost upper bound, measured workflow runtime, retries, approval, risks, uncertainties, escalations, and rollback instructions. It excludes credentials and full internal traces and states that the PR is a draft and unmerged.
 
 ## Publication and human review
 
-The trusted publisher uses a normal `git push --set-upstream` for the unique run branch, then `gh pr create --draft`. It applies `agentify:draft` and `agent:review`, links the issue, and points to the detailed workflow artifact. It never uses force push, default-branch push, merge, or auto-merge.
+The trusted publisher binds the branch SHA to the validated implementation `HEAD`, uses a normal `git push --set-upstream` for the unique run branch, then `gh pr create --draft`. It applies `agentify:draft` and `agent:review`, links the issue, and points to the detailed workflow artifact. It never uses force push, default-branch push, merge, or auto-merge.
 
 Human review is captured with the `Agent Draft Human Review` workflow. The reviewer records `accepted`, `minor_changes`, `major_rework`, `rejected`, or `safety_concern`, plus review time, notes, and final outcome. The workflow verifies the PR is still a draft and emits a strict imported-trial artifact for `agentify eval run --input`, including the native human-review facts and evaluation failure categories.
 

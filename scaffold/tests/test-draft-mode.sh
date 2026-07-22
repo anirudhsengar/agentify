@@ -53,6 +53,24 @@ printf 'plan\n' > "$tmp/plan.md"
 node "$root/.github/scripts/build-draft-evidence.mjs" "$repo" "$tmp/gate.json" "$tmp/validation.json" "$tmp/plan.md" 7 agent/draft-7-1-change "$tmp/evidence.json"
 jq -e '.publication_status == "draft_unmerged" and (.explicit_statement | contains("never merges")) and .traces_included == false' "$tmp/evidence.json" >/dev/null
 
+jq '.validation_checks[0].argv=["node","-e","require(\"node:fs\").writeFileSync(\"post-validation.txt\",\"untrusted mutation\")"]' "$repo/.github/agentify-shadow.json" > "$tmp/config"; mv "$tmp/config" "$repo/.github/agentify-shadow.json"
+set +e; node "$root/.github/scripts/validate-draft-run.mjs" "$repo" "$base" .github/agentify-shadow.json "$tmp/usage.json" "$tmp/mutation.json"; mutation_status=$?; set -e
+[ "$mutation_status" -ne 0 ] && jq -e '.diff_policy.validation_worktree_unchanged == false and .publication_allowed == false and (.validation_status_after | map(contains("post-validation.txt")) | any)' "$tmp/mutation.json" >/dev/null
+rm "$repo/post-validation.txt"
+jq '.validation_checks[0].argv=["node","-e","process.exit(0)"]' "$repo/.github/agentify-shadow.json" > "$tmp/config"; mv "$tmp/config" "$repo/.github/agentify-shadow.json"
+
+jq '.allow_failed_draft=true | .validation_checks[0].argv=["node","-e","require(\"node:fs\").writeFileSync(\"post-validation.txt\",\"untrusted mutation\")"]' "$repo/.github/agentify-shadow.json" > "$tmp/config"; mv "$tmp/config" "$repo/.github/agentify-shadow.json"
+set +e; node "$root/.github/scripts/validate-draft-run.mjs" "$repo" "$base" .github/agentify-shadow.json "$tmp/usage.json" "$tmp/mutation-override.json"; mutation_override_status=$?; set -e
+[ "$mutation_override_status" -ne 0 ] && jq -e '.diff_policy.validation_worktree_unchanged == false and .publication_allowed == false and .failed_draft_policy_used == false' "$tmp/mutation-override.json" >/dev/null
+rm "$repo/post-validation.txt"
+jq '.allow_failed_draft=false | .validation_checks[0].argv=["node","-e","process.exit(0)"]' "$repo/.github/agentify-shadow.json" > "$tmp/config"; mv "$tmp/config" "$repo/.github/agentify-shadow.json"
+
+jq '.validation_checks[0].argv=["node","-e","console.log(\"arbitrary-customer-secret-12345\")"]' "$repo/.github/agentify-shadow.json" > "$tmp/config"; mv "$tmp/config" "$repo/.github/agentify-shadow.json"
+node "$root/.github/scripts/validate-draft-run.mjs" "$repo" "$base" .github/agentify-shadow.json "$tmp/usage.json" "$tmp/redacted-output.json"
+! grep -q 'arbitrary-customer-secret-12345' "$tmp/redacted-output.json"
+jq -e '.validation_results[0].output_tail | contains("omitted")' "$tmp/redacted-output.json" >/dev/null
+jq '.validation_checks[0].argv=["node","-e","process.exit(0)"]' "$repo/.github/agentify-shadow.json" > "$tmp/config"; mv "$tmp/config" "$repo/.github/agentify-shadow.json"
+
 printf '{"dependencies":{}}\n' > "$repo/package.json"; git -C "$repo" add package.json; git -C "$repo" commit -qm dependency
 set +e; node "$root/.github/scripts/validate-draft-run.mjs" "$repo" "$base" .github/agentify-shadow.json "$tmp/usage.json" "$tmp/dependency.json"; dependency_status=$?; set -e
 [ "$dependency_status" -ne 0 ] && jq -e '.diff_policy.dependency_changes == false and .dependency_changes == ["package.json"]' "$tmp/dependency.json" >/dev/null

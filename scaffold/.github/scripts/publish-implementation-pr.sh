@@ -3,17 +3,18 @@
 # GitHub credentials; this trusted script owns the non-force push and draft PR creation.
 set -euo pipefail
 
-if [ "$#" -ne 6 ]; then
-  echo "usage: publish-implementation-pr.sh <branch> <base-ref> <expected-base-sha> <title-file> <description-file> <github-output-file>" >&2
+if [ "$#" -ne 7 ]; then
+  echo "usage: publish-implementation-pr.sh <branch> <base-ref> <expected-base-sha> <expected-head-sha> <title-file> <description-file> <github-output-file>" >&2
   exit 2
 fi
 
 branch=$1
 base_ref=$2
 expected_base_sha=$3
-title_file=$4
-description_file=$5
-github_output=$6
+expected_head_sha=$4
+title_file=$5
+description_file=$6
+github_output=$7
 
 : "${AGENT_PAT:?AGENT_PAT is required - see SETUP.md}"
 
@@ -46,6 +47,10 @@ if [ -z "$remote_base_sha" ] || [ "$remote_base_sha" != "$expected_base_sha" ]; 
   exit 1
 fi
 local_sha=$(git rev-parse "$branch")
+if [ "$local_sha" != "$expected_head_sha" ]; then
+  echo "implementation head changed after validation; expected $expected_head_sha, found $local_sha" >&2
+  exit 1
+fi
 remote_sha=$(git ls-remote --heads origin "refs/heads/$branch" | awk '{print $1}')
 if [ -n "$remote_sha" ] && [ "$remote_sha" != "$local_sha" ]; then
   echo "branch collision: remote $branch belongs to another run" >&2

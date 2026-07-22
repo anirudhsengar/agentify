@@ -323,6 +323,7 @@ jobs:
           bash .agentify-runtime/.github/scripts/publish-implementation-pr.sh \
             "$BRANCH" "$BASE_REF" \
             "$(jq -r .base_commit "$RUNNER_TEMP/draft-gate.json")" \
+            "$(jq -r .head_commit "$RUNNER_TEMP/draft-validation.json")" \
             "${RUNNER_TEMP}/pr_title.txt" \
             "${RUNNER_TEMP}/pr_description.txt" \
             "$GITHUB_OUTPUT"
