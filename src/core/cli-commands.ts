@@ -26,9 +26,10 @@ import { recoverInterruptedStateTransactions } from "./state-transaction.ts";
 import { revertLastRun } from "./revert.ts";
 import type { AgentifyProvider, AgentifyUi, ModelRole } from "./types.ts";
 import { engageCommand } from "./engagement/cli.ts";
+import { evalCommand } from "./evals/cli.ts";
 
 /** Names of the public config-utility subcommands this module dispatches. */
-export const SUBCOMMAND_NAMES = ["login", "logout", "models", "revert", "engage"] as const;
+export const SUBCOMMAND_NAMES = ["login", "logout", "models", "revert", "engage", "eval"] as const;
 export type SubcommandName = (typeof SUBCOMMAND_NAMES)[number];
 
 export interface SubcommandContext {
@@ -867,6 +868,11 @@ export async function dispatchSubcommand(
     process.exitCode = code;
     return true;
   }
+  if (head === "eval") {
+    const code = await evalCommand(argv.slice(1), ctx);
+    process.exitCode = code;
+    return true;
+  }
   return false;
 }
 
@@ -913,4 +919,8 @@ export function printSubcommandHelp(out: NodeJS.WritableStream): void {
   out.write(`  agentify engage <init|status|validate|report> [options]\n`);
   out.write(`    Create, inspect, validate, or deterministically report an\n`);
   out.write(`    FDE engagement record. No LLM or implementation is invoked.\n`);
+  out.write(`\nFDE evaluation subcommands:\n`);
+  out.write(`  agentify eval <run|report|validate> [options]\n`);
+  out.write(`    Validate suites, grade imported structured trial evidence, and\n`);
+  out.write(`    generate deterministic release-eligibility reports.\n`);
 }

@@ -43,8 +43,8 @@ Run agentify in the current repository. Existing repos are audited and exported 
 the coding agents you select — by default Claude Code, Codex, and Pi, prompted
 interactively. Empty/new repos start a local-first greenfield chat.
 
-agentify exposes the bootstrap entrypoint plus the deliberately small supported
-\`agentify engage\` record-and-analysis family. Bootstrap, attach, and recovery start here. After bootstrap, work
+agentify exposes the bootstrap entrypoint plus supported \`agentify engage\`
+records and \`agentify eval\` deterministic evaluation commands. Bootstrap, attach, and recovery start here. After bootstrap, work
 through GitHub issues, comments, and PRs (see docs/lifecycle/README.md).
 `);
   printSubcommandHelp(output);

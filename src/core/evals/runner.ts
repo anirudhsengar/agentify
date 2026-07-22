@@ -25,6 +25,7 @@ export interface ImportedTrialArtifact {
   inputs: Record<string, unknown>; environment_reference: string | null; execution_reference: string | null;
   transcript_reference: string | null; cost_usd: number; runtime_ms: number; output_references: string[];
   error: string | null;
+  facts?: import("./graders.ts").EvalArtifactFacts;
 }
 export type GraderAdapter = (task: EvalTask, artifact: ImportedTrialArtifact, plan: TrialPlanItem) => Omit<GraderResult, "schema_version" | "run_id" | "task_id" | "trial_index" | "grader_id">;
 export interface RunEvalOptions {
@@ -67,8 +68,17 @@ export function aggregateEvalResult(suite: EvalSuite, tasks: readonly EvalTask[]
   if (missingGraders.length) reasons.push("required graders are missing");
   if (safetyFailures) reasons.push("run contains safety failures");
   const graderErrorCount = completed.flatMap((trial) => trial.grader_results).filter((grader) => grader.status === "error").length;
+  const unresolvedGraders = completed.flatMap((trial) => trial.grader_results).filter((grader) => grader.status === "error" || grader.status === "skipped" || grader.status === "human_required").length;
   if (graderErrorCount) reasons.push("one or more graders failed");
+  if (unresolvedGraders) reasons.push("one or more graders are unresolved");
   if (failed.length || skipped.length) reasons.push("one or more trials did not pass");
+  const policy = suite.release_policy;
+  if (policy?.minimum_task_count !== undefined && tasks.length < policy.minimum_task_count) reasons.push(`minimum task count is ${policy.minimum_task_count}`);
+  const passedHumanReviews = completed.flatMap((trial) => trial.grader_results).filter((grader) => grader.grader_id === "human_review" && grader.status === "pass").length;
+  if (policy?.required_human_reviews !== undefined && passedHumanReviews < policy.required_human_reviews) reasons.push(`required human reviews: ${policy.required_human_reviews}`);
+  if (policy?.require_safety_checks === true && !suite.required_graders.some((grader) => grader === "deterministic" || grader === "process")) reasons.push("required safety checks are not configured");
+  if (policy?.require_complete_traces === true && completed.some((trial) => trial.transcript_reference === null)) reasons.push("one or more transcript or trace references are missing");
+  if (policy?.require_cost_runtime_reporting === true && completed.some((trial) => !Number.isFinite(trial.cost_usd) || !Number.isFinite(trial.runtime_ms))) reasons.push("cost or runtime reporting is incomplete");
   const result: EvalResult = {
     schema_version: "1", run_id: runId, suite_id: suite.suite_id, suite_version: suite.version,
     status: completed.length === suite.task_references.length * suite.number_of_trials ? "complete" : "partial",
@@ -122,13 +132,17 @@ export function runEvaluation(options: RunEvalOptions): EvalResult {
     if (!artifact) { const trial = skippedTrial(item, task, "no imported artifact supplied"); appendJsonLine(trialsFile, trial); existing.push(trial); continue; }
     const graderResults: GraderResult[] = suite.required_graders.map((graderId) => {
       const adapter = options.graders?.[graderId];
-      if (!adapter) return { schema_version: "1", ...item, grader_id: graderId, status: "error", passed: null, score: null, explanation: "grader adapter unavailable", failure_categories: ["grader_failure"], evidence_references: [], error: "grader adapter unavailable" };
+      if (!adapter) return { schema_version: "1", ...item, grader_id: graderId, grader_version: "1", status: "error", passed: null, score: null, reason: "grader adapter unavailable", failure_categories: ["grader_failure"], evidence_references: [], error: "grader adapter unavailable", duration_ms: 0, confidence: null };
       try { return validateEvalValue<GraderResult>(GraderResultSchema, { schema_version: "1", ...item, grader_id: graderId, ...adapter(task, artifact, item) }, "grader result"); }
-      catch (error) { return { schema_version: "1", ...item, grader_id: graderId, status: "error", passed: null, score: null, explanation: "grader adapter failed", failure_categories: ["grader_failure"], evidence_references: [], error: error instanceof Error ? error.message : String(error) }; }
+      catch (error) { return { schema_version: "1", ...item, grader_id: graderId, grader_version: "1", status: "error", passed: null, score: null, reason: "grader adapter failed", failure_categories: ["grader_failure"], evidence_references: [], error: error instanceof Error ? error.message : String(error), duration_ms: 0, confidence: null }; }
     });
-    const isPassed = graderResults.length > 0 && graderResults.every((grader) => grader.status === "passed" && grader.passed === true);
-    const categories = [...new Set(graderResults.flatMap((grader) => grader.failure_categories))];
-    const trial: EvalTrial = validateEvalValue(EvalTrialSchema, { schema_version: "1", ...item, ...artifact, status: isPassed ? "passed" : "failed", grader_results: graderResults, passed: isPassed, failure_categories: categories }, "eval trial");
+    const limitCategories: EvalFailureCategory[] = [];
+    if (artifact.cost_usd > task.maximum_cost_usd) limitCategories.push("excessive_cost");
+    if (artifact.runtime_ms > task.maximum_runtime_ms) limitCategories.push("timeout");
+    const isPassed = limitCategories.length === 0 && graderResults.length > 0 && graderResults.every((grader) => grader.status === "pass" && grader.passed === true);
+    const categories = [...new Set([...graderResults.flatMap((grader) => grader.failure_categories), ...limitCategories])];
+    const { facts: artifactFacts, ...persistedArtifact } = artifact; void artifactFacts;
+    const trial: EvalTrial = validateEvalValue(EvalTrialSchema, { schema_version: "1", ...item, ...persistedArtifact, status: isPassed ? "passed" : "failed", grader_results: graderResults, passed: isPassed, failure_categories: categories }, "eval trial");
     appendJsonLine(trialsFile, trial); existing.push(trial);
     for (const grader of graderResults) { appendJsonLine(gradersFile, grader); graderKeys.add(`${grader.task_id}:${grader.trial_index}:${grader.grader_id}`); }
   }

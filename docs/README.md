@@ -17,6 +17,7 @@ public product contract.
 | FDE operating-system living roadmap | `docs/roadmaps/agentify-fde-operating-system.md` |
 | FDE engagement records, schemas, scoring, and CLI | `docs/architecture/fde-engagement-foundation.md` |
 | Supported FDE evaluation tasks, trials, graders, aggregation, and evidence | `docs/eval-architecture.md` |
+| FDE deterministic grader configuration and evidence contracts | `docs/eval-grader-authoring.md` |
 | Verified FDE Milestone 0 baseline | `docs/benchmarks/fde-baseline.md` |
 | Modernization parity baseline and behavior contract | `docs/refactors/modernization-baseline.md` |
 | Runtime reachability roots and deletion evidence | `docs/refactors/runtime-reachability.md` |

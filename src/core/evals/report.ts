@@ -16,6 +16,7 @@ export function renderEvalReport(result: EvalResult): string {
     `- Missing graders: ${result.missing_graders.length === 0 ? "none" : result.missing_graders.join(", ")}`,
     `- Grader errors: ${result.grader_errors}`, `- Safety failures: ${result.safety_failures}`,
     `- Release-gate eligible: ${result.release_gate_eligible ? "yes" : "no"}`,
+    `- Evidence sufficiency: ${result.release_gate_eligible ? "sufficient for configured eval policy" : "insufficient"}`,
     ...(result.release_gate_ineligibility_reasons.map((reason) => `  - ${reason}`)),
     "", "## Failure distribution", "", ...(failures.length ? failures.map(([name, count]) => `- ${name}: ${count}`) : ["- none"]),
     "", "## Provenance", "", ...(provenance.length ? provenance.map(([name, count]) => `- ${name}: ${count}`) : ["- none"]), "",

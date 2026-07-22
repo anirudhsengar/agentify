@@ -63,6 +63,8 @@ try {
     "docs/architecture/experimental-runtime-decisions.md",
     "docs/build-and-package.md",
     "docs/experimental-surfaces.md",
+    "docs/eval-architecture.md",
+    "docs/eval-grader-authoring.md",
     "docs/refactors/modernization-baseline.md",
     "docs/refactors/runtime-reachability.md",
     "SECURITY.md",
@@ -149,12 +151,17 @@ try {
     expectFailure: true,
   });
   assert.equal(positional.stdout, "");
-  assert.match(positional.stderr, /Known subcommands: login, logout, models, revert, engage/);
+  assert.match(positional.stderr, /Known subcommands: login, logout, models, revert, engage, eval/);
 
   const engageHelp = run(bin, ["engage", "help"], { cwd: installRoot, env, timeout: 30_000 });
   assert.match(engageHelp.stdout, /agentify engage <init\|status\|validate\|report>/);
   assert.match(engageHelp.stdout, /agentify engage init --input engagement\.json --yes/);
   assert.equal(engageHelp.stderr, "");
+
+  const evalHelp = run(bin, ["eval", "help"], { cwd: installRoot, env, timeout: 30_000 });
+  assert.match(evalHelp.stdout, /agentify eval <run\|report\|validate>/);
+  assert.match(evalHelp.stdout, /task files cannot supply shell commands/);
+  assert.equal(evalHelp.stderr, "");
 
   const engageMissingRepo = run(bin, ["engage", "status"], { cwd: installRoot, env, timeout: 30_000, expectFailure: true });
   assert.match(engageMissingRepo.stderr, /engage requires a Git repository/);

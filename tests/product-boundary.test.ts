@@ -24,6 +24,9 @@ async function testPackageExposesOnlyCliRuntime(): Promise<void> {
 
 async function testCliHasNoExperimentalCommands(): Promise<void> {
   assert.ok(SUBCOMMAND_NAMES.includes("engage"), "engage must be an explicit supported command");
+  assert.ok(SUBCOMMAND_NAMES.includes("eval"), "eval must be an explicit supported command");
+  const evalCli = read("src/core/evals/cli.ts");
+  assert.doesNotMatch(evalCli, /core\/(?:orchestrator|aiw)|\.\.\/orchestrator|\.\.\/aiw/);
   for (const command of ["webhook", "aiw", "orchestrator", "coms", "expert"]) {
     assert.ok(
       !SUBCOMMAND_NAMES.includes(command as never),

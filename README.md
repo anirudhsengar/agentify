@@ -135,6 +135,21 @@ engagement-record and analysis surface, not an autonomous FDE: it performs no
 workflow discovery, model call, evaluation, implementation, deployment, or
 autonomy promotion.
 
+## FDE evaluations
+
+```bash
+agentify eval validate --id invoice-review --suite regression
+agentify eval run --id invoice-review --suite regression --input trial-artifacts.json
+agentify eval report --id invoice-review --suite regression --run-id <run-id> --stdout
+```
+
+Evaluation commands validate explicit tasks and suites, grade imported
+structured evidence, resume completed trials, and produce deterministic release
+eligibility reports. They do not expose the experimental orchestrator or execute
+shell commands supplied by task files. See
+[the evaluation architecture](docs/eval-architecture.md) and the
+[grader-authoring guide](docs/eval-grader-authoring.md).
+
 ## Where does agentify write?
 
 The audit's **state directory** is provider-scoped. The user picks

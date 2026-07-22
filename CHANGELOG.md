@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Add deterministic outcome, process, economics, and human-review graders plus
+  the supported `agentify eval validate|run|report` CLI and configurable
+  release-eligibility policy.
+
 - Add a supported, engagement-scoped FDE evaluation foundation with strict task,
   suite, trial, grader, and result schemas; controlled failure taxonomy;
   resumable imported-result runs; JSONL evidence; precise aggregation; and

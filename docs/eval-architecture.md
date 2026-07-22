@@ -27,12 +27,14 @@ and execution references, transcript or audit-trail reference, cost, runtime,
 outputs, error, grader results, final pass/fail, and controlled failure
 categories. Failed and skipped trials remain in evidence and in reports.
 
-A **grader** is a named deterministic adapter in this foundation. It receives a
+A **grader** is a named supported adapter in this foundation. It receives a
 validated task and a supplied trial artifact, and returns a strict result with
-pass state, optional normalized score, explanation, evidence, error, and
+version, `pass`, `fail`, `human_required`, `skipped`, or `error` status,
+optional normalized score, reason, evidence, duration, confidence, error, and
 failure categories. A missing or throwing adapter becomes a visible grader
-error and `grader_failure`; it is never treated as a pass. Model-based graders
-are intentionally outside this milestone.
+error and `grader_failure`; it is never treated as a pass. Deterministic,
+outcome, process, economics, and structured human-review graders are supported.
+Model-based graders remain outside this release.
 
 An **outcome** is the combination of the final trial pass boolean, its grader
 results, and its failure categories. Application-owned adapters and schemas—not
@@ -81,6 +83,19 @@ is never silently rerun. Missing imported artifacts in no-execution/imported
 operation become explicit skipped trials. Corrupt state stops the run. The
 foundation fails clearly for `execute` mode because no supported execution
 adapter exists yet.
+
+## Supported CLI
+
+`agentify eval validate` checks schemas, cross-references, grader configuration,
+adapter availability, provenance, and configured release-policy preconditions.
+`agentify eval run` grades supplied JSON trial artifacts (or records explicit
+skips when artifacts are absent), prints the run ID, persists progress, and
+resumes by stable trial identity. `agentify eval report` regenerates and
+optionally prints the deterministic report.
+
+Command checks use imported named/categorized exit-status evidence. Eval task
+files cannot provide executable shell strings, so this release never executes
+untrusted task commands.
 
 ## Aggregation
 

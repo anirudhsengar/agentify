@@ -131,12 +131,22 @@ async function testCiSeparatesConcernsAndCoversEngines(): Promise<void> {
   assert.match(packageJson.scripts?.["test:maintenance"] ?? "", /tests\/release-safety\.test\.ts/);
 }
 
+async function testEvalEvidenceCannotPublishAutomatically(): Promise<void> {
+  const workflow = read(".github/workflows/release-publish.yml");
+  const runner = read("src/core/evals/runner.ts");
+  const architecture = read("docs/eval-architecture.md");
+  assert.doesNotMatch(workflow, /eval(?:s)?\/|eval report|release_gate_eligible/);
+  assert.match(runner, /synthetic tasks alone cannot gate a release/);
+  assert.match(architecture, /not a replacement/i);
+}
+
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "releaseJobsAreTagOnly", fn: testReleaseJobsAreTagOnly },
   { name: "scopedPackageIdentityIsStable", fn: testScopedPackageIdentityIsStable },
   { name: "exactVerifiedArtifactIsPublished", fn: testExactVerifiedArtifactIsPublished },
   { name: "tagVersionValidation", fn: testTagVersionValidation },
   { name: "ciSeparatesConcernsAndCoversEngines", fn: testCiSeparatesConcernsAndCoversEngines },
+  { name: "evalEvidenceCannotPublishAutomatically", fn: testEvalEvidenceCannotPublishAutomatically },
 ];
 
 let passed = 0;

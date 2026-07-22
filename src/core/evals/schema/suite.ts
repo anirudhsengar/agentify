@@ -15,6 +15,13 @@ export const EvalSuiteSchema = Type.Object({
     all_k: Type.Optional(Type.Integer({ minimum: 1 })),
   }, { additionalProperties: false }),
   release_gate_eligible: Type.Boolean(),
+  release_policy: Type.Optional(Type.Object({
+    minimum_task_count: Type.Optional(Type.Integer({ minimum: 1 })),
+    required_human_reviews: Type.Optional(Type.Integer({ minimum: 0 })),
+    require_safety_checks: Type.Optional(Type.Boolean()),
+    require_complete_traces: Type.Optional(Type.Boolean()),
+    require_cost_runtime_reporting: Type.Optional(Type.Boolean()),
+  }, { additionalProperties: false })),
   provenance: Type.Object({ source_reference: Type.String({ minLength: 1 }), created_at: Type.String({ format: "date-time" }) }, { additionalProperties: false }),
 }, { additionalProperties: false });
 
