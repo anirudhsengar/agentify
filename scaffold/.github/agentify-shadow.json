@@ -8,6 +8,13 @@
   "validation_policy": "configured-eval-suite",
   "maximum_runtime_ms": 900000,
   "maximum_cost_usd": 5,
+  "require_measured_cost": true,
+  "maximum_input_tokens": 200000,
+  "maximum_output_tokens": 8192,
+  "pricing_policy": {
+    "version": "2026-07-22",
+    "models": []
+  },
   "allow_failed_draft": false,
   "allow_dependency_changes": false,
   "forbidden_paths": [".github/workflows", ".git", ".agentify"],

@@ -56,6 +56,12 @@ test("economics grader uses supplied values and never invents review time", () =
   const fail = economicsGrader(configured, artifact({ cost_usd: 2, runtime_ms: 101, facts: { retry_count: 2, repeated_action_count: 3 } }));
   assert.equal(fail.status, "fail"); assert.ok(fail.failure_categories.includes("excessive_cost")); assert.ok(fail.failure_categories.includes("timeout")); assert.match(fail.reason, /human review minutes missing/);
   assert.match(fail.reason, /accepted outcome count is missing/);
+  const measuredRequired = task({ economics: { require_measured_cost: true } });
+  assert.equal(economicsGrader(measuredRequired, artifact({ cost_measurement_status: "measured", measured_cost_usd: 0.5, budget_usd: 1 })).status, "pass");
+  assert.match(economicsGrader(measuredRequired, artifact({ cost_measurement_status: "estimated", estimated_cost_usd: 0.5 })).reason, /measured cost accounting is required/);
+  assert.match(economicsGrader(measuredRequired, artifact({ cost_limit_status: "rejected" })).reason, /rejected a model call/);
+  assert.match(economicsGrader(measuredRequired, artifact({ runtime_limit_status: "cancelled" })).reason, /application runtime deadline/);
+  assert.match(economicsGrader(measuredRequired, artifact({ runtime_limit_status: "outer_workflow_timeout" })).reason, /outer workflow emergency timeout/);
 });
 
 test("human review import remains distinguishable and safety concern cannot pass", () => {

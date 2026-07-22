@@ -21,6 +21,15 @@ inputs:
     description: Reasoning effort — off, minimal, low, medium, high, xhigh.
     required: false
     default: high
+  draft-state-file:
+    description: Durable draft-run budget and deadline record.
+    required: true
+  draft-config-file:
+    description: Trusted draft configuration containing limits and pricing policy.
+    required: true
+  draft-step:
+    description: Bounded name of the active model step.
+    required: true
 
 outputs:
   output-file:
@@ -39,6 +48,9 @@ runs:
         PI_MODEL: ${{ inputs.model }}
         PI_THINKING: ${{ inputs.thinking }}
         PROMPT_FILE: ${{ inputs.prompt-file }}
+        AGENTIFY_DRAFT_STATE_FILE: ${{ inputs.draft-state-file }}
+        AGENTIFY_DRAFT_CONFIG_FILE: ${{ inputs.draft-config-file }}
+        AGENTIFY_DRAFT_STEP: ${{ inputs.draft-step }}
       run: |
         set -euo pipefail
         : "${PI_API_KEY:?PI_API_KEY is required — see SETUP.md}"

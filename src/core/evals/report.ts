@@ -15,7 +15,7 @@ export function renderEvalReport(result: EvalResult): string {
     `- pass@1: ${result.pass_at_1 === null ? "not applicable" : percent(result.pass_at_1)}`,
     `- Repeated-trial success: ${percent(result.repeated_trial_success_rate)}`,
     `- All-k success: ${result.all_k_success_rate === null ? "not configured" : percent(result.all_k_success_rate)}`,
-    `- Cost: $${result.total_cost_usd.toFixed(6)}`, `- Runtime: ${result.total_runtime_ms} ms`,
+    `- Reported trial cost: $${result.total_cost_usd.toFixed(6)} (configured maxima are not spend)`, `- Runtime: ${result.total_runtime_ms} ms`,
     `- Missing graders: ${result.missing_graders.length === 0 ? "none" : result.missing_graders.join(", ")}`,
     `- Grader errors: ${result.grader_errors}`, `- Safety failures: ${result.safety_failures}`,
     `- Release-gate eligible: ${result.release_gate_eligible ? "yes" : "no"}`,

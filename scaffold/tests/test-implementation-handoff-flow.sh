@@ -30,7 +30,14 @@ if [ "$1 $2" = "pr create" ]; then
     echo "expected AGENT_PAT token for PR creation" >&2
     exit 1
   fi
-  echo "https://github.com/owner/repo/pull/456"
+  touch "$PR_CREATED"
+fi
+if [ "$1 $2" = "pr list" ]; then
+  if [ -f "$PR_CREATED" ]; then
+    printf '%s\n' '[{"number":456,"url":"https://github.com/owner/repo/pull/456","isDraft":true,"body":"Closes #42\n<!-- agentify:draft engagement=eng issue=42 branch=agent/draft-42-999-1-add-billing-export -->","headRefName":"agent/draft-42-999-1-add-billing-export","baseRefName":"main"}]'
+  else
+    printf '[]\n'
+  fi
 fi
 if [ "$1 $2" = "pr edit" ] && [ "${GH_TOKEN:-}" != "agent-token" ]; then
   echo "expected AGENT_PAT token for review label" >&2
@@ -69,10 +76,14 @@ PATH="$bin_dir:$PATH" \
 branch=$(sed -n 's/^name=//p' "$github_output")
 
 bash "$repo_root/.github/scripts/extract-pr-meta.sh" "$transcript" 42 "$tmp/pr-meta"
+printf '{"maximum_runtime_ms":60000,"maximum_cost_usd":5,"engagement_id":"eng","pricing_policy":{"version":"v1","models":[]}}\n' > "$tmp/draft-config.json"
+node "$repo_root/.github/scripts/draft-run-control.mjs" init "$tmp/draft-state.json" "$tmp/draft-config.json"
 
 CALLS_LOG="$calls" \
+PR_CREATED="$tmp/pr-created" \
 PATH="$bin_dir:$PATH" \
 AGENT_PAT="agent-token" \
+GH_REPO="owner/repo" \
   bash "$repo_root/.github/scripts/publish-implementation-pr.sh" \
     "$branch" \
     "main" \
@@ -80,6 +91,7 @@ AGENT_PAT="agent-token" \
     "abc123" \
     "$tmp/pr-meta/pr_title.txt" \
     "$tmp/pr-meta/pr_description.txt" \
+    "$tmp/draft-state.json" \
     "$github_output"
 pr_number=$(sed -n 's/^pr_number=//p' "$github_output" | tail -n1)
 
@@ -101,7 +113,7 @@ GITHUB_TOKEN="github-token" \
   echo "unexpected PR number: $pr_number" >&2
   exit 1
 }
-grep -q 'token=agent-token gh pr create --draft --base main --head agent/draft-42-999-1-add-billing-export --title Agentify draft #42: feat: add billing export --body-file '"$tmp/pr-meta/pr_description.txt" "$calls" || {
+grep -q 'token=agent-token gh pr create --repo owner/repo --draft --base main --head agent/draft-42-999-1-add-billing-export --title Agentify draft #42: feat: add billing export --body-file '"$tmp/pr-meta/pr_description.txt" "$calls" || {
   echo "expected draft PR creation call" >&2
   exit 1
 }

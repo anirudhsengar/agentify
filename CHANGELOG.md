@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Enforce human-approved draft model budgets with versioned pricing, per-call
+  reservations and measured/estimated usage; actively cancel draft execution
+  at one application deadline; recover draft PR publication idempotently; and
+  record owned orphan branches for confirmed safe cleanup.
+
 - Harden human-approved draft publication by rejecting validation-time or post-validation repository mutations and omitting untrusted validation output from persisted evidence artifacts.
 
 ### Added

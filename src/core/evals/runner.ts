@@ -24,6 +24,9 @@ export interface ImportedTrialArtifact {
   task_id: string; trial_index: number; started_at: string; ended_at: string;
   inputs: Record<string, unknown>; environment_reference: string | null; execution_reference: string | null;
   transcript_reference: string | null; cost_usd: number; runtime_ms: number; output_references: string[];
+  budget_usd?: number; reserved_cost_usd?: number; measured_cost_usd?: number; estimated_cost_usd?: number;
+  cost_measurement_status?: "measured" | "estimated" | "unavailable"; cost_limit_status?: "within_limit" | "rejected" | "overrun" | "measurement_required";
+  runtime_limit_status?: "within_limit" | "cancelled" | "outer_workflow_timeout";
   error: string | null;
   facts?: import("./graders.ts").EvalArtifactFacts;
 }
@@ -34,6 +37,11 @@ const ImportedTrialArtifactSchema = Type.Object({
   execution_reference: Type.Union([Type.String({ minLength: 1, maxLength: 2_000 }), Type.Null()]),
   transcript_reference: Type.Union([Type.String({ minLength: 1, maxLength: 2_000 }), Type.Null()]),
   cost_usd: Type.Number({ minimum: 0 }), runtime_ms: Type.Integer({ minimum: 0 }),
+  budget_usd: Type.Optional(Type.Number({ minimum: 0 })), reserved_cost_usd: Type.Optional(Type.Number({ minimum: 0 })),
+  measured_cost_usd: Type.Optional(Type.Number({ minimum: 0 })), estimated_cost_usd: Type.Optional(Type.Number({ minimum: 0 })),
+  cost_measurement_status: Type.Optional(Type.Union([Type.Literal("measured"), Type.Literal("estimated"), Type.Literal("unavailable")])),
+  cost_limit_status: Type.Optional(Type.Union([Type.Literal("within_limit"), Type.Literal("rejected"), Type.Literal("overrun"), Type.Literal("measurement_required")])),
+  runtime_limit_status: Type.Optional(Type.Union([Type.Literal("within_limit"), Type.Literal("cancelled"), Type.Literal("outer_workflow_timeout")])),
   output_references: Type.Array(Type.String({ minLength: 1, maxLength: 2_000 }), { maxItems: 500 }),
   error: Type.Union([Type.String({ minLength: 1, maxLength: 8_000 }), Type.Null()]), facts: Type.Optional(Type.Unknown()),
 }, { additionalProperties: false });

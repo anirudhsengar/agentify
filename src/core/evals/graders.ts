@@ -123,14 +123,21 @@ function modifiedOutsideAllowed(trace: TraceEntry[], allowed: string[]): boolean
 export function economicsGrader(task: EvalTask, artifact: ImportedTrialArtifact): GraderOutput {
   const started = Date.now(); const data = facts(artifact); const config = task.grader_configuration.economics; if (!isObject(config)) throw new Error("economics grader config must be an object");
   const failures: string[] = []; const categories = new Set<EvalFailureCategory>();
-  if (artifact.cost_usd > task.maximum_cost_usd) { failures.push("cost limit exceeded"); categories.add("excessive_cost"); }
+  if (artifact.cost_limit_status === "rejected") { failures.push("cost limit rejected a model call"); categories.add("excessive_cost"); }
+  if (artifact.cost_limit_status === "overrun") { failures.push("cost limit overrun"); categories.add("excessive_cost"); }
+  if (artifact.cost_limit_status === "measurement_required" || artifact.cost_measurement_status === "unavailable") { failures.push("measured cost accounting is unavailable"); categories.add("excessive_cost"); }
+  if (config.require_measured_cost === true && artifact.cost_measurement_status !== "measured") { failures.push("measured cost accounting is required"); categories.add("excessive_cost"); }
+  const evaluatedCost = artifact.cost_measurement_status === "measured" && artifact.measured_cost_usd !== undefined ? artifact.measured_cost_usd : artifact.cost_measurement_status === "estimated" && artifact.estimated_cost_usd !== undefined ? artifact.estimated_cost_usd : artifact.cost_usd;
+  if (evaluatedCost > task.maximum_cost_usd) { failures.push("cost limit exceeded"); categories.add("excessive_cost"); }
+  if (artifact.runtime_limit_status === "cancelled") { failures.push("application runtime deadline cancelled execution"); categories.add("timeout"); }
+  if (artifact.runtime_limit_status === "outer_workflow_timeout") { failures.push("outer workflow emergency timeout"); categories.add("timeout"); }
   if (artifact.runtime_ms > task.maximum_runtime_ms) { failures.push("runtime limit exceeded"); categories.add("timeout"); }
   if (typeof config.maximum_retries === "number" && (data.retry_count === undefined || data.retry_count > config.maximum_retries)) { failures.push("retry count missing or exceeded"); categories.add("unnecessary_complexity"); }
   if (typeof config.maximum_repeated_actions === "number" && (data.repeated_action_count === undefined || data.repeated_action_count > config.maximum_repeated_actions)) { failures.push("repeated actions missing or excessive"); categories.add("unnecessary_complexity"); }
   if (typeof config.maximum_human_review_minutes === "number" && (data.human_review === undefined || data.human_review.review_minutes > config.maximum_human_review_minutes)) { failures.push("human review minutes missing or exceeded"); categories.add("excessive_cost"); }
   if (typeof config.maximum_cost_per_accepted_outcome === "number") {
     if (data.accepted_outcome_count === undefined || data.accepted_outcome_count <= 0) { failures.push("accepted outcome count is missing"); categories.add("excessive_cost"); }
-    else if (artifact.cost_usd / data.accepted_outcome_count > config.maximum_cost_per_accepted_outcome) { failures.push("cost per accepted outcome exceeded"); categories.add("excessive_cost"); }
+    else if (evaluatedCost / data.accepted_outcome_count > config.maximum_cost_per_accepted_outcome) { failures.push("cost per accepted outcome exceeded"); categories.add("excessive_cost"); }
   }
   return result(failures.length ? "fail" : "pass", failures.join("; ") || "supplied economics are within configured limits", [...categories], artifact.output_references, started, failures.length ? 0 : 1, 1);
 }

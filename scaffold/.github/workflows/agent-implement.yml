@@ -67,6 +67,8 @@ jobs:
           node .agentify-runtime/.github/scripts/check-draft-gates.mjs \
             . "$state_dir" .github/agentify-shadow.json "$ISSUE_NUMBER" "$RUNNER_TEMP/draft-approval.json" \
             "$RUNNER_TEMP/github-permissions.json" "$RUNNER_TEMP/draft-gate.json"
+          node .agentify-runtime/.github/scripts/draft-run-control.mjs init \
+            "$RUNNER_TEMP/draft-run-state.json" "$RUNNER_TEMP/draft-config.json"
           echo "started_ms=$(date +%s%3N)" >> "$GITHUB_OUTPUT"
           echo "state_dir=$state_dir" >> "$GITHUB_OUTPUT"
 
@@ -176,6 +178,9 @@ jobs:
           provider: ${{ vars.PI_PROVIDER || 'anthropic' }}
           model: ${{ vars.PI_MODEL }}
           thinking: ${{ vars.PI_THINKING || 'high' }}
+          draft-state-file: ${{ runner.temp }}/draft-run-state.json
+          draft-config-file: ${{ runner.temp }}/draft-config.json
+          draft-step: orchestrate issue
 
       - name: Extract orchestration plan
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
@@ -221,6 +226,9 @@ jobs:
           provider: ${{ vars.PI_PROVIDER || 'anthropic' }}
           model: ${{ vars.PI_MODEL }}
           thinking: ${{ vars.PI_THINKING || 'high' }}
+          draft-state-file: ${{ runner.temp }}/draft-run-state.json
+          draft-config-file: ${{ runner.temp }}/draft-config.json
+          draft-step: implement issue
 
       - name: Verify selected routing evidence
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
@@ -243,15 +251,9 @@ jobs:
         env:
           STARTED_MS: ${{ steps.draft_gate.outputs.started_ms }}
         run: |
-          now_ms=$(date +%s%3N)
-          jq -n \
-            --argjson runtime_ms "$((now_ms - STARTED_MS))" \
-            --argjson cost_usd "$(jq -r .limits.maximum_cost_usd "$RUNNER_TEMP/draft-gate.json")" \
-            '{runtime_ms:$runtime_ms,cost_usd:$cost_usd,cost_source:"policy_reserved_upper_bound",retries:0}' \
-            > "$RUNNER_TEMP/draft-usage.json"
           node .agentify-runtime/.github/scripts/validate-draft-run.mjs \
             . "$BASE_REF" "$RUNNER_TEMP/draft-config.json" \
-            "$RUNNER_TEMP/draft-usage.json" "$RUNNER_TEMP/draft-validation.json"
+            "$RUNNER_TEMP/draft-run-state.json" "$RUNNER_TEMP/draft-validation.json"
 
       - name: Render write-pr prompt
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
@@ -271,6 +273,9 @@ jobs:
           provider: ${{ vars.PI_PROVIDER || 'anthropic' }}
           model: ${{ vars.PI_MODEL }}
           thinking: ${{ vars.PI_THINKING || 'high' }}
+          draft-state-file: ${{ runner.temp }}/draft-run-state.json
+          draft-config-file: ${{ runner.temp }}/draft-config.json
+          draft-step: write PR metadata
 
       - name: Extract PR title and description
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
@@ -279,6 +284,12 @@ jobs:
         run: |
           bash .agentify-runtime/.github/scripts/extract-pr-meta.sh \
             "$TRANSCRIPT" "$ISSUE_NUMBER" "$RUNNER_TEMP"
+
+      - name: Reconcile final draft cost and runtime limits
+        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
+        run: |
+          node .agentify-runtime/.github/scripts/finalize-draft-validation.mjs \
+            "$RUNNER_TEMP/draft-run-state.json" "$RUNNER_TEMP/draft-validation.json"
 
       - name: Build redacted draft evidence packet
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
@@ -304,6 +315,7 @@ jobs:
             ${{ runner.temp }}/draft-approval.json
             ${{ runner.temp }}/draft-validation.json
             ${{ runner.temp }}/draft-evidence.json
+            ${{ runner.temp }}/draft-run-state.json
             ${{ runner.temp }}/orchestration-plan.md
           if-no-files-found: warn
           retention-days: 30
@@ -326,6 +338,7 @@ jobs:
             "$(jq -r .head_commit "$RUNNER_TEMP/draft-validation.json")" \
             "${RUNNER_TEMP}/pr_title.txt" \
             "${RUNNER_TEMP}/pr_description.txt" \
+            "$RUNNER_TEMP/draft-run-state.json" \
             "$GITHUB_OUTPUT"
 
       - name: Complete implementation handoff
@@ -350,6 +363,15 @@ jobs:
             "$ISSUE_NUMBER" "${CREATED_PR_NUMBER:-}" \
             "${RUNNER_TEMP}/failure_reason.txt" \
             "$RUN_URL"
+
+      - name: Preserve final draft run control state
+        if: always() && steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentify-draft-state-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/draft-run-state.json
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Always remove in-progress
         if: always() && steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'

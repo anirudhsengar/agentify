@@ -1,131 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-publisher="$repo_root/.github/scripts/publish-implementation-pr.sh"
-tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
-
-calls="$tmp/calls.log"
-bin_dir="$tmp/bin"
-mkdir -p "$bin_dir"
-
-cat > "$bin_dir/git" <<'EOF'
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd); publisher="$root/.github/scripts/publish-implementation-pr.sh"; tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$tmp/bin"; calls="$tmp/calls"
+cat > "$tmp/bin/git" <<'EOF'
 #!/usr/bin/env bash
-printf 'git %s\n' "$*" >> "$CALLS_LOG"
-if [ "$1" = "rev-parse" ]; then echo abc123; fi
-if [ "$1" = "ls-remote" ]; then
-  if [[ "$*" == *"refs/heads/main"* ]]; then echo "${BASE_SHA:-base123} refs/heads/main";
-  elif [ -n "${REMOTE_SHA:-}" ]; then echo "$REMOTE_SHA refs/heads/test"; fi
-fi
+printf 'git %s\n' "$*" >> "$CALLS"
+case "$1" in rev-parse) echo "${LOCAL_SHA:-abc123}";; ls-remote) [[ "$*" == *refs/heads/main* ]] && echo "${BASE_SHA:-base123} refs/heads/main" || { [ -z "${REMOTE_SHA:-}" ] || echo "$REMOTE_SHA refs/heads/x"; };; check-ref-format) exit 0;; push) exit 0;; esac
 EOF
-chmod +x "$bin_dir/git"
-
-cat > "$bin_dir/gh" <<'EOF'
+cat > "$tmp/bin/gh" <<'EOF'
 #!/usr/bin/env bash
-if [ "${GH_TOKEN:-}" != "secret-token" ]; then
-  echo "expected GH_TOKEN to be set from AGENT_PAT" >&2
-  exit 1
-fi
-printf 'gh %s\n' "$*" >> "$CALLS_LOG"
-if [ "$1 $2" = "pr create" ]; then
-  echo "${GH_PR_CREATE_OUTPUT:-https://github.com/example/repo/pull/123}"
-fi
+printf 'gh %s\n' "$*" >> "$CALLS"
+if [ "$1 $2" = "pr list" ]; then
+  if [ "${PR_MODE:-none}" = owned ]; then printf '%s\n' '[{"number":123,"url":"https://github.com/owner/repo/pull/123","isDraft":true,"body":"Closes #42\n<!-- agentify:draft engagement=eng issue=42 branch=agent/draft-42-900-1-change -->","headRefName":"agent/draft-42-900-1-change","baseRefName":"main"}]';
+  elif [ "${PR_MODE:-none}" = mismatch ]; then printf '%s\n' '[{"number":99,"url":"https://github.com/owner/repo/pull/99","isDraft":true,"body":"other","headRefName":"agent/draft-42-900-1-change","baseRefName":"main"}]';
+  elif [ "${CREATED:-0}" = 1 ] || [ -f "${CREATED_FILE:-/nonexistent}" ]; then touch "$CREATED_FILE"; printf '%s\n' '[{"number":123,"url":"https://github.com/owner/repo/pull/123","isDraft":true,"body":"Closes #42\n<!-- agentify:draft engagement=eng issue=42 branch=agent/draft-42-900-1-change -->","headRefName":"agent/draft-42-900-1-change","baseRefName":"main"}]'; else printf '[]\n'; fi
+elif [ "$1 $2" = "pr create" ]; then touch "$CREATED_FILE"; [ "${CREATE_FAIL:-0}" = 0 ] || exit 1; fi
 EOF
-chmod +x "$bin_dir/gh"
-
-title_file="$tmp/title.txt"
-description_file="$tmp/description.md"
-output_file="$tmp/github-output.txt"
-printf '%s\n' 'feat: add billing export' > "$title_file"
-printf '%s\n' '## Summary' '' 'Closes #42' > "$description_file"
-
-CALLS_LOG="$calls" \
-PATH="$bin_dir:$PATH" \
-AGENT_PAT="secret-token" \
-  bash "$publisher" \
-    "agent/draft-42-900-1-billing-export" \
-    "main" \
-    "base123" \
-    "abc123" \
-    "$title_file" \
-    "$description_file" \
-    "$output_file"
-
-grep -q 'git push --set-upstream origin agent/draft-42-900-1-billing-export' "$calls" || {
-  echo "expected unique draft branch to be pushed without force" >&2
-  exit 1
-}
-grep -q 'gh auth setup-git' "$calls" || {
-  echo "expected gh auth setup-git to run" >&2
-  exit 1
-}
-grep -q 'gh pr create --draft --base main --head agent/draft-42-900-1-billing-export --title Agentify draft #42: feat: add billing export --body-file '"$description_file" "$calls" || {
-  echo "expected draft PR creation with rendered title/body" >&2
-  exit 1
-}
-grep -q '^pr_number=123$' "$output_file" || {
-  echo "expected PR number output" >&2
-  exit 1
-}
-
-if CALLS_LOG="$calls" PATH="$bin_dir:$PATH" AGENT_PAT="secret-token" \
-  bash "$publisher" "main" "main" "base123" "abc123" "$title_file" "$description_file" "$output_file" >/dev/null 2>&1; then
-  echo "expected non-agent branch publication to fail" >&2
-  exit 1
-fi
-
-if CALLS_LOG="$calls" PATH="$bin_dir:$PATH" \
-  bash "$publisher" "agent/draft-42-900-1-billing-export" "main" "base123" "abc123" "$title_file" "$description_file" "$output_file" >/dev/null 2>&1; then
-  echo "expected missing AGENT_PAT to fail" >&2
-  exit 1
-fi
-
-bad_output_file="$tmp/bad-github-output.txt"
-if CALLS_LOG="$calls" \
-  PATH="$bin_dir:$PATH" \
-  AGENT_PAT="secret-token" \
-  GH_PR_CREATE_OUTPUT="not a pr url" \
-  bash "$publisher" \
-    "agent/draft-42-900-1-billing-export" \
-    "main" \
-    "base123" \
-    "abc123" \
-    "$title_file" \
-    "$description_file" \
-    "$bad_output_file" >/dev/null 2>&1; then
-  echo "expected malformed gh pr create output to fail" >&2
-  exit 1
-fi
-if [ -f "$bad_output_file" ] && grep -q '^pr_number=' "$bad_output_file"; then
-  echo "malformed gh output must not write a PR number" >&2
-  exit 1
-fi
-
-if CALLS_LOG="$calls" PATH="$bin_dir:$PATH" AGENT_PAT="secret-token" REMOTE_SHA="different" \
-  bash "$publisher" "agent/draft-42-901-1-collision" "main" "base123" "abc123" "$title_file" "$description_file" "$bad_output_file" >/dev/null 2>&1; then
-  echo "expected a branch collision to stop publication" >&2
-  exit 1
-fi
-if CALLS_LOG="$calls" PATH="$bin_dir:$PATH" AGENT_PAT="secret-token" BASE_SHA="moved" \
-  bash "$publisher" "agent/draft-42-902-1-base-moved" "main" "base123" "abc123" "$title_file" "$description_file" "$bad_output_file" >/dev/null 2>&1; then
-  echo "expected moved base branch to stop publication" >&2
-  exit 1
-fi
-if grep -q 'git push.*agent/draft-42-901-1-collision' "$calls"; then
-  echo "a colliding branch must never be pushed" >&2
-  exit 1
-fi
-before_pushes=$(grep -c 'git push' "$calls" || true)
-resume_output="$tmp/resume-output.txt"
-CALLS_LOG="$calls" PATH="$bin_dir:$PATH" AGENT_PAT="secret-token" REMOTE_SHA="abc123" \
-  bash "$publisher" "agent/draft-42-903-1-resume" "main" "base123" "abc123" "$title_file" "$description_file" "$resume_output"
-after_pushes=$(grep -c 'git push' "$calls" || true)
-[ "$before_pushes" -eq "$after_pushes" ] || { echo "matching partial push should resume without another push" >&2; exit 1; }
-grep -q '^pr_number=123$' "$resume_output"
-
-if CALLS_LOG="$calls" PATH="$bin_dir:$PATH" AGENT_PAT="secret-token" \
-  bash "$publisher" "agent/draft-42-904-1-stale" "main" "base123" "validated456" "$title_file" "$description_file" "$bad_output_file" >/dev/null 2>&1; then
-  echo "expected a post-validation head change to stop publication" >&2
-  exit 1
-fi
+chmod +x "$tmp/bin/git" "$tmp/bin/gh"
+title="$tmp/title"; body="$tmp/body"; printf 'change\n' > "$title"; printf 'Closes #42\n' > "$body"
+fresh_state() { node "$root/.github/scripts/draft-run-control.mjs" init "$1" "$tmp/config"; jq '.publication.engagement_id="eng"' "$1" > "$1.x"; mv "$1.x" "$1"; }
+printf '{"maximum_runtime_ms":60000,"maximum_cost_usd":5,"engagement_id":"eng","pricing_policy":{"version":"v1","models":[]}}\n' > "$tmp/config"
+run_publish() { CALLS="$calls" CREATED_FILE="$tmp/created" PATH="$tmp/bin:$PATH" AGENT_PAT=token GH_REPO=owner/repo bash "$publisher" "agent/draft-42-900-1-change" main base123 abc123 "$title" "$body" "$1" "$2"; }
+state="$tmp/state"; output="$tmp/output"; fresh_state "$state"; run_publish "$state" "$output"; grep -q '^pr_number=123$' "$output"; jq -e '.publication.status=="publication_recorded" and .publication.pr_number==123 and .remote_branches[0].status=="active"' "$state" >/dev/null
+before=$(grep -c 'gh pr create' "$calls"); retry="$tmp/retry"; run_publish "$state" "$retry"; after=$(grep -c 'gh pr create' "$calls"); [ "$before" -eq "$after" ]; grep -q '^pr_number=123$' "$retry"
+rm -f "$tmp/created"; conflict="$tmp/conflict"; fresh_state "$conflict"; if PR_MODE=mismatch CALLS="$calls" PATH="$tmp/bin:$PATH" AGENT_PAT=token GH_REPO=owner/repo bash "$publisher" "agent/draft-42-900-1-change" main base123 abc123 "$title" "$body" "$conflict" "$tmp/no" >/dev/null 2>&1; then exit 1; fi; jq -e '.publication.status=="ownership_conflict"' "$conflict" >/dev/null
+rm -f "$tmp/created"; crash="$tmp/crash"; fresh_state "$crash"; CREATE_FAIL=1 run_publish "$crash" "$tmp/crash-out"; grep -q '^pr_number=123$' "$tmp/crash-out"; [ "$(grep -c 'gh pr create' "$calls")" -ge 2 ]
+if CALLS="$calls" PATH="$tmp/bin:$PATH" AGENT_PAT=token GH_REPO=owner/repo bash "$publisher" main main base123 abc123 "$title" "$body" "$state" "$tmp/no" >/dev/null 2>&1; then exit 1; fi
+expired="$tmp/expired"; fresh_state "$expired"; jq '.runtime.deadline_at="2000-01-01T00:00:00.000Z"' "$expired" > "$expired.x"; mv "$expired.x" "$expired"; before=$(grep -c 'gh pr create' "$calls"); if CALLS="$calls" PATH="$tmp/bin:$PATH" AGENT_PAT=token GH_REPO=owner/repo bash "$publisher" "agent/draft-42-900-1-change" main base123 abc123 "$title" "$body" "$expired" "$tmp/no" >/dev/null 2>&1; then exit 1; fi; after=$(grep -c 'gh pr create' "$calls"); [ "$before" -eq "$after" ]
+fresh_state "$tmp/base-mismatch"; if CALLS="$calls" PATH="$tmp/bin:$PATH" AGENT_PAT=token GH_REPO=owner/repo BASE_SHA=moved bash "$publisher" "agent/draft-42-900-1-change" main base123 abc123 "$title" "$body" "$tmp/base-mismatch" "$tmp/no" >/dev/null 2>&1; then exit 1; fi
+fresh_state "$tmp/head-mismatch"; if CALLS="$calls" PATH="$tmp/bin:$PATH" AGENT_PAT=token GH_REPO=owner/repo LOCAL_SHA=moved bash "$publisher" "agent/draft-42-900-1-change" main base123 abc123 "$title" "$body" "$tmp/head-mismatch" "$tmp/no" >/dev/null 2>&1; then exit 1; fi

@@ -4,6 +4,8 @@ set -euo pipefail
 : "${PI_API_KEY:?PI_API_KEY is required - see SETUP.md}"
 : "${PI_MODEL:?PI_MODEL repository variable is required - see SETUP.md}"
 : "${PROMPT_FILE:?PROMPT_FILE is required}"
+: "${AGENTIFY_DRAFT_STATE_FILE:?AGENTIFY_DRAFT_STATE_FILE is required}"
+: "${AGENTIFY_DRAFT_CONFIG_FILE:?AGENTIFY_DRAFT_CONFIG_FILE is required}"
 
 if [ ! -f "$PROMPT_FILE" ]; then
   echo "run-pi-safe: prompt file not found: $PROMPT_FILE" >&2
@@ -23,7 +25,10 @@ export AGENTIFY_NO_PROJECT_EXTENSIONS="${AGENTIFY_NO_PROJECT_EXTENSIONS:-1}"
 # --approve trusts only the checked-out runtime action for this one-shot job.
 # Workflows call this script from .agentify-runtime, checked out from the
 # protected base/default branch, not from mutable PR branch files.
-exec pi --print --no-session --approve \
+control="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/draft-run-control.mjs"
+exec node "$control" run "$AGENTIFY_DRAFT_STATE_FILE" "$AGENTIFY_DRAFT_STEP" -- \
+  pi --print --no-session --approve \
+  --extension "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/extensions/draft-budget.ts" \
   --provider "${PI_PROVIDER:-anthropic}" \
   --model "$PI_MODEL" \
   --api-key "$PI_API_KEY" \

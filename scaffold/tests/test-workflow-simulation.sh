@@ -36,6 +36,11 @@ export PI_MODEL=test-model
 export PI_PROVIDER=openai
 export PI_THINKING=low
 export PROMPT_FILE="$prompt"
+printf '{"maximum_runtime_ms":60000,"maximum_cost_usd":5,"pricing_policy":{"version":"v1","models":[]}}\n' > "$tmp/draft-config.json"
+node "$repo_root/.github/scripts/draft-run-control.mjs" init "$tmp/draft-state.json" "$tmp/draft-config.json"
+export AGENTIFY_DRAFT_STATE_FILE="$tmp/draft-state.json"
+export AGENTIFY_DRAFT_CONFIG_FILE="$tmp/draft-config.json"
+export AGENTIFY_DRAFT_STEP="test model"
 export PI_CAPTURE="$tmp/pi-capture.txt"
 export AGENT_PAT=must-not-leak
 export GH_TOKEN=must-not-leak

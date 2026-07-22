@@ -96,6 +96,10 @@ per-run human approval for that issue and exact base commit. The workflow uses
 an ephemeral checkout and unique run branch and may create only a draft PR
 labeled `agentify:draft`; it never force-pushes, enables auto-merge, pushes to
 the default branch, or merges. See `docs/github-draft-mode.md` for permissions,
+cost pricing/reservation maintenance, the active runtime deadline, idempotent
+PR recovery, and confirmed cleanup of recorded orphan branches. Populate the
+exact provider/model rows in `pricing_policy.models` before enabling draft mode;
+unknown models fail closed and configured budget is never reported as spend.
 failure recovery, cleanup, revocation, evidence, and human-review capture.
 
 Creating an issue is safe triage by default. Automation starts when a trusted

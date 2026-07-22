@@ -1,0 +1,17 @@
+import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { initializeDraftRun, reconcileModelCall, reserveModelCall, runDeadlineProcess, writeAtomic } from "../.github/scripts/draft-run-control.mjs";
+const pricing = { version: "test-v1", models: [{ provider: "test", model: "model", effective_version: "test-v1", input_usd_per_million: 2, cached_input_usd_per_million: 1, cache_write_input_usd_per_million: 2, output_usd_per_million: 10 }] };
+const config = { maximum_runtime_ms: 60_000, maximum_cost_usd: 1, maximum_input_tokens: 100_000, maximum_output_tokens: 10_000, require_measured_cost: true, pricing_policy: pricing };
+const state = initializeDraftRun(config, Date.now()); const call = reserveModelCall(state, config, { step: "planning", provider: "test", model: "model" });
+assert.equal(call.reserved_cost_usd, 0.3); assert.equal(state.reserved_cost_usd, 0.3); assert.equal(call.maximum_output_tokens, 10_000);
+reconcileModelCall(state, config, call.call_id, { input_tokens: 10_000, cached_input_tokens: 2_000, output_tokens: 1_000, reasoning_tokens: 500, total_tokens: 11_000, provider_request_id: "req_safe" });
+assert.equal(state.reserved_cost_usd, 0); assert.equal(state.measured_cost_usd, 0.032); assert.equal(state.cost_measurement_status, "measured"); assert.equal(state.model_calls[0].pricing_policy_version, "test-v1");
+const small = initializeDraftRun({ ...config, maximum_cost_usd: 0.29 }); assert.throws(() => reserveModelCall(small, config, { step: "planning", provider: "test", model: "model" }), /exceeds remaining/); assert.equal(small.cost_limit_status, "rejected"); assert.throws(() => reserveModelCall(small, config, { step: "retry", provider: "test", model: "model" }), /cost policy/);
+const unknown = initializeDraftRun(config); assert.throws(() => reserveModelCall(unknown, config, { step: "planning", provider: "test", model: "unknown" }), /unknown model pricing/);
+const missing = initializeDraftRun(config); const missingCall = reserveModelCall(missing, config, { step: "planning", provider: "test", model: "model" }); reconcileModelCall(missing, config, missingCall.call_id, null); assert.equal(missing.estimated_cost_usd, 0.3); assert.equal(missing.cost_measurement_status, "estimated"); assert.equal(missing.cost_limit_status, "measurement_required");
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "draft-deadline-")); const stateFile = path.join(tmp, "state.json"); const deadline = initializeDraftRun({ ...config, maximum_runtime_ms: 30 }); writeAtomic(stateFile, deadline);
+await assert.rejects(runDeadlineProcess(stateFile, deadline, "validation tests", process.execPath, ["-e", "setTimeout(()=>{},10000)"], { stdio: "ignore", graceMs: 5 }), /deadline cancelled/); const cancelled = JSON.parse(fs.readFileSync(stateFile, "utf8")); assert.ok(cancelled.runtime.cancellation_requested_at); assert.ok(cancelled.runtime.cancellation_completed_at); assert.equal(cancelled.runtime.step_active_at_timeout, "validation tests"); assert.equal(cancelled.runtime.child_processes_terminated, true); if (process.platform !== "win32") assert.equal(cancelled.runtime.process_groups_terminated, true);
+fs.rmSync(tmp, { recursive: true, force: true }); console.log("draft run budget and deadline controls passed.");

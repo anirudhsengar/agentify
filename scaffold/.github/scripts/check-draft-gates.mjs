@@ -26,6 +26,8 @@ const dirtySource = execFileSync("git", ["-C", root, "status", "--porcelain=v1",
 if (!process.env.DRAFT_BASE_COMMIT && dirtySource.length > 0) throw new Error(`implementation checkout is not clean: ${dirtySource.join(", ")}`);
 if (!Number.isInteger(issueNumber) || issueNumber < 1) throw new Error("issue number is invalid");
 if (!Number.isFinite(config.maximum_cost_usd) || config.maximum_cost_usd < 0 || !Number.isInteger(config.maximum_runtime_ms) || config.maximum_runtime_ms < 1) throw new Error("cost/runtime policy is unavailable");
+if (!Number.isInteger(config.maximum_input_tokens) || config.maximum_input_tokens < 1 || !Number.isInteger(config.maximum_output_tokens) || config.maximum_output_tokens < 1) throw new Error("bounded model token policy is unavailable");
+if (!config.pricing_policy || typeof config.pricing_policy.version !== "string" || !Array.isArray(config.pricing_policy.models)) throw new Error("versioned pricing policy is unavailable");
 const engagementRoot = path.join(state, "engagements", engagementId);
 const charter = readState(path.join(engagementRoot, "charter.json"), "engagement charter");
 if (!['shadow', 'draft_pilot'].includes(charter.status)) throw new Error(`engagement lifecycle ${charter.status} is not eligible for draft mode`);

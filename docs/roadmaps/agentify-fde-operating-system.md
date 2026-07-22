@@ -97,6 +97,9 @@ The initial lifecycle is:
    selected brownfield repositories and create human-reviewed draft PRs only.
 6. **Milestone 5 — measurement and hardening.** Establish outcome metrics,
    failure taxonomy, recovery drills, security review, and pilot exit criteria.
+   Milestone 5D hardening is complete: draft execution has measured/reserved
+   budget admission, an active application deadline, idempotent PR recovery,
+   and operator-confirmed owned-orphan cleanup. This does not begin Milestone 6.
 7. **Milestone 6 — productization decision.** Graduate only evidence-backed
    capabilities through explicit architecture, security, package, and release
    review.

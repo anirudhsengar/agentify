@@ -10,7 +10,7 @@ git -C "$repo" add .; git -C "$repo" commit -qm base; base=$(git -C "$repo" rev-
 future=$(node -e 'console.log(new Date(Date.now()+86400000).toISOString())')
 mkdir -p "$repo/.agents/agentify/shadow/shadow-1"
 cat > "$repo/.github/agentify-shadow.json" <<EOF
-{"schema_version":"1","mode":"draft","engagement_id":"eng","eval_suite_id":"suite","task_id":"task","maximum_cost_usd":5,"maximum_runtime_ms":60000,"allow_failed_draft":false,"allow_dependency_changes":false,"forbidden_paths":[".github/workflows"],"state_dir":".agents/agentify","validation_checks":[{"name":"build","kind":"build","argv":["node","-e","process.exit(0)"]},{"name":"tests","kind":"tests","argv":["node","-e","process.exit(0)"],"timeout_ms":1000},{"name":"typecheck","kind":"typecheck","argv":["node","-e","process.exit(0)"]},{"name":"lint","kind":"lint","argv":["node","-e","process.exit(0)"]},{"name":"security","kind":"security","argv":["node","-e","process.exit(0)"]}]}
+{"schema_version":"1","mode":"draft","engagement_id":"eng","eval_suite_id":"suite","task_id":"task","maximum_cost_usd":5,"maximum_runtime_ms":60000,"require_measured_cost":true,"maximum_input_tokens":1000,"maximum_output_tokens":100,"pricing_policy":{"version":"test-v1","models":[]},"allow_failed_draft":false,"allow_dependency_changes":false,"forbidden_paths":[".github/workflows"],"state_dir":".agents/agentify","validation_checks":[{"name":"build","kind":"build","argv":["node","-e","process.exit(0)"]},{"name":"tests","kind":"tests","argv":["node","-e","process.exit(0)"],"timeout_ms":1000},{"name":"typecheck","kind":"typecheck","argv":["node","-e","process.exit(0)"]},{"name":"lint","kind":"lint","argv":["node","-e","process.exit(0)"]},{"name":"security","kind":"security","argv":["node","-e","process.exit(0)"]}]}
 EOF
 printf '{"schema_version":"1","engagement_id":"eng","status":"shadow"}\n' > "$repo/.agents/agentify/engagements/eng/charter.json"
 printf '{"schema_version":"1","engagement_id":"eng","risks":[]}\n' > "$repo/.agents/agentify/engagements/eng/risk-register.json"
@@ -46,7 +46,7 @@ jq '.expected_base_commit="0000000000000000000000000000000000000000"' "$tmp/appr
 sed -i "s/0000000000000000000000000000000000000000/$base/" "$tmp/approval.json"
 
 printf 'export const value = 2;\n' > "$repo/src/value.ts"; git -C "$repo" add src/value.ts; git -C "$repo" commit -qm change
-printf '{"cost_usd":1,"runtime_ms":1000,"retries":1}\n' > "$tmp/usage.json"
+node "$root/.github/scripts/draft-run-control.mjs" init "$tmp/usage.json" "$repo/.github/agentify-shadow.json"
 node "$root/.github/scripts/validate-draft-run.mjs" "$repo" "$base" .github/agentify-shadow.json "$tmp/usage.json" "$tmp/validation.json"
 jq -e '.passed and .publication_allowed and .files_changed == ["src/value.ts"]' "$tmp/validation.json" >/dev/null
 printf 'plan\n' > "$tmp/plan.md"
