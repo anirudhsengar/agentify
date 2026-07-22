@@ -18,10 +18,14 @@ async function testInstallsManagedScaffoldFiles(): Promise<void> {
     const workflow = path.join(cwd, ".github", "workflows", "agent-implement.yml");
     const shell = path.join(cwd, ".github", "scripts", "setup-agentify.sh");
     const setup = path.join(cwd, "SETUP.md");
+    const shadowWorkflow = path.join(cwd, ".github", "workflows", "agent-shadow.yml");
+    const shadowConfig = path.join(cwd, ".github", "agentify-shadow.json");
 
     assert.ok(fs.existsSync(workflow));
     assert.ok(fs.existsSync(shell));
     assert.ok(fs.existsSync(setup));
+    assert.ok(fs.existsSync(shadowWorkflow));
+    assert.equal((JSON.parse(fs.readFileSync(shadowConfig, "utf-8")) as { mode: string }).mode, "disabled");
     assert.match(fs.readFileSync(workflow, "utf-8"), /^# agentify:managed/m);
     assert.match(fs.readFileSync(shell, "utf-8"), /^#!\/usr\/bin\/env bash\n# agentify:managed/m);
     assert.match(fs.readFileSync(setup, "utf-8"), /<!-- agentify:managed -->/);

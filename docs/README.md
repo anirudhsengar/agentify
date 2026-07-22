@@ -17,6 +17,7 @@ public product contract.
 | FDE operating-system living roadmap | `docs/roadmaps/agentify-fde-operating-system.md` |
 | FDE engagement records, schemas, scoring, and CLI | `docs/architecture/fde-engagement-foundation.md` |
 | Supported FDE evaluation tasks, trials, graders, aggregation, and evidence | `docs/eval-architecture.md` |
+| GitHub shadow-mode operation, security, evidence, and migration | `docs/github-shadow-mode.md` |
 | FDE deterministic grader configuration and evidence contracts | `docs/eval-grader-authoring.md` |
 | Verified FDE Milestone 0 baseline | `docs/benchmarks/fde-baseline.md` |
 | Modernization parity baseline and behavior contract | `docs/refactors/modernization-baseline.md` |

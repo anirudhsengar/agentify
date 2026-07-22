@@ -25,6 +25,7 @@ The setup creates the following labels (every workflow triggers off these):
 | `agent:update-branch` | Merge the PR's base branch into the PR branch |
 | `agent:approved` | Automated review found no blocking changes; human merge approval is still required |
 | `agent:drill-me` | Async drilling intake via `agent-drill-me-issue.yml` |
+| `agent:shadow` | Opt-in analysis-only FDE recommendation; disabled by default |
 | `artifact:prd` | Planning artifact; not directly executable by an agent |
 
 To create only the labels manually, run the `gh label create` invocations in
@@ -65,6 +66,24 @@ AGENT_BOT_LOGIN Required. The GitHub login AGENT_PAT belongs to. The drill workf
 ```
 
 ## 3. Drive the async loop
+
+### Optional GitHub shadow mode
+
+Shadow mode is installed but inert. To enable it, edit
+`.github/agentify-shadow.json`, set `mode` to `shadow`, and provide an existing
+engagement ID, eval suite ID, and task ID. Keep `comment_on_issue` false unless
+compact public recommendations are acceptable for the repository. The reserved
+`draft` value fails closed in this release.
+
+Adding `agent:shadow` then runs the supported analysis-only workflow. It has
+read-only contents permission, does not configure checkout credentials, and
+uploads `agentify-shadow-<run>-<attempt>` containing a redacted JSON evidence
+packet and Markdown summary. It writes a copy under the resolved Agentify state
+directory during the job. GitHub-hosted runners are ephemeral, so the uploaded
+artifact is the durable CI record unless the state directory is backed by a
+separate approved persistence mechanism. See the packaged
+`docs/github-shadow-mode.md` operator guide for setup, packet fields, security,
+limits, troubleshooting, migration, and an example flow.
 
 Creating an issue is safe triage by default. Automation starts when a trusted
 actor adds a runnable label or comments with one of these commands:

@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Add opt-in GitHub FDE shadow mode with deterministic issue readiness,
+  evidence-backed candidate scope and plans, redacted evidence packets,
+  analysis-only live evidence attestation and evaluation, artifact upload, and
+  explicitly gated compact issue comments. Existing installations remain
+  disabled and shadow evidence cannot prove implementation success or gate a
+  package release.
+
 - Harden FDE evaluation imports by binding artifact identities to deterministic
   plans, rejecting duplicate and unknown artifacts, canonicalizing grader paths,
   blocking symlink traversal, redacting grader exceptions, validating `all_k`,

@@ -8,6 +8,10 @@ export const EvalResultSchema = Type.Object({
   task_count: Type.Integer({ minimum: 0 }), planned_trials: Type.Integer({ minimum: 0 }), completed_trials: Type.Integer({ minimum: 0 }),
   passed_trials: Type.Integer({ minimum: 0 }), failed_trials: Type.Integer({ minimum: 0 }), skipped_trials: Type.Integer({ minimum: 0 }),
   imported_trials: Type.Integer({ minimum: 0 }),
+  live_shadow_trials: Type.Optional(Type.Integer({ minimum: 0 })),
+  shadow_evidence_classification: Type.Optional(Type.Union([
+    Type.Literal("valid_live_shadow_evidence"), Type.Literal("incomplete_live_shadow_evidence"), Type.Literal("invalid_live_shadow_evidence"),
+  ])),
   trial_pass_rate: Type.Number({ minimum: 0, maximum: 1 }), task_pass_rate: Type.Number({ minimum: 0, maximum: 1 }),
   pass_at_1: Type.Union([Type.Number({ minimum: 0, maximum: 1 }), Type.Null()]),
   repeated_trial_success_rate: Type.Number({ minimum: 0, maximum: 1 }),

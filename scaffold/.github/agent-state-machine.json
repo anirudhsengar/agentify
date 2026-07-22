@@ -2,6 +2,7 @@
   "schema_version": "1",
   "states": [
     { "name": "intake", "label": "agent:drill-me", "description": "Issue is being drilled or clarified." },
+    { "name": "shadow", "label": "agent:shadow", "description": "An opt-in analysis-only recommendation is running; source mutation is forbidden." },
     { "name": "queued", "label": "agent:queued", "description": "Implementation slice exists but is not running." },
     { "name": "implementing", "label": "agent:in-progress", "description": "An agent workflow is currently mutating code." },
     { "name": "review", "label": "agent:review", "description": "A PR is awaiting automated review." },

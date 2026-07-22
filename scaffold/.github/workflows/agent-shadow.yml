@@ -1,0 +1,78 @@
+name: Agent Shadow
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: agent-shadow-${{ github.repository_id }}-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  shadow:
+    if: github.event.label.name == 'agent:shadow'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    steps:
+      - name: Checkout exact event commit without credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Refuse disabled or reserved mode
+        id: config
+        run: |
+          mode=$(jq -r '.mode' .github/agentify-shadow.json)
+          case "$mode" in
+            disabled) echo "Shadow mode is disabled by configuration."; exit 0 ;;
+            shadow) echo "enabled=true" >> "$GITHUB_OUTPUT" ;;
+            draft) echo "Draft mode is reserved and cannot run." >&2; exit 1 ;;
+            *) echo "Invalid shadow mode." >&2; exit 1 ;;
+          esac
+      - name: Resolve Agentify state
+        if: steps.config.outputs.enabled == 'true'
+        id: state
+        run: echo "path=$(bash .github/scripts/resolve-state-dir.sh .)" >> "$GITHUB_OUTPUT"
+      - name: Run read-only shadow analysis and evaluation
+        if: steps.config.outputs.enabled == 'true'
+        id: shadow
+        env:
+          # GITHUB_* default variables and GITHUB_EVENT_PATH are runner-owned.
+          AGENTIFY_STATE_DIR: ${{ steps.state.outputs.path }}
+        run: |
+          before=$(git rev-parse HEAD)
+          result=$(node .github/scripts/run-shadow.mjs . "$AGENTIFY_STATE_DIR" .github/agentify-shadow.json "$RUNNER_TEMP/agentify-shadow")
+          test "$before" = "$(git rev-parse HEAD)"
+          printf '%s\n' "$result" > "$RUNNER_TEMP/shadow-result.json"
+          echo "readiness=$(jq -r .readiness "$RUNNER_TEMP/shadow-result.json")" >> "$GITHUB_OUTPUT"
+          echo "classification=$(jq -r .classification "$RUNNER_TEMP/shadow-result.json")" >> "$GITHUB_OUTPUT"
+          echo "comment_enabled=$(jq -r .comment_enabled "$RUNNER_TEMP/shadow-result.json")" >> "$GITHUB_OUTPUT"
+      - name: Upload evidence packet
+        if: steps.config.outputs.enabled == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentify-shadow-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/agentify-shadow
+          if-no-files-found: error
+          retention-days: 30
+      - name: Post compact shadow recommendation
+        if: steps.config.outputs.enabled == 'true' && steps.shadow.outputs.comment_enabled == 'true' && success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          READINESS: ${{ steps.shadow.outputs.readiness }}
+          CLASSIFICATION: ${{ steps.shadow.outputs.classification }}
+        run: |
+          printf '%s\n' \
+            '## Agentify shadow recommendation' \
+            '' "**Readiness:** $READINESS" \
+            '' '**High-level plan:** inspect the evidence-backed candidate files, obtain required approvals, implement the smallest approved change, and run the configured validation policy.' \
+            '' '**Key risks:** see the redacted evidence artifact; repository content and traces are intentionally omitted here.' \
+            '' "**Evidence:** artifact \`agentify-shadow-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\` ($CLASSIFICATION)." \
+            '' '**Human action required:** review readiness, risks, approvals, and uncertainties before implementation.' \
+            '' '_Shadow mode only: no code was changed, no branch was pushed, and no pull request was created._' \
+            > "$RUNNER_TEMP/shadow-comment.md"
+          gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/shadow-comment.md"

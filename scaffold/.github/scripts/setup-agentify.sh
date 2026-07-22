@@ -34,6 +34,7 @@ create_label "agent:review" "1D76DB" "Request automated review of an agent-owned
 create_label "agent:update-branch" "0E8A16" "Merge the PR base branch into an agent-owned PR branch"
 create_label "agent:approved" "0E8A16" "Automated review found no blocking changes; human merge approval remains"
 create_label "agent:drill-me" "D4C5F9" "Async drilling intake via agent-drill-me-issue.yml; the agent interviews on issue comments and eventually publishes GOALS / PRDs / queued slices"
+create_label "agent:shadow" "6E7781" "Run an analysis-only FDE shadow recommendation when explicitly enabled"
 create_label "artifact:prd" "C5DEF5" "Planning artifact; not directly executable by an agent"
 
 set_variable_if_present() {

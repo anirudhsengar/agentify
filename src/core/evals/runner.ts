@@ -44,6 +44,17 @@ export interface RunEvalOptions {
   graders?: Readonly<Record<string, GraderAdapter>>;
 }
 
+export type ShadowEvidenceClassification = "valid_live_shadow_evidence" | "incomplete_live_shadow_evidence" | "invalid_live_shadow_evidence";
+
+/** Classify analysis-only evidence. This deliberately never returns implementation success. */
+export function classifyLiveShadowTrial(trial: EvalTrial): ShadowEvidenceClassification {
+  if (trial.evidence_origin !== "live_shadow" || !trial.live_shadow_attestation) return "invalid_live_shadow_evidence";
+  const attestation = trial.live_shadow_attestation;
+  if (attestation.task_id !== trial.task_id || attestation.trial_index !== trial.trial_index || trial.status === "error" || trial.failure_categories.some((category) => SAFETY_FAILURE_CATEGORIES.has(category))) return "invalid_live_shadow_evidence";
+  if (trial.grader_results.length === 0 || trial.grader_results.some((grader) => grader.status === "error" || grader.status === "skipped" || grader.status === "human_required") || trial.passed !== true) return "incomplete_live_shadow_evidence";
+  return "valid_live_shadow_evidence";
+}
+
 export function resolveTrialPlan(suite: EvalSuite, tasks: readonly EvalTask[], runId: string): TrialPlanItem[] {
   if (suite.aggregation_policy.all_k !== undefined && suite.aggregation_policy.all_k > suite.number_of_trials) throw new Error("all_k cannot exceed number_of_trials");
   const ids = new Set<string>();
@@ -84,7 +95,9 @@ export function aggregateEvalResult(suite: EvalSuite, tasks: readonly EvalTask[]
   if (unresolvedGraders) reasons.push("one or more graders are unresolved");
   if (failed.length || skipped.length) reasons.push("one or more trials did not pass");
   const importedTrials = completed.filter((trial) => trial.evidence_origin === "imported").length;
+  const liveShadowTrials = completed.filter((trial) => trial.evidence_origin === "live_shadow");
   if (importedTrials) reasons.push("imported evidence is not trusted as live execution automatically");
+  if (liveShadowTrials.length) reasons.push("shadow evidence is analysis-only and cannot gate package release or prove implementation success");
   const policy = suite.release_policy;
   if (policy?.minimum_task_count !== undefined && tasks.length < policy.minimum_task_count) reasons.push(`minimum task count is ${policy.minimum_task_count}`);
   const passedHumanReviews = completed.flatMap((trial) => trial.grader_results).filter((grader) => grader.grader_id === "human_review" && grader.status === "pass").length;
@@ -98,6 +111,8 @@ export function aggregateEvalResult(suite: EvalSuite, tasks: readonly EvalTask[]
     task_count: suite.task_references.length, planned_trials: suite.task_references.length * suite.number_of_trials, completed_trials: completed.length,
     passed_trials: passed.length, failed_trials: failed.length, skipped_trials: skipped.length,
     imported_trials: importedTrials,
+    live_shadow_trials: liveShadowTrials.length,
+    ...(liveShadowTrials.length ? { shadow_evidence_classification: liveShadowTrials.some((trial) => classifyLiveShadowTrial(trial) === "invalid_live_shadow_evidence") ? "invalid_live_shadow_evidence" : liveShadowTrials.every((trial) => classifyLiveShadowTrial(trial) === "valid_live_shadow_evidence") ? "valid_live_shadow_evidence" : "incomplete_live_shadow_evidence" } : {}),
     trial_pass_rate: completed.length ? passed.length / completed.length : 0,
     task_pass_rate: suite.task_references.length ? taskPassed / suite.task_references.length : 0,
     pass_at_1: firstTrials.length === suite.task_references.length && firstTrials.length > 0 ? firstTrials.filter((trial) => trial.passed).length / firstTrials.length : null,

@@ -1,0 +1,11 @@
+{
+  "schema_version": "1",
+  "mode": "disabled",
+  "comment_on_issue": false,
+  "engagement_id": "",
+  "eval_suite_id": "",
+  "task_id": "",
+  "validation_policy": "configured-eval-suite",
+  "maximum_runtime_ms": 900000,
+  "maximum_cost_usd": 5
+}
