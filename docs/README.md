@@ -19,6 +19,7 @@ public product contract.
 | FDE autonomy levels, evidence gates, approval, revocation, and rollback | `docs/autonomy-and-promotion.md` |
 | Supported FDE evaluation tasks, trials, graders, aggregation, and evidence | `docs/eval-architecture.md` |
 | GitHub shadow-mode operation, security, evidence, and migration | `docs/github-shadow-mode.md` |
+| Human-approved isolated implementation and unmerged draft PR operation | `docs/github-draft-mode.md` |
 | FDE deterministic grader configuration and evidence contracts | `docs/eval-grader-authoring.md` |
 | Verified FDE Milestone 0 baseline | `docs/benchmarks/fde-baseline.md` |
 | Modernization parity baseline and behavior contract | `docs/refactors/modernization-baseline.md` |

@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Add human-approved FDE draft mode with promotion/evidence admission gates,
+  unique isolated run branches, structured validation, redacted evidence
+  packets, draft-only PR publication, and structured human-review capture.
+  Agentify never merges or enables auto-merge.
+
 - Add a typed, deterministic FDE autonomy model with engagement-scoped,
   revisioned promotion policies; append-preserved decisions; explicit human
   approval and revocation; fail-closed evidence and safety gates; deterministic

@@ -79,8 +79,8 @@ test("promotion CLI requires explicit evidence, actor, and confirmation without 
     const evaluated = await run(root, ["promotion", "evaluate", "--id", "invoice-review", "--input", promotionFile]); assert.equal(evaluated.code, 2); assert.match(evaluated.out, /insufficient_evidence/);
     const noActor = await run(root, ["promotion", "approve", "--id", "invoice-review", "--yes"]); assert.equal(noActor.code, 1); assert.match(noActor.err, /--actor/);
     const noConfirmation = await run(root, ["promotion", "approve", "--id", "invoice-review", "--actor", "Owner"]); assert.equal(noConfirmation.code, 1); assert.match(noConfirmation.err, /--yes/);
-    const approved = await run(root, ["promotion", "approve", "--id", "invoice-review", "--actor", "Owner", "--yes"]); assert.equal(approved.code, 2); assert.match(approved.out, /Decision: rejected/); assert.match(approved.out, /GitHub behavior: unchanged/);
-    const status = await run(root, ["promotion", "status", "--id", "invoice-review"]); assert.equal(status.code, 0); assert.match(status.out, /Current level: observe/);
-    const revoked = await run(root, ["promotion", "revoke", "--id", "invoice-review", "--actor", "Owner", "--reason", "risk", "--yes"]); assert.equal(revoked.code, 1); assert.match(revoked.err, /no active approved promotion/);
+    const approved = await run(root, ["promotion", "approve", "--id", "invoice-review", "--actor", "Owner", "--yes"]); assert.equal(approved.code, 0); assert.match(approved.out, /Decision: approved/); assert.match(approved.out, /GitHub behavior: unchanged/);
+    const status = await run(root, ["promotion", "status", "--id", "invoice-review"]); assert.equal(status.code, 0); assert.match(status.out, /Current level: draft/);
+    const revoked = await run(root, ["promotion", "revoke", "--id", "invoice-review", "--actor", "Owner", "--reason", "risk", "--yes"]); assert.equal(revoked.code, 0); assert.match(revoked.out, /revoked/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

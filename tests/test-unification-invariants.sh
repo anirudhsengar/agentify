@@ -68,6 +68,7 @@ done
 # 9. The scaffold payload is complete (what /scaffold-ci stamps into a target).
 for f in \
   scaffold/.github/workflows/agent-implement.yml \
+  scaffold/.github/workflows/agent-draft-review.yml \
   scaffold/.github/workflows/agent-review.yml \
   scaffold/.github/workflows/agent-command.yml \
   scaffold/.github/workflows/agent-drill-me-issue.yml \
@@ -79,6 +80,8 @@ for f in \
   scaffold/.github/actions/setup-pi/action.yml \
   scaffold/.github/scripts/apply-drill-issues.sh \
   scaffold/.github/scripts/check-existing-issue-pr.sh \
+  scaffold/.github/scripts/check-draft-gates.mjs \
+  scaffold/.github/scripts/build-draft-evidence.mjs \
   scaffold/.github/scripts/complete-implementation-handoff.sh \
   scaffold/.github/scripts/complete-review-handoff.sh \
   scaffold/.github/scripts/compute-implementation-branch.sh \
@@ -87,6 +90,7 @@ for f in \
   scaffold/.github/scripts/extract-pr-meta.sh \
   scaffold/.github/scripts/extract-review-verdict.sh \
   scaffold/.github/scripts/extract-update-branch-comment.sh \
+  scaffold/.github/scripts/import-draft-review.mjs \
   scaffold/.github/scripts/mark-implementation-failure.sh \
   scaffold/.github/scripts/mark-pr-workflow-failure.sh \
   scaffold/.github/scripts/publish-implementation-pr.sh \
@@ -113,6 +117,7 @@ for f in \
   scaffold/.github/scripts/verify-implementation-commits.sh \
   scaffold/.github/scripts/verify-routing-evidence.sh \
   scaffold/.github/scripts/validate-repository.sh \
+  scaffold/.github/scripts/validate-draft-run.mjs \
   scaffold/SETUP.md scaffold/tests/run.sh; do
   [ -f "$f" ] || fail "scaffold payload missing: $f"
 done

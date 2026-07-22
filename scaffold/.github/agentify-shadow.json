@@ -7,5 +7,9 @@
   "task_id": "",
   "validation_policy": "configured-eval-suite",
   "maximum_runtime_ms": 900000,
-  "maximum_cost_usd": 5
+  "maximum_cost_usd": 5,
+  "allow_failed_draft": false,
+  "allow_dependency_changes": false,
+  "forbidden_paths": [".github/workflows", ".git", ".agentify"],
+  "validation_checks": []
 }

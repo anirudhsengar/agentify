@@ -4,7 +4,7 @@ Agentify records FDE autonomy explicitly. A level is a policy fact, not a claim 
 
 ## Levels and current support
 
-The ordered levels are `observe`, `draft`, `approved_execute`, `bounded_auto`, and `policy_auto`. `observe` is the only currently supported operating level. `draft` is represented for the next implementation milestone but is not operational yet. `approved_execute` can be represented, but execution is not automated. `bounded_auto` is unavailable by default. `policy_auto` is unsupported and every attempted transition to it is rejected.
+The ordered levels are `observe`, `draft`, `approved_execute`, `bounded_auto`, and `policy_auto`. `observe` and human-approved `draft` are supported operating levels. Draft only authorizes an isolated implementation run that may publish an unmerged draft pull request after validation; it never authorizes merge. `approved_execute` can be represented, but execution is not automated. `bounded_auto` is unavailable by default. `policy_auto` is unsupported and every attempted transition to it is rejected.
 
 Promotions normally advance exactly one level. Skips, reverse transitions, implicit promotions, terminal-engagement promotions, and unsupported candidates fail closed. An approved record still cannot silently grant tools, change an execution policy, or enable a GitHub workflow.
 

@@ -66,6 +66,7 @@ try {
     "docs/eval-architecture.md",
     "docs/eval-grader-authoring.md",
     "docs/autonomy-and-promotion.md",
+    "docs/github-draft-mode.md",
     "docs/refactors/modernization-baseline.md",
     "docs/refactors/runtime-reachability.md",
     "SECURITY.md",

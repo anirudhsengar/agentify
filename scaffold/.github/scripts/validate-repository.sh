@@ -16,7 +16,16 @@ require_text() {
   local file=$1
   local pattern=$2
   local description=$3
-  if ! grep -Eq "$pattern" "$file"; then
+  if ! grep -Eq -- "$pattern" "$file"; then
+    fail "$description ($file)"
+  fi
+}
+
+forbidden_text() {
+  local file=$1
+  local pattern=$2
+  local description=$3
+  if grep -Eq -- "$pattern" "$file"; then
     fail "$description ($file)"
   fi
 }
@@ -112,6 +121,16 @@ require_text .github/workflows/agent-implement.yml 'extract-pr-meta\.sh' \
   "issue implementation PR metadata validation must delegate to a tested trusted script"
 require_text .github/workflows/agent-implement.yml 'publish-implementation-pr\.sh' \
   "issue implementation branch push and draft PR creation must delegate to a tested trusted script"
+require_text .github/workflows/agent-implement.yml 'check-draft-gates\.mjs' \
+  "issue implementation must enforce draft promotion, evidence, approval, risk, base, and permission gates"
+require_text .github/workflows/agent-implement.yml 'validate-draft-run\.mjs' \
+  "issue implementation must run structured validation before draft publication"
+require_text .github/workflows/agent-implement.yml 'build-draft-evidence\.mjs' \
+  "issue implementation must build a redacted evidence packet"
+require_text .github/scripts/publish-implementation-pr.sh '--draft' \
+  "trusted publication must create only a draft pull request"
+forbidden_text .github/scripts/publish-implementation-pr.sh 'push --force|pr merge|auto-merge' \
+  "draft publication must never force-push, merge, or enable auto-merge"
 require_text .github/workflows/agent-implement.yml 'verify-implementation-commits\.sh' \
   "issue implementation no-change detection must delegate to a tested trusted script"
 require_text .github/workflows/agent-implement.yml 'complete-implementation-handoff\.sh' \

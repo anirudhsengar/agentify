@@ -12,7 +12,7 @@ assert_output() {
   local expected=$3
   local output_file="$tmp/output-$issue_number.txt"
 
-  bash "$computer" "$issue_number" "$issue_title" "$output_file"
+  bash "$computer" "$issue_number" "$issue_title" "900-1" "$output_file"
   if ! grep -q "^name=$expected$" "$output_file"; then
     printf 'expected branch: %s\nactual output:\n' "$expected" >&2
     cat "$output_file" >&2
@@ -20,21 +20,25 @@ assert_output() {
   fi
 }
 
-assert_output 42 "Implement Payments Retry" "agent/issue-42-implement-payments-retry"
-assert_output 7 "!!!" "agent/issue-7-issue"
-assert_output 9 $'Fix payments\nretry now' "agent/issue-9-fix-payments-retry-now"
+assert_output 42 "Implement Payments Retry" "agent/draft-42-900-1-implement-payments-retry"
+assert_output 7 "!!!" "agent/draft-7-900-1-issue"
+assert_output 9 $'Fix payments\nretry now' "agent/draft-9-900-1-fix-payments-retry-now"
 
 long_title="Implement a branch slug that keeps only the first fifty normalized characters"
 output_file="$tmp/long-output.txt"
-bash "$computer" 123 "$long_title" "$output_file"
+bash "$computer" 123 "$long_title" "900-1" "$output_file"
 branch=$(sed -n 's/^name=//p' "$output_file")
-slug=${branch#agent/issue-123-}
+slug=${branch#agent/draft-123-900-1-}
 if [ "${#slug}" -ne 50 ]; then
   echo "expected slug to be truncated to 50 characters, got ${#slug}" >&2
   exit 1
 fi
 
-if bash "$computer" "not-a-number" "Title" "$tmp/bad-output.txt" >/dev/null 2>&1; then
+if bash "$computer" "not-a-number" "Title" "900-1" "$tmp/bad-output.txt" >/dev/null 2>&1; then
   echo "expected non-numeric issue number to fail" >&2
+  exit 1
+fi
+if bash "$computer" 1 "Title" "unsafe/run" "$tmp/bad-run.txt" >/dev/null 2>&1; then
+  echo "expected unsafe run ID to fail" >&2
   exit 1
 fi

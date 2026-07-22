@@ -13,6 +13,8 @@ mkdir -p "$bin_dir"
 cat > "$bin_dir/git" <<'EOF'
 #!/usr/bin/env bash
 printf 'token=%s git %s\n' "${GH_TOKEN:-}" "$*" >> "$CALLS_LOG"
+if [ "$1" = "rev-parse" ]; then echo abc123; fi
+if [ "$1" = "ls-remote" ] && [[ "$*" == *"refs/heads/main"* ]]; then echo "base123 refs/heads/main"; fi
 EOF
 chmod +x "$bin_dir/git"
 
@@ -62,6 +64,7 @@ PATH="$bin_dir:$PATH" \
   bash "$repo_root/.github/scripts/compute-implementation-branch.sh" \
     42 \
     "Add Billing Export" \
+    "999-1" \
     "$github_output"
 branch=$(sed -n 's/^name=//p' "$github_output")
 
@@ -73,6 +76,7 @@ AGENT_PAT="agent-token" \
   bash "$repo_root/.github/scripts/publish-implementation-pr.sh" \
     "$branch" \
     "main" \
+    "base123" \
     "$tmp/pr-meta/pr_title.txt" \
     "$tmp/pr-meta/pr_description.txt" \
     "$github_output"
@@ -88,7 +92,7 @@ GITHUB_TOKEN="github-token" \
     "$pr_number" \
     "https://github.com/owner/repo/actions/runs/999"
 
-[ "$branch" = "agent/issue-42-add-billing-export" ] || {
+[ "$branch" = "agent/draft-42-999-1-add-billing-export" ] || {
   echo "unexpected branch: $branch" >&2
   exit 1
 }
@@ -96,11 +100,11 @@ GITHUB_TOKEN="github-token" \
   echo "unexpected PR number: $pr_number" >&2
   exit 1
 }
-grep -q 'token=agent-token gh pr create --draft --base main --head agent/issue-42-add-billing-export --title feat: add billing export --body-file '"$tmp/pr-meta/pr_description.txt" "$calls" || {
+grep -q 'token=agent-token gh pr create --draft --base main --head agent/draft-42-999-1-add-billing-export --title Agentify draft #42: feat: add billing export --body-file '"$tmp/pr-meta/pr_description.txt" "$calls" || {
   echo "expected draft PR creation call" >&2
   exit 1
 }
-grep -q 'token=agent-token gh pr edit 456 --add-label agent:review' "$calls" || {
+grep -q 'token=agent-token gh pr edit 456 --add-label agent:review --add-label agentify:draft' "$calls" || {
   echo "expected review label on created PR" >&2
   exit 1
 }

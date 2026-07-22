@@ -7,8 +7,8 @@ public orchestrator, implementation branch, or pull request.
 ## Configuration
 
 The managed `.github/agentify-shadow.json` supports `disabled`, `shadow`, and
-reserved `draft`. New and upgraded installations receive `disabled`; Agentify
-never silently activates the workflow. Enabling requires valid IDs for an
+human-approved `draft`. New and upgraded installations receive `disabled`;
+Agentify never silently activates either workflow. Shadow enabling requires valid IDs for an
 existing engagement, eval suite, and task, plus a validation policy and cost
 and runtime ceilings. `comment_on_issue` defaults to false.
 

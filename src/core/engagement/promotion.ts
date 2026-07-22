@@ -7,7 +7,7 @@ import { engagementArtifactPath } from "./paths.ts";
 import { readEngagement, writeEngagementJsonAtomic, type EngagementStateOptions } from "./state.ts";
 import { AUTONOMY_LEVELS, PromotionPolicySchema, PromotionStateSchema, type AutonomyLevel, type PromotionActuals, type PromotionConditions, type PromotionPolicy, type PromotionRecord, type PromotionState } from "./schema/promotion.ts";
 
-const SUPPORTED_LEVELS = new Set<AutonomyLevel>(["observe"]);
+const SUPPORTED_LEVELS = new Set<AutonomyLevel>(["observe", "draft"]);
 const SAFETY_KEYS = new Set(["maximum_forbidden_action_failures", "maximum_security_failures", "required_rollback_test", "required_escalation_test", "no_unresolved_critical_risks"]);
 export function promotionStatePath(stateDir: string, engagementId: string): string { return path.join(path.dirname(engagementArtifactPath(stateDir, engagementId, "charter.json")), "promotion-state.json"); }
 export function promotionReportPath(stateDir: string, engagementId: string): string { return path.join(path.dirname(engagementArtifactPath(stateDir, engagementId, "charter.json")), "reports", "promotion.md"); }

@@ -35,6 +35,6 @@ Opened draft PR #${pr_number} and queued it for automated review (\`agent:review
 **Workflow run:** ${run_url}
 EOF
 
-GH_TOKEN="$AGENT_PAT" gh pr edit "$pr_number" --add-label "agent:review"
+GH_TOKEN="$AGENT_PAT" gh pr edit "$pr_number" --add-label "agent:review" --add-label "agentify:draft"
 GH_TOKEN="$GITHUB_TOKEN" gh issue edit "$issue_number" --remove-label "agent:queued" || true
 GH_TOKEN="$GITHUB_TOKEN" gh issue comment "$issue_number" --body-file "$comment_file" || true

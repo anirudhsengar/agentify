@@ -26,6 +26,7 @@ The setup creates the following labels (every workflow triggers off these):
 | `agent:approved` | Automated review found no blocking changes; human merge approval is still required |
 | `agent:drill-me` | Async drilling intake via `agent-drill-me-issue.yml` |
 | `agent:shadow` | Opt-in analysis-only FDE recommendation; disabled by default |
+| `agentify:draft` | Human-approved Agentify draft PR; Agentify never merges it |
 | `artifact:prd` | Planning artifact; not directly executable by an agent |
 
 To create only the labels manually, run the `gh label create` invocations in
@@ -72,8 +73,7 @@ AGENT_BOT_LOGIN Required. The GitHub login AGENT_PAT belongs to. The drill workf
 Shadow mode is installed but inert. To enable it, edit
 `.github/agentify-shadow.json`, set `mode` to `shadow`, and provide an existing
 engagement ID, eval suite ID, and task ID. Keep `comment_on_issue` false unless
-compact public recommendations are acceptable for the repository. The reserved
-`draft` value fails closed in this release.
+compact public recommendations are acceptable for the repository.
 
 Adding `agent:shadow` then runs the supported analysis-only workflow. It has
 read-only contents permission, does not configure checkout credentials, and
@@ -84,6 +84,19 @@ artifact is the durable CI record unless the state directory is backed by a
 separate approved persistence mechanism. See the packaged
 `docs/github-shadow-mode.md` operator guide for setup, packet fields, security,
 limits, troubleshooting, migration, and an example flow.
+
+### Human-approved draft mode
+
+After retaining valid shadow evidence, explicitly promote the engagement to
+`draft`, move its lifecycle to `shadow` or `draft_pilot`, and confirm there are
+no unresolved critical risks. Then set `mode` to `draft` and configure explicit
+argv-vector checks for build, tests, typecheck, lint, and security in
+`.github/agentify-shadow.json`. Applying `agent:implement` is the separate
+per-run human approval for that issue and exact base commit. The workflow uses
+an ephemeral checkout and unique run branch and may create only a draft PR
+labeled `agentify:draft`; it never force-pushes, enables auto-merge, pushes to
+the default branch, or merges. See `docs/github-draft-mode.md` for permissions,
+failure recovery, cleanup, revocation, evidence, and human-review capture.
 
 Creating an issue is safe triage by default. Automation starts when a trusted
 actor adds a runnable label or comments with one of these commands:

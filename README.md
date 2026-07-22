@@ -140,6 +140,11 @@ implicit autonomy promotion. Promotion is recorded separately through
 currently operational, and promotion records do not enable GitHub behavior.
 See [the autonomy and promotion guide](docs/autonomy-and-promotion.md).
 
+After valid shadow evidence and explicit promotion, human-approved `draft`
+mode can implement in an isolated GitHub Actions checkout and publish an
+unmerged draft pull request. It never merges, force-pushes, or pushes to the
+default branch. See [the draft-mode operator guide](docs/github-draft-mode.md).
+
 ## FDE evaluations
 
 ```bash
@@ -374,7 +379,10 @@ optionally explorer/lite). The CLI lets you change this later.
 - **GitHub loop does nothing after bootstrap** — confirm you committed
   and pushed the generated files, ran `setup-agentify.sh`, set the
   `PI_API_KEY`/`AGENT_PAT` secrets, and that the issue carries both
-  `agent:queued` and `agent:implement`. The implement workflow first runs
+  `agent:queued` and `agent:implement`. Draft execution also requires valid
+  shadow evidence, an active promotion to `draft`, eligible lifecycle/risk
+  state, complete structured validation configuration, and the label actor's
+  explicit human approval for the exact base. The implement workflow first runs
   a credential-free orchestration planner over the generated workflow,
   specialist, and expert context, then passes that route to the implementation
   agent.

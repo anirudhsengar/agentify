@@ -20,6 +20,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+      actions: read
 
     env:
       ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -45,6 +46,29 @@ jobs:
 
       - name: Exclude trusted runtime checkout from implementation commits
         run: echo "/.agentify-runtime/" >> .git/info/exclude
+
+      - name: Resolve Agentify state and require draft admission gates
+        id: draft_gate
+        env:
+          AGENTIFY_STATE_DIR: ${{ vars.AGENTIFY_STATE_DIR }}
+        run: |
+          state_dir=${AGENTIFY_STATE_DIR:-$(bash .agentify-runtime/.github/scripts/resolve-state-dir.sh .)}
+          jq --arg state_dir "$state_dir" '.state_dir=$state_dir' .github/agentify-shadow.json > "$RUNNER_TEMP/draft-config.json"
+          printf '%s\n' '{"contents":"write","pull_requests":"write","issues":"write"}' > "$RUNNER_TEMP/github-permissions.json"
+          now=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+          expires=$(node -e 'console.log(new Date(Date.now()+3600000).toISOString())')
+          jq -n --arg engagement_id "$(jq -r .engagement_id .github/agentify-shadow.json)" \
+            --argjson issue_number "$ISSUE_NUMBER" --arg approved_by "$GITHUB_ACTOR" \
+            --arg approved_at "$now" --arg expires_at "$expires" \
+            --arg expected_base_commit "$(git rev-parse HEAD)" \
+            --arg approval_id "github-label:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
+            '{schema_version:"1",approval_id:$approval_id,status:"approved",engagement_id:$engagement_id,issue_number:$issue_number,approved_by:$approved_by,approved_at:$approved_at,expires_at:$expires_at,expected_base_commit:$expected_base_commit}' \
+            > "$RUNNER_TEMP/draft-approval.json"
+          node .agentify-runtime/.github/scripts/check-draft-gates.mjs \
+            . "$state_dir" .github/agentify-shadow.json "$ISSUE_NUMBER" "$RUNNER_TEMP/draft-approval.json" \
+            "$RUNNER_TEMP/github-permissions.json" "$RUNNER_TEMP/draft-gate.json"
+          echo "started_ms=$(date +%s%3N)" >> "$GITHUB_OUTPUT"
+          echo "state_dir=$state_dir" >> "$GITHUB_OUTPUT"
 
       - name: Pre-flight — require queued state, closed blockers, authorized actor
         id: readiness
@@ -97,7 +121,7 @@ jobs:
         id: branch
         run: |
           bash .agentify-runtime/.github/scripts/compute-implementation-branch.sh \
-            "$ISSUE_NUMBER" "$ISSUE_TITLE" "$GITHUB_OUTPUT"
+            "$ISSUE_NUMBER" "$ISSUE_TITLE" "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" "$GITHUB_OUTPUT"
 
       - name: Create branch
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
@@ -174,10 +198,17 @@ jobs:
           SPECIALIST_CONTEXT=$(cat "${RUNNER_TEMP}/specialist-context.md")
           EXPERT_CONTEXT=$(cat "${RUNNER_TEMP}/expert-context.md")
           ORCHESTRATION_PLAN=$(cat "${RUNNER_TEMP}/orchestration-plan.md")
+          DRAFT_GATE_CONTEXT=$(cat "${RUNNER_TEMP}/draft-gate.json")
+          evidence_run_id=$(jq -r '.evidence_run_ids[0]' "${RUNNER_TEMP}/draft-gate.json")
+          SHADOW_EVIDENCE_CONTEXT=$(cat "${{ steps.draft_gate.outputs.state_dir }}/shadow/${evidence_run_id}/evidence-packet.json")
+          RISK_CONTROLS=$(cat "${{ steps.draft_gate.outputs.state_dir }}/engagements/$(jq -r .engagement_id "${RUNNER_TEMP}/draft-gate.json")/risk-register.json")
           export WORKFLOW_CONTEXT
           export SPECIALIST_CONTEXT
           export EXPERT_CONTEXT
           export ORCHESTRATION_PLAN
+          export DRAFT_GATE_CONTEXT
+          export SHADOW_EVIDENCE_CONTEXT
+          export RISK_CONTROLS
           envsubst < .agentify-runtime/.github/agent-prompts/implement.md > "${RUNNER_TEMP}/implement-prompt.md"
 
       - name: Run Pi — implement
@@ -207,6 +238,21 @@ jobs:
           bash .agentify-runtime/.github/scripts/verify-implementation-commits.sh \
             "$BASE_REF" "${RUNNER_TEMP}/failure_reason.txt"
 
+      - name: Run structured draft validation
+        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true'
+        env:
+          STARTED_MS: ${{ steps.draft_gate.outputs.started_ms }}
+        run: |
+          now_ms=$(date +%s%3N)
+          jq -n \
+            --argjson runtime_ms "$((now_ms - STARTED_MS))" \
+            --argjson cost_usd "$(jq -r .limits.maximum_cost_usd "$RUNNER_TEMP/draft-gate.json")" \
+            '{runtime_ms:$runtime_ms,cost_usd:$cost_usd,cost_source:"policy_reserved_upper_bound",retries:0}' \
+            > "$RUNNER_TEMP/draft-usage.json"
+          node .agentify-runtime/.github/scripts/validate-draft-run.mjs \
+            . "$BASE_REF" "$RUNNER_TEMP/draft-config.json" \
+            "$RUNNER_TEMP/draft-usage.json" "$RUNNER_TEMP/draft-validation.json"
+
       - name: Render write-pr prompt
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
         env:
@@ -234,19 +280,49 @@ jobs:
           bash .agentify-runtime/.github/scripts/extract-pr-meta.sh \
             "$TRANSCRIPT" "$ISSUE_NUMBER" "$RUNNER_TEMP"
 
+      - name: Build redacted draft evidence packet
+        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
+        env:
+          BRANCH: ${{ steps.branch.outputs.name }}
+        run: |
+          node .agentify-runtime/.github/scripts/build-draft-evidence.mjs \
+            . "$RUNNER_TEMP/draft-gate.json" "$RUNNER_TEMP/draft-validation.json" \
+            "$RUNNER_TEMP/orchestration-plan.md" "$ISSUE_NUMBER" "$BRANCH" \
+            "$RUNNER_TEMP/draft-evidence.json"
+          printf '\n\n## Agentify draft evidence\n\n- Detailed artifact: `agentify-draft-%s-%s`\n- Validation: **%s**\n- This pull request is a draft and unmerged. Agentify never merges it automatically.\n' \
+            "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            "$(jq -r 'if .passed then "passed" else "failed — publication explicitly allowed by policy" end' "$RUNNER_TEMP/draft-validation.json")" \
+            >> "$RUNNER_TEMP/pr_description.txt"
+
+      - name: Upload draft workflow artifacts
+        if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentify-draft-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/draft-gate.json
+            ${{ runner.temp }}/draft-approval.json
+            ${{ runner.temp }}/draft-validation.json
+            ${{ runner.temp }}/draft-evidence.json
+            ${{ runner.temp }}/orchestration-plan.md
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Publish implementation branch and draft PR
         if: steps.readiness.outputs.proceed == 'true' && steps.preflight.outputs.refused != 'true' && success()
         id: open_pr
         env:
           BRANCH: ${{ steps.branch.outputs.name }}
           AGENT_PAT: ${{ secrets.AGENT_PAT }}
-        # Force-push to recover from leftover branches whose PR has since
-        # closed/merged. Safe because preflight refuses when an open PR
-        # already exists for this issue, and the branch name is
-        # deterministic from the issue number.
         run: |
+          state_dir="${{ steps.draft_gate.outputs.state_dir }}"
+          DRAFT_BASE_COMMIT=$(jq -r .base_commit "$RUNNER_TEMP/draft-gate.json") \
+            node .agentify-runtime/.github/scripts/check-draft-gates.mjs \
+              . "$state_dir" .github/agentify-shadow.json "$ISSUE_NUMBER" "$RUNNER_TEMP/draft-approval.json" \
+              "$RUNNER_TEMP/github-permissions.json" "$RUNNER_TEMP/draft-gate-recheck.json"
           bash .agentify-runtime/.github/scripts/publish-implementation-pr.sh \
             "$BRANCH" "$BASE_REF" \
+            "$(jq -r .base_commit "$RUNNER_TEMP/draft-gate.json")" \
             "${RUNNER_TEMP}/pr_title.txt" \
             "${RUNNER_TEMP}/pr_description.txt" \
             "$GITHUB_OUTPUT"
