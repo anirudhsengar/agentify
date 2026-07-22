@@ -168,4 +168,11 @@ export class ConsoleUi implements AgentifyUi {
       stdin.on("data", onData);
     });
   }
+
+  async promptText(message: string): Promise<string> {
+    this.ensureInteractive(message);
+    const rl = readline.createInterface({ input, output });
+    try { return (await rl.question(`${message}\n> `)).trim(); }
+    finally { rl.close(); }
+  }
 }

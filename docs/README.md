@@ -1,7 +1,7 @@
 # Documentation Index
 
 This directory is the documentation root for Agentify. The installed CLI is the
-only supported public runtime surface in 0.1.x. Internal runtime modules are
+supported public runtime surface in 0.2.x. Internal runtime modules are
 explicitly classified as experimental and are documented separately from the
 public product contract.
 
@@ -15,6 +15,7 @@ public product contract.
 | Dependency compatibility matrix and upgrade gates | `docs/architecture/dependency-compatibility-matrix.md` |
 | Generation architecture and trust boundary | `docs/architecture.md` |
 | FDE operating-system living roadmap | `docs/roadmaps/agentify-fde-operating-system.md` |
+| FDE engagement records, schemas, scoring, and CLI | `docs/architecture/fde-engagement-foundation.md` |
 | Verified FDE Milestone 0 baseline | `docs/benchmarks/fde-baseline.md` |
 | Modernization parity baseline and behavior contract | `docs/refactors/modernization-baseline.md` |
 | Runtime reachability roots and deletion evidence | `docs/refactors/runtime-reachability.md` |

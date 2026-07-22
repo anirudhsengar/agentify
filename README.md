@@ -48,8 +48,9 @@ See [docs/README.md](docs/README.md) for the documentation index.
 
 ## What It Does
 
-The installed `agentify` command is the only supported public runtime surface
-in 0.2.x. Internal runtime modules are experimental implementation details, not
+The installed `agentify` executable is the supported public runtime surface in
+0.2.x, including its deliberately small `agentify engage` record-and-analysis
+family. Internal runtime modules are experimental implementation details, not
 package APIs or hidden command families. See
 [docs/experimental-surfaces.md](docs/experimental-surfaces.md).
 
@@ -62,6 +63,9 @@ package APIs or hidden command families. See
 - **Internal control plane:** orchestrators, specialists, experts, and
   workflows remain implementation machinery, not separate public command
   families.
+- **FDE engagement records:** `agentify engage init|status|validate|report`
+  creates and analyzes deterministic local engagement records without invoking
+  an LLM, implementing code, or claiming deployment.
 - **GitHub-first async loop:** after bootstrap, issues, comments, and
   PRs are the primary out-of-loop surface.
 
@@ -114,6 +118,22 @@ formation resume context, and the credential-free model run can request
 child, PRD, or implementation issues through structured output that the
 trusted workflow applies with the right labels. Subsequent runs attach to
 that initialized state instead of acting like a separate tool family.
+
+## Engagement records
+
+```bash
+agentify engage init --input engagement.json --yes
+agentify engage status --id invoice-review
+agentify engage validate --id invoice-review
+agentify engage report --id invoice-review --stdout
+```
+
+`init` prompts for required facts in an interactive terminal or accepts a strict
+charter-input JSON file for automation. Reports are deterministic Markdown at
+`<stateDir>/engagements/<engagementId>/reports/engagement-summary.md`. This is an
+engagement-record and analysis surface, not an autonomous FDE: it performs no
+workflow discovery, model call, evaluation, implementation, deployment, or
+autonomy promotion.
 
 ## Where does agentify write?
 

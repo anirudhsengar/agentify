@@ -79,6 +79,7 @@ const OWNERSHIP_ROOTS = new Set([
   ".agentify",
   "agents",
   "extensions",
+  "engagements",
   "history",
   "logs",
   "prompts",
@@ -269,7 +270,7 @@ export function inspectStateTree(cwd: string, requestedRelativeDir: string): Sta
       }
       const digest = crypto.createHash("sha256").update(content).digest("hex");
       fingerprintEntries.push(`f|${childRelative}|${stat.mode & 0o777}|${stat.size}|${digest}`);
-      if (PRIMARY_STATE_FILES.has(childRelative)) {
+      if (PRIMARY_STATE_FILES.has(childRelative) || /^engagements\/[^/]+\/charter\.json$/.test(childRelative)) {
         primaryFound = true;
         const parsed = parseJsonObject(content);
         if (!parsed) {

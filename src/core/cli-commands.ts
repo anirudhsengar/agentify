@@ -25,9 +25,10 @@ import {
 import { recoverInterruptedStateTransactions } from "./state-transaction.ts";
 import { revertLastRun } from "./revert.ts";
 import type { AgentifyProvider, AgentifyUi, ModelRole } from "./types.ts";
+import { engageCommand } from "./engagement/cli.ts";
 
 /** Names of the public config-utility subcommands this module dispatches. */
-export const SUBCOMMAND_NAMES = ["login", "logout", "models", "revert"] as const;
+export const SUBCOMMAND_NAMES = ["login", "logout", "models", "revert", "engage"] as const;
 export type SubcommandName = (typeof SUBCOMMAND_NAMES)[number];
 
 export interface SubcommandContext {
@@ -861,12 +862,17 @@ export async function dispatchSubcommand(
     process.exitCode = code;
     return true;
   }
+  if (head === "engage") {
+    const code = await engageCommand(argv.slice(1), ctx);
+    process.exitCode = code;
+    return true;
+  }
   return false;
 }
 
 export function runUnknownSubcommand(name: string, ctx: SubcommandContext): number {
   ctx.err.write(
-    `agentify: unknown subcommand '${name}'. Known subcommands: login, logout, models, revert. Run \`agentify --help\` for usage.\n`,
+    `agentify: unknown subcommand '${name}'. Known subcommands: ${SUBCOMMAND_NAMES.join(", ")}. Run \`agentify --help\` for usage.\n`,
   );
   return 1;
 }
@@ -903,5 +909,8 @@ export function printSubcommandHelp(out: NodeJS.WritableStream): void {
   out.write(`    and deletes files agentify created from scratch. Single-\n`);
   out.write(`    shot, not a history. --keep-alongside preserves the\n`);
   out.write(`    alongside files.\n`);
+  out.write(`\nEngagement record and analysis subcommands:\n`);
+  out.write(`  agentify engage <init|status|validate|report> [options]\n`);
+  out.write(`    Create, inspect, validate, or deterministically report an\n`);
+  out.write(`    FDE engagement record. No LLM or implementation is invoked.\n`);
 }
-

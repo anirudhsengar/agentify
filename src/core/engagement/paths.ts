@@ -80,3 +80,15 @@ export function engagementArtifactPath(resolvedStateDir: string, engagementId: s
   }
   return charterPath;
 }
+
+export function engagementReportPath(resolvedStateDir: string, engagementId: string): string {
+  validateEngagementId(engagementId);
+  const engagementDir = path.dirname(engagementArtifactPath(resolvedStateDir, engagementId, "charter.json"));
+  const reportsDir = path.join(engagementDir, "reports");
+  const reportPath = path.join(reportsDir, "engagement-summary.md");
+  for (const candidate of [reportsDir, reportPath]) {
+    try { if (fs.lstatSync(candidate).isSymbolicLink()) throw new EngagementError("unsafe_path", `engagement report path cannot be a symlink: ${candidate}`); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
+  }
+  return reportPath;
+}

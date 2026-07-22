@@ -207,7 +207,7 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<vo
   if (options.args.length > 0) {
     const first = options.args[0];
     throw new Error(
-      `agentify does not accept '${first}'. Known subcommands: login, logout, models, revert. Run \`agentify --help\` for usage.`,
+      `agentify does not accept '${first}'. Known subcommands: login, logout, models, revert, engage. Run \`agentify --help\` for usage.`,
     );
   }
 

@@ -51,6 +51,17 @@ duplicate IDs and references to missing workflow steps, stakeholders, or
 workflows. Evidence is recorded only as caller-supplied references; this layer
 does not collect, synthesize, or infer evidence.
 
+## Supported CLI boundary
+
+`agentify engage init`, `status`, `validate`, and `report` are the supported
+record-and-analysis interface. `init` accepts explicit facts interactively or
+through `--input`; `status` reports lifecycle, qualification, revision, and gaps;
+`validate` performs strict schema and cross-file checks without repair; and
+`report` atomically renders deterministic Markdown beneath the engagement's
+`reports/` directory. This surface makes no model calls and does not expose AIW,
+the orchestrator, webhooks, Agent Expert, evaluation, implementation, deployment,
+or autonomy promotion.
+
 ## Opportunity scoring
 
 All scoring inputs are explicit numbers from 0 through 100. The positive score

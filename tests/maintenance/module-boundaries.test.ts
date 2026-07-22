@@ -52,7 +52,7 @@ const EXPERIMENTAL_COMPOSITION_ROOTS = [
   "src/core/agent-expert.ts",
 ] as const;
 
-const SUPPORTED_SUBCOMMANDS = ["login", "logout", "models", "revert"] as const;
+const SUPPORTED_SUBCOMMANDS = ["login", "logout", "models", "revert", "engage"] as const;
 
 function normalizeRepoPath(value: string): string {
   return value.split(path.sep).join("/");

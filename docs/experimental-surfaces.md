@@ -1,7 +1,7 @@
 # Supported and experimental surfaces
 
-Agentify 0.1.x intentionally has one supported public runtime surface: the
-installed `agentify` command.
+Agentify 0.2.x has one supported executable, the installed `agentify` command,
+including the bounded `engage` record-and-analysis family.
 
 Everything else in this repository is classified explicitly below so users and
 contributors do not infer a stable library API from source layout, test coverage,
@@ -19,8 +19,9 @@ The supported public surface consists of:
 
 - the `agentify` executable declared by the package `bin` field;
 - the top-level `--help`, `--version`, `--mode`, and `--targets` options;
-- the `login`, `logout`, `models`, and `revert` utility subcommands shown in
+- the `login`, `logout`, `models`, `revert`, and `engage` subcommands shown in
   `agentify --help`;
+- deterministic engagement record creation, inspection, validation, and reports;
 - brownfield bootstrap, attach, recovery, deterministic artifact generation, and
   greenfield formation initiated through that executable;
 - documented configuration files and generated artifacts referenced by the root

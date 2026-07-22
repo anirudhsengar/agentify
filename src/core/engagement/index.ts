@@ -1,5 +1,5 @@
 export { EngagementError, type EngagementErrorCode } from "./errors.ts";
-export { engagementArtifactPath, engagementCharterPath, engagementRootPath, validateEngagementId, type EngagementArtifactName } from "./paths.ts";
+export { engagementArtifactPath, engagementCharterPath, engagementReportPath, engagementRootPath, validateEngagementId, type EngagementArtifactName } from "./paths.ts";
 export { readEngagementArtifact, writeEngagementArtifact } from "./artifacts.ts";
 export {
   EngagementCharterSchema,
@@ -37,5 +37,5 @@ export { scoreOpportunity } from "./opportunity-scorer.ts";
 export { validateAutomationDecision } from "./automation-decider.ts";
 export { deriveRiskSeverity, validateRiskRegister } from "./risk-register.ts";
 export { qualifyEngagement } from "./qualification.ts";
-export { renderEngagementSummary } from "./report.ts";
+export { renderEngagementReport, renderEngagementSummary } from "./report.ts";
 export { validateAutomationDecisionRegister, validateOpportunityMatrix, validateStakeholderRegister } from "./registers.ts";

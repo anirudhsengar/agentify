@@ -23,6 +23,7 @@ async function testPackageExposesOnlyCliRuntime(): Promise<void> {
 }
 
 async function testCliHasNoExperimentalCommands(): Promise<void> {
+  assert.ok(SUBCOMMAND_NAMES.includes("engage"), "engage must be an explicit supported command");
   for (const command of ["webhook", "aiw", "orchestrator", "coms", "expert"]) {
     assert.ok(
       !SUBCOMMAND_NAMES.includes(command as never),
@@ -34,7 +35,7 @@ async function testCliHasNoExperimentalCommands(): Promise<void> {
 async function testDocumentationDefinesBoundary(): Promise<void> {
   const readme = read("README.md");
   const experimental = read("docs/experimental-surfaces.md");
-  assert.match(readme, /only supported public (?:runtime )?surface/i);
+  assert.match(readme, /supported public (?:runtime )?surface/i);
   assert.match(readme, /docs\/experimental-surfaces\.md/);
   for (const area of ["Webhook", "AIW", "Orchestrator", "Communications", "Agent Expert"]) {
     assert.match(experimental, new RegExp(area, "i"));

@@ -149,7 +149,32 @@ try {
     expectFailure: true,
   });
   assert.equal(positional.stdout, "");
-  assert.match(positional.stderr, /Known subcommands: login, logout, models, revert/);
+  assert.match(positional.stderr, /Known subcommands: login, logout, models, revert, engage/);
+
+  const engageHelp = run(bin, ["engage", "help"], { cwd: installRoot, env, timeout: 30_000 });
+  assert.match(engageHelp.stdout, /agentify engage <init\|status\|validate\|report>/);
+  assert.match(engageHelp.stdout, /agentify engage init --input engagement\.json --yes/);
+  assert.equal(engageHelp.stderr, "");
+
+  const engageMissingRepo = run(bin, ["engage", "status"], { cwd: installRoot, env, timeout: 30_000, expectFailure: true });
+  assert.match(engageMissingRepo.stderr, /engage requires a Git repository/);
+
+  const engageRepo = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-package-engage-"));
+  fs.mkdirSync(path.join(engageRepo, ".git"));
+  const engageInput = path.join(engageRepo, "engagement.json");
+  fs.writeFileSync(engageInput, `${JSON.stringify({
+    repository: { root: engageRepo, remote: null }, workflow_name: "Package Review", workflow_owner: "Operations",
+    intended_users: ["analyst"], systems_involved: ["ledger"], problem_statement: "Review is slow.", workflow_frequency: "daily",
+    baseline_metrics: [{ name: "cycle", unit: "minutes", value: 20 }], desired_primary_outcome: "Reduce cycle time",
+    target: { direction: "decrease", value: 10, unit: "minutes" }, guardrail_metrics: [], forbidden_actions: [],
+    requires_human_approval: true, business_owner: "Finance", technical_owner: "Platform", evidence_references: [],
+  }, null, 2)}\n`);
+  const engageInit = run(bin, ["engage", "init", "--input", engageInput, "--yes"], { cwd: engageRepo, env, timeout: 30_000 });
+  assert.match(engageInit.stdout, /Created engagement package-review/);
+  const engageStatus = run(bin, ["engage", "status"], { cwd: engageRepo, env, timeout: 30_000 });
+  assert.match(engageStatus.stdout, /Lifecycle: draft/);
+  assert.match(engageStatus.stdout, /Missing artifacts:/);
+  fs.rmSync(engageRepo, { recursive: true, force: true });
 
   const utility = run(bin, ["login", "--provider", "openai-codex"], {
     cwd: installRoot,

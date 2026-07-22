@@ -24,8 +24,8 @@ Run agentify in the current repository. Existing repos are audited and exported 
 the coding agents you select — by default Claude Code, Codex, and Pi, prompted
 interactively. Empty/new repos start a local-first greenfield chat.
 
-agentify exposes one public runtime entrypoint: `agentify` with no positional
-arguments. Bootstrap, attach, and recovery all start there. After bootstrap, work
+agentify exposes the bootstrap entrypoint plus the deliberately small supported
+`agentify engage` record-and-analysis family. Bootstrap, attach, and recovery start here. After bootstrap, work
 through GitHub issues, comments, and PRs (see docs/lifecycle/README.md).
 
 Config subcommands (manage ~/.agentify/{config,auth}.json):
@@ -56,3 +56,8 @@ Operational subcommands (mutate the repo):
     and deletes files agentify created from scratch. Single-
     shot, not a history. --keep-alongside preserves the
     alongside files.
+
+Engagement record and analysis subcommands:
+  agentify engage <init|status|validate|report> [options]
+    Create, inspect, validate, or deterministically report an
+    FDE engagement record. No LLM or implementation is invoked.

@@ -67,7 +67,7 @@ test("unexpected positional arguments identify the supported utility commands", 
     assert.equal(result.stdout, "");
     assert.equal(
       result.stderr,
-      "agentify: unknown subcommand 'unsupported-command'. Known subcommands: login, logout, models, revert. Run `agentify --help` for usage.\n",
+      "agentify: unknown subcommand 'unsupported-command'. Known subcommands: login, logout, models, revert, engage. Run `agentify --help` for usage.\n",
     );
   } finally {
     sandbox.cleanup();

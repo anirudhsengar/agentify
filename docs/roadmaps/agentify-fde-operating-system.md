@@ -85,9 +85,10 @@ The initial lifecycle is:
 1. **Milestone 0 — verified baseline.** Record the product boundary,
    architecture, test surface, environment, known gaps, and green validation
    baseline.
-2. **Milestone 1 — engagement contract.** Define typed qualification,
+2. **Milestone 1 — engagement contract (complete).** Define typed qualification,
    approval, scope, evidence, and outcome records without exposing experimental
-   runtimes.
+   runtimes. The supported `agentify engage init|status|validate|report` surface
+   exposes deterministic records and analysis only; it is not an autonomous FDE.
 3. **Milestone 2 — issue-to-plan evidence path.** Connect an approved issue to
    bounded audit, mapping, prioritization, and a human decision checkpoint.
 4. **Milestone 3 — safe build and evaluation.** Produce a constrained change

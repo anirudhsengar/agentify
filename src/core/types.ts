@@ -83,6 +83,8 @@ export interface AgentifyUi {
     },
   ): Promise<ReadonlyArray<string>>;
   promptSecret(message: string): Promise<string>;
+  /** Plain-text prompt used by deterministic, non-secret setup flows. */
+  promptText?(message: string): Promise<string>;
 }
 
 export interface GitHubReadiness {

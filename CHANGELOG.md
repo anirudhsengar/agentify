@@ -6,6 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Add the supported `agentify engage init|status|validate|report` CLI family for
+  deterministic local FDE engagement records and Markdown analysis reports.
+
 - Add deterministic internal FDE stakeholder, workflow, opportunity scoring,
   automation-decision, risk, and qualification models with atomic engagement
   artifact persistence and strict cross-reference validation.
