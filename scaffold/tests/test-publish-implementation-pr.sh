@@ -22,6 +22,7 @@ fresh_state() { node "$root/.github/scripts/draft-run-control.mjs" init "$1" "$t
 printf '{"maximum_runtime_ms":60000,"maximum_cost_usd":5,"engagement_id":"eng","pricing_policy":{"version":"v1","models":[]}}\n' > "$tmp/config"
 run_publish() { CALLS="$calls" CREATED_FILE="$tmp/created" PATH="$tmp/bin:$PATH" AGENT_PAT=token GH_REPO=owner/repo bash "$publisher" "agent/draft-42-900-1-change" main base123 abc123 "$title" "$body" "$1" "$2"; }
 state="$tmp/state"; output="$tmp/output"; fresh_state "$state"; run_publish "$state" "$output"; grep -q '^pr_number=123$' "$output"; jq -e '.publication.status=="publication_recorded" and .publication.pr_number==123 and .remote_branches[0].status=="active"' "$state" >/dev/null
+grep -q 'gh pr list .* --state all ' "$calls"
 before=$(grep -c 'gh pr create' "$calls"); retry="$tmp/retry"; run_publish "$state" "$retry"; after=$(grep -c 'gh pr create' "$calls"); [ "$before" -eq "$after" ]; grep -q '^pr_number=123$' "$retry"
 rm -f "$tmp/created"; conflict="$tmp/conflict"; fresh_state "$conflict"; if PR_MODE=mismatch CALLS="$calls" PATH="$tmp/bin:$PATH" AGENT_PAT=token GH_REPO=owner/repo bash "$publisher" "agent/draft-42-900-1-change" main base123 abc123 "$title" "$body" "$conflict" "$tmp/no" >/dev/null 2>&1; then exit 1; fi; jq -e '.publication.status=="ownership_conflict"' "$conflict" >/dev/null
 rm -f "$tmp/created"; crash="$tmp/crash"; fresh_state "$crash"; CREATE_FAIL=1 run_publish "$crash" "$tmp/crash-out"; grep -q '^pr_number=123$' "$tmp/crash-out"; [ "$(grep -c 'gh pr create' "$calls")" -ge 2 ]

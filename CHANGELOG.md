@@ -78,6 +78,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Recover Agentify-owned draft pull requests across all PR states after a
+  publication crash, and fail closed when orphan cleanup cannot verify branch
+  protection instead of treating lookup errors as an unprotected branch.
+
 - Coverage recovery now supplies exact D2 module-edge and D3 type-contract
   payload shapes, preventing otherwise rich large audits from looping on
   missing structured evidence.

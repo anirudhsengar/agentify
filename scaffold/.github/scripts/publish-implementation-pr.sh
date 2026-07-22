@@ -15,7 +15,9 @@ check_deadline() { node "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/draft-run
 record_branch() { local status=$1 associated=$2; update_state '.publication.branch=$branch | .publication.base_branch=$base | .publication.issue_number=$issue | .remote_branches = ([.remote_branches[] | select(.branch != $branch)] + [{branch:$branch,owned:true,associated_pr:$associated,status:$status,recorded_at:$now}])' --arg branch "$branch" --arg base "$base_ref" --argjson issue "$issue_number" --arg status "$status" --argjson associated "$associated" --arg now "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"; }
 recover_pr() {
   local json number url draft body head base
-  json=$(GH_TOKEN="$AGENT_PAT" gh pr list --repo "$GH_REPO" --state open --head "$branch" --base "$base_ref" --json number,url,isDraft,body,headRefName,baseRefName --limit 10)
+  # Search all states: a create response can be lost and the PR can be closed
+  # before retry. Looking only at open PRs would permit a duplicate create.
+  json=$(GH_TOKEN="$AGENT_PAT" gh pr list --repo "$GH_REPO" --state all --head "$branch" --base "$base_ref" --json number,url,isDraft,body,headRefName,baseRefName --limit 10)
   [ "$(jq 'length' <<<"$json")" -le 1 ] || { update_state '.publication.status="ownership_conflict" | .publication.error="multiple matching pull requests"'; echo "multiple matching PRs create an ownership conflict" >&2; return 2; }
   [ "$(jq 'length' <<<"$json")" -eq 1 ] || return 1
   number=$(jq -r '.[0].number' <<<"$json"); url=$(jq -r '.[0].url' <<<"$json"); draft=$(jq -r '.[0].isDraft' <<<"$json"); body=$(jq -r '.[0].body' <<<"$json"); head=$(jq -r '.[0].headRefName' <<<"$json"); base=$(jq -r '.[0].baseRefName' <<<"$json")

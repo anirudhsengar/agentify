@@ -8,7 +8,12 @@ jq -e --arg branch "$branch" '.remote_branches[] | select(.branch==$branch and .
 default_branch=$(GH_TOKEN="$GH_TOKEN" gh repo view "$GH_REPO" --json defaultBranchRef --jq '.defaultBranchRef.name')
 [ "$branch" != "$default_branch" ] || { echo "refusing to delete the default branch" >&2; exit 1; }
 encoded_branch=${branch//\//%2F}
-if GH_TOKEN="$GH_TOKEN" gh api "repos/$GH_REPO/branches/$encoded_branch/protection" >/dev/null 2>&1; then echo "refusing to delete a protected branch" >&2; exit 1; fi
+set +e
+protection_result=$(GH_TOKEN="$GH_TOKEN" gh api --include "repos/$GH_REPO/branches/$encoded_branch/protection" 2>&1)
+protection_status=$?
+set -e
+if [ "$protection_status" -eq 0 ]; then echo "refusing to delete a protected branch" >&2; exit 1; fi
+grep -Eq 'HTTP/[0-9.]+ 404|HTTP 404|status code: 404' <<<"$protection_result" || { echo "cannot verify branch protection; refusing deletion" >&2; exit 1; }
 active=$(GH_TOKEN="$GH_TOKEN" gh pr list --repo "$GH_REPO" --state open --head "$branch" --json number --limit 1 --jq 'length')
 [ "$active" = 0 ] || { echo "refusing to delete a branch with an active PR" >&2; exit 1; }
 git check-ref-format --branch "$branch" >/dev/null; git push origin --delete "$branch"
