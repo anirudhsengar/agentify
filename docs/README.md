@@ -14,6 +14,8 @@ public product contract.
 | Experimental runtime lifecycle decisions and evidence | `docs/architecture/experimental-runtime-decisions.md` |
 | Dependency compatibility matrix and upgrade gates | `docs/architecture/dependency-compatibility-matrix.md` |
 | Generation architecture and trust boundary | `docs/architecture.md` |
+| FDE operating-system living roadmap | `docs/roadmaps/agentify-fde-operating-system.md` |
+| Verified FDE Milestone 0 baseline | `docs/benchmarks/fde-baseline.md` |
 | Modernization parity baseline and behavior contract | `docs/refactors/modernization-baseline.md` |
 | Runtime reachability roots and deletion evidence | `docs/refactors/runtime-reachability.md` |
 | Audit schema domain ownership, migration design, and drift gates | `docs/refactors/audit-schema-domain-migration.md` |
