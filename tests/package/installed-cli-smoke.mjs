@@ -162,6 +162,11 @@ try {
   assert.match(engageHelp.stdout, /agentify engage init --input engagement\.json --yes/);
   assert.equal(engageHelp.stderr, "");
 
+  const shadowHelp = run(bin, ["engage", "shadow", "run-local", "--help"], { cwd: installRoot, env, timeout: 30_000 });
+  assert.match(shadowHelp.stdout, /agentify engage shadow <run-local\|status-local>/);
+  assert.match(shadowHelp.stdout, /fixture-owner\/fixture-repo/);
+  assert.equal(shadowHelp.stderr, "");
+
   const evalHelp = run(bin, ["eval", "help"], { cwd: installRoot, env, timeout: 30_000 });
   assert.match(evalHelp.stdout, /agentify eval <run\|report\|validate>/);
   assert.match(evalHelp.stdout, /task files cannot supply shell commands/);

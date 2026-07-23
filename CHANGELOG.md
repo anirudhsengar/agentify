@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Harden supported local shadow execution with strict GitHub identity and remote
+  matching, separately attested GitHub/local operator identities, bounded
+  subprocess deadlines, portable path-redacted evidence, fail-closed private
+  workspace reuse, conservative locks, explicit metric execution origins, and
+  local-evidence promotion/release separation.
+
 - Add a supported local shadow runner (`agentify engage shadow run-local` /
   `status-local`) with a private pilot workspace, an explicit
   `live_local_shadow` evidence origin, dedicated

@@ -75,9 +75,6 @@ function normalizeParseError(error: unknown): Error {
  * options are parsed only when no subcommand is selected.
  */
 export function parseCliArgs(argv: readonly string[]): ParsedCliCommand {
-  if (argv.includes("--help") || argv.includes("-h")) return { kind: "help" };
-  if (argv.includes("--version") || argv.includes("-v")) return { kind: "version" };
-
   const head = argv[0];
   if (head && SUBCOMMAND_SET.has(head)) {
     return {
@@ -86,6 +83,8 @@ export function parseCliArgs(argv: readonly string[]): ParsedCliCommand {
       argv: [...argv],
     };
   }
+  if (argv.includes("--help") || argv.includes("-h")) return { kind: "help" };
+  if (argv.includes("--version") || argv.includes("-v")) return { kind: "version" };
 
   assertNoDuplicateSingletonOptions(argv);
 

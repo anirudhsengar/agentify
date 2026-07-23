@@ -18,6 +18,20 @@ function task(id = "task-a", source: "synthetic" | "historical" | "live" = "hist
   return { schema_version: "1", task_id: id, suite_id: "fde", title: "Fix issue", description: "Fix the supplied issue", repository: { fixture: "fixtures/repo" }, workflow_input: { issue: "broken" }, expected_outcomes: ["tests pass"], forbidden_outcomes: ["unsafe write"], required_escalations: ["ask before deployment"], allowed_actions: ["edit fixture"], risk_tier: "medium", maximum_runtime_ms: 1_000, maximum_cost_usd: 1, grader_configuration: { deterministic: {} }, tags: ["fde"], evidence_references: ["ticket:a"], source_type: source, provenance };
 }
 function trial(index: number, passed: boolean, categories: EvalTrial["failure_categories"] = []): EvalTrial { return { schema_version: "1", run_id: "run-1", task_id: "task-a", trial_index: index, started_at: timestamp, ended_at: timestamp, status: passed ? "passed" : "failed", evidence_origin: "imported", inputs: {}, environment_reference: "env:a", execution_reference: "exec:a", transcript_reference: "audit:a", cost_usd: 0.25, runtime_ms: 100, output_references: [], error: null, grader_results: [{ schema_version: "1", run_id: "run-1", task_id: "task-a", trial_index: index, grader_id: "deterministic", grader_version: "1", status: passed ? "pass" : "fail", passed, score: passed ? 1 : 0, reason: "deterministic", failure_categories: categories, evidence_references: [], error: null, duration_ms: 0, confidence: 1 }], passed, failure_categories: categories }; }
+function localTrial(index: number): EvalTrial {
+  const base = trial(index, true);
+  return { ...base, evidence_origin: "live_local_shadow", local_shadow_attestation: {
+    repository_identity: "R_fixture", github_repository: "owner/repo", issue_number: 42,
+    issue_url: "https://github.com/owner/repo/issues/42", local_run_id: `local-${index}`,
+    github_operator_login: "operator", local_operator_identity: "local-user", github_authentication_status: "authenticated",
+    repository_commit_sha: "a".repeat(40), engagement_id: "eng", workflow_id: "flow", eval_suite_id: "fde",
+    task_id: "task-a", trial_index: index, agentify_version: "0.2.1", audit_version: "1",
+    started_at: timestamp, ended_at: timestamp, monotonic_runtime_ms: 100, execution_policy_version: "local-shadow-v1",
+    evidence_packet_digest: `sha256:${"b".repeat(64)}`, issue_fetched_at: timestamp,
+    workspace_reference: "workspace:repo", source_repository_reference: `github:owner/repo@${"a".repeat(40)}`,
+    source_repository_commit: "a".repeat(40), local_authentication_used_only_for_reads: true,
+  } };
+}
 function root(): string { return fs.mkdtempSync(path.join(os.tmpdir(), "agentify-evals-")); }
 
 test("all eval schemas are strict and reject invalid limits, statuses, and arbitrary failures", () => {
@@ -50,6 +64,10 @@ test("aggregation formulas expose partial, safety, grader failure, cost, and pro
   assert.equal(partial.status, "partial"); assert.equal(partial.pass_at_1, 1); assert.equal(partial.all_k_success_rate, 0);
   assert.equal(aggregateEvalResult(suite({ task_references: [] }), [], [], "empty").trial_pass_rate, 0);
   assert.equal(aggregateEvalResult(suite(), [task("task-a", "synthetic")], [trial(0, true), trial(1, true)], "run-1").release_gate_eligible, false);
+  const local = aggregateEvalResult(suite(), [task("task-a", "live")], [localTrial(0), localTrial(1)], "local-run");
+  assert.equal(local.local_shadow_evidence_classification, "valid_live_local_shadow_evidence");
+  assert.equal(local.release_gate_eligible, false);
+  assert.match(local.release_gate_ineligibility_reasons.join(" "), /cannot gate package release/);
 });
 
 test("JSONL appends are intact and truncated or invalid records are corrupt", () => {

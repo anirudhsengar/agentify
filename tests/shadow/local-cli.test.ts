@@ -137,13 +137,39 @@ test("agentify engage shadow status-local requires --id and --pilot-root", async
 
 test("agentify engage shadow status-local reports the local workspace state", async () => {
   const cwd = tmp();
+  const pilotRoot = tmp();
   try {
     const { ctx, output } = buildCtx(cwd);
-    const code = await dispatchSubcommand(["engage", "shadow", "status-local", "--id", "eng", "--pilot-root", cwd], ctx);
+    const code = await dispatchSubcommand(["engage", "shadow", "status-local", "--id", "eng", "--pilot-root", pilotRoot], ctx);
     assert.equal(typeof code, "boolean"); assert.equal(process.exitCode ?? 0, 0);
     assert.match(output.stdout.join(""), /Engagement: eng/);
     assert.match(output.stdout.join(""), /No local workspace yet/);
-  } finally { fs.rmSync(cwd, { recursive: true, force: true }); }
+  } finally { fs.rmSync(cwd, { recursive: true, force: true }); fs.rmSync(pilotRoot, { recursive: true, force: true }); }
+});
+
+test("agentify engage shadow non-interactive mode requires explicit --yes", async () => {
+  const cwd = tmp();
+  const pilotRoot = tmp();
+  try {
+    writeShadowConfig(cwd);
+    const { ctx, output } = buildCtx(cwd);
+    await dispatchSubcommand(["engage", "shadow", "run-local", "--id", "test-engagement", "--issue", "2", "--repo", "owner/repo", "--pilot-root", pilotRoot, "--non-interactive"], ctx);
+    assert.equal(process.exitCode, 1);
+    assert.match(output.stderr.join(""), /non-interactive execution requires --yes/);
+    assert.equal(fs.existsSync(path.join(pilotRoot, "workspaces")), false);
+  } finally { fs.rmSync(cwd, { recursive: true, force: true }); fs.rmSync(pilotRoot, { recursive: true, force: true }); }
+});
+
+test("shadow commands require absolute pilot roots and status rejects approval flags", async () => {
+  const cwd = tmp();
+  try {
+    const first = buildCtx(cwd);
+    await dispatchSubcommand(["engage", "shadow", "status-local", "--id", "eng", "--pilot-root", "relative"], first.ctx);
+    assert.match(first.output.stderr.join(""), /--pilot-root must be absolute/);
+    const second = buildCtx(cwd);
+    await dispatchSubcommand(["engage", "shadow", "status-local", "--id", "eng", "--pilot-root", cwd, "--yes"], second.ctx);
+    assert.match(second.output.stderr.join(""), /unknown flag --yes/);
+  } finally { process.exitCode = 0; fs.rmSync(cwd, { recursive: true, force: true }); }
 });
 
 test("agentify CLI --help advertises the local shadow subcommand", () => {

@@ -19,6 +19,7 @@ function baseEvent(overrides: Partial<MetricEventInput>): MetricEventInput {
     run_id: "local-1",
     timestamp: "2026-07-22T00:00:00.000Z",
     source: "runtime",
+    execution_origin: "live_local_shadow",
     provenance: { quality: "measured", method: "local shadow runner", source_reference: "evidence-packet.json" },
     evidence_references: ["evidence-packet.json"],
     redaction_status: "reference_only",
@@ -89,6 +90,8 @@ test("recordMetricEvent records and reads back local shadow events", () => {
     const aggregate = aggregatePilotEvents(events);
     assert.equal(aggregate.costs.measured_usd, 0);
     assert.equal(aggregate.runtime_ms.sample_size, 1);
+    assert.equal(aggregate.runs_by_execution_origin.live_local_shadow.started, 1);
+    assert.equal(aggregate.runs_by_execution_origin.github_live_shadow.started, 0);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

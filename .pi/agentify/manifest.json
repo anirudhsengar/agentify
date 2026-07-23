@@ -306,7 +306,7 @@
       "kind": "scaffold",
       "required": false,
       "marker": "// agentify:managed",
-      "sha256": "d02ab12d3daf34211357377e8f177caf4ecbf56539a1757d14d9f4671cb3186e",
+      "sha256": "008ca6587ec9ae7d4353cdd5cf5ba8853bbfa61f57c3501b1196bada617e1da5",
       "source": "scaffold-installer"
     },
     {
@@ -394,7 +394,7 @@
       "kind": "scaffold",
       "required": false,
       "marker": "// agentify:managed",
-      "sha256": "1896d8834707832d36f4f31c08d1591d956d3d5721b7ea533af408d0a923bc6e",
+      "sha256": "f42453f3539f1a21de14a4858b006b9f25461de5094ad0d2e6105ea8743b313e",
       "source": "scaffold-installer"
     },
     {

@@ -1,159 +1,147 @@
 # Agentify local shadow mode
 
-Local shadow mode is the supported local equivalent of the GitHub-hosted
-shadow workflow introduced in Milestone 6A. It exists because GitHub
-Actions may not be available in every pilot environment (for example,
-the Pilot Wave 1 environment used to develop this milestone). Local
-shadow mode is **deliberately separate** from GitHub-hosted shadow mode
-and carries a different trust model.
+Local shadow mode is a supported, deterministic, analysis-only alternative to
+the GitHub-hosted shadow workflow. It is deliberately separate from hosted
+execution and carries a lower trust level.
 
 ## Trust model
 
-Local shadow evidence is **operator-attested local execution**. It is:
+Every local packet states that it is **operator-attested local execution**. It
+is suitable only for controlled internal pilot review and is:
 
-- **appropriate for** controlled internal pilot evidence
-- **not equivalent to** GitHub-hosted runtime attestation
-- **not** an automatic package release gate
-- **not** customer proof
-- **not** implementation success
-- unable to prove that an issue was fixed
+- not equivalent to GitHub-hosted runtime attestation;
+- not a package release gate;
+- not customer proof;
+- not implementation success;
+- unable to prove that an issue was fixed;
+- ineligible for automatic draft admission or promotion.
 
-Local shadow evidence uses a distinct evidence origin
-(`live_local_shadow`) and distinct classifications
-(`valid_live_local_shadow_evidence`,
-`incomplete_live_local_shadow_evidence`,
-`invalid_live_local_shadow_evidence`). It never reuses the GitHub
-`live_shadow` provenance path: that path still requires a
-GitHub Actions runtime and a workflow run id.
+Local evidence uses `live_local_shadow` and the distinct classifications
+`valid_live_local_shadow_evidence`, `incomplete_live_local_shadow_evidence`, and
+`invalid_live_local_shadow_evidence`. It never supplies or fabricates a GitHub
+workflow-run ID, run attempt, runner identity, hosted environment reference, or
+Actions artifact ID. The hosted `live_shadow` path still requires the GitHub
+Actions trust boundary.
 
-## Comparison to GitHub-hosted shadow
+A pilot-gate-valid local run requires authenticated `gh` access. The attestation
+records these separately:
 
-| Property | GitHub shadow | Local shadow |
-| --- | --- | --- |
-| Evidence origin | `live_shadow` | `live_local_shadow` |
-| Runtime identity | GitHub Actions environment | Operator + local run id |
-| Requires `GITHUB_ACTIONS=true` | yes | no |
-| Requires a GitHub token | no (read-only `gh` API is allowed but not required) | no |
-| Reads issue data from | `GITHUB_EVENT_PATH` | `gh issue view` |
-| Cost status | measured 0 (no model calls) | measured 0 (no model calls) |
-| Comment on issue | optional via config | never |
-| Runs in sandbox | GitHub-hosted runner | operator's machine |
+- `github_operator_login`: authenticated GitHub login or `null`;
+- `local_operator_identity`: the local operating-system account;
+- `github_authentication_status`: `authenticated`, `anonymous_read`, or
+  `unavailable`.
 
-## Private pilot workspace
+Anonymous public reads are never represented as an authenticated operator.
+Repository metadata and issue data are fetched through narrowly constrained,
+read-only `gh` commands. Local GitHub authentication is used only for reads.
 
-Local shadow evidence is written to a private workspace beneath the
-pilot root:
+## Private workspace and source integrity
 
-```
-<pilot-root>/
-└── workspaces/
-    └── <repository-slug>/
-        ├── managed-state/    # local metrics stream (re-used across runs)
-        ├── shadow/
-        │   └── <local-run-id>/
-        │       ├── evidence-packet.json
-        │       └── summary.md
-        ├── locks/
-        │   └── <repo>__<engagement>__<issue>.lock
-        └── clone/            # detached clone pinned to source commit
-```
-
-The source checkout at the operator's normal working copy is never
-modified. The local runner:
-
-1. resolves the exact source commit with `git rev-parse HEAD`,
-2. cross-checks the origin against the requested repository,
-3. creates (or reuses) a private detached clone without a remote,
-4. writes evidence only inside the private workspace,
-5. verifies that HEAD, branch, refs, and the file inventory outside
-   the managed state root are unchanged at the end of the run.
-
-## Concurrency
-
-A single-file lock beneath `<pilot-root>/workspaces/<repo-slug>/locks/`
-serializes concurrent runs against the same repository / engagement /
-issue tuple. A second concurrent run fails with an actionable error
-that names the holding pid and start timestamp. Stale locks are
-inspected (and only removed when their owning pid is no longer alive)
-by `agentify engage shadow status-local --yes`.
-
-## Redaction
-
-Local evidence packets apply the same redaction rules as the GitHub
-runner. GitHub PATs, OAuth tokens, generic API keys, and PEM-encoded
-private keys are replaced with `[REDACTED]`. Issue bodies are also
-truncated to 8,000 characters. API keys and tokens are never loaded
-into the process and never persisted.
-
-## Metrics
-
-Local shadow runs record `run_started` and `run_completed` metric
-events with the same shape as GitHub-hosted runs. The measured cost
-is always 0 because no model call occurs; this is documented
-explicitly in the event payload and is never mixed with "estimated"
-or "unavailable" categories. Aggregation reports distinguish
-`live_shadow` from `live_local_shadow` runs and never merge them
-under a single source label.
-
-## Operator guide
+`--pilot-root` must be an existing absolute private directory outside the
+source repository. The runner writes beneath:
 
 ```text
-# Repository A (anirudhsengar/agentify)
-cd ~/Projects/agentify
-agentify engage shadow run-local \
-  --id pilot-wave-1-agentify \
-  --issue 127 \
-  --repo anirudhsengar/agentify \
-  --suite canary-shadow \
-  --task canary-a1 \
-  --pilot-root ~/Projects/agentify-pilot-data/pilot-wave-1 \
-  --yes
+<pilot-root>/workspaces/<repository-slug>/
+├── managed-state/       # cumulative local metrics
+├── shadow/<run-id>/     # portable evidence and summary
+├── locks/               # host-local cooperative locks
+└── clone/               # detached, remote-free private checkout
+```
 
-# Repository B (anirudhsengar/click)
-cd ~/Projects/click
-~/Projects/agentify/bin/agentify.js engage shadow run-local \
-  --id pilot-wave-1-click-fork \
-  --issue 1 \
-  --repo anirudhsengar/click \
-  --suite canary-shadow \
-  --task canary-b1 \
-  --pilot-root ~/Projects/agentify-pilot-data/pilot-wave-1 \
+The first run clones from the operator's source checkout without hard links,
+removes the clone remote, and detaches at the exact source commit. A reused
+clone must already be clean, detached, remote-free, and at that exact commit;
+unexplained state is rejected rather than silently repaired. Pilot/source
+path overlap and symlink escapes are rejected.
+
+The source checkout is read-only. Integrity snapshots cover HEAD, branch or
+detached state, local and remote refs, remote configuration, index/working-tree
+state, tracked object and mode inventory, untracked inventory, and ignored-file
+symlink topology. An integrity violation returns non-zero and any preserved
+terminal evidence is classified invalid.
+
+Portable evidence contains stable repository, commit, workspace, and evidence
+references. It does not serialize the source checkout, pilot root, home
+directory, or private workspace absolute path.
+
+## Approval and command contract
+
+```text
+agentify engage shadow run-local \
+  --id verification \
+  --issue 9001 \
+  --repo fixture-owner/fixture-repo \
+  --pilot-root /absolute/private/pilot-root \
   --yes
 ```
 
-Inspect recorded runs and stale locks:
+`--id`, `--issue`, `--repo`, and `--pilot-root` are required. Issue numbers
+must be positive integers and repositories must be exact `owner/name` values.
+Interactive runs prompt unless `--yes` is supplied. Non-interactive runs,
+including those using `--non-interactive`, require explicit `--yes`;
+`--non-interactive` is not approval.
+
+Status inspection is read-only and does not require approval:
 
 ```text
 agentify engage shadow status-local \
-  --id pilot-wave-1-agentify \
-  --pilot-root ~/Projects/agentify-pilot-data/pilot-wave-1 \
-  --yes
+  --id verification \
+  --repo fixture-owner/fixture-repo \
+  --pilot-root /absolute/private/pilot-root
 ```
 
-## Limitations
+Locks are scoped to repository + engagement + issue. They record host, PID,
+process-start identity, creation time, and a nonce. `status-local` only inspects
+locks. Recovery is conservative: a lock from another host, a corrupt lock, or a
+lock whose process identity cannot be disproved must not be removed. This is
+host-local cooperative locking, not distributed locking.
 
-This milestone implements deterministic local shadow analysis only.
-It does not implement model-backed local shadow. Future model-backed
-local shadow (when added) must:
+Explicit recovery procedure: run `status-local`, compare the recorded host,
+PID, start timestamp, and process-start identity with the local process table,
+and stop if any value is unknown or still matches. Only after the same-host
+process identity is proven absent may the operator remove that one exact
+`<pilot-root>/workspaces/<repository-slug>/locks/<repo>__<engagement>__<issue>.lock`
+file. Never remove every lock by glob and never use lock age alone.
 
-- record measured cost separately from "no model call",
-- require a documented model configuration,
-- preserve the existing GitHub `live_shadow` provenance path,
-- never auto-promote local shadow evidence to release-gate eligible.
+## Runtime, cost, and redaction
+
+One monotonic deadline governs the run. Git and GitHub subprocesses receive the
+remaining bounded timeout, and no new major stage starts after expiry. A timeout
+is distinct from cancellation, is never valid evidence, and writes a factual
+terminal record when the private workspace is available.
+
+The deterministic engine makes no provider call. `model_call_count` is `0`,
+measured cost is exactly `$0`, and the cost source says `no provider invocation`.
+The configured maximum cost remains a separate policy field. Provider
+configuration and credentials are not required or loaded.
+
+Evidence, summaries, metric references, and diagnostics share one redactor for
+GitHub tokens, generic keys, private keys, authorization headers,
+credential-bearing GitHub URLs, ANSI escapes, sensitive local paths, and
+oversized text.
+
+## Metrics and promotion boundaries
+
+Every metric event carries an explicit closed `execution_origin`; origin is not
+inferred from a run-ID prefix. Aggregates expose separate factual counts for
+GitHub live shadow, local live shadow, draft, synthetic, imported/no-execution,
+and legacy/unknown data.
+
+`live_local_shadow` remains release-gate ineligible, customer-proof ineligible,
+implementation-success false, and automatic-promotion ineligible. Existing
+GitHub draft gates accept only their explicit hosted evidence policy; local
+shadow evidence can support human pilot review but is not interchangeable with
+hosted evidence.
 
 ## Failure classification
 
-A local shadow run is classified as:
+- **valid**: authenticated GitHub operator, authoritative matching repository
+  and issue, complete attestation, all graders pass, and all safety checks pass;
+- **incomplete**: factual execution completed but required evidence or graders
+  are incomplete, including anonymous/unavailable GitHub authentication;
+- **invalid**: identity mismatch, malformed attestation, forbidden action,
+  timeout, source/workspace integrity violation, or other safety failure.
 
-- `valid_live_local_shadow_evidence` when the local attestation is
-  complete, the runner used local authentication only for reads, all
-  graders passed, and no grader reported an unsafe action;
-- `incomplete_live_local_shadow_evidence` when one or more graders
-  failed but no unsafe action was attempted;
-- `invalid_live_local_shadow_evidence` when the local attestation is
-  missing, the runner used authentication for anything other than
-  reads, an unsafe action was attempted, or git safety was violated.
-
-When git safety is violated the evidence packet is preserved beneath
-the private workspace so the operator can inspect it, but the run
-returns a non-zero exit code.
+This milestone does not add local implementation, branch creation, pushing,
+pull requests, automatic merging, model-backed execution, or general local
+autonomy.

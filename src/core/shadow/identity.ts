@@ -1,11 +1,16 @@
 // Local identity collection for the supported local shadow runner. All values
 // are derived from controlled local tools (git + gh CLI) executed via execFile
-// so that issue text or model output can never influence the result.
+// so issue text can never influence a command line.
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
+
+export interface CommandOptions {
+  timeoutMs?: number;
+}
 
 export interface IssueIdentity {
   number: number;
@@ -14,135 +19,138 @@ export interface IssueIdentity {
   url: string;
   state: string;
   fetchedAt: string;
-  /** Repo from the issue view (must equal the requested repo). */
   repositoryFullName: string;
 }
 
 export interface RepositoryIdentity {
-  /** Exact repository HEAD commit (40-char hex). */
   commitSha: string;
-  /** Resolved origin URL (normalized). */
   remoteUrl: string;
-  /** `owner/name` from gh repo view. */
   githubFullName: string;
-  /** Repository node id when gh is authenticated. */
-  nodeId: string | null;
-  /** Default branch from gh. */
+  nodeId: string;
   defaultBranch: string;
 }
 
-export interface OperatorIdentity {
-  /** Authenticated gh login or local user when gh is unavailable. */
-  login: string;
-  /** Local invocation timestamp (ISO-8601 UTC). */
-  invokedAt: string;
-  /** Locally-generated run id (ULID-ish). */
-  localRunId: string;
-  /** True iff this run used a gh token and only for read-only queries. */
-  ghAuthenticated: boolean;
-}
+export type GitHubAuthenticationStatus = "authenticated" | "anonymous_read" | "unavailable";
 
-export interface GitStateSnapshot {
-  commitSha: string;
-  /** "main" or "HEAD" when detached. */
-  branch: string;
-  detached: boolean;
-  remoteRefs: string;
-  porcelain: string;
-  fileInventoryDigest: string;
-  /** Existing managed state path relative to root (or null). */
-  managedStateRelative: string | null;
+export interface OperatorIdentity {
+  githubOperatorLogin: string | null;
+  localOperatorIdentity: string;
+  githubAuthenticationStatus: GitHubAuthenticationStatus;
+  invokedAt: string;
+  localRunId: string;
 }
 
 const SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const SAFE_REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+const SAFE_REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,98}[A-Za-z0-9])?\/[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,98}[A-Za-z0-9])?$/;
 const SHA_RE = /^[0-9a-f]{40}$/;
 
 export function assertSafeId(value: string, label: string): void {
-  if (!SAFE_ID_RE.test(value)) throw new Error(`${label} contains unsafe characters`);
+  if (typeof value !== "string" || !SAFE_ID_RE.test(value)) throw new Error(`${label} contains unsafe characters`);
 }
 
 export function assertSafeRepo(value: string): void {
-  if (!SAFE_REPO_RE.test(value)) throw new Error(`repository ${value} is not a safe owner/name pair`);
+  if (!SAFE_REPO_RE.test(value)) throw new Error(`repository is not a safe owner/name pair`);
 }
 
 export function assertSafeSha(value: string, label: string): void {
   if (!SHA_RE.test(value)) throw new Error(`${label} is not a 40-char hex SHA`);
 }
 
-/** Run an argv-based git command. Issues are never interpolated. */
-export async function git(args: ReadonlyArray<string>, cwd: string): Promise<string> {
-  const { stdout } = await execFileAsync("git", ["-C", cwd, ...args], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+function timeout(options?: CommandOptions): number {
+  const value = options?.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
+  if (!Number.isFinite(value) || value <= 0) throw new Error("command deadline expired");
+  return Math.max(1, Math.floor(value));
+}
+
+export async function git(args: ReadonlyArray<string>, cwd: string, options?: CommandOptions): Promise<string> {
+  const { stdout } = await execFileAsync("git", ["-C", cwd, ...args], {
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
+    timeout: timeout(options),
+    killSignal: "SIGKILL",
+  });
   return stdout.trim();
 }
 
-/** Run an argv-based gh command. Issues and paths are passed as argv, not shell. */
-export async function ghJson<T>(args: ReadonlyArray<string>): Promise<T> {
-  const { stdout } = await execFileAsync("gh", [...args, "--json"], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+export async function ghJson<T>(args: ReadonlyArray<string>, options?: CommandOptions): Promise<T> {
+  const { stdout } = await execFileAsync("gh", [...args], {
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
+    timeout: timeout(options),
+    killSignal: "SIGKILL",
+  });
   return JSON.parse(stdout) as T;
 }
 
-export async function ghText(args: ReadonlyArray<string>): Promise<string> {
-  const { stdout } = await execFileAsync("gh", [...args], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+export async function ghText(args: ReadonlyArray<string>, options?: CommandOptions): Promise<string> {
+  const { stdout } = await execFileAsync("gh", [...args], {
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
+    timeout: timeout(options),
+    killSignal: "SIGKILL",
+  });
   return stdout.trim();
 }
 
-/**
- * Normalize an origin URL to a comparable form. Both https://github.com/owner/name
- * and git@github.com:owner/name reduce to "owner/name".
- */
+/** Normalize a supported GitHub origin to lowercase owner/name. */
 export function normalizeOrigin(input: string): string {
-  const trimmed = input.trim().replace(/\.git$/, "");
-  const sshMatch = trimmed.match(/^git@[^:]+:(.+)$/);
-  if (sshMatch) return sshMatch[1]!.toLowerCase();
-  const httpsMatch = trimmed.match(/^https?:\/\/[^/]+\/(.+)$/);
-  if (httpsMatch) return httpsMatch[1]!.toLowerCase();
-  return trimmed.toLowerCase();
+  const value = input.trim();
+  let owner: string;
+  let repo: string;
+
+  const scp = value.match(/^git@github\.com:([^/]+)\/([^/?#]+?)(?:\.git)?$/i);
+  if (scp) {
+    owner = scp[1]!;
+    repo = scp[2]!;
+  } else {
+    let url: URL;
+    try { url = new URL(value); }
+    catch { throw new Error("origin must be a supported GitHub URL"); }
+    if (!['https:', 'ssh:'].includes(url.protocol) || url.hostname.toLowerCase() !== "github.com") {
+      throw new Error("origin must use github.com over https or ssh");
+    }
+    if (url.password || (url.protocol === "https:" && url.username)) throw new Error("origin must not contain credentials");
+    if (url.port || url.search || url.hash) throw new Error("origin contains unsupported URL components");
+    if (url.protocol === "ssh:" && url.username !== "git") throw new Error("SSH origin must use the git account");
+    const pieces = url.pathname.split("/").filter(Boolean);
+    if (pieces.length !== 2) throw new Error("origin must contain exactly owner/repository");
+    owner = decodeURIComponent(pieces[0]!);
+    repo = decodeURIComponent(pieces[1]!).replace(/\.git$/i, "");
+  }
+
+  const normalized = `${owner}/${repo}`;
+  assertSafeRepo(normalized);
+  return normalized.toLowerCase();
 }
 
-/**
- * Collect authoritative local identity for the requested GitHub repository.
- * Refuses to proceed when the local checkout disagrees with the requested
- * repository or when identity cannot be resolved.
- */
 export async function collectRepositoryIdentity(
   sourceRoot: string,
   requestedRepo: string,
+  options?: CommandOptions,
 ): Promise<RepositoryIdentity> {
   assertSafeRepo(requestedRepo);
-  const commitSha = await git(["rev-parse", "HEAD"], sourceRoot);
+  const commitSha = await git(["rev-parse", "HEAD"], sourceRoot, options);
   assertSafeSha(commitSha, "source repository commit");
-  const remoteUrl = await git(["remote", "get-url", "origin"], sourceRoot);
-  const normalized = normalizeOrigin(remoteUrl);
-  if (normalized !== requestedRepo.toLowerCase()) {
-    throw new Error(
-      `source repository origin '${remoteUrl}' does not match requested repo '${requestedRepo}'`,
-    );
+  const remoteUrl = await git(["remote", "get-url", "origin"], sourceRoot, options);
+  if (normalizeOrigin(remoteUrl) !== requestedRepo.toLowerCase()) {
+    throw new Error(`source repository origin does not match requested repo`);
   }
-  // Cross-check via gh repo view when authenticated.
-  let nodeId: string | null = null;
-  let defaultBranch = "main";
-  try {
-    const data = await ghJson<{ id?: string; nameWithOwner?: string; defaultBranchRef?: { name?: string } }>([
-      "repo", "view", requestedRepo,
-    ]);
-    if (data.id) nodeId = String(data.id);
-    if (data.nameWithOwner) {
-      if (data.nameWithOwner.toLowerCase() !== requestedRepo.toLowerCase()) {
-        throw new Error(`gh repo view reports '${data.nameWithOwner}' but requested '${requestedRepo}'`);
-      }
-    }
-    if (data.defaultBranchRef?.name) defaultBranch = data.defaultBranchRef.name;
-  } catch {
-    // gh unavailable; rely on git identity alone. This is acceptable because
-    // we still have a hard origin match.
+
+  const data = await ghJson<{ id?: string; nameWithOwner?: string; defaultBranchRef?: { name?: string } }>([
+    "repo", "view", requestedRepo, "--json", "id,nameWithOwner,defaultBranchRef",
+  ], options);
+  if (!data.id || !data.nameWithOwner || !data.defaultBranchRef?.name) {
+    throw new Error("GitHub repository lookup returned incomplete identity");
+  }
+  if (data.nameWithOwner.toLowerCase() !== requestedRepo.toLowerCase()) {
+    throw new Error(`GitHub repository identity does not match requested repo`);
   }
   return {
     commitSha,
     remoteUrl,
-    githubFullName: requestedRepo,
-    nodeId,
-    defaultBranch,
+    githubFullName: data.nameWithOwner,
+    nodeId: String(data.id),
+    defaultBranch: data.defaultBranchRef.name,
   };
 }
 
@@ -155,39 +163,29 @@ export interface GhIssueViewFields {
   repository?: { nameWithOwner?: string };
 }
 
-/**
- * Fetch authoritative issue identity via gh. Refuses to proceed when gh
- * cannot be authenticated, when the issue is not a positive integer, when the
- * fetched issue does not belong to the requested repo, or when the issue
- * payload is missing required fields.
- */
 export async function collectIssueIdentity(
   requestedRepo: string,
   issueNumber: number,
+  options?: CommandOptions,
 ): Promise<IssueIdentity> {
   assertSafeRepo(requestedRepo);
-  if (!Number.isInteger(issueNumber) || issueNumber < 1) {
-    throw new Error(`issue number ${issueNumber} must be a positive integer`);
-  }
+  if (!Number.isInteger(issueNumber) || issueNumber < 1) throw new Error("issue number must be a positive integer");
   let view: GhIssueViewFields;
   try {
     view = await ghJson<GhIssueViewFields>([
       "issue", "view", String(issueNumber), "--repo", requestedRepo,
-    ]);
-  } catch (error) {
-    throw new Error(
-      `unable to read issue #${issueNumber} from ${requestedRepo}: ${error instanceof Error ? error.message : String(error)}`,
-    );
+      "--json", "number,title,body,url,state,repository",
+    ], options);
+  } catch {
+    throw new Error(`unable to read requested issue from GitHub`);
   }
-  if (view.number !== issueNumber) {
-    throw new Error(`gh issue view returned number ${view.number} but requested ${issueNumber}`);
+  if (view.number !== issueNumber) throw new Error(`GitHub issue identity does not match requested issue`);
+  const repoName = view.repository?.nameWithOwner;
+  if (!repoName || repoName.toLowerCase() !== requestedRepo.toLowerCase()) {
+    throw new Error(`GitHub issue repository does not match requested repo`);
   }
-  const repoName = view.repository?.nameWithOwner?.toLowerCase();
-  if (repoName && repoName !== requestedRepo.toLowerCase()) {
-    throw new Error(`issue belongs to repo ${repoName} but ${requestedRepo} was requested`);
-  }
-  if (!view.url || !view.url.startsWith("https://")) {
-    throw new Error(`issue URL is missing or not https: ${view.url ?? "(absent)"}`);
+  if (!view.url || !view.url.startsWith(`https://github.com/${repoName}/issues/${issueNumber}`)) {
+    throw new Error("GitHub issue URL does not match requested issue");
   }
   return {
     number: view.number,
@@ -195,30 +193,37 @@ export async function collectIssueIdentity(
     body: view.body ?? "",
     url: view.url,
     state: view.state ?? "unknown",
-    repositoryFullName: view.repository?.nameWithOwner ?? requestedRepo,
+    repositoryFullName: repoName,
     fetchedAt: new Date().toISOString(),
   };
 }
 
-/**
- * Resolve the authenticated operator login. Falls back to the local user when
- * gh is unauthenticated, but marks the run as not gh-authenticated so the
- * attestation records the actual trust level.
- */
-export async function collectOperatorIdentity(): Promise<OperatorIdentity> {
+export async function collectOperatorIdentity(options?: CommandOptions): Promise<OperatorIdentity> {
   const invokedAt = new Date().toISOString();
-  let ghAuthenticated = false;
-  let login = process.env.USER || process.env.USERNAME || "local-operator";
+  const localOperatorIdentity = process.env.USER || process.env.USERNAME || "unknown-local-operator";
+  let githubOperatorLogin: string | null = null;
+  let githubAuthenticationStatus: GitHubAuthenticationStatus = "unavailable";
   try {
-    const who = await ghText(["api", "user", "--jq", ".login"]);
-    if (who) { login = who; ghAuthenticated = true; }
+    const who = await ghText(["api", "--method", "GET", "user", "--jq", ".login"], options);
+    if (who) {
+      githubOperatorLogin = who;
+      githubAuthenticationStatus = "authenticated";
+    } else {
+      githubAuthenticationStatus = "anonymous_read";
+    }
   } catch {
-    // Unauthenticated gh is allowed: local execution does not require it.
+    try {
+      await ghText(["--version"], options);
+      githubAuthenticationStatus = "anonymous_read";
+    } catch {
+      githubAuthenticationStatus = "unavailable";
+    }
   }
   return {
-    login,
+    githubOperatorLogin,
+    localOperatorIdentity,
+    githubAuthenticationStatus,
     invokedAt,
     localRunId: `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-    ghAuthenticated,
   };
 }

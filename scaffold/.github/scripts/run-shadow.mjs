@@ -48,6 +48,19 @@ function stable(value) {
   return JSON.stringify(value);
 }
 function digest(value) { return `sha256:${createHash("sha256").update(typeof value === "string" ? value : stable(value)).digest("hex")}`; }
+function normalizeGitHubOrigin(value) {
+  const input = String(value).trim();
+  const scp = input.match(/^git@github\.com:([^/]+)\/([^/?#]+?)(?:\.git)?$/i);
+  if (scp) return `${scp[1]}/${scp[2]}`.toLowerCase();
+  let parsed;
+  try { parsed = new URL(input); } catch { throw new Error("checkout remote is not a supported GitHub URL"); }
+  if (!['https:', 'ssh:'].includes(parsed.protocol) || parsed.hostname.toLowerCase() !== 'github.com' || parsed.port || parsed.search || parsed.hash || parsed.password) throw new Error("checkout remote is not a supported GitHub URL");
+  if (parsed.protocol === 'https:' && parsed.username) throw new Error("checkout remote must not contain credentials");
+  if (parsed.protocol === 'ssh:' && parsed.username !== 'git') throw new Error("checkout SSH remote must use git");
+  const pieces = parsed.pathname.split('/').filter(Boolean);
+  if (pieces.length !== 2) throw new Error("checkout remote must contain exactly owner/repository");
+  return `${pieces[0]}/${pieces[1].replace(/\.git$/i, '')}`.toLowerCase();
+}
 function writeAtomic(file, content) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.tmp`;
@@ -79,7 +92,7 @@ const runAttempt = requiredString(process.env.GITHUB_RUN_ATTEMPT, "workflow run 
 const commit = git(["rev-parse", "HEAD"]);
 if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error("repository commit identity is invalid");
 const remote = git(["remote", "get-url", "origin"]);
-if (!remote.toLowerCase().includes(githubRepository.toLowerCase())) throw new Error("checkout remote does not match GitHub repository");
+if (normalizeGitHubOrigin(remote) !== githubRepository.toLowerCase()) throw new Error("checkout remote does not match GitHub repository");
 const initialBranch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
 const initialRemoteRefs = git(["for-each-ref", "--format=%(refname):%(objectname)", "refs/remotes"]);
 

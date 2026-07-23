@@ -23,10 +23,14 @@ function makeAttestation(overrides: Partial<LocalShadowAttestation> = {}): Local
     repository_identity: "R_local",
     github_repository: "owner/repo",
     issue_number: 42,
+    issue_url: "https://github.com/owner/repo/issues/42",
     local_run_id: "local-abc",
-    operator_login: "operator",
+    github_operator_login: "operator",
+    local_operator_identity: "local-user",
+    github_authentication_status: "authenticated",
     repository_commit_sha: "a".repeat(40),
     engagement_id: "eng",
+    workflow_id: "eng",
     eval_suite_id: "suite",
     task_id: "task",
     trial_index: 0,
@@ -34,11 +38,12 @@ function makeAttestation(overrides: Partial<LocalShadowAttestation> = {}): Local
     audit_version: "1",
     started_at: "2026-07-22T00:00:00.000Z",
     ended_at: "2026-07-22T00:01:00.000Z",
+    monotonic_runtime_ms: 60_000,
     execution_policy_version: "local-shadow-v1",
     evidence_packet_digest: `sha256:${"c".repeat(64)}`,
     issue_fetched_at: "2026-07-22T00:00:00.000Z",
-    workspace_identity: "/tmp/ws",
-    source_repository_path: "/tmp/src",
+    workspace_reference: "workspace:repo",
+    source_repository_reference: `github:owner/repo@${"a".repeat(40)}`,
     source_repository_commit: "a".repeat(40),
     local_authentication_used_only_for_reads: true,
     ...overrides,
@@ -102,10 +107,14 @@ test("redactSecret redacts API keys, tokens, and PEM blocks", () => {
   assert.match(redactSecret("-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----"), /\[REDACTED\]/);
 });
 
-test("normalizeOrigin collapses ssh and https URLs to owner/name", () => {
+test("normalizeOrigin accepts exact GitHub remotes and rejects unsafe forms", () => {
   assert.equal(normalizeOrigin("https://github.com/owner/repo.git"), "owner/repo");
   assert.equal(normalizeOrigin("git@github.com:Owner/Repo.git"), "owner/repo");
-  assert.equal(normalizeOrigin("/local/path/repo"), "/local/path/repo");
+  assert.equal(normalizeOrigin("ssh://git@github.com/Owner/Repo.git"), "owner/repo");
+  assert.throws(() => normalizeOrigin("/local/path/repo"), /supported GitHub URL/);
+  assert.throws(() => normalizeOrigin("https://user:token@github.com/owner/repo.git"), /credentials/);
+  assert.throws(() => normalizeOrigin("https://github.com/extra/owner/repo.git"), /exactly owner\/repository/);
+  assert.throws(() => normalizeOrigin("https://github.com.example/owner/repo.git"), /github.com/);
 });
 
 test("analyseShadow classifies a clear ready issue as ready", () => {
@@ -175,9 +184,10 @@ test("digestObject returns a sha256 prefixed digest", () => {
 
 test("LocalShadowAttestationSchema rejects missing fields", () => {
   assert.equal(Value.Check(LocalShadowAttestationSchema, makeAttestation()), true);
-  assert.equal(Value.Check(LocalShadowAttestationSchema, makeAttestation({ local_authentication_used_only_for_reads: false })), true); // schema permits false; classifier rejects it
+  assert.equal(JSON.stringify(makeAttestation()).includes("/tmp/"), false);
+  assert.equal(Value.Check(LocalShadowAttestationSchema, makeAttestation({ local_authentication_used_only_for_reads: false as never })), false);
   const broken = makeAttestation();
-  delete (broken as Record<string, unknown>).operator_login;
+  delete (broken as Record<string, unknown>).github_operator_login;
   assert.equal(Value.Check(LocalShadowAttestationSchema, broken), false);
 });
 
@@ -190,7 +200,11 @@ test("classifyLocalShadowTrial returns valid only when fully attested and passed
     "invalid_live_local_shadow_evidence",
   );
   assert.equal(
-    classifyLocalShadowTrial(trial({ local_shadow_attestation: makeAttestation({ local_authentication_used_only_for_reads: false }) })),
+    classifyLocalShadowTrial(trial({ local_shadow_attestation: makeAttestation({ github_operator_login: null, github_authentication_status: "anonymous_read" }) })),
+    "invalid_live_local_shadow_evidence",
+  );
+  assert.equal(
+    classifyLocalShadowTrial(trial({ local_shadow_attestation: makeAttestation({ github_operator_login: null, github_authentication_status: "unavailable" }) })),
     "invalid_live_local_shadow_evidence",
   );
 });

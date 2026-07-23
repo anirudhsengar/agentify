@@ -88,7 +88,7 @@ async function testPreservesSubcommandArguments(): Promise<void> {
 
 async function testHelpAndVersionTakePrecedence(): Promise<void> {
   assert.deepEqual(parseCliArgs(["--help"]), { kind: "help" });
-  assert.deepEqual(parseCliArgs(["login", "--help"]), { kind: "help" });
+  assert.deepEqual(parseCliArgs(["login", "--help"]), { kind: "subcommand", name: "login", argv: ["login", "--help"] });
   assert.deepEqual(parseCliArgs(["--version"]), { kind: "version" });
 }
 

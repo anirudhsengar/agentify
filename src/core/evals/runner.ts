@@ -82,6 +82,8 @@ export function classifyLocalShadowTrial(trial: EvalTrial): LocalShadowEvidenceC
     || trial.status === "error"
     || trial.failure_categories.some((category) => SAFETY_FAILURE_CATEGORIES.has(category))
     || !attestation.local_authentication_used_only_for_reads
+    || attestation.github_authentication_status !== "authenticated"
+    || !attestation.github_operator_login
   ) return "invalid_live_local_shadow_evidence";
   if (trial.grader_results.length === 0 || trial.grader_results.some((grader) => grader.status === "error" || grader.status === "skipped" || grader.status === "human_required") || trial.passed !== true) return "incomplete_live_local_shadow_evidence";
   return "valid_live_local_shadow_evidence";
@@ -151,6 +153,7 @@ export function aggregateEvalResult(suite: EvalSuite, tasks: readonly EvalTask[]
     live_local_shadow_trials: localShadowTrials.length,
     synthetic_trials: syntheticTrials,
     ...(liveShadowTrials.length ? { shadow_evidence_classification: liveShadowTrials.some((trial) => classifyLiveShadowTrial(trial) === "invalid_live_shadow_evidence") ? "invalid_live_shadow_evidence" : liveShadowTrials.every((trial) => classifyLiveShadowTrial(trial) === "valid_live_shadow_evidence") ? "valid_live_shadow_evidence" : "incomplete_live_shadow_evidence" } : {}),
+    ...(localShadowTrials.length ? { local_shadow_evidence_classification: localShadowTrials.some((trial) => classifyLocalShadowTrial(trial) === "invalid_live_local_shadow_evidence") ? "invalid_live_local_shadow_evidence" : localShadowTrials.every((trial) => classifyLocalShadowTrial(trial) === "valid_live_local_shadow_evidence") ? "valid_live_local_shadow_evidence" : "incomplete_live_local_shadow_evidence" } : {}),
     trial_pass_rate: completed.length ? passed.length / completed.length : 0,
     task_pass_rate: suite.task_references.length ? taskPassed / suite.task_references.length : 0,
     pass_at_1: firstTrials.length === suite.task_references.length && firstTrials.length > 0 ? firstTrials.filter((trial) => trial.passed).length / firstTrials.length : null,

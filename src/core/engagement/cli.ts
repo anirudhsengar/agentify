@@ -24,7 +24,7 @@ import { PromotionActualsSchema, PromotionPolicySchema, type PromotionActuals, t
 import { appendPromotionRecord, assertEngagementPromotable, createPromotionState, currentAutonomyLevel, evaluatePromotion, promotionReportPath, promotionStatePath, readPromotionState, renderPromotionReport, revokePromotion } from "./promotion.ts";
 import { writeEngagementJsonAtomic } from "./state.ts";
 import { aggregatePilotEvents, metricsDirectory, readMetricEvents, recordMetricEvent, renderPilotReport, type MetricEventInput } from "./metrics/index.ts";
-import { runLocalShadow, lockPathFor, readLock, removeIfStale, resolveWorkspacePaths } from "../shadow/index.ts";
+import { runLocalShadow, readLock, resolveWorkspacePaths } from "../shadow/index.ts";
 
 export interface EngageCommandContext {
   cwd: string; configDir: string; ui: AgentifyUi;
@@ -250,7 +250,10 @@ const SHADOW_RUN_LOCAL_TAKES = new Set([
   "id", "issue", "repo", "suite", "task", "pilot-root", "config",
 ]);
 
-function parseShadowFlags(argv: readonly string[]): { flags: Record<string, string | true>; positionals: string[]; errors: string[] } {
+const SHADOW_STATUS_LOCAL_FLAGS = new Set(["id", "repo", "pilot-root"]);
+const SHADOW_STATUS_LOCAL_TAKES = new Set(["id", "repo", "pilot-root"]);
+
+function parseShadowFlags(argv: readonly string[], allowed = SHADOW_RUN_LOCAL_FLAGS, takesValue = SHADOW_RUN_LOCAL_TAKES): { flags: Record<string, string | true>; positionals: string[]; errors: string[] } {
   const flags: Record<string, string | true> = {};
   const positionals: string[] = [];
   const errors: string[] = [];
@@ -262,8 +265,10 @@ function parseShadowFlags(argv: readonly string[]): { flags: Record<string, stri
       let name: string; let value: string | true;
       if (eq >= 0) { name = tok.slice(2, eq); value = tok.slice(eq + 1); }
       else { name = tok.slice(2); value = true; }
-      if (!SHADOW_RUN_LOCAL_FLAGS.has(name)) { errors.push(`unknown flag --${name}`); i += 1; continue; }
-      if (SHADOW_RUN_LOCAL_TAKES.has(name)) {
+      if (!allowed.has(name)) { errors.push(`unknown flag --${name}`); i += 1; continue; }
+      if (Object.hasOwn(flags, name)) { errors.push(`duplicate flag --${name}`); i += typeof value === "string" ? 1 : (takesValue.has(name) && argv[i + 1] && !argv[i + 1]!.startsWith("--") ? 2 : 1); continue; }
+      if (takesValue.has(name)) {
+        if (typeof value === "string" && value.length === 0) { errors.push(`--${name} requires a value`); i += 1; continue; }
         if (typeof value !== "string") {
           const next = argv[i + 1];
           if (!next || next.startsWith("--")) { errors.push(`--${name} requires a value`); i += 1; continue; }
@@ -279,13 +284,13 @@ function parseShadowFlags(argv: readonly string[]): { flags: Record<string, stri
   return { flags, positionals, errors };
 }
 
-function resolveShadowConfigPath(_repoSlug: string): string {
+function resolveShadowConfigPath(cwd: string): string {
   // The local shadow runner always uses the same config file as the GitHub
   // workflow. We refuse to invent one because that would let a caller
   // accidentally craft a relaxed policy.
   const candidates = [".github/agentify-shadow.json", "agentify-shadow.json"];
   for (const candidate of candidates) {
-    if (fs.existsSync(path.resolve(candidate))) return path.resolve(candidate);
+    if (fs.existsSync(path.resolve(cwd, candidate))) return path.resolve(cwd, candidate);
   }
   throw new Error(
     `shadow configuration was not found; checked ${candidates.join(" and ")}`,
@@ -307,9 +312,11 @@ async function shadowRunLocalCommand(argv: readonly string[], ctx: EngageCommand
   const issueRaw = parsed.flags.issue as string;
   const issueNumber = Number(issueRaw);
   if (!Number.isInteger(issueNumber) || issueNumber < 1) return usageError(ctx, "shadow run-local", `--issue must be a positive integer (received '${issueRaw}')`);
-  if (!/^[^/]+\/[^/]+$/.test(repo)) return usageError(ctx, "shadow run-local", `--repo must be of the form owner/name (received '${repo}')`);
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,98}[A-Za-z0-9])?\/[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,98}[A-Za-z0-9])?$/.test(repo)) return usageError(ctx, "shadow run-local", `--repo must be of the form owner/name (received '${repo}')`);
+  if (!path.isAbsolute(pilotRoot)) return usageError(ctx, "shadow run-local", "--pilot-root must be absolute");
 
   const interactive = (ctx.stdinIsTTY ?? Boolean(process.stdin.isTTY)) && !parsed.flags["non-interactive"];
+  if (!interactive && !parsed.flags.yes) return usageError(ctx, "shadow run-local", "non-interactive execution requires --yes");
   if (interactive && !parsed.flags.yes) {
     ctx.out.write(
       `Local shadow analysis for engagement ${id} on ${repo}#${issueNumber}\n` +
@@ -326,7 +333,7 @@ async function shadowRunLocalCommand(argv: readonly string[], ctx: EngageCommand
   const suiteRaw = typeof parsed.flags.suite === "string" ? parsed.flags.suite : undefined;
   const taskRaw = typeof parsed.flags.task === "string" ? parsed.flags.task : undefined;
   const configRaw = typeof parsed.flags.config === "string" ? parsed.flags.config : undefined;
-  const configPath = configRaw ? path.resolve(ctx.cwd, configRaw) : resolveShadowConfigPath(repo);
+  const configPath = configRaw ? path.resolve(ctx.cwd, configRaw) : resolveShadowConfigPath(ctx.cwd);
 
   // Read config to default suite/task when the caller left them unset.
   const configJson = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<string, unknown>;
@@ -375,15 +382,16 @@ async function shadowRunLocalCommand(argv: readonly string[], ctx: EngageCommand
 }
 
 async function shadowStatusLocalCommand(argv: readonly string[], ctx: EngageCommandContext): Promise<number> {
-  const parsed = parseShadowFlags(argv);
+  const parsed = parseShadowFlags(argv, SHADOW_STATUS_LOCAL_FLAGS, SHADOW_STATUS_LOCAL_TAKES);
   if (parsed.errors.length) return usageError(ctx, "shadow status-local", parsed.errors[0]!);
   if (parsed.positionals.length) return usageError(ctx, "shadow status-local", `unexpected argument: ${parsed.positionals[0]}`);
   if (typeof parsed.flags.id !== "string") return usageError(ctx, "shadow status-local", "--id is required");
   if (typeof parsed.flags["pilot-root"] !== "string") return usageError(ctx, "shadow status-local", "--pilot-root is required");
   const id = parsed.flags.id as string;
   const pilotRoot = parsed.flags["pilot-root"] as string;
+  if (!path.isAbsolute(pilotRoot)) return usageError(ctx, "shadow status-local", "--pilot-root must be absolute");
   const repoRaw = typeof parsed.flags.repo === "string" ? parsed.flags.repo : undefined;
-  if (repoRaw && !/^[^/]+\/[^/]+$/.test(repoRaw)) return usageError(ctx, "shadow status-local", `--repo must be of the form owner/name (received '${repoRaw}')`);
+  if (repoRaw && !/^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,98}[A-Za-z0-9])?\/[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,98}[A-Za-z0-9])?$/.test(repoRaw)) return usageError(ctx, "shadow status-local", `--repo must be of the form owner/name (received '${repoRaw}')`);
   const paths = resolveWorkspacePaths({
     pilotRoot,
     repoSlug: repoRaw ? repoRaw.split("/")[1]! : id,
@@ -392,7 +400,7 @@ async function shadowStatusLocalCommand(argv: readonly string[], ctx: EngageComm
     sourceCommitSha: "0000000000000000000000000000000000000000",
   });
   if (!fs.existsSync(paths.workspaceRoot)) {
-    ctx.out.write(`Engagement: ${id}\nNo local workspace yet at ${paths.workspaceRoot}.\n`);
+    ctx.out.write(`Engagement: ${id}\nNo local workspace yet.\n`);
     return 0;
   }
   const shadowDir = paths.shadowEvidenceRoot;
@@ -407,20 +415,11 @@ async function shadowStatusLocalCommand(argv: readonly string[], ctx: EngageComm
   }
   ctx.out.write(
     `Engagement: ${id}\n` +
-      `Workspace: ${paths.workspaceRoot}\n` +
+      `Workspace reference: workspace:${paths.repoSlug}\n` +
       `Local shadow runs on disk: ${runs.length}\n` +
       (runs.length ? runs.map((r) => `  - ${r}`).join("\n") + "\n" : "") +
       (lockInfo || "No active local locks.\n"),
   );
-  if (parsed.flags.yes) {
-    // Surface any stale locks so the operator can clean them.
-    for (const file of lockFile) {
-      const lf = path.join(paths.lockRoot, file);
-      const outcome = removeIfStale(lf);
-      if (outcome.removed) ctx.out.write(`removed stale lock ${file}: ${outcome.reason}\n`);
-      else ctx.out.write(`kept lock ${file}: ${outcome.reason}\n`);
-    }
-  }
   return 0;
 }
 
@@ -430,6 +429,7 @@ async function shadowCommand(argv: readonly string[], ctx: EngageCommandContext)
     printShadowHelp(ctx.out);
     return action ? 0 : usageError(ctx, "shadow", "missing action. Usage: agentify engage shadow <run-local|status-local>");
   }
+  if ((action === "run-local" || action === "status-local") && ["--help", "-h"].includes(argv[1] ?? "")) { printShadowHelp(ctx.out); return 0; }
   if (action === "run-local") return shadowRunLocalCommand(argv.slice(1), ctx);
   if (action === "status-local") return shadowStatusLocalCommand(argv.slice(1), ctx);
   return usageError(ctx, "shadow", `unknown action '${action}'. Valid: run-local, status-local`);
@@ -444,18 +444,15 @@ function printShadowHelp(out: NodeJS.WritableStream): void {
       "    Run a read-only local shadow analysis. Persists evidence to the\n" +
       "    private pilot workspace beneath <pilot-root>. Never implements.\n" +
       "  agentify engage shadow status-local --id <id>\n" +
-      "       --pilot-root <abs> [--repo <owner/name>] [--yes]\n" +
-      "    Inspect local shadow runs and locks. With --yes, also remove\n" +
-      "    stale locks whose owning process is no longer alive.\n\n" +
-      "Examples:\n  agentify engage shadow run-local --id pilot-wave-1-agentify --issue 127 --repo anirudhsengar/agentify --pilot-root ~/Projects/agentify-pilot-data/pilot-wave-1 --yes\n",
+      "       --pilot-root <abs> [--repo <owner/name>]\n" +
+      "    Inspect local shadow runs and locks without modifying them.\n\n" +
+      "Example:\n  agentify engage shadow run-local --id verification --issue 9001 --repo fixture-owner/fixture-repo --pilot-root /absolute/private/pilot-root --yes\n",
   );
 }
 
-// Suppress lint warning for unused helper (used only by status-local above).
-void lockPathFor;
 export async function engageCommand(argv: readonly string[], ctx: EngageCommandContext): Promise<number> {
   const action = argv[0];
-  if (!action || action === "help") { printEngageHelp(ctx.out); return action ? 0 : usageError(ctx, "", "missing action. Usage: agentify engage <init|status|validate|report|promotion|metrics|shadow>"); }
+  if (!action || action === "help" || action === "--help" || action === "-h") { printEngageHelp(ctx.out); return action ? 0 : usageError(ctx, "", "missing action. Usage: agentify engage <init|status|validate|report|promotion|metrics|shadow>"); }
   try {
     if (action === "init") return await initCommand(argv.slice(1), ctx);
     if (action === "status") return await statusCommand(argv.slice(1), ctx);

@@ -36,6 +36,15 @@ ${provenance.length ? provenance.map((v) => `- ${v}`).join("\n") : "- unavailabl
 ## Baseline data
 - records: ${baselines.length}
 
+## Execution origins
+- GitHub live shadow: ${a.runs_by_execution_origin.github_live_shadow.started}
+- local live shadow: ${a.runs_by_execution_origin.live_local_shadow.started}
+- GitHub draft: ${a.runs_by_execution_origin.github_draft.started}
+- synthetic: ${a.runs_by_execution_origin.synthetic.started}
+- imported: ${a.runs_by_execution_origin.imported.started}
+- no execution: ${a.runs_by_execution_origin.no_execution.started}
+- legacy/unspecified: ${a.runs_by_execution_origin.legacy_unspecified.started}
+
 ## Shadow runs
 - count: ${a.runs.shadow}
 

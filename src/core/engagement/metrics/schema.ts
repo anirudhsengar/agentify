@@ -14,11 +14,18 @@ const MeasuredNumber = (minimum = 0) => Type.Object({
   unit: Type.String({ minLength: 1, maxLength: 64 }),
 }, { additionalProperties: false });
 const StringList = Type.Array(Type.String({ minLength: 1, maxLength: 2_000 }), { maxItems: 200 });
+export const ExecutionOriginSchema = Type.Union([
+  Type.Literal("github_live_shadow"), Type.Literal("live_local_shadow"), Type.Literal("github_draft"),
+  Type.Literal("synthetic"), Type.Literal("imported"), Type.Literal("no_execution"),
+  Type.Literal("operator"), Type.Literal("evaluation"), Type.Literal("legacy_unspecified"),
+]);
+export type ExecutionOrigin = Static<typeof ExecutionOriginSchema>;
 const Common = {
   schema_version: Type.Literal("1"), event_id: Type.String({ pattern: "^[0-9a-f]{64}$" }),
   engagement_id: Type.String({ minLength: 1, maxLength: 128 }), workflow_id: Type.String({ minLength: 1, maxLength: 128 }),
   run_id: Type.Union([Type.String({ minLength: 1, maxLength: 128 }), Type.Null()]), timestamp: Type.String({ format: "date-time" }),
   source: Type.Union([Type.Literal("runtime"), Type.Literal("github"), Type.Literal("operator"), Type.Literal("evaluation")]),
+  execution_origin: Type.Optional(ExecutionOriginSchema),
   provenance: ProvenanceSchema, evidence_references: StringList,
   redaction_status: Type.Union([Type.Literal("redacted"), Type.Literal("not_required"), Type.Literal("reference_only")]),
 };
@@ -37,4 +44,4 @@ export const AdoptionRecordedEventSchema = event("adoption_recorded", Type.Objec
 export const BaselineRecordedEventSchema = event("baseline_recorded", Type.Object({ manual_workflow_duration_minutes: MeasuredNumber(), review_duration_minutes: MeasuredNumber(), review_cycles: MeasuredNumber(), failure_rate: MeasuredNumber(), cost_usd: MeasuredNumber(), collection_method: Type.Union([Type.Literal("historical_repository_evidence"), Type.Literal("maintainer_provided"), Type.Literal("direct_observation"), Type.Literal("structured_estimate")]), sample_size: Type.Integer({ minimum: 1 }), time_window: Type.String({ minLength: 1, maxLength: 300 }), data_provenance: Type.Array(ProvenanceSchema, { minItems: 1, maxItems: 50 }) }, { additionalProperties: false }));
 export const MetricEventSchema = Type.Union([RunStartedEventSchema, RunCompletedEventSchema, ReadinessRecordedEventSchema, PlanRecordedEventSchema, DraftPublishedEventSchema, HumanReviewRecordedEventSchema, InterventionRecordedEventSchema, IncidentRecordedEventSchema, AdoptionRecordedEventSchema, BaselineRecordedEventSchema]);
 export type MetricEvent = Static<typeof MetricEventSchema>;
-export type MetricEventInput = Omit<MetricEvent, "event_id">;
+export type MetricEventInput = Omit<MetricEvent, "event_id"> & { execution_origin: ExecutionOrigin };

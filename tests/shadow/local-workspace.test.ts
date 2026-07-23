@@ -55,8 +55,8 @@ test("removeIfStale removes a lock whose pid is no longer alive", () => {
     const lockFile = lockPathFor(root, "owner/repo", "eng", 1);
     fs.mkdirSync(path.dirname(lockFile), { recursive: true });
     fs.writeFileSync(lockFile, JSON.stringify({
-      pid: 999999, host: "test", startedAt: "2026-01-01T00:00:00.000Z",
-      repo: "owner/repo", engagementId: "eng", issueNumber: 1, localRunId: "dead",
+      schemaVersion: "1", pid: 999999, host: os.hostname(), processStartIdentity: "dead-start", nonce: "test-nonce",
+      startedAt: "2026-01-01T00:00:00.000Z", repo: "owner/repo", engagementId: "eng", issueNumber: 1, localRunId: "dead",
     }));
     const outcome = removeIfStale(lockFile);
     assert.equal(outcome.removed, true);
@@ -97,7 +97,7 @@ test("resolveWorkspacePaths sanitizes repo slugs that contain dangerous characte
       pilotRoot: root,
       repoSlug: "../etc",
       githubFullName: "owner/repo",
-      sourceRepoRoot: "/tmp",
+      sourceRepoRoot: path.join(os.tmpdir(), "separate-source"),
       sourceCommitSha: "a".repeat(40),
     });
     // The leading `..` collapses to `-` and is trimmed by the dash collapse.
@@ -124,12 +124,13 @@ test("preparePrivateClone creates a private detached clone without a remote", ()
         sourceRepoRoot: srcRoot,
         sourceCommitSha: sha,
       });
-      // Reuse srcRoot as the clone destination to validate the destination
-      // layout. preparePrivateClone will not touch the existing checkout
-      // because we are pointing it at a path that already contains a .git.
-      preparePrivateClone({ ...paths, cloneRoot: srcRoot }, sha);
-      assert.ok(fs.existsSync(path.join(srcRoot, ".git")));
-      assert.ok(fs.existsSync(path.join(srcRoot, "README.md")));
+      preparePrivateClone(paths, sha);
+      assert.ok(fs.existsSync(path.join(paths.cloneRoot, ".git")));
+      assert.ok(fs.existsSync(path.join(paths.cloneRoot, "README.md")));
+      assert.equal(execFileSync("git", ["-C", paths.cloneRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim(), "HEAD");
+      assert.equal(execFileSync("git", ["-C", paths.cloneRoot, "remote"], { encoding: "utf8" }).trim(), "");
+      const wrongRepoPaths = resolveWorkspacePaths({ pilotRoot, repoSlug: "agentify", githubFullName: "other-owner/agentify", sourceRepoRoot: srcRoot, sourceCommitSha: sha });
+      assert.throws(() => preparePrivateClone(wrongRepoPaths, sha), /different repository/);
     } finally { fs.rmSync(srcRoot, { recursive: true, force: true }); fs.rmSync(pilotRoot, { recursive: true, force: true }); }
   } catch (error) {
     // If git is unavailable, skip the test rather than fail the suite.
