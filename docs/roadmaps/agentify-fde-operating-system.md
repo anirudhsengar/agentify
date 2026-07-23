@@ -104,6 +104,12 @@ The initial lifecycle is:
    events, aggregates, human evidence input, and reports now support repeated
    measured pilots. No pilot outcome, business-value, autonomy, or
    productization conclusion is implied; repeated real pilots remain required.
+   Milestone 6A-L is complete: the supported local shadow runner
+   (`agentify engage shadow run-local`) captures operator-attested pilot
+   evidence beneath a private pilot workspace without using GitHub Actions.
+   It uses a distinct `live_local_shadow` evidence origin, dedicated
+   classifications, and git safety verification. The GitHub-hosted
+   `live_shadow` path remains unchanged and still requires GitHub Actions.
 7. **Milestone 6 — productization decision.** Graduate only evidence-backed
    capabilities through explicit architecture, security, package, and release
    review.

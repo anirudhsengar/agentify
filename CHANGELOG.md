@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Add a supported local shadow runner (`agentify engage shadow run-local` /
+  `status-local`) with a private pilot workspace, an explicit
+  `live_local_shadow` evidence origin, dedicated
+  `*_live_local_shadow_evidence` classifications, operator-attested identity,
+  git safety verification, local file locking, and redacted evidence packets.
+  Local shadow is intentionally separate from GitHub-hosted shadow and does
+  not weaken the existing `live_shadow` provenance path or its GitHub Actions
+  runtime requirement. See `docs/local-shadow-mode.md`.
+
 - Add engagement-local factual pilot instrumentation with closed provenance-aware
   events, idempotent JSONL storage, automatic shadow/draft measurements, explicit
   human evidence recording, deterministic aggregates, and redacted reports.

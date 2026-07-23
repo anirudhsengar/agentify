@@ -54,6 +54,8 @@ export interface RunEvalOptions {
 
 export type ShadowEvidenceClassification = "valid_live_shadow_evidence" | "incomplete_live_shadow_evidence" | "invalid_live_shadow_evidence";
 
+export type LocalShadowEvidenceClassification = "valid_live_local_shadow_evidence" | "incomplete_live_local_shadow_evidence" | "invalid_live_local_shadow_evidence";
+
 /** Classify analysis-only evidence. This deliberately never returns implementation success. */
 export function classifyLiveShadowTrial(trial: EvalTrial): ShadowEvidenceClassification {
   if (trial.evidence_origin !== "live_shadow" || !trial.live_shadow_attestation) return "invalid_live_shadow_evidence";
@@ -61,6 +63,28 @@ export function classifyLiveShadowTrial(trial: EvalTrial): ShadowEvidenceClassif
   if (attestation.task_id !== trial.task_id || attestation.trial_index !== trial.trial_index || trial.status === "error" || trial.failure_categories.some((category) => SAFETY_FAILURE_CATEGORIES.has(category))) return "invalid_live_shadow_evidence";
   if (trial.grader_results.length === 0 || trial.grader_results.some((grader) => grader.status === "error" || grader.status === "skipped" || grader.status === "human_required") || trial.passed !== true) return "incomplete_live_shadow_evidence";
   return "valid_live_shadow_evidence";
+}
+
+/**
+ * Classify local operator-attested shadow evidence. Honours the same shape of
+ * checks as `classifyLiveShadowTrial` but is keyed on the local attestation
+ * fields and never accepts a trial that claims the local origin without
+ * binding it to an explicit operator, local run id, and read-only auth flag.
+ * The GitHub hosted `live_shadow` classification path is intentionally not
+ * reused; this helper always returns the local variant of the classification.
+ */
+export function classifyLocalShadowTrial(trial: EvalTrial): LocalShadowEvidenceClassification {
+  if (trial.evidence_origin !== "live_local_shadow" || !trial.local_shadow_attestation) return "invalid_live_local_shadow_evidence";
+  const attestation = trial.local_shadow_attestation;
+  if (
+    attestation.task_id !== trial.task_id
+    || attestation.trial_index !== trial.trial_index
+    || trial.status === "error"
+    || trial.failure_categories.some((category) => SAFETY_FAILURE_CATEGORIES.has(category))
+    || !attestation.local_authentication_used_only_for_reads
+  ) return "invalid_live_local_shadow_evidence";
+  if (trial.grader_results.length === 0 || trial.grader_results.some((grader) => grader.status === "error" || grader.status === "skipped" || grader.status === "human_required") || trial.passed !== true) return "incomplete_live_local_shadow_evidence";
+  return "valid_live_local_shadow_evidence";
 }
 
 export function resolveTrialPlan(suite: EvalSuite, tasks: readonly EvalTask[], runId: string): TrialPlanItem[] {
@@ -104,8 +128,12 @@ export function aggregateEvalResult(suite: EvalSuite, tasks: readonly EvalTask[]
   if (failed.length || skipped.length) reasons.push("one or more trials did not pass");
   const importedTrials = completed.filter((trial) => trial.evidence_origin === "imported").length;
   const liveShadowTrials = completed.filter((trial) => trial.evidence_origin === "live_shadow");
+  const localShadowTrials = completed.filter((trial) => trial.evidence_origin === "live_local_shadow");
+  const syntheticTrials = completed.filter((trial) => trial.evidence_origin === "synthetic").length;
   if (importedTrials) reasons.push("imported evidence is not trusted as live execution automatically");
   if (liveShadowTrials.length) reasons.push("shadow evidence is analysis-only and cannot gate package release or prove implementation success");
+  if (localShadowTrials.length) reasons.push("local shadow evidence is operator-attested and cannot gate package release or prove implementation success");
+  if (syntheticTrials) reasons.push("synthetic trials are not live execution and cannot gate package release");
   const policy = suite.release_policy;
   if (policy?.minimum_task_count !== undefined && tasks.length < policy.minimum_task_count) reasons.push(`minimum task count is ${policy.minimum_task_count}`);
   const passedHumanReviews = completed.flatMap((trial) => trial.grader_results).filter((grader) => grader.grader_id === "human_review" && grader.status === "pass").length;
@@ -120,6 +148,8 @@ export function aggregateEvalResult(suite: EvalSuite, tasks: readonly EvalTask[]
     passed_trials: passed.length, failed_trials: failed.length, skipped_trials: skipped.length,
     imported_trials: importedTrials,
     live_shadow_trials: liveShadowTrials.length,
+    live_local_shadow_trials: localShadowTrials.length,
+    synthetic_trials: syntheticTrials,
     ...(liveShadowTrials.length ? { shadow_evidence_classification: liveShadowTrials.some((trial) => classifyLiveShadowTrial(trial) === "invalid_live_shadow_evidence") ? "invalid_live_shadow_evidence" : liveShadowTrials.every((trial) => classifyLiveShadowTrial(trial) === "valid_live_shadow_evidence") ? "valid_live_shadow_evidence" : "incomplete_live_shadow_evidence" } : {}),
     trial_pass_rate: completed.length ? passed.length / completed.length : 0,
     task_pass_rate: suite.task_references.length ? taskPassed / suite.task_references.length : 0,

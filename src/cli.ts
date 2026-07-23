@@ -46,6 +46,10 @@ interactively. Empty/new repos start a local-first greenfield chat.
 agentify exposes the bootstrap entrypoint plus supported \`agentify engage\`
 records and \`agentify eval\` deterministic evaluation commands. Bootstrap, attach, and recovery start here. After bootstrap, work
 through GitHub issues, comments, and PRs (see docs/lifecycle/README.md).
+
+Local pilot evidence may also be captured by running \`agentify engage shadow
+run-local\` directly inside the source checkout when GitHub Actions is not
+available; see docs/local-shadow-mode.md for the supported local trust model.
 `);
   printSubcommandHelp(output);
 }

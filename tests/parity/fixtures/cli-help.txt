@@ -28,6 +28,10 @@ agentify exposes the bootstrap entrypoint plus supported `agentify engage`
 records and `agentify eval` deterministic evaluation commands. Bootstrap, attach, and recovery start here. After bootstrap, work
 through GitHub issues, comments, and PRs (see docs/lifecycle/README.md).
 
+Local pilot evidence may also be captured by running `agentify engage shadow
+run-local` directly inside the source checkout when GitHub Actions is not
+available; see docs/local-shadow-mode.md for the supported local trust model.
+
 Config subcommands (manage ~/.agentify/{config,auth}.json):
   agentify login [--provider <name>] [--key <key>]
     Store or replace an API key. Prompts interactively when
@@ -58,11 +62,19 @@ Operational subcommands (mutate the repo):
     alongside files.
 
 Engagement record and analysis subcommands:
-  agentify engage <init|status|validate|report|promotion|metrics> [options]
+  agentify engage <init|status|validate|report|promotion|metrics|shadow> [options]
     Create, inspect, validate, or deterministically report an
     FDE engagement record. Metrics records shadow, draft, baseline,
     review, intervention, incident, and adoption evidence locally;
     no LLM or implementation is invoked.
+
+Supported local shadow subcommand (Milestone 6A-L):
+  agentify engage shadow run-local --id <id> --issue <n> --repo <owner/name>
+       [--suite <id>] [--task <id>] --pilot-root <abs> [--yes]
+    Run a read-only local shadow analysis backed by the Agentify
+    shared engine. Persists evidence to the private pilot workspace.
+  agentify engage shadow status-local --id <id> --pilot-root <abs>
+    Inspect local shadow runs and locks beneath the pilot workspace.
 
 FDE evaluation subcommands:
   agentify eval <run|report|validate> [options]
