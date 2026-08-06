@@ -1,0 +1,159 @@
+{
+  "serialization": {
+    "codebase_map": {
+      "sha256": "899fbf87b7716a66f933eeb644a15c2ca7be0030d6f18b920124a289c737ee39",
+      "bytes": 40080
+    },
+    "partial_codebase_map": {
+      "sha256": "426bd66d813e01f737382106f0e73ec30e4f66fb1cd8fc94a5f2cab578290f89",
+      "bytes": 39511
+    },
+    "write_map_params": {
+      "sha256": "31495d351ed9f3b38ca146bb3c16d48839b09dc196c846027d0f27ed1e51a3e6",
+      "bytes": 1533
+    },
+    "write_map_delta_params": {
+      "sha256": "d556eefdc81d2c5f8e915a49958934c0a69087a24945dd4ea0dcbc327bb277bd",
+      "bytes": 2333
+    }
+  },
+  "required": {
+    "codebase_map": [
+      "meta",
+      "skeleton",
+      "module_graph",
+      "type_contract_surface",
+      "conventions",
+      "pitfalls",
+      "validation_surface",
+      "operational_surface",
+      "security_surface",
+      "coverage",
+      "open_questions",
+      "exploration_log"
+    ],
+    "partial_codebase_map": [],
+    "write_map_params": [],
+    "write_map_delta_params": [
+      "delta"
+    ],
+    "coverage": [
+      "D1_topography",
+      "D2_module_boundaries",
+      "D3_type_contract",
+      "D4_conventions",
+      "D5_pitfalls",
+      "D6_validation",
+      "D7_operational",
+      "D8_security",
+      "D9_process",
+      "D10_documentation"
+    ]
+  },
+  "properties": {
+    "codebase_map": [
+      "schema_version",
+      "generated_at",
+      "meta",
+      "skeleton",
+      "module_graph",
+      "type_contract_surface",
+      "conventions",
+      "pitfalls",
+      "validation_surface",
+      "operational_surface",
+      "security_surface",
+      "coverage",
+      "open_questions",
+      "exploration_log",
+      "schema_migration_history",
+      "customization_evidence",
+      "expert_evidence",
+      "artifact_intents"
+    ],
+    "partial_codebase_map": [
+      "schema_version",
+      "generated_at",
+      "meta",
+      "skeleton",
+      "module_graph",
+      "type_contract_surface",
+      "conventions",
+      "pitfalls",
+      "validation_surface",
+      "operational_surface",
+      "security_surface",
+      "coverage",
+      "open_questions",
+      "exploration_log",
+      "customization_evidence",
+      "expert_evidence",
+      "artifact_intents"
+    ],
+    "write_map_params": [
+      "map",
+      "codebase_map",
+      "map_file",
+      "mode"
+    ],
+    "write_map_delta_params": [
+      "dimension",
+      "confidence",
+      "evidence_summary",
+      "observed_type_contract",
+      "delta",
+      "merge_strategy"
+    ]
+  },
+  "enums": {
+    "coverage_dimensions": [
+      "D1_topography",
+      "D2_module_boundaries",
+      "D3_type_contract",
+      "D4_conventions",
+      "D5_pitfalls",
+      "D6_validation",
+      "D7_operational",
+      "D8_security",
+      "D9_process",
+      "D10_documentation"
+    ],
+    "write_mode": [
+      "inline",
+      "file",
+      "auto"
+    ],
+    "merge_strategy": [
+      "shallow_overwrite",
+      "deep_merge",
+      "append"
+    ],
+    "delta_confidence": [
+      "high",
+      "medium",
+      "low"
+    ],
+    "coverage_status": [
+      "covered",
+      "gap"
+    ]
+  },
+  "defaults": {
+    "schema_version": "1",
+    "write_mode": "auto",
+    "merge_strategy": "shallow_overwrite"
+  },
+  "bounds": {
+    "agent_guide_sections": {
+      "minItems": 1,
+      "maxItems": 20
+    },
+    "feature_agents": {
+      "minItems": 0,
+      "maxItems": 24
+    },
+    "write_map_file_description": "Path (absolute or cwd-relative) to an already-existing JSON file containing the codebase map. Audit sessions cannot create this file; normally submit `map` inline with mode `auto`, which safely creates a private draft when needed. The tool reads, validates, and writes the canonical map to the explicitly configured audit state directory (currently .agentify/runtime/audit/codebase_map.json).",
+    "write_mode_description": "Persist mode. `inline` (strict) errors if the inline map exceeds 100KB. `file` (strict) requires explicit `map_file`. `auto` (default and recommended) safely creates a private draft when an inline map exceeds the cap.",
+    "merge_strategy_description": "How to merge the delta into the canonical map. `shallow_overwrite` (default) replaces matching top-level keys. `deep_merge` recursively merges objects. `append` pushes onto existing arrays."
+  }
+}

@@ -1,0 +1,77 @@
+name: Agentify issue lifecycle
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: agentify-issue-${{ github.repository_id }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  lifecycle:
+    if: >-
+      github.event.issue.pull_request == null &&
+      (
+        (github.event_name == 'issue_comment' && github.event.sender.type == 'User') ||
+        github.event.label.name == 'agentify:queue'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout trusted default-branch application tree
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up supported Node runtime
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22.19.0"
+
+      - name: Set up supported npm runtime
+        run: npm install --global npm@11.19.0 --ignore-scripts --no-audit --no-fund
+
+      - name: Install locked validation dependencies
+        if: ${{ hashFiles('package-lock.json', 'npm-shrinkwrap.json') != '' }}
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Require the trusted installed lifecycle runtime
+        run: |
+          test -f .github/agentify/task-runtime.mjs
+          test -f .github/agentify-task-policy.json
+          test -f .agentify/manifest.json
+          node --version
+
+      - name: Run trusted issue lifecycle
+        id: lifecycle
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          AGENTIFY_PR_TOKEN: ${{ secrets.AGENT_PAT }}
+          PI_API_KEY: ${{ secrets.PI_API_KEY }}
+          PI_PROVIDER: ${{ vars.PI_PROVIDER || 'anthropic' }}
+          PI_MODEL: ${{ vars.PI_MODEL }}
+          PI_THINKING: ${{ vars.PI_THINKING || 'high' }}
+          AGENTIFY_TASK_POLICY: .github/agentify-task-policy.json
+          AGENTIFY_TASK_OUTPUT_DIR: ${{ runner.temp }}/agentify-task-evidence
+        run: node .github/scripts/run-task-lifecycle.mjs
+
+      - name: Upload bounded lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: agentify-task-${{ github.event.issue.number }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/agentify-task-evidence
+          if-no-files-found: ignore
+          retention-days: 7

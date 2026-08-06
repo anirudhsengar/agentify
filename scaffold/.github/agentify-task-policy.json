@@ -1,0 +1,22 @@
+{
+  "format": "agentify_task_policy_configuration",
+  "schema_version": "2",
+  "configured": false,
+  "repository": null,
+  "model_network_posture": "denied-by-default",
+  "dependency_change_policy": "maintainer-approval-required",
+  "application_merge": "disabled",
+  "application_deployment": "disabled",
+  "protected_path_policy_known": false,
+  "validation_services_attested": false,
+  "validation_execution": {
+    "mode": "maintainer-approved-unsandboxed",
+    "child_environment_credentials": "removed",
+    "repository_mutation": "detected-and-rejected",
+    "network_isolation": "not-provided",
+    "os_sandbox": "not-provided"
+  },
+  "validation_approval": null,
+  "policy": null,
+  "instructions": "The one-time installer must replace this managed placeholder after a maintainer explicitly approves unsandboxed repository validation. The issue runtime fails closed while configured is false."
+}

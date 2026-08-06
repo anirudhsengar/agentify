@@ -1,0 +1,43 @@
+agentify 1.0.0
+
+Usage:
+  agentify [options]
+  agentify <subcommand> [subcommand-options]
+
+Options:
+  -h, --help                 Show this help and exit.
+  -v, --version              Print the version and exit.
+
+Install Agentify once in an existing GitHub repository. Agentify audits the
+codebase, creates a persistent orchestrator and evidence-backed read-only
+specialists, installs the controlled GitHub runtime, and verifies readiness.
+
+After installation, authorized GitHub issues are the normal work interface.
+Agentify plans with the orchestrator and specialists, gives exactly one builder
+write authority on an isolated task branch, validates the change, obtains a
+role-separated automated read-only review, and opens an unmerged draft pull request. A human
+retains application merge authority.
+
+Agentify-owned knowledge, procedures, lessons, specialist expertise, routing,
+and derived views are designed to refresh after accepted repository changes
+without another local CLI run. Learned output may update only the validated
+Agentify knowledge allowlist; it cannot rewrite application source, executable
+Agentify runtime code, dependencies, or policy.
+
+
+Provider and model configuration:
+  agentify login [--provider <name>]
+    Configure a provider outside repository state. Environment
+    credentials remain in the environment; OAuth-only providers
+    print their supported login instructions.
+  agentify logout [--provider <name> | --all] [--yes]
+    Remove one stored provider credential or clear all stored auth.
+  agentify models list [--provider <name>]
+    List models available with the current provider credentials.
+  agentify models show [--resolved]
+    Show configured and resolved model assignments.
+  agentify models set <provider>/<model>
+  agentify models set <primary|explorer|lite> <provider>/<model>
+    Configure the default model or one persistent team role.
+  agentify models unset [primary|explorer|lite]
+    Clear the default model or a named role assignment.

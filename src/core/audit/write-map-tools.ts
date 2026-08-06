@@ -1,0 +1,765 @@
+import * as path from "node:path";
+import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import {
+    WriteMapDeltaParamsSchema,
+    WriteMapParamsSchema,
+    applyMapDefaults,
+    COVERAGE_DIMENSIONS,
+    type CodebaseMap,
+} from "./schema.ts";
+import {
+    formatCoverageClosure,
+    type FormattedCoverageClosure,
+} from "./map-coverage.ts";
+import { applyMapDelta, type MapMergeStrategy } from "./map-delta.ts";
+import { mergeEvidenceIntoGapDraft, mergeEvidenceIntoMap } from "./map-draft.ts";
+import {
+    loadMapFromFile,
+    MAX_INLINE_MAP_BYTES,
+} from "./map-input.ts";
+import {
+    consumeReserve,
+    GAP_FILLER_SOFT_CEILING,
+    getReserveCount,
+} from "./map-observability.ts";
+import {
+    DEFAULT_MAP_FILENAME,
+    readCanonicalMap,
+    writeCanonicalMap,
+    writeDraftAtomically,
+    type MapPathConfig,
+    type MapToolExecutionContext,
+} from "./map-storage.ts";
+import { validateMap } from "./map-validation.ts";
+
+export interface MapTools {
+    writeMapTool: ToolDefinition;
+    writeMapDeltaTool: ToolDefinition;
+    /** Absolute path of the canonical map for a given repo root. */
+    canonicalMapPath: (cwd: string) => string;
+    /** Posix-style relative path of the canonical map. */
+    canonicalMapRelative: string;
+    /** Selected-state draft transport directory. */
+    draftDirectoryRelative: string;
+    /** Selected-state draft transport file path. */
+    draftPathRelative: string;
+    /** Selected-state previous-map history directory. */
+    historyRelative: string;
+}
+
+type UnknownRecord = Record<string, unknown>;
+
+function isTopographyEntryPoint(value: unknown): boolean {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+    const entry = value as UnknownRecord;
+    return typeof entry.path === "string" && entry.path.length > 0;
+}
+
+function isBootstrapDraft(map: { exploration_log: ReadonlyArray<{ action: string }> }): boolean {
+    return map.exploration_log.some((entry) => entry.action === "draft_bootstrap");
+}
+
+const MAP_TOP_LEVEL_KEYS = new Set([
+    "schema_version",
+    "generated_at",
+    "meta",
+    "skeleton",
+    "module_graph",
+    "type_contract_surface",
+    "conventions",
+    "pitfalls",
+    "validation_surface",
+    "operational_surface",
+    "security_surface",
+    "coverage",
+    "open_questions",
+    "exploration_log",
+    "artifact_intents",
+]);
+
+type CoverageDimensionName = (typeof COVERAGE_DIMENSIONS)[number];
+
+const COVERAGE_REPAIR_HINTS: Partial<Record<CoverageDimensionName, string>> = {
+    D3_type_contract:
+        "retry write_map_delta with the top-level parameter " +
+        "observed_type_contract: { kind: \"typescript_interface\", path: \"src/types.ts\", " +
+        "name: \"ObservedName\", fields: [\"realField\"] } (adapt values to evidence), or add " +
+        "type_contract_surface.typescript_interfaces, stable_types, or one_type_trace in delta. " +
+        "One real type is sufficient in a small repository; never leave every contract field empty when evidence exists",
+    D8_security:
+        "keep paths.zero_access non-empty and add at least one evidence-backed bash_blocked_patterns " +
+        "or damage_control_rules entry (for example a documented rule forbidding credential reads or commits)",
+};
+
+function downgradeUnsupportedCoverage(
+    map: CodebaseMap,
+    closure: FormattedCoverageClosure,
+): CoverageDimensionName[] {
+    const downgraded: CoverageDimensionName[] = [];
+    for (const dimension of closure.unresolved) {
+        const entry = map.coverage[dimension];
+        if (entry.status !== "covered") continue;
+        map.coverage[dimension] = { ...entry, status: "gap" };
+        downgraded.push(dimension);
+    }
+    return downgraded;
+}
+
+function formatCoverageRepairGuidance(closure: FormattedCoverageClosure): string {
+    const repairs = closure.unresolved.flatMap((dimension) => {
+        const hint = COVERAGE_REPAIR_HINTS[dimension];
+        return hint ? [`${dimension} repair: ${hint}`] : [];
+    });
+    return repairs.length > 0 ? ` Repair guidance: ${repairs.join("; ")}.` : "";
+}
+
+function injectObservedTypeContract(
+    delta: UnknownRecord,
+    observed: {
+        kind: "typescript_interface" | "pydantic_model";
+        path: string;
+        name: string;
+        fields: string[];
+    },
+): UnknownRecord {
+    const collection = observed.kind === "typescript_interface"
+        ? "typescript_interfaces"
+        : "pydantic_models";
+    const currentSurface = delta.type_contract_surface;
+    const surface: UnknownRecord = currentSurface !== null
+        && typeof currentSurface === "object"
+        && !Array.isArray(currentSurface)
+        ? { ...currentSurface as UnknownRecord }
+        : {};
+    const currentEntries = Array.isArray(surface[collection])
+        ? surface[collection] as unknown[]
+        : [];
+    const entry = {
+        path: observed.path,
+        name: observed.name,
+        fields: [...observed.fields],
+    };
+    const alreadyPresent = currentEntries.some((candidate) => {
+        if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) return false;
+        const record = candidate as UnknownRecord;
+        return record.path === entry.path && record.name === entry.name;
+    });
+    surface[collection] = alreadyPresent ? currentEntries : [...currentEntries, entry];
+    return { ...delta, type_contract_surface: surface };
+}
+
+function isEmptyRecord(value: unknown): value is UnknownRecord {
+    return (
+        value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        Object.keys(value).length === 0
+    );
+}
+
+function parseSerializedObject(value: unknown): unknown {
+    let candidate = value;
+    // OpenAI-compatible transports may stringify a tool argument twice. Keep
+    // this deliberately bounded: only an object reached within two JSON layers
+    // is accepted; all other values continue to strict TypeBox validation.
+    for (let layer = 0; layer < 2 && typeof candidate === "string"; layer += 1) {
+        try {
+            candidate = JSON.parse(candidate) as unknown;
+        } catch {
+            return value;
+        }
+    }
+    return candidate !== null && typeof candidate === "object" && !Array.isArray(candidate)
+        ? candidate
+        : value;
+}
+
+function normalizeEmptyNullableObject(
+    parent: UnknownRecord | undefined,
+    key: string,
+): void {
+    if (parent && isEmptyRecord(parent[key])) {
+        parent[key] = null;
+    }
+}
+
+function removePrematureEmptyArtifactIntents(map: UnknownRecord): void {
+    const intents = map.artifact_intents;
+    if (intents === null || typeof intents !== "object" || Array.isArray(intents)) return;
+    const record = intents as UnknownRecord;
+    const guide = record.agent_guide;
+    if (guide === null || typeof guide !== "object" || Array.isArray(guide)) return;
+    const sections = (guide as UnknownRecord).sections;
+    if (!Array.isArray(sections) || sections.length !== 0) return;
+    const emptyLists = ["always_on_docs", "feature_agents", "prompt_templates", "experts", "extension_candidates"];
+    if (emptyLists.every((key) => Array.isArray(record[key]) && (record[key] as unknown[]).length === 0)) {
+        delete map.artifact_intents;
+    }
+}
+
+function normalizePartialArtifactIntents(map: UnknownRecord): void {
+    const intents = map.artifact_intents;
+    if (intents === null || typeof intents !== "object" || Array.isArray(intents)) return;
+    const record = intents as UnknownRecord;
+    for (const key of ["always_on_docs", "feature_agents", "prompt_templates", "experts", "extension_candidates"]) {
+        if (!(key in record)) record[key] = [];
+    }
+}
+
+function normalizeNumericEvidence(map: UnknownRecord): void {
+    const validation = map.validation_surface;
+    if (validation === null || typeof validation !== "object" || Array.isArray(validation)) return;
+    const record = validation as UnknownRecord;
+    if (typeof record.test_count === "string" && /^\d+$/.test(record.test_count)) {
+        record.test_count = Number(record.test_count);
+    }
+}
+
+function normalizePitfallLineReferences(map: UnknownRecord): void {
+    if (!Array.isArray(map.pitfalls)) return;
+    for (const pitfall of map.pitfalls) {
+        if (pitfall === null || typeof pitfall !== "object" || Array.isArray(pitfall)) continue;
+        const record = pitfall as UnknownRecord;
+        if (typeof record.line_ref !== "string") continue;
+        const match = /\d+/.exec(record.line_ref);
+        if (match) record.line_ref = Number(match[0]);
+    }
+}
+
+/**
+ * Some OpenAI-compatible providers serialize a null value for an object-or-null
+ * field as an empty object. Normalize only those known nullable object fields
+ * before the SDK applies the strict TypeBox parameter schema.
+ */
+function prepareMapArguments<T>(input: unknown): T {
+    if (input === null || typeof input !== "object" || Array.isArray(input)) {
+        return input as T;
+    }
+
+    let prepared: UnknownRecord;
+    try {
+        prepared = structuredClone(input) as UnknownRecord;
+    } catch {
+        // Direct tool calls and provider adapters can supply proxy-backed
+        // objects that are not structured-cloneable. Continue with normal
+        // property access so their original validation or access error is
+        // preserved instead of replacing it with DataCloneError.
+        prepared = input as UnknownRecord;
+    }
+    // Some OpenAI-compatible transports encode a structured argument as a JSON
+    // string. Accept only a parsable object; malformed strings still reach the
+    // strict schema and produce the normal validation error.
+    prepared.map = parseSerializedObject(prepared.map);
+    prepared.codebase_map = parseSerializedObject(prepared.codebase_map);
+    prepared.delta = parseSerializedObject(prepared.delta);
+    if (prepared.map === undefined && prepared.codebase_map !== undefined) {
+        prepared.map = prepared.codebase_map;
+    }
+    delete prepared.codebase_map;
+    // Some providers occasionally close `map` after its first property and
+    // emit the remaining map sections as siblings of the wrapper. Repair only
+    // known codebase-map keys before TypeBox validation; never absorb control
+    // fields such as mode or map_file.
+    const inlineMap = prepared.map !== null && typeof prepared.map === "object" && !Array.isArray(prepared.map)
+        ? prepared.map as UnknownRecord
+        : {};
+    for (const key of MAP_TOP_LEVEL_KEYS) {
+        if (key in prepared && !(key in inlineMap)) {
+            inlineMap[key] = prepared[key];
+            delete prepared[key];
+        }
+    }
+    if (Object.keys(inlineMap).length > 0) {
+        prepared.map = inlineMap;
+    }
+    const map = isEmptyRecord(prepared.map) ? undefined : prepared.map;
+    const delta = isEmptyRecord(prepared.delta) ? undefined : prepared.delta;
+    const candidate = map ?? delta;
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+        return prepared as T;
+    }
+
+    const codebaseMap = candidate as UnknownRecord;
+    normalizePartialArtifactIntents(codebaseMap);
+    normalizeNumericEvidence(codebaseMap);
+    normalizePitfallLineReferences(codebaseMap);
+    removePrematureEmptyArtifactIntents(codebaseMap);
+    const moduleGraph = codebaseMap.module_graph as UnknownRecord | undefined;
+    const typeContracts = codebaseMap.type_contract_surface as UnknownRecord | undefined;
+    const conventions = codebaseMap.conventions as UnknownRecord | undefined;
+    const operational = codebaseMap.operational_surface as UnknownRecord | undefined;
+
+    normalizeEmptyNullableObject(moduleGraph, "client_server_split");
+    normalizeEmptyNullableObject(moduleGraph, "monorepo_workspace");
+    normalizeEmptyNullableObject(typeContracts, "one_type_trace");
+    normalizeEmptyNullableObject(conventions, "versioning");
+    normalizeEmptyNullableObject(conventions, "db_migration");
+    normalizeEmptyNullableObject(operational, "deploy");
+
+    return prepared as T;
+}
+
+function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
+    return defineTool({
+        name: "write_map",
+        label: "Write Codebase Map",
+        description:
+            "Persist the 10-dimension codebase map to ./.agentify/runtime/audit/codebase_map.json. " +
+            "Schema-enforced via TypeBox. Every write, including the first checkpoint, requires the complete top-level map; " +
+            "use honest empty sections and `gap` coverage entries for unexplored areas. Submit the map inline with `mode: 'auto'`; " +
+            "the tool safely creates its own draft transport when it exceeds 100KB. " +
+            "Use `map_file` only for an already-existing JSON file. The tool reads, " +
+            "validates, and writes the canonical map. Gap entries in the coverage block are " +
+            "allowed in the data and reported in the result; weak `covered` entries are " +
+            "also reported with the same closure rules as the final post-run gate. " +
+            "Audit sessions do not have a general-purpose write tool, so do not attempt to " +
+            "create a draft file yourself. " +
+            "Call multiple times during exploration to persist progress; call once with the " +
+            "final map before rendering the report.",
+        parameters: WriteMapParamsSchema,
+        prepareArguments: prepareMapArguments,
+        async execute(_id, params, _signal, _onUpdate, ctx) {
+            const prepared = prepareMapArguments<typeof params>(params);
+            const mode = prepared.mode ?? "auto";
+            const hasInline = prepared.map !== undefined;
+            const hasFile = typeof prepared.map_file === "string" && prepared.map_file.length > 0;
+
+            if (!hasInline && !hasFile) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text:
+                                "Error: write_map called with empty arguments. Provide either " +
+                                "`map` (inline object) or `map_file` (path to a JSON file). " +
+                                "Audit sessions cannot create a map file; submit inline `map` with " +
+                                "`mode: \"auto\"` for large maps.",
+                        },
+                    ],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+
+            if (hasInline && hasFile) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "Error: write_map called with both `map` and `map_file`. Provide exactly one.",
+                        },
+                    ],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+
+            let mapInput: unknown;
+            let sourcePath: string;
+
+            if (hasFile) {
+                try {
+                    const loaded = loadMapFromFile(prepared.map_file!, ctx.cwd);
+                    mapInput = loaded.map;
+                    sourcePath = loaded.absolutePath;
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    return {
+                        content: [{ type: "text", text: `Error: ${msg}` }],
+                        isError: true,
+                        details: undefined as unknown as Record<string, unknown>,
+                    };
+                }
+            } else {
+                if (mode === "file") {
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text:
+                                    "Error: write_map called with `mode: 'file'` and inline `map`. " +
+                                    "Use inline `map` with `mode: \"auto\"`; audit sessions cannot create " +
+                                    "a map file.",
+                            },
+                        ],
+                        isError: true,
+                        details: undefined as unknown as Record<string, unknown>,
+                    };
+                }
+                const inlineSize = Buffer.byteLength(JSON.stringify(prepared.map), "utf8");
+                if (inlineSize > MAX_INLINE_MAP_BYTES) {
+                    if (mode === "inline") {
+                        return {
+                            content: [
+                                {
+                                    type: "text",
+                                    text:
+                                        `Error: inline map is ${inlineSize} bytes, exceeds the ${MAX_INLINE_MAP_BYTES} byte cap. ` +
+                                        "Retry with `mode: \"auto\"` so agentify can create a private draft.",
+                                },
+                            ],
+                            isError: true,
+                            details: undefined as unknown as Record<string, unknown>,
+                        };
+                    }
+                    try {
+                        const draftPath = writeDraftAtomically(
+                            ctx.cwd,
+                            JSON.stringify(prepared.map, null, 2),
+                            context,
+                        );
+                        const loaded = loadMapFromFile(draftPath, ctx.cwd);
+                        mapInput = loaded.map;
+                        sourcePath = `auto-fallback:${draftPath}`;
+                    } catch (err) {
+                        const msg = err instanceof Error ? err.message : String(err);
+                        return {
+                            content: [
+                                {
+                                    type: "text",
+                                    text:
+                                        `Error: inline map (${inlineSize} bytes) exceeded the cap and ` +
+                                        `auto-fallback to file failed: ${msg}. ` +
+                                        `Use the file-based mode explicitly.`,
+                                },
+                            ],
+                            isError: true,
+                            details: undefined as unknown as Record<string, unknown>,
+                        };
+                    }
+                } else {
+                    mapInput = prepared.map;
+                    sourcePath = "(inline)";
+                }
+            }
+
+            const { map: withDefaults, injectedDefaults } = applyMapDefaults(mapInput);
+            let validation = validateMap(withDefaults);
+            if (!validation.ok && mapInput !== null && typeof mapInput === "object" && !Array.isArray(mapInput)) {
+                const merged = mergeEvidenceIntoGapDraft(mapInput as Record<string, unknown>);
+                validation = validateMap(merged);
+                if (validation.ok) sourcePath = `${sourcePath}:draft-merged`;
+            }
+            if (!validation.ok) {
+                return {
+                    content: [{ type: "text", text: `Error: ${validation.error}` }],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+
+            const validMap = validation.value;
+            const existingMap = readCanonicalMap(ctx.cwd, context);
+            const closure = formatCoverageClosure(validMap);
+            if (existingMap !== null && isBootstrapDraft(existingMap)) {
+                const existingClosure = formatCoverageClosure(existingMap);
+                if (closure.closed.length < existingClosure.closed.length) {
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text:
+                                    "Error: full map write would discard previously recorded audit evidence " +
+                                    `(${existingClosure.closed.length} closed dimensions would become ${closure.closed.length}). ` +
+                                    "Keep the canonical map intact and use write_map_delta to add or repair a single dimension.",
+                            },
+                        ],
+                        isError: true,
+                        details: undefined as unknown as Record<string, unknown>,
+                    };
+                }
+            }
+            if (
+                existingMap !== null
+                && isBootstrapDraft(existingMap)
+                && !isBootstrapDraft(validMap)
+            ) {
+                const bootstrapEntry = existingMap.exploration_log.find((entry) => entry.action === "draft_bootstrap");
+                if (bootstrapEntry) validMap.exploration_log.unshift(bootstrapEntry);
+            }
+            const downgradedDimensions = downgradeUnsupportedCoverage(validMap, closure);
+            let writeResult: { path: string; size_bytes: number };
+            try {
+                writeResult = writeCanonicalMap(ctx.cwd, validMap, context);
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                return {
+                    content: [{ type: "text", text: `Error: failed to write canonical map: ${msg}` }],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+
+            const injectedLine =
+                injectedDefaults.length > 0
+                    ? ` Injected defaults: ${injectedDefaults.join(", ")}.`
+                    : "";
+            const resultText =
+                `Wrote codebase map to ${writeResult.path} (${writeResult.size_bytes} bytes). ` +
+                `Source: ${sourcePath}.${injectedLine} ${closure.line}` +
+                (downgradedDimensions.length > 0
+                    ? ` Unsupported covered claims persisted as gap: ${downgradedDimensions.join(", ")}.`
+                    : "") +
+                formatCoverageRepairGuidance(closure);
+
+            return {
+                content: [{ type: "text", text: resultText }],
+                details: {
+                    path: writeResult.path,
+                    size_bytes: writeResult.size_bytes,
+                    source_path: sourcePath,
+                    injected_defaults: injectedDefaults,
+                    schema_version: validMap.schema_version ?? "1",
+                    generated_at: validMap.generated_at ?? null,
+                    coverage_summary: {
+                        covered: closure.closed,
+                        gap: closure.unresolved,
+                        total: COVERAGE_DIMENSIONS.length,
+                    },
+                    coverage_closure: {
+                        closed: closure.closed,
+                        unresolved: closure.unresolved,
+                        reasons: closure.reasons,
+                    },
+                    downgraded_dimensions: downgradedDimensions,
+                    gap_warning: closure.warnings,
+                },
+            };
+        },
+    }) as unknown as ToolDefinition;
+}
+
+function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefinition {
+    return defineTool({
+        name: "write_map_delta",
+        label: "Write Codebase Map Delta",
+        description:
+            "Merge a partial delta into the canonical codebase map. Used by `gap_filler` " +
+            "sub-agents to close a single dimension's gap without re-persisting the entire " +
+            "map. Agentify merges the delta and strictly validates the complete result. The merge " +
+            "strategy controls how delta fields are combined with the existing map " +
+            "(`shallow_overwrite` = default, `deep_merge` = recursive merge, `append` = " +
+            "push onto arrays). If `dimension` is provided, the corresponding coverage " +
+            "entry is proposed as `covered` with the delta's `confidence` and `evidence_summary`; " +
+            "Agentify persists it as `gap` when the merged map still fails that dimension's substance gate. " +
+            "For D3_type_contract, pass the typed top-level `observed_type_contract` parameter so Agentify " +
+            "places the observed path, name, and fields into the canonical contract surface. " +
+            "Per-dimension gap_filler count is tracked (soft ceiling of 3, no hard cap; observability only).",
+        parameters: WriteMapDeltaParamsSchema,
+        prepareArguments: prepareMapArguments,
+        async execute(_id, params, _signal, _onUpdate, ctx) {
+            const prepared = prepareMapArguments<typeof params>(params);
+            const existing = readCanonicalMap(ctx.cwd, context);
+            if (existing === null) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text:
+                                "Error: no canonical map exists at ./.agentify/runtime/audit/codebase_map.json. " +
+                                "Call `write_map` first to write the initial map, then use `write_map_delta` " +
+                                "for subsequent partial updates.",
+                        },
+                    ],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+
+            if (prepared.delta === null || typeof prepared.delta !== "object" || Array.isArray(prepared.delta)) {
+                return {
+                    content: [{ type: "text", text: "Error: write_map_delta requires an object delta." }],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+
+            if (params.observed_type_contract && params.dimension !== "D3_type_contract") {
+                return {
+                    content: [{
+                        type: "text",
+                        text: "Error: observed_type_contract is valid only with dimension=D3_type_contract.",
+                    }],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+
+            const delta = params.observed_type_contract
+                ? injectObservedTypeContract(
+                    prepared.delta as UnknownRecord,
+                    params.observed_type_contract,
+                )
+                : prepared.delta as UnknownRecord;
+
+            let reserveWarning: string | undefined;
+            if (params.dimension) {
+                reserveWarning = consumeReserve(params.dimension).reason;
+            }
+
+            const strategy = (params.merge_strategy ?? "shallow_overwrite") as MapMergeStrategy;
+            const mergeAndAnnotate = (mergeStrategy: MapMergeStrategy): Record<string, unknown> => {
+                const merged = applyMapDelta(
+                    existing as unknown as Record<string, unknown>,
+                    delta,
+                    mergeStrategy,
+                );
+
+                if (params.dimension) {
+                    const dim = params.dimension;
+                    const confidence = params.confidence ?? "medium";
+                    const evidenceSummary =
+                        params.evidence_summary ??
+                        `Closed by gap_filler delta (${mergeStrategy}).`;
+                    const topographyEntryPoints = (merged.skeleton as UnknownRecord | undefined)?.entry_points;
+                    const canCloseTopography = Array.isArray(topographyEntryPoints)
+                        && topographyEntryPoints.some(isTopographyEntryPoint);
+                    const coverage = (merged.coverage ?? {}) as Record<string, unknown>;
+                    coverage[dim] = {
+                        status: dim === "D1_topography" && !canCloseTopography ? "gap" : "covered",
+                        confidence,
+                        evidence_summary:
+                            dim === "D1_topography" && !canCloseTopography
+                                ? `${evidenceSummary} Add skeleton.entry_points before closing D1_topography.`
+                                : evidenceSummary,
+                    };
+                    merged.coverage = coverage;
+                }
+
+                // A delta is allowed to omit the log, but it must never turn the
+                // application-owned audit trail into an arbitrary object. Some
+                // providers emit a keyed log object while filling a dimension;
+                // retain the last valid trail in that case so the delta can still
+                // pass through the bootstrap sanitizer below.
+                const log = Array.isArray(merged.exploration_log)
+                    ? merged.exploration_log as Array<Record<string, unknown>>
+                    : structuredClone(existing.exploration_log) as Array<Record<string, unknown>>;
+                log.push({
+                    ts: new Date().toISOString(),
+                    action: "gap_filler_delta",
+                    target: params.dimension ?? "(no-dim)",
+                    observation: `merged delta from write_map_delta (strategy=${mergeStrategy})`,
+                });
+                merged.exploration_log = log;
+                return merged;
+            };
+
+            let appliedStrategy = strategy;
+            let merged = mergeAndAnnotate(appliedStrategy);
+            let { map: withDefaults } = applyMapDefaults(merged);
+            let mergedValidation = validateMap(withDefaults);
+            if (!mergedValidation.ok && strategy === "shallow_overwrite") {
+                appliedStrategy = "deep_merge";
+                merged = mergeAndAnnotate(appliedStrategy);
+                ({ map: withDefaults } = applyMapDefaults(merged));
+                mergedValidation = validateMap(withDefaults);
+            }
+            if (!mergedValidation.ok && isBootstrapDraft(existing)) {
+                const sanitized = mergeEvidenceIntoMap(merged, existing);
+                ({ map: withDefaults } = applyMapDefaults(sanitized));
+                mergedValidation = validateMap(withDefaults);
+            }
+            if (!mergedValidation.ok) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text:
+                                `Error: merged map failed schema validation. ` +
+                                `Correct the reported delta fields and retry. ` +
+                                `${mergedValidation.error}`,
+                        },
+                    ],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+
+            const validMap = mergedValidation.value;
+            const needsTopographyEvidence =
+                params.dimension === "D1_topography"
+                && (
+                    validMap.skeleton.top_level_tree.length === 0
+                    || validMap.skeleton.entry_points.length === 0
+                    || validMap.skeleton.first_5_files_for_fresh_agent.length === 0
+                );
+            if (needsTopographyEvidence) {
+                validMap.coverage.D1_topography = {
+                    status: "gap",
+                    confidence: params.confidence ?? "medium",
+                    evidence_summary:
+                        `${params.evidence_summary ?? "Topography evidence was submitted."} ` +
+                        "Add a non-empty skeleton.top_level_tree, skeleton.entry_points objects with path, role, language, and run_command, plus first_5_files_for_fresh_agent objects with path and why before closing D1_topography.",
+                };
+            }
+            const closure = formatCoverageClosure(validMap);
+            const downgradedDimensions = downgradeUnsupportedCoverage(validMap, closure);
+            let writeResult: { path: string; size_bytes: number };
+            try {
+                writeResult = writeCanonicalMap(ctx.cwd, validMap, context);
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                return {
+                    content: [{ type: "text", text: `Error: failed to write merged map: ${msg}` }],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+
+            const resultText =
+                `Merged delta into codebase map at ${writeResult.path} (${writeResult.size_bytes} bytes). ` +
+                `Strategy: ${appliedStrategy}. Dimension: ${params.dimension ?? "(none)"}. ` +
+                `Gap-filler count for ${params.dimension ?? "n/a"}: ${params.dimension ? getReserveCount(params.dimension) : 0} (soft ceiling: ${GAP_FILLER_SOFT_CEILING}). ` +
+                `${closure.line}` +
+                (downgradedDimensions.length > 0
+                    ? ` Unsupported covered claims persisted as gap: ${downgradedDimensions.join(", ")}.`
+                    : "") +
+                formatCoverageRepairGuidance(closure) +
+                (needsTopographyEvidence
+                    ? " To close D1, retry with `delta: { skeleton: { top_level_tree: [\"src/\"], entry_points: [{ path: \"path/to/entry\", role: \"what it starts\", language: \"language\", run_command: \"documented command\" }], first_5_files_for_fresh_agent: [{ path: \"README.md\", why: \"starting context\" }] } }`."
+                    : "") +
+                (reserveWarning ? ` Note: ${reserveWarning}` : "");
+
+            return {
+                content: [{ type: "text", text: resultText }],
+                details: {
+                    path: writeResult.path,
+                    size_bytes: writeResult.size_bytes,
+                    dimension: params.dimension ?? null,
+                    merge_strategy: appliedStrategy,
+                    gap_filler_count: params.dimension ? getReserveCount(params.dimension) : 0,
+                    gap_filler_soft_ceiling: GAP_FILLER_SOFT_CEILING,
+                    coverage_summary: {
+                        covered: closure.closed,
+                        gap: closure.unresolved,
+                        total: COVERAGE_DIMENSIONS.length,
+                    },
+                    coverage_closure: {
+                        closed: closure.closed,
+                        unresolved: closure.unresolved,
+                        reasons: closure.reasons,
+                    },
+                    downgraded_dimensions: downgradedDimensions,
+                    gap_warning: closure.warnings,
+                },
+            };
+        },
+    }) as unknown as ToolDefinition;
+}
+
+export function createWriteMapTools(config: MapPathConfig): MapTools {
+    const context: MapToolExecutionContext = Object.freeze({
+        stateDir: config.stateDir,
+        mapFilename: config.mapFilename ?? DEFAULT_MAP_FILENAME,
+    });
+    const normalize = (value: string): string => value.replace(/\\/g, "/");
+    return {
+        writeMapTool: defineWriteMapTool(context),
+        writeMapDeltaTool: defineWriteMapDeltaTool(context),
+        canonicalMapPath: (cwd: string) => path.join(cwd, context.stateDir, context.mapFilename),
+        canonicalMapRelative: normalize(path.join(context.stateDir, context.mapFilename)),
+        draftDirectoryRelative: normalize(path.join(context.stateDir, ".agentify")),
+        draftPathRelative: normalize(path.join(context.stateDir, ".agentify", "draft.json")),
+        historyRelative: normalize(path.join(context.stateDir, "history")),
+    };
+}

@@ -1,0 +1,41 @@
+# Agentify runtime state
+.agentify/
+
+# Dependencies and build output
+node_modules/
+dist/
+*.tgz
+
+# Test and coverage output
+coverage/
+.coverage
+coverage.xml
+*.db
+*.sqlite
+*.sqlite3
+screenshots/
+videos/
+
+# Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# Tool caches
+.pnpm-store/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+
+# Editors and operating systems
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

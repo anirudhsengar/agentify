@@ -1,0 +1,76 @@
+{
+  "baseline_commit": "44a069d3443e2a523ef0597614247cc3d0ce3ac2",
+  "normalization": "none-exact-typebox-serialization",
+  "cases": [
+    {
+      "name": "complete valid map",
+      "input": "complete_valid",
+      "schema": "codebase_map",
+      "valid": true,
+      "errors": []
+    },
+    {
+      "name": "partial coverage-only map",
+      "input": "partial_coverage_only",
+      "schema": "partial_codebase_map",
+      "valid": true,
+      "errors": []
+    },
+    {
+      "name": "complete map missing meta",
+      "input": "complete_missing_meta",
+      "schema": "codebase_map",
+      "valid": false,
+      "errors": [
+        {
+          "keyword": "required",
+          "instancePath": "",
+          "requiredProperties": [
+            "meta"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "complete map invalid first coverage status",
+      "input": "complete_invalid_coverage_status",
+      "schema": "codebase_map",
+      "valid": false,
+      "errors": [
+        {
+          "keyword": "enum",
+          "instancePath": "/coverage/D1_topography/status"
+        }
+      ]
+    },
+    {
+      "name": "write_map empty parameters remain schema-valid",
+      "input": "empty_object",
+      "schema": "write_map_params",
+      "valid": true,
+      "errors": []
+    },
+    {
+      "name": "write_map_delta minimal parameters",
+      "input": "minimal_delta",
+      "schema": "write_map_delta_params",
+      "valid": true,
+      "errors": []
+    },
+    {
+      "name": "write_map_delta missing delta",
+      "input": "empty_object",
+      "schema": "write_map_delta_params",
+      "valid": false,
+      "errors": [
+        {
+          "keyword": "required",
+          "instancePath": "",
+          "requiredProperties": [
+            "delta"
+          ]
+        }
+      ]
+    }
+  ]
+}

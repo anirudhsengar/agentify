@@ -1,0 +1,87 @@
+import { StringEnum } from "@earendil-works/pi-ai";
+import { Type, type Static } from "typebox";
+import { COVERAGE_DIMENSIONS } from "../coverage.ts";
+
+const SerializedMapTransportSchema = Type.String({
+  description:
+    "JSON-serialized map transport. Use an inline object normally; Agentify parses this form and applies the same strict map validation.",
+});
+
+const InlineMapTransportSchema = Type.Record(Type.String(), Type.Unknown(), {
+  description: "Map transport envelope. Agentify normalizes provider encodings and strictly validates the complete map before persistence.",
+});
+
+const MapTransportSchema = Type.Union([InlineMapTransportSchema, SerializedMapTransportSchema]);
+const DeltaTransportSchema = Type.Record(Type.String(), Type.Unknown(), {
+  description: "Incremental map update transport. Agentify merges this into the canonical map and strictly validates the complete result.",
+});
+
+const ObservedTypeContractSchema = Type.Object({
+  kind: StringEnum(["typescript_interface", "pydantic_model"] as const, {
+    description: "Canonical contract collection that owns this observed definition.",
+  }),
+  path: Type.String({
+    description: "Repository-relative path containing the observed contract definition.",
+  }),
+  name: Type.String({
+    description: "Exact interface, model, or schema name observed in the repository.",
+  }),
+  fields: Type.Array(Type.String(), {
+    minItems: 1,
+    maxItems: 64,
+    description: "One or more real field names observed on the contract.",
+  }),
+}, {
+  description:
+    "Structured D3 evidence. With dimension=D3_type_contract, Agentify inserts this entry into type_contract_surface before applying the closure gate. Use this when a generic delta risks recording only a coverage annotation.",
+});
+
+export const WriteMapParamsSchema = Type.Object({
+  map: Type.Optional(MapTransportSchema),
+  codebase_map: Type.Optional(MapTransportSchema),
+  map_file: Type.Optional(
+    Type.String({
+      description:
+        "Path (absolute or cwd-relative) to an already-existing JSON file containing the codebase map. Audit sessions cannot create this file; normally submit `map` inline with mode `auto`, which safely creates a private draft when needed. The tool reads, validates, and writes the canonical map to the explicitly configured audit state directory (currently .agentify/runtime/audit/codebase_map.json).",
+    }),
+  ),
+  mode: Type.Optional(
+    StringEnum(["inline", "file", "auto"] as const, {
+      default: "auto",
+      description:
+        "Persist mode. `inline` (strict) errors if the inline map exceeds 100KB. `file` (strict) requires explicit `map_file`. `auto` (default and recommended) safely creates a private draft when an inline map exceeds the cap.",
+    }),
+  ),
+});
+
+export type WriteMapParams = Static<typeof WriteMapParamsSchema>;
+
+export const WriteMapDeltaParamsSchema = Type.Object({
+  dimension: Type.Optional(
+    StringEnum(COVERAGE_DIMENSIONS, {
+      description: "The dimension this delta closes. If provided, the corresponding coverage entry is set to `covered` with the delta's `confidence` and `evidence_summary`.",
+    }),
+  ),
+  confidence: Type.Optional(
+    StringEnum(["high", "medium", "low"] as const, {
+      description: "Confidence level for the delta. Used for the dimension's coverage entry.",
+    }),
+  ),
+  evidence_summary: Type.Optional(
+    Type.String({
+      description:
+        "1-2 sentence evidence summary stored with the coverage record and consumed by trusted closure, specialist-discovery, and task-planning code.",
+    }),
+  ),
+  observed_type_contract: Type.Optional(ObservedTypeContractSchema),
+  delta: Type.Union([DeltaTransportSchema, SerializedMapTransportSchema]),
+  merge_strategy: Type.Optional(
+    StringEnum(["shallow_overwrite", "deep_merge", "append"] as const, {
+      default: "shallow_overwrite",
+      description:
+        "How to merge the delta into the canonical map. `shallow_overwrite` (default) replaces matching top-level keys. `deep_merge` recursively merges objects. `append` pushes onto existing arrays.",
+    }),
+  ),
+});
+
+export type WriteMapDeltaParams = Static<typeof WriteMapDeltaParamsSchema>;

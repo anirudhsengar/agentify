@@ -1,0 +1,107 @@
+{
+  "name": "@anirudhsengar/agentify",
+  "version": "1.0.0",
+  "description": "Install-once persistent autonomous engineering team for existing GitHub repositories.",
+  "type": "module",
+  "keywords": [
+    "agentic-engineering",
+    "agents",
+    "codebase-audit",
+    "agentic-development"
+  ],
+  "license": "MIT",
+  "author": "Anirudh Sengar",
+  "packageManager": "npm@11.19.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anirudhsengar/agentify"
+  },
+  "bugs": {
+    "url": "https://github.com/anirudhsengar/agentify/issues"
+  },
+  "homepage": "https://github.com/anirudhsengar/agentify#readme",
+  "bin": {
+    "agentify": "./bin/agentify.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "scaffold/AGENTS.md",
+    "scaffold/SETUP.md",
+    "scaffold/.github/agentify-task-policy.json",
+    "scaffold/.github/scripts/complete-accepted-task-merge.mjs",
+    "scaffold/.github/scripts/publish-task-draft.mjs",
+    "scaffold/.github/scripts/run-task-lifecycle.mjs",
+    "scaffold/.github/scripts/task-state-github.mjs",
+    "scaffold/.github/workflows/agentify-issue.yml",
+    "scaffold/.github/workflows/agentify-learn.yml",
+    "docs/README.md",
+    "docs/architecture.md",
+    "docs/architecture/install-once-repository-team.md",
+    "docs/architecture/agent-memory.md",
+    "docs/architecture/repository-specialists.md",
+    "docs/architecture/continuous-learning.md",
+    "docs/architecture/issue-lifecycle.md",
+    "docs/build-and-package.md",
+    "docs/release-process.md",
+    "docs/state-lifecycle.md",
+    "README.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "AGENTS.md"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "overrides": {
+    "@smithy/util-buffer-from": "4.4.7",
+    "undici": "8.9.0"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.7.0",
+    "@earendil-works/pi-ai": "0.83.0",
+    "@earendil-works/pi-coding-agent": "0.83.0",
+    "typebox": "^1.3.10"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "esbuild": "^0.28.1",
+    "tsx": "^4.23.5",
+    "typescript": "^6.0.3"
+  },
+  "scripts": {
+    "test:unit": "node tests/scripts/run-test-files.mjs",
+    "test:all": "npm run build && npm run test:unit && bash tests/run.sh",
+    "test": "npm run typecheck && npm run test:all",
+    "test:package": "node tests/package/exact-artifact-qualification.mjs",
+    "test:parity:cli": "tsx tests/parity/cli-contract.test.ts",
+    "test:parity": "npm run build && npm run test:parity:cli",
+    "test:maintenance": "tsx tests/maintenance/documentation-invariants.test.ts && tsx tests/maintenance/cleanup-hygiene.test.ts && tsx tests/maintenance/action-pinning.test.ts && tsx tests/maintenance/schema-boundaries.test.ts && tsx tests/maintenance/reachability-invariants.test.ts && tsx tests/maintenance/module-boundaries.test.ts && tsx tests/release-safety.test.ts && tsx tests/maintenance/memory-boundary.test.ts && tsx tests/maintenance/specialist-boundary.test.ts && tsx tests/maintenance/learning-boundary.test.ts && tsx tests/maintenance/task-lifecycle-boundary.test.ts",
+    "test:fixtures": "npm run test:unit",
+    "test:scaffold-e2e": "bash scaffold/tests/run.sh",
+    "test:security-redteam": "tsx tests/audit/defense-hardening.test.ts && bash scaffold/tests/test-agentify-issue-lifecycle.sh && bash scaffold/tests/test-agentify-learn-lifecycle.sh",
+    "test:specialists": "tsx tests/specialists/specialist-discovery.test.ts && tsx tests/specialists/specialist-persistence.test.ts && tsx tests/specialists/specialist-runtime.test.ts",
+    "test:learning": "tsx tests/learning/merge-learning.test.ts && tsx tests/learning/reconciliation.test.ts && tsx tests/learning/self-update.test.ts",
+    "test:lifecycle": "tsx tests/task-lifecycle/task-lifecycle.test.ts && tsx tests/task-lifecycle/builder-tools.test.ts && tsx tests/task-lifecycle/generative-invariants.test.ts && tsx tests/task-lifecycle/validation-runner.test.ts && tsx tests/task-lifecycle/github-runtime.test.ts",
+    "test:installer": "tsx tests/installer/one-time-installer.test.ts",
+    "verify:source": "npm run typecheck && npm run test:all",
+    "verify:scaffold": "npm run test:scaffold-e2e",
+    "verify:package": "npm run test:package",
+    "verify:security": "npm audit --omit=dev --audit-level=high",
+    "verify:release": "npm run verify:source && npm run verify:scaffold && npm run verify:package && npm run verify:security",
+    "release:check": "npm run verify:release",
+    "pack:release": "node scripts/pack-release.mjs",
+    "verify:pack-reproducibility": "node scripts/verify-pack-reproducibility.mjs",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run release:check",
+    "inspect-log": "node src/core/audit/scripts/inspect-log.mjs",
+    "build": "node scripts/build.mjs",
+    "prepack": "npm run build",
+    "test:memory": "tsx tests/memory/memory-schema.test.ts && tsx tests/memory/memory-provenance.test.ts && tsx tests/memory/memory-store.test.ts && tsx tests/memory/memory-queries-compaction.test.ts"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  }
+}

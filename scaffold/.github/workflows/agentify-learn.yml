@@ -1,0 +1,203 @@
+name: Agentify Learn
+
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      max_commits:
+        description: Maximum recent first-parent commits to reconcile
+        required: false
+        default: "20"
+  schedule:
+    - cron: "23 3 * * *"
+
+concurrency:
+  group: agentify-learning-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  learn:
+    if: github.event_name != 'pull_request_target' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout current default branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select supported Node runtime
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22.19.0"
+
+      - name: Require the trusted installed learning runtime
+        run: |
+          test -f .github/agentify/learning-runtime.mjs
+          test -f .github/agentify/task-runtime.mjs
+          test -f .github/scripts/complete-accepted-task-merge.mjs
+          test -f .github/scripts/task-state-github.mjs
+          test -f .agentify/manifest.json
+          node --version
+
+      - name: Capture expected default-branch head
+        id: head
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build accepted-merge event
+        if: github.event_name == 'pull_request_target'
+        env:
+          EVENT_PATH: ${{ runner.temp }}/agentify-merge-event.json
+          EXPECTED_HEAD: ${{ steps.head.outputs.sha }}
+          REPOSITORY_ID: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          ACCEPTED_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          PULL_REQUEST_URL: ${{ github.event.pull_request.html_url }}
+          ACCEPTED_AT: ${{ github.event.pull_request.merged_at }}
+          ACCEPTED_BY: ${{ github.event.pull_request.merged_by.login }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          FIRST_PARENT=$(git rev-parse "${ACCEPTED_COMMIT}^1")
+          export FIRST_PARENT
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const agentifyAuthored = process.env.HEAD_REF.startsWith("agentify/issue-");
+          const event = {
+            schema_version: "1",
+            repository_id: process.env.REPOSITORY_ID,
+            default_branch: process.env.DEFAULT_BRANCH,
+            accepted_commit: process.env.ACCEPTED_COMMIT,
+            first_parent_commit: process.env.FIRST_PARENT,
+            expected_repository_head: process.env.EXPECTED_HEAD,
+            pull_request_number: Number(process.env.PULL_REQUEST_NUMBER),
+            issue_number: null,
+            pull_request_url: process.env.PULL_REQUEST_URL,
+            actor: process.env.ACCEPTED_BY || "github-merge",
+            author_kind: agentifyAuthored ? "agentify" : "human",
+            accepted_at: new Date(process.env.ACCEPTED_AT).toISOString(),
+          };
+          fs.writeFileSync(process.env.EVENT_PATH, `${JSON.stringify(event, null, 2)}\n`);
+          NODE
+
+      - name: Bind accepted Agentify task evidence and finalize application state
+        if: github.event_name == 'pull_request_target'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node .github/scripts/complete-accepted-task-merge.mjs \
+            "${GITHUB_EVENT_PATH}" \
+            "${RUNNER_TEMP}/agentify-merge-event.json" \
+            "${RUNNER_TEMP}/agentify-accepted-task-evidence.json"
+
+      - name: Process accepted merge
+        if: github.event_name == 'pull_request_target'
+        run: |
+          task_evidence=()
+          if test -f "${RUNNER_TEMP}/agentify-accepted-task-evidence.json"; then
+            task_evidence=(--task-evidence "${RUNNER_TEMP}/agentify-accepted-task-evidence.json")
+          fi
+          node .github/agentify/learning-runtime.mjs process \
+            --event "${RUNNER_TEMP}/agentify-merge-event.json" \
+            "${task_evidence[@]}" \
+            --output "${RUNNER_TEMP}/agentify-learning-report.json"
+
+      - name: Reconcile missed accepted commits
+        if: github.event_name != 'pull_request_target'
+        env:
+          MAX_COMMITS: ${{ github.event.inputs.max_commits || '20' }}
+        run: |
+          node .github/agentify/learning-runtime.mjs reconcile \
+            --repository-id "${GITHUB_REPOSITORY}" \
+            --default-branch "${{ github.event.repository.default_branch }}" \
+            --max-commits "${MAX_COMMITS}" \
+            --output "${RUNNER_TEMP}/agentify-learning-report.json"
+
+      - name: Verify path-restricted knowledge diff
+        id: diff
+        env:
+          EXPECTED_HEAD: ${{ steps.head.outputs.sha }}
+        run: |
+          node .github/agentify/learning-runtime.mjs verify-diff \
+            --expected-head "${EXPECTED_HEAD}" \
+            --output "${RUNNER_TEMP}/agentify-learning-diff.json"
+          count=$(jq '.paths | length' "${RUNNER_TEMP}/agentify-learning-diff.json")
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit verified knowledge update
+        id: commit
+        if: steps.diff.outputs.count != '0'
+        env:
+          EXPECTED_HEAD: ${{ steps.head.outputs.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "${EXPECTED_HEAD}"
+          git config user.name "agentify-knowledge[bot]"
+          git config user.email "agentify-knowledge[bot]@users.noreply.github.com"
+          while IFS= read -r path; do
+            git add -- "$path"
+          done < <(jq -r '.paths[]' "${RUNNER_TEMP}/agentify-learning-diff.json")
+          git diff --cached --quiet && {
+            echo "No staged knowledge changes remain."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          git commit -m "chore(agentify): refresh repository knowledge"
+          echo "created=true" >> "$GITHUB_OUTPUT"
+
+      - name: Publish a dedicated knowledge-maintenance pull request
+        if: steps.commit.outputs.created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPECTED_HEAD: ${{ steps.head.outputs.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          branch="agentify/knowledge-maintenance"
+          remote_sha=$(git ls-remote --heads origin "refs/heads/${branch}" | cut -f1)
+          gh auth setup-git
+          if [ -n "$remote_sha" ]; then
+            git push origin "HEAD:refs/heads/${branch}" \
+              "--force-with-lease=refs/heads/${branch}:${remote_sha}"
+          else
+            git push origin "HEAD:refs/heads/${branch}" \
+              "--force-with-lease=refs/heads/${branch}:"
+          fi
+          body_file="${RUNNER_TEMP}/agentify-knowledge-pr.md"
+          {
+            echo "## Agentify knowledge refresh"
+            echo
+            echo "This pull request contains only path-verified Agentify-owned knowledge changes."
+            echo
+            echo "- Expected base: \`${EXPECTED_HEAD}\`"
+            echo "- Trigger: \`${GITHUB_EVENT_NAME}\`"
+            echo "- Run: \`${GITHUB_RUN_ID}\`"
+            echo "- Automatic application merge remains disabled."
+            echo
+            echo "The trusted learning runtime rejected application source, dependencies, policy, workflow code, operational journals, symlinks, and paths outside the knowledge allowlist before this branch was published."
+          } > "$body_file"
+          pr_number=$(gh pr list \
+            --state open \
+            --base "$DEFAULT_BRANCH" \
+            --head "$branch" \
+            --json number \
+            --jq '.[0].number // empty' \
+            --limit 1)
+          if [ -n "$pr_number" ]; then
+            gh pr edit "$pr_number" \
+              --title "chore(agentify): refresh repository knowledge" \
+              --body-file "$body_file"
+          else
+            gh pr create \
+              --base "$DEFAULT_BRANCH" \
+              --head "$branch" \
+              --title "chore(agentify): refresh repository knowledge" \
+              --body-file "$body_file"
+          fi
