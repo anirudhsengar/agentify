@@ -4,7 +4,7 @@
 
 | Version | Supported |
 | --- | --- |
-| 0.1.x | Yes |
+| 1.0.0 | Yes |
 
 Report vulnerabilities privately through
 [GitHub security advisories](https://github.com/anirudhsengar/agentify/security/advisories/new)
