@@ -111,7 +111,7 @@ export function acquireStoreLock<T>(
       descriptor = tryOpen();
     } catch (retryError) {
       try {
-        if (staleQuarantine !== null && fs.existsSync(staleQuarantine) && !fs.existsSync(lockPath)) {
+        if (fs.existsSync(staleQuarantine) && !fs.existsSync(lockPath)) {
           fs.renameSync(staleQuarantine, lockPath);
         }
       } catch {

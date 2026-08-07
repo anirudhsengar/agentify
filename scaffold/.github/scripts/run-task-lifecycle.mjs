@@ -13,10 +13,6 @@ const MAX_EVENT_BYTES = 4 * 1024 * 1024;
 const MAX_COMMENT_BYTES = 12_000;
 const SHA = /^[0-9a-f]{40}$/;
 const SAFE_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
-const TERMINAL_STATES = new Set([
-  "completed", "stopped", "refused", "blocked", "stale-base", "budget-exhausted", "failed",
-]);
-const EXECUTION_STATES = new Set(["approved", "implementing", "validating", "reviewing", "fixing"]);
 const SENSITIVE_ENVIRONMENT = /(?:^|_)(?:API_?KEY|AUTH|CREDENTIAL|PASSWORD|PRIVATE_?KEY|SECRET|TOKEN)(?:$|_)/i;
 
 function fail(message) {
@@ -468,7 +464,7 @@ class Controller {
   }
 
   issuePullRequestConflict(branch = null, taskId = null, planDigest = null) {
-    const issueMarker = new RegExp(`issue=${this.issue.number}(?:\s|-->|$)`);
+    const issueMarker = new RegExp(`issue=${this.issue.number}(?:\\s|-->|$)`);
     const implementsIssue = new RegExp(`(?:^|\n)Implements #${this.issue.number}(?![0-9])`, "m");
     const matches = this.openPullRequests().filter((pr) => {
       const body = String(pr.body ?? "");

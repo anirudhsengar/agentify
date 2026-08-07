@@ -199,7 +199,6 @@ function main() {
 
   if (remoteHead !== localHead) {
     run("git", ["-C", root, "push", "--set-upstream", "origin", branch]);
-    remoteHead = localHead;
   }
 
   let pr = recoverPullRequest({ repository, branch, base_branch: baseBranch }, marker);

@@ -12,7 +12,7 @@ export const TEAM_MEMORY_INITIALIZATION_JOURNAL_RELATIVE =
 const SAFE_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 
 export function validateMemoryId(value: string, label = "memory ID"): string {
-  let decoded = value;
+  let decoded: string;
   try {
     decoded = decodeURIComponent(value);
   } catch {

@@ -275,7 +275,7 @@ async function main() {
   }
 
   let path = pathArg;
-  if (useLatest || (!path && !useList)) {
+  if (useLatest || !path) {
     const logs = await listLogs();
     if (logs.length === 0) {
       console.error("No logs found in", LOG_DIR);
@@ -286,7 +286,10 @@ async function main() {
   }
 
   const text = await readFile(path, "utf-8");
-  const events = parseLog(text);
+  let events = parseLog(text);
+  if (filterEvent) events = events.filter((e) => e.type === filterEvent);
+  if (fromTs) events = events.filter((e) => e.ts >= fromTs);
+  if (toTs) events = events.filter((e) => e.ts <= toTs);
   const summary = summarize(events);
   printSummary(summary);
 }
