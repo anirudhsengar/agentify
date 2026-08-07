@@ -223,8 +223,8 @@ npm run verify:release
 
 Useful evidence:
 
-- [CI workflow](.github/workflows/ci.yml)
-- [Exact installed-artifact qualification](tests/package/exact-artifact-qualification.mjs)
+- [CI workflow](https://github.com/anirudhsengar/agentify/blob/main/.github/workflows/ci.yml)
+- [Exact installed-artifact qualification](https://github.com/anirudhsengar/agentify/blob/main/tests/package/exact-artifact-qualification.mjs)
 - [Release process](docs/release-process.md)
 - [Product and trust contract](docs/architecture/install-once-repository-team.md)
 - [Security boundary](SECURITY.md)
