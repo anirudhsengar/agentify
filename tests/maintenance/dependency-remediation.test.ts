@@ -38,6 +38,6 @@ test("production dependencies use registry semver specifications", async () => {
     );
   }
 
-  assert.equal(manifest.dependencies?.["@earendil-works/pi-ai"], "0.83.0");
-  assert.equal(manifest.dependencies?.["@earendil-works/pi-coding-agent"], "0.83.0");
+  assert.equal(manifest.dependencies?.["@earendil-works/pi-ai"], "0.84.0");
+  assert.equal(manifest.dependencies?.["@earendil-works/pi-coding-agent"], "0.84.0");
 });

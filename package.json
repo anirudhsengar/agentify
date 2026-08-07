@@ -61,8 +61,8 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0",
-    "@earendil-works/pi-ai": "0.83.0",
-    "@earendil-works/pi-coding-agent": "0.83.0",
+    "@earendil-works/pi-ai": "0.84.0",
+    "@earendil-works/pi-coding-agent": "0.84.0",
     "typebox": "^1.3.10"
   },
   "devDependencies": {
@@ -103,5 +103,10 @@
   },
   "exports": {
     "./package.json": "./package.json"
+  },
+  "allowScripts": {
+    "@google/genai": true,
+    "protobufjs": true,
+    "esbuild": true
   }
 }
