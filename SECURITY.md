@@ -108,7 +108,7 @@ scaffold assets. Release publication is tag-only, verifies the exact tarball, an
 publishes the same bytes used by package qualification.
 
 Production dependencies use npm-registry semver specifications and are audited
-at release time. Agentify consumes the official `0.83.0` Pi coding-agent and AI
+at release time. Agentify consumes the official `0.84.0` Pi coding-agent and AI
 packages together; tests reject personal GitHub, raw-file, or tarball dependency
 specifications. Runtime, provider, exact-artifact, reproducibility, and
 `npm audit --omit=dev --audit-level=high` qualification must all pass before a

@@ -4,6 +4,23 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- A read-only planner role that refines implementation steps between two
+  deterministic planning passes, decomposing ambiguous or compound acceptance
+  criteria before a plan is recorded.
+- The builder may inspect, edit, and self-check across a bounded turn budget
+  before its terminal typed submission, instead of one single-shot whole-file
+  call.
+
+### Security
+
+- Bump `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` to
+  `0.84.0`, clearing a moderate/high `npm audit` finding in a bundled `undici`
+  and `brace-expansion`.
+- Record `esbuild`, `protobufjs`, and `@google/genai` as reviewed in
+  `allowScripts` so future scripted-dependency changes are flagged for review.
+
 ## [1.0.0] - 2026-08-06
 
 ### Added

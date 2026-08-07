@@ -14,7 +14,7 @@
 
 Agentify is a Node.js CLI that installs a controlled multi-agent engineering workflow into an existing GitHub repository. You run the installer once; after that, authorized GitHub issues are the normal work interface.
 
-For each queued task, Agentify plans with a persistent orchestrator and evidence-backed read-only specialists, gives exactly one builder bounded write access on an isolated branch, runs maintainer-approved validation, and obtains a role-separated automated read-only review before opening an **unmerged draft pull request**. A path-restricted knowledge maintainer refreshes learning after an accepted merge. The human retains merge authority; deployment is never automatic.
+For each queued task, Agentify plans with a persistent orchestrator, a read-only planner that refines the implementation steps, and evidence-backed read-only specialists, gives exactly one builder bounded write access on an isolated branch to inspect, edit, and self-check before its terminal submission, runs maintainer-approved validation, and obtains a role-separated automated read-only review before opening an **unmerged draft pull request**. A path-restricted knowledge maintainer refreshes learning after an accepted merge. The human retains merge authority; deployment is never automatic.
 
 > [!NOTE]
 > Agentify is an early public project. Its current evidence comes from maintainer-controlled qualification, security tests, and exact-artifact tests. This repository does not claim independent production adoption.
@@ -25,7 +25,7 @@ For each queued task, Agentify plans with a persistent orchestrator and evidence
 | --- | --- |
 | Installation | Run once in an existing repository |
 | Work intake | Authorized GitHub issues with explicit scope and acceptance criteria |
-| Planning | Persistent orchestrator plus evidence-backed read-only specialists |
+| Planning | Persistent orchestrator, a read-only planner, plus evidence-backed read-only specialists |
 | Source changes | Exactly one builder, one isolated task branch, bounded writable paths |
 | Validation | Maintainer-approved repository commands run by trusted code |
 | Review | Separate automated reviewer with no application-source write tools |
@@ -37,7 +37,7 @@ For each queued task, Agentify plans with a persistent orchestrator and evidence
 
 ```mermaid
 flowchart LR
-    A[Authorized GitHub issue] --> B[Orchestrator and read-only specialists]
+    A[Authorized GitHub issue] --> B[Orchestrator, planner, and read-only specialists]
     B --> C[One bounded builder]
     C --> D[Trusted repository validation]
     D --> E[Separate read-only review]
@@ -48,8 +48,8 @@ flowchart LR
 
 1. A maintainer creates or approves an issue with testable acceptance criteria and explicit candidate paths.
 2. Agentify verifies the actor, repository identity, issue state, and current default-branch commit.
-3. The orchestrator builds a typed, evidence-backed plan with selected repository specialists.
-4. Exactly one builder receives bounded write authority on an isolated task branch.
+3. The orchestrator builds a typed, evidence-backed plan; a read-only planner refines its implementation steps before selected repository specialists are consulted.
+4. Exactly one builder receives bounded write authority on an isolated task branch and inspects, edits, and self-checks before its terminal submission.
 5. Trusted code captures the diff and runs the approved repository validation outside the model process.
 6. A role-separated, read-only reviewer evaluates the plan, diff, evidence, and acceptance criteria.
 7. Successful work is published as an unmerged draft pull request.
@@ -203,7 +203,7 @@ Agentify preserves user-owned files. If a required path is already occupied by u
 | Boundary | Enforced behavior |
 | --- | --- |
 | GitHub credentials | Model processes never receive GitHub write credentials |
-| Read-only roles | Audit, specialist, orchestrator, reviewer, and knowledge-maintainer sessions cannot edit application source |
+| Read-only roles | Audit, specialist, orchestrator, planner, reviewer, and knowledge-maintainer sessions cannot edit application source |
 | Application writer | Exactly one builder may edit only approved paths on the isolated task branch |
 | Trusted mutations | Trusted code validates typed output, repository identity, commits, branches, paths, state transitions, validation, and review evidence |
 | Validation approval | The approved manifest, command set, and lockfile are hashed; drift disables issue intake until renewed consent |

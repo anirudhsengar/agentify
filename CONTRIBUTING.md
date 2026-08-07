@@ -51,8 +51,8 @@ The authoritative architecture is
 ## Security rules
 
 - Every model session must receive an explicit execution policy.
-- Audit, specialist, reviewer, and knowledge-maintainer roles are read-only for
-  application source.
+- Audit, specialist, planner, reviewer, and knowledge-maintainer roles are
+  read-only for application source.
 - Only one builder may write application source for a task.
 - Never pass credentials in argv, logs, repository files, model prompts, or
   durable memory.

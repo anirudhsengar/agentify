@@ -35,10 +35,10 @@ Trusted maintainers may use these exact comments:
 - `/agent explain`
 
 The trusted runtime checks authorization and the configured repository policy,
-plans with read-only specialists, grants exactly one builder bounded source
-write authority, runs approved repository validation, obtains a role-separated
-automated read-only review, and opens an unmerged draft pull request. A human
-retains merge authority.
+plans with a read-only planner and read-only specialists, grants exactly one
+builder bounded source write authority, runs approved repository validation,
+obtains a role-separated automated read-only review, and opens an unmerged
+draft pull request. A human retains merge authority.
 
 ## Credentials
 

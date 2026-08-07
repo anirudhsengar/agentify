@@ -52,7 +52,7 @@ function writeCredentials(filePath: string, credentials: Record<string, Credenti
   }
 }
 
-/** Agentify-owned credential adapter for the Pi 0.83 CredentialStore contract. */
+/** Agentify-owned credential adapter for the Pi 0.84 CredentialStore contract. */
 export class AgentifyCredentialStore implements CredentialStore {
   readonly #filePath: string;
   #pending: Promise<void> = Promise.resolve();

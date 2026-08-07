@@ -23,6 +23,8 @@ keeps issue intake disabled.
 A ready installation provides:
 
 - one persistent orchestrator;
+- one read-only planner that refines implementation steps before a plan is
+  recorded;
 - a bounded portfolio of evidence-backed read-only specialists;
 - one writable builder per active task;
 - one role-separated automated read-only reviewer;
@@ -89,14 +91,18 @@ approved by an authorized actor, bound to the current default-branch commit, and
 contains testable acceptance criteria.
 
 The orchestrator builds a typed plan from repository evidence, specialists,
-procedures, active policy, and relevant memory. The plan declares candidate
-paths, excluded paths, implementation steps, validation commands, risk, budget,
-and selected specialists.
+procedures, active policy, and relevant memory, refined by a read-only planner
+that decomposes ambiguous or compound acceptance criteria into concrete steps
+before the plan is recorded. The plan declares candidate paths, excluded paths,
+implementation steps, validation commands, risk, budget, and selected
+specialists.
 
 Exactly one builder receives application-source write authority. Its tools are
-confined to the approved repository paths and isolated branch. It does not
-receive GitHub write credentials. Trusted code captures the resulting diff and
-runs validation outside the model process.
+confined to the approved repository paths and isolated branch: within a
+bounded turn budget it may inspect, edit, and self-check before its terminal
+typed submission. It does not receive GitHub write credentials. Trusted code
+applies nothing until that submission, then captures the resulting diff and
+runs the authoritative validation outside the model process.
 
 The reviewer receives the plan, diff, validation evidence, and acceptance
 criteria but no application-source write tools. Corrections are bounded by the

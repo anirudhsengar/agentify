@@ -9,10 +9,12 @@ Agentify installs a persistent, repository-specific engineering team into an
 existing GitHub repository. Authorized GitHub issues are the normal work
 interface after installation.
 
-The canonical team has one orchestrator, evidence-backed read-only specialists,
-exactly one writable builder per task, one role-separated automated read-only reviewer, and a
-path-restricted knowledge maintainer. Application changes stop at an unmerged
-draft pull request. A human retains merge authority.
+The canonical team has one orchestrator, a read-only planner that refines
+implementation steps before each plan is recorded, evidence-backed read-only
+specialists, exactly one writable builder per task, one role-separated
+automated read-only reviewer, and a path-restricted knowledge maintainer.
+Application changes stop at an unmerged draft pull request. A human retains
+merge authority.
 
 Durable learning is versioned external memory. Every learned record requires
 provenance, a supporting commit, confidence, freshness, and deterministic
