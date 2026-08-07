@@ -115,7 +115,7 @@ export interface TaskApproval {
   policy_digest: string;
 }
 
-export type TaskModelRole = "specialist" | "builder" | "reviewer";
+export type TaskModelRole = "planner" | "specialist" | "builder" | "reviewer";
 
 export interface TaskActiveModelCall {
   call_id: string;
@@ -444,8 +444,29 @@ export interface SpecialistConsultationResult {
   result_digest: string;
 }
 
+export interface PlannerRefinementRequest {
+  task_id: string;
+  issue_number: number;
+  expected_base_commit: string;
+  task_summary: string;
+  acceptance_criteria: IssueAcceptanceCriterion[];
+  candidate_paths: string[];
+  excluded_paths: string[];
+  draft_implementation_steps: TaskImplementationStep[];
+}
+
+export interface PlannerRefinementResult {
+  schema_version: typeof TASK_LIFECYCLE_SCHEMA_VERSION;
+  task_id: string;
+  draft_plan_digest: string;
+  expected_base_commit: string;
+  implementation_steps: TaskImplementationStep[];
+  scope_conflicts: string[];
+  result_digest: string;
+}
+
 export interface TaskRoleAuthority {
-  role: "orchestrator" | "specialist" | "builder" | "reviewer";
+  role: "orchestrator" | "planner" | "specialist" | "builder" | "reviewer";
   application_source_write: boolean;
   github_write: false;
   may_approve_result: boolean;

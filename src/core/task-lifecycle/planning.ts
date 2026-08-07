@@ -14,6 +14,7 @@ import {
   TASK_LIFECYCLE_SCHEMA_VERSION,
   TASK_RUNTIME_PROTECTED_PATHS,
   type OrchestratorPlan,
+  type PlannerRefinementRequest,
   type PlanProcedureSelection,
   type PlanSpecialistSelection,
   type SpecialistConsultationRequest,
@@ -169,6 +170,27 @@ export function loadCurrentSpecialistPortfolio(cwd: string) {
   );
 }
 
+
+export function buildPlannerRefinementRequest(input: {
+  draft_plan: OrchestratorPlan;
+}): PlannerRefinementRequest {
+  const plan = input.draft_plan;
+  return {
+    task_id: plan.task_id,
+    issue_number: plan.issue_number,
+    expected_base_commit: plan.expected_base_commit,
+    task_summary: plan.task_summary,
+    acceptance_criteria: plan.acceptance_criteria.map((criterion) => ({ ...criterion })),
+    candidate_paths: [...plan.in_scope_paths],
+    excluded_paths: [...plan.excluded_paths],
+    draft_implementation_steps: plan.implementation_steps.map((step) => ({
+      ...step,
+      in_scope_paths: [...step.in_scope_paths],
+      required_procedure_ids: [...step.required_procedure_ids],
+      validation_command_ids: [...step.validation_command_ids],
+    })),
+  };
+}
 
 export function buildSpecialistConsultationRequest(input: {
   portfolio: TaskPlanningInput["portfolio"];

@@ -561,8 +561,16 @@ test("role authority has exactly one writer and no GitHub-authorized model", () 
   assert.ok(roles.every((role) => role.github_write === false));
   assert.ok(roles.every((role) => role.execution_policy.networkIsolation === "not-provided"));
   assert.ok(roles.every((role) => role.execution_policy.allowedTools.length === 0));
+  assert.deepEqual(roles.find((role) => role.role === "planner")?.trusted_custom_tools, ["submit_planner_refinement"]);
+  assert.equal(roles.find((role) => role.role === "planner")?.may_approve_result, false);
   assert.deepEqual(roles.find((role) => role.role === "specialist")?.trusted_custom_tools, ["submit_specialist_findings"]);
-  assert.deepEqual(roles.find((role) => role.role === "builder")?.trusted_custom_tools, ["submit_builder_result"]);
+  assert.deepEqual(roles.find((role) => role.role === "builder")?.trusted_custom_tools, [
+    "write_task_file",
+    "replace_task_text",
+    "delete_task_file",
+    "run_task_check",
+    "submit_builder_result",
+  ]);
   assert.deepEqual(roles.find((role) => role.role === "reviewer")?.trusted_custom_tools, ["submit_reviewer_verdict"]);
 });
 

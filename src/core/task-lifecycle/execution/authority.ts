@@ -32,6 +32,19 @@ export function createTaskRoleAuthorities(input: {
       trusted_custom_tools: [],
     },
     {
+      role: "planner",
+      application_source_write: false,
+      github_write: false,
+      may_approve_result: false,
+      execution_policy: createReadOnlyExecutionPolicy({
+        cwd: input.cwd,
+        mode: "audit-readonly",
+        tools: [],
+        protectedPaths,
+      }),
+      trusted_custom_tools: ["submit_planner_refinement"],
+    },
+    {
       role: "specialist",
       application_source_write: false,
       github_write: false,
@@ -56,7 +69,13 @@ export function createTaskRoleAuthorities(input: {
         protectedPaths,
         allowDevelopmentCommands: false,
       }),
-      trusted_custom_tools: ["submit_builder_result"],
+      trusted_custom_tools: [
+        "write_task_file",
+        "replace_task_text",
+        "delete_task_file",
+        "run_task_check",
+        "submit_builder_result",
+      ],
     },
     {
       role: "reviewer",

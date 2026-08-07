@@ -572,6 +572,10 @@ class Controller {
     return `${plan.task_id}:${specialistId}:${plan.plan_digest.slice(0, 16)}`;
   }
 
+  plannerKey(plan) {
+    return `${plan.task_id}:planner:${plan.plan_digest.slice(0, 16)}`;
+  }
+
   evidenceKey(kind, identity) {
     return `${this.state.task_id}:${kind}:${digest(identity).slice(0, 32)}`;
   }
@@ -834,6 +838,40 @@ class Controller {
     return this.runReadinessAndPlan(parsed);
   }
 
+  consultPlanner(draftPlan) {
+    const key = this.plannerKey(draftPlan);
+    const callId = this.modelCallId("planner", "planner");
+    let result = this.readRecord("planner", key);
+    if (result) {
+      if (this.state.active_model_call?.call_id === callId) {
+        this.reconcileModel(callId, { turns: 0, cost_usd: null, runtime_ms: 0, aborted: false });
+      } else if (this.state.active_model_call) {
+        fail(`another model call ${this.state.active_model_call.call_id} is unresolved`);
+      }
+      return result;
+    }
+    if (this.state.active_model_call) {
+      fail(`planner model call ${this.state.active_model_call.call_id} has no durable typed result; retry is unsafe`);
+    }
+    const request = this.requireRuntime("build-planner-request", { draft_plan: draftPlan });
+    this.reserveModel("planner", "planner", callId);
+    const model = this.modelConfig();
+    const runResult = this.runtime("run-planner-model", {
+      cwd: this.root,
+      draft_plan: draftPlan,
+      request,
+      model,
+    }, { model: true, allowFailure: true, timeout: this.policy.maximum_runtime_ms });
+    if (!runResult.ok) {
+      fail(`planner failed with an unresolved model-call reservation: ${runResult.error}`);
+    }
+    result = runResult.value.result;
+    this.writeRecord("planner", key, result);
+    this.reconcileModel(callId, runResult.value.usage, runResult.value.usage?.aborted === true);
+    if (this.state.current_state === "budget-exhausted") fail("planner consultation exhausted the configured task budget or deadline");
+    return result;
+  }
+
   consultSpecialists(planning) {
     const consultations = [];
     for (const selection of this.plan.selected_specialists) {
@@ -886,7 +924,7 @@ class Controller {
       ...step,
       validation_command_ids: this.policy.validation_commands.filter((command) => command.required).map((command) => command.command_id),
     }));
-    const planning = this.requireRuntime("plan-repository", {
+    const basePlanningInput = {
       cwd: this.root,
       task_id: this.state.task_id,
       repository: this.state.repository,
@@ -897,11 +935,18 @@ class Controller {
       candidate_paths: specification.candidate_paths,
       excluded_paths: specification.excluded_paths,
       risk_category: risk,
-      implementation_steps: steps,
       policy: this.policy,
       now: this.state.budget.started_at,
       prior_successful_specialist_ids: [],
-    });
+    };
+    // Pass 1: a deterministic draft plan, used only to give the planner a
+    // reproducible digest to key its model call against (see consultPlanner).
+    const draftPlanning = this.requireRuntime("plan-repository", { ...basePlanningInput, implementation_steps: steps });
+    this.plan = draftPlanning.plan;
+    const plannerResult = this.consultPlanner(draftPlanning.plan);
+    // Pass 2: the final deterministic plan, recomputed with the planner's
+    // refined steps. This is the only plan that ever gets recorded.
+    const planning = this.requireRuntime("plan-repository", { ...basePlanningInput, implementation_steps: plannerResult.implementation_steps });
     this.plan = planning.plan;
     this.writeRecord("plan", this.planKey(this.plan), this.plan);
     this.specialists = this.consultSpecialists(planning);
@@ -1013,7 +1058,7 @@ class Controller {
     if (!this.state) fail("no Agentify task state exists to retry");
     if (this.state.event_ids.includes(parsed.event_id)) return this.output({ status: "duplicate", state: this.state.current_state });
     if (this.state.active_model_call) {
-      if (this.state.active_model_call.role === "specialist" && this.state.current_state === "ready") {
+      if (["planner", "specialist"].includes(this.state.active_model_call.role) && this.state.current_state === "ready") {
         const specification = this.requireRuntime("parse-issue", { title: this.issue.title ?? "", body: this.issue.body ?? "" });
         return this.createPlan(
           specification,

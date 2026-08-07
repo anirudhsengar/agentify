@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -13,6 +14,43 @@ import type {
 
 interface CheckTool {
   execute(id: string, params: { command_id: string }): Promise<unknown>;
+}
+
+interface WriteTool {
+  execute(id: string, params: { path: string; content: string }): Promise<unknown>;
+}
+
+interface DeleteTool {
+  execute(id: string, params: { path: string; expected_sha256: string }): Promise<unknown>;
+}
+
+interface SubmitTool {
+  execute(id: string, params: {
+    changes: Array<
+      | { action: "write"; path: string; content: string }
+      | { action: "delete"; path: string; expected_sha256: string }
+    >;
+    summary: string;
+    attempts: Array<{
+      sequence: number;
+      approach: string;
+      result: "succeeded" | "failed" | "cancelled";
+      failure_category: string | null;
+      signal: string;
+      correction: string | null;
+    }>;
+  }): Promise<unknown>;
+}
+
+function oneAttempt() {
+  return [{
+    sequence: 1,
+    approach: "direct edit",
+    result: "succeeded" as const,
+    failure_category: null,
+    signal: "run_task_check passed",
+    correction: null,
+  }];
 }
 
 function git(cwd: string, ...args: string[]): string {
@@ -57,6 +95,66 @@ function checkTool(root: string, script: string): CheckTool {
   assert.ok(tool);
   return tool as unknown as CheckTool;
 }
+
+function builderToolSet(root: string) {
+  const request = {
+    ...({} as BuilderRequest),
+    allowed_paths: ["src"],
+    protected_paths: [".github"],
+    plan: { validation_commands: [] } as unknown as OrchestratorPlan,
+  };
+  return createBuilderTools({ cwd: root, request, commands: [] });
+}
+
+test("submit_builder_result with empty changes applies only a prior live write", async () => {
+  const { root } = fixture();
+  try {
+    const toolSet = builderToolSet(root);
+    const write = toolSet.tools.find((candidate) => candidate.name === "write_task_file") as unknown as WriteTool;
+    const submit = toolSet.tools.find((candidate) => candidate.name === "submit_builder_result") as unknown as SubmitTool;
+    await write.execute("write", { path: "src/live.txt", content: "written live\n" });
+    await submit.execute("submit", { changes: [], summary: "applied via live write only", attempts: oneAttempt() });
+    assert.equal(fs.readFileSync(path.join(root, "src", "live.txt"), "utf8"), "written live\n");
+    assert.ok(toolSet.getSubmission());
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("submit_builder_result redeclaring an already live-deleted file is a harmless no-op", async () => {
+  const { root, tracked } = fixture();
+  try {
+    const toolSet = builderToolSet(root);
+    const del = toolSet.tools.find((candidate) => candidate.name === "delete_task_file") as unknown as DeleteTool;
+    const submit = toolSet.tools.find((candidate) => candidate.name === "submit_builder_result") as unknown as SubmitTool;
+    const digest = crypto.createHash("sha256").update(fs.readFileSync(tracked)).digest("hex");
+    await del.execute("delete", { path: "src/value.txt", expected_sha256: digest });
+    assert.equal(fs.existsSync(tracked), false);
+    await assert.doesNotReject(submit.execute("submit", {
+      changes: [{ action: "delete", path: "src/value.txt", expected_sha256: digest }],
+      summary: "redeclares an already-deleted path",
+      attempts: oneAttempt(),
+    }));
+    assert.equal(fs.existsSync(tracked), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("submit_builder_result rejects empty changes with no prior live mutation", async () => {
+  const { root } = fixture();
+  try {
+    const toolSet = builderToolSet(root);
+    const submit = toolSet.tools.find((candidate) => candidate.name === "submit_builder_result") as unknown as SubmitTool;
+    await assert.rejects(
+      submit.execute("submit", { changes: [], summary: "nothing happened", attempts: oneAttempt() }),
+      /no changes and no prior live mutation/,
+    );
+    assert.equal(toolSet.getSubmission(), null);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("builder check detects content changes to an already-dirty tracked file", async () => {
   const { root, tracked } = fixture();

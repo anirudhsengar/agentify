@@ -15,6 +15,7 @@ import {
   type BuilderResult,
   type DurableTaskState,
   type OrchestratorPlan,
+  type PlannerRefinementResult,
   type ReviewerVerdict,
   type SpecialistConsultationResult,
   type TaskLifecyclePolicy,
@@ -127,7 +128,7 @@ const TaskBudgetStateSchema = Type.Object({
 
 const TaskActiveModelCallSchema = Type.Object({
   call_id: SafeIdSchema,
-  role: Type.Union([Type.Literal("specialist"), Type.Literal("builder"), Type.Literal("reviewer")]),
+  role: Type.Union([Type.Literal("planner"), Type.Literal("specialist"), Type.Literal("builder"), Type.Literal("reviewer")]),
   phase: Type.String({ minLength: 1, maxLength: 256 }),
   reserved_cost_usd: Type.Number({ exclusiveMinimum: 0 }),
   started_at: TimestampSchema,
@@ -318,6 +319,16 @@ export const OrchestratorPlanSchema = Type.Object({
   policy_digest: DigestSchema,
   created_at: TimestampSchema,
   plan_digest: DigestSchema,
+}, { additionalProperties: false });
+
+export const PlannerRefinementResultSchema = Type.Object({
+  schema_version: Type.Literal(TASK_LIFECYCLE_SCHEMA_VERSION),
+  task_id: SafeIdSchema,
+  draft_plan_digest: DigestSchema,
+  expected_base_commit: CommitSchema,
+  implementation_steps: Type.Array(ImplementationStepSchema, { minItems: 1, maxItems: 128 }),
+  scope_conflicts: StringListSchema,
+  result_digest: DigestSchema,
 }, { additionalProperties: false });
 
 const SpecialistFindingSchema = Type.Object({
@@ -548,6 +559,12 @@ export function validateOrchestratorPlan(value: unknown): OrchestratorPlan {
 export function validateSpecialistConsultationResult(value: unknown): SpecialistConsultationResult {
   const result = validateValue<SpecialistConsultationResult>(SpecialistConsultationResultSchema, value, "specialist consultation");
   assertDigestBound(result as unknown as Record<string, unknown>, "result_digest", "specialist consultation");
+  return result;
+}
+
+export function validatePlannerRefinementResult(value: unknown): PlannerRefinementResult {
+  const result = validateValue<PlannerRefinementResult>(PlannerRefinementResultSchema, value, "planner refinement");
+  assertDigestBound(result as unknown as Record<string, unknown>, "result_digest", "planner refinement");
   return result;
 }
 

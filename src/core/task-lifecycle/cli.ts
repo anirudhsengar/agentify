@@ -39,11 +39,13 @@ import {
 import { parseIssueSpecification } from "./issue.ts";
 import {
   runBuilderModel,
+  runPlannerModel,
   runReviewerModel,
   runSpecialistModel,
 } from "./model-runtime.ts";
 import {
   buildOrchestratorPlan,
+  buildPlannerRefinementRequest,
   buildSpecialistConsultationRequest,
   loadCurrentSpecialistPortfolio,
 } from "./planning.ts";
@@ -55,6 +57,7 @@ import {
   validateBuilderResult,
   validateDurableTaskState,
   validateOrchestratorPlan,
+  validatePlannerRefinementResult,
   validateReviewerVerdict,
   validateSpecialistConsultationResult,
   validateTaskLifecyclePolicy,
@@ -119,6 +122,8 @@ async function dispatch(command: string, inputValue: unknown): Promise<unknown> 
       return validateDurableTaskState(input);
     case "validate-plan":
       return validateOrchestratorPlan(input);
+    case "validate-planner":
+      return validatePlannerRefinementResult(input);
     case "validate-specialist":
       return validateSpecialistConsultationResult(input);
     case "validate-builder-call":
@@ -195,6 +200,12 @@ async function dispatch(command: string, inputValue: unknown): Promise<unknown> 
         portfolio,
       });
     }
+    case "build-planner-request":
+      return buildPlannerRefinementRequest({
+        draft_plan: validateOrchestratorPlan(input.draft_plan),
+      });
+    case "run-planner-model":
+      return runPlannerModel(input as unknown as Parameters<typeof runPlannerModel>[0]);
     case "build-specialist-request": {
       const cwd = String(input.cwd ?? ".");
       return buildSpecialistConsultationRequest({

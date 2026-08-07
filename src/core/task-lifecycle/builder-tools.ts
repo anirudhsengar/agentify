@@ -113,6 +113,7 @@ export function createBuilderTools(input: {
   const root = fs.realpathSync(path.resolve(input.cwd));
   const commandById = new Map(input.commands.map((command) => [command.command_id, command]));
   let submission: BuilderModelSubmission | null = null;
+  let hasLiveMutation = false;
   const checks: Array<{
     command_id: string;
     exit_code: number | null;
@@ -124,7 +125,7 @@ export function createBuilderTools(input: {
   const writeTool = defineTool({
     name: "write_task_file",
     label: "Write approved task file",
-    description: "Atomically write one UTF-8 file inside the approved application scope. Protected paths, symlinks, traversal, and oversized content are rejected by trusted code.",
+    description: "Atomically write one UTF-8 file inside the approved application scope. Protected paths, symlinks, traversal, and oversized content are rejected by trusted code. Use this iteratively; it does not end the session.",
     parameters: Type.Object({
       path: Type.String({ minLength: 1, maxLength: 1_024 }),
       content: Type.String({ maxLength: MAX_TASK_FILE_BYTES }),
@@ -132,6 +133,7 @@ export function createBuilderTools(input: {
     async execute(_id: string, params: { path: string; content: string }) {
       const target = taskPath(input.request, root, params.path);
       writeAtomic(target.absolute, params.content);
+      hasLiveMutation = true;
       return { content: [{ type: "text", text: `Wrote ${target.relative}.` }], details: { path: target.relative } };
     },
   });
@@ -139,7 +141,7 @@ export function createBuilderTools(input: {
   const replaceTool = defineTool({
     name: "replace_task_text",
     label: "Replace approved task text",
-    description: "Replace an exact bounded UTF-8 string in one approved regular file. The expected replacement count is enforced.",
+    description: "Replace an exact bounded UTF-8 string in one approved regular file. The expected replacement count is enforced. Use this iteratively; it does not end the session.",
     parameters: Type.Object({
       path: Type.String({ minLength: 1, maxLength: 1_024 }),
       old_text: Type.String({ minLength: 1, maxLength: MAX_REPLACE_TEXT_BYTES }),
@@ -161,6 +163,7 @@ export function createBuilderTools(input: {
         );
       }
       writeAtomic(target.absolute, original.split(params.old_text).join(params.new_text));
+      hasLiveMutation = true;
       return { content: [{ type: "text", text: `Replaced text in ${target.relative}.` }], details: { path: target.relative, replacements: count } };
     },
   });
@@ -168,7 +171,7 @@ export function createBuilderTools(input: {
   const deleteTool = defineTool({
     name: "delete_task_file",
     label: "Delete approved task file",
-    description: "Delete one approved regular file only when its current SHA-256 equals the supplied digest.",
+    description: "Delete one approved regular file only when its current SHA-256 equals the supplied digest. Use this iteratively; it does not end the session.",
     parameters: Type.Object({
       path: Type.String({ minLength: 1, maxLength: 1_024 }),
       expected_sha256: Type.String({ pattern: "^[0-9a-f]{64}$" }),
@@ -184,6 +187,7 @@ export function createBuilderTools(input: {
         throw new TaskLifecycleError("invalid_input", `${target.relative} changed since deletion was proposed`);
       }
       fs.unlinkSync(target.absolute);
+      hasLiveMutation = true;
       return { content: [{ type: "text", text: `Deleted ${target.relative}.` }], details: { path: target.relative } };
     },
   });
@@ -191,7 +195,7 @@ export function createBuilderTools(input: {
   const checkTool = defineTool({
     name: "run_task_check",
     label: "Run admitted task check",
-    description: "Execute one exact argv-vector check admitted by repository policy. Arbitrary commands, shells, GitHub tools, network tools, and repository mutation are rejected.",
+    description: "Execute one exact argv-vector check admitted by repository policy, as an advisory self-check. Trusted code independently reruns the authoritative check after the session ends. Arbitrary commands, shells, GitHub tools, network tools, and repository mutation are rejected.",
     parameters: Type.Object({
       command_id: Type.String({ minLength: 1, maxLength: 256 }),
     }, { additionalProperties: false }),
@@ -232,7 +236,7 @@ export function createBuilderTools(input: {
   const submitTool = defineTool({
     name: "submit_builder_result",
     label: "Submit typed builder result",
-    description: "Submit complete bounded file changes plus the implementation summary and attempt evidence in one call. Trusted code validates every path and precondition before applying changes. This does not approve, commit, push, publish, or merge the work.",
+    description: "Submit the implementation summary and attempt evidence as the terminal action. Only list a file in changes if you have not already applied it live with write_task_file/replace_task_text/delete_task_file; changes may be empty if your live edits already produced the final state. Trusted code validates every path and precondition before applying any listed changes. This does not approve, commit, push, publish, or merge the work.",
     parameters: Type.Object({
       changes: Type.Array(Type.Union([
         Type.Object({
@@ -245,7 +249,7 @@ export function createBuilderTools(input: {
           path: Type.String({ minLength: 1, maxLength: 1_024 }),
           expected_sha256: Type.String({ pattern: "^[0-9a-f]{64}$" }),
         }, { additionalProperties: false }),
-      ]), { minItems: 1, maxItems: MAX_SUBMITTED_FILE_CHANGES }),
+      ]), { minItems: 0, maxItems: MAX_SUBMITTED_FILE_CHANGES }),
       summary: Type.String({ minLength: 1, maxLength: 12_000 }),
       attempts: Type.Array(Type.Object({
         sequence: Type.Integer({ minimum: 1, maximum: 32 }),
@@ -268,6 +272,9 @@ export function createBuilderTools(input: {
         correction: string | null;
       }>;
     }) {
+      if (params.changes.length === 0 && !hasLiveMutation) {
+        throw new TaskLifecycleError("invalid_input", "builder submission has no changes and no prior live mutation this session");
+      }
       const validatedSubmission = validateBuilderModelSubmission({
         summary: params.summary,
         attempts: params.attempts,
@@ -291,6 +298,10 @@ export function createBuilderTools(input: {
           }
           continue;
         }
+        // A live delete_task_file call earlier this session may have already
+        // removed this path; redeclaring it here is a harmless no-op rather
+        // than a stale-precondition error.
+        if (!fs.existsSync(target.absolute)) continue;
         const stat = fs.lstatSync(target.absolute);
         if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_TASK_FILE_BYTES) {
           throw new TaskLifecycleError("invalid_input", `${target.relative} is not one bounded regular file`);
@@ -301,7 +312,7 @@ export function createBuilderTools(input: {
       }
       for (const { change, target } of prepared) {
         if (change.action === "write") writeAtomic(target.absolute, change.content);
-        else fs.unlinkSync(target.absolute);
+        else if (fs.existsSync(target.absolute)) fs.unlinkSync(target.absolute);
       }
       submission = validatedSubmission;
       return {

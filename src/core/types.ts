@@ -70,6 +70,14 @@ export interface AgentRuntimeSessionOptions {
   /** Use a provider-native specific-tool directive for the recovery tool. */
   forceRequiredToolChoice?: boolean;
   /**
+   * Leaves tool_choice unconstrained for this many provider requests so the
+   * model can freely use other registered tools, then forces tool_choice to
+   * the recovery tool on every request after that (same directive as
+   * `forceRequiredToolChoice`). Ignored unless `recoveryPromptIfToolNotCalled`
+   * is also set. Mutually exclusive with `forceRequiredToolChoice: true`.
+   */
+  forceRequiredToolChoiceAfterTurns?: number;
+  /**
    * Optional in-session recovery. After the initial prompt ends normally, the
    * runtime sends this follow-up through the same session only when the named
    * tool was never called. This preserves the model's gathered context while

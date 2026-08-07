@@ -233,6 +233,20 @@ export class PiSdkRuntime implements AgentRuntime {
               forcedToolChoiceRequests += 1;
               return forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName);
             });
+          } else if (recovery && options.forceRequiredToolChoiceAfterTurns !== undefined) {
+            const turnBudget = options.forceRequiredToolChoiceAfterTurns;
+            pi.on("before_provider_request", (event) => {
+              providerRequests += 1;
+              const api = selectedModel?.api ?? "";
+              const boundedPayload = options.maxOutputTokens === undefined
+                ? event.payload
+                : capProviderOutputTokens(event.payload, api, options.maxOutputTokens);
+              if (options.maxOutputTokens !== undefined) cappedOutputRequests += 1;
+              if (sawRequiredRecoveryTool || recovery.shouldRecover?.() === false) return boundedPayload;
+              if (providerRequests < turnBudget) return boundedPayload;
+              forcedToolChoiceRequests += 1;
+              return forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName);
+            });
           } else if (options.maxOutputTokens !== undefined) {
             pi.on("before_provider_request", (event) => {
               providerRequests += 1;
