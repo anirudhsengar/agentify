@@ -12,9 +12,9 @@
 
 </div>
 
-Agentify is a Node.js CLI that installs a controlled multi-agent engineering workflow into an existing GitHub repository. You run the installer once; after that, authorized GitHub issues become the normal work interface.
+Agentify is a Node.js CLI that installs a controlled multi-agent engineering workflow into an existing GitHub repository. You run the installer once; after that, authorized GitHub issues are the normal work interface.
 
-For each queued task, Agentify plans with a persistent orchestrator and evidence-backed read-only specialists, gives exactly one builder bounded write access on an isolated branch, runs maintainer-approved validation, obtains a separate read-only review, and opens an **unmerged draft pull request**. Humans retain application merge and deployment authority.
+For each queued task, Agentify plans with a persistent orchestrator and evidence-backed read-only specialists, gives exactly one builder bounded write access on an isolated branch, runs maintainer-approved validation, and obtains a role-separated automated read-only review before opening an **unmerged draft pull request**. A path-restricted knowledge maintainer refreshes learning after an accepted merge. The human retains merge authority; deployment is never automatic.
 
 > [!NOTE]
 > Agentify is an early public project. Its current evidence comes from maintainer-controlled qualification, security tests, and exact-artifact tests. This repository does not claim independent production adoption.
