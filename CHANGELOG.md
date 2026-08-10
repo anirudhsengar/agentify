@@ -6,12 +6,26 @@ All notable changes to Agentify are documented here.
 
 ### Added
 
+- Multi-ecosystem repository support during installation: Node.js, Python,
+  Rust, Go, Java (Maven and Gradle), Ruby, and Makefile-based projects can
+  now be inspected, validated, and configured without requiring `package.json`.
 - A read-only planner role that refines implementation steps between two
   deterministic planning passes, decomposing ambiguous or compound acceptance
   criteria before a plan is recorded.
 - The builder may inspect, edit, and self-check across a bounded turn budget
   before its terminal typed submission, instead of one single-shot whole-file
   call.
+
+### Fixed
+
+- On Windows, execute `.bat`/`.cmd` validation wrappers (Gradle/Maven) via
+  `cmd.exe /d /s /c` with repository cwd confinement so installer and
+  task-lifecycle validation no longer fail with `spawnSync EINVAL`.
+- Index validation reports in `docs/README.md` and the npm package `files`
+  list so documentation-invariant tests and shipped artifacts stay aligned.
+- Add `tests/installer/edge-case-campaign.test.ts` covering 23 synthetic
+  installer/resolver edge cases (lockfile policy, unsafe scripts, manifest
+  precedence, multi-ecosystem blockers).
 
 ### Security
 

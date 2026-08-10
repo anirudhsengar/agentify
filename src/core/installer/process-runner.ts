@@ -11,6 +11,32 @@ import type {
 const MAX_PROCESS_OUTPUT_BYTES = 1024 * 1024;
 const PROVIDER_ENV_KEY_SET = new Set<string>(PROVIDER_ENV_KEYS);
 
+function resolveWindowsCmdScript(
+  program: string,
+  args: readonly string[],
+  cwd: string,
+): { program: string; args: string[] } | null {
+  if (process.platform !== "win32") return null;
+  if (!/\.(?:bat|cmd)$/i.test(path.basename(program))) return null;
+  const resolved = path.isAbsolute(program) ? path.normalize(program) : path.resolve(cwd, program);
+  const root = path.resolve(cwd);
+  const relative = path.relative(root, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error("Windows .bat/.cmd validation scripts must resolve inside the repository cwd");
+  }
+  const stat = fs.lstatSync(resolved);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error("Windows .bat/.cmd validation scripts must identify a regular local file");
+  }
+  // Node cannot spawn .bat/.cmd directly (EINVAL). Route through cmd.exe without shell:true
+  // so argv stays discrete and is not concatenated into an injectable shell string.
+  const comspec = process.env.ComSpec?.trim() || "cmd.exe";
+  return {
+    program: comspec,
+    args: ["/d", "/s", "/c", resolved, ...args],
+  };
+}
+
 function resolveInvocation(request: InstallerProcessRequest): {
   program: string;
   args: string[];
@@ -37,6 +63,8 @@ function resolveInvocation(request: InstallerProcessRequest): {
     const npmCli = candidates.find((candidate) => fs.existsSync(candidate));
     if (npmCli) return { program: process.execPath, args: [npmCli, ...request.args] };
   }
+  const windowsScript = resolveWindowsCmdScript(request.program, request.args, request.cwd);
+  if (windowsScript) return windowsScript;
   return { program: request.program, args: [...request.args] };
 }
 

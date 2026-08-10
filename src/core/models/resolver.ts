@@ -66,13 +66,14 @@ export function selectModelForRole(
   config: AgentifyConfig,
   role: ModelRole,
 ): ResolvedModel | undefined {
-  const explicit = config.models[role];
+  const configuredModels = config.models ?? {};
+  const explicit = configuredModels[role];
   if (explicit) {
     return resolveExplicit(registry, role, explicit);
   }
 
   if (role !== "primary") {
-    const primarySlot = config.models.primary;
+    const primarySlot = configuredModels.primary;
     if (primarySlot) {
       const inherited = tryResolve(registry, primarySlot);
       if (inherited) {

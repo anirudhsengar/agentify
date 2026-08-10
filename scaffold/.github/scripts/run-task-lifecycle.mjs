@@ -49,9 +49,25 @@ function validationApprovalCurrent(root, configuration) {
     || typeof approval.package_json_sha256 !== "string"
     || typeof approval.commands_sha256 !== "string"
   ) return false;
-  const manifest = path.join(root, "package.json");
+  const manifestPath = typeof approval.manifest_path === "string" && approval.manifest_path.trim()
+    ? approval.manifest_path.trim()
+    : "package.json";
+  const manifest = path.join(root, manifestPath);
   if (!fs.existsSync(manifest) || fileDigest(manifest) !== approval.package_json_sha256) return false;
-  const lockNames = ["npm-shrinkwrap.json", "package-lock.json"];
+  const lockNames = [
+    "npm-shrinkwrap.json",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "bun.lock",
+    "poetry.lock",
+    "uv.lock",
+    "Pipfile.lock",
+    "Cargo.lock",
+    "go.sum",
+    "Gemfile.lock",
+    "gradle.lockfile",
+  ];
   const lockName = lockNames.find((name) => fs.existsSync(path.join(root, name))) ?? null;
   if (lockName !== (approval.lockfile?.path ?? null)) return false;
   if (lockName && fileDigest(path.join(root, lockName)) !== approval.lockfile.sha256) return false;

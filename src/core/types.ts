@@ -115,6 +115,7 @@ export interface AgentRuntimeResult {
   costUsd: number | null;
   aborted: boolean;
   diagnostics?: {
+    provider: string | null;
     provider_api: string | null;
     provider_requests: number;
     forced_tool_choice_requests: number;

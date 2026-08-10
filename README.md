@@ -57,16 +57,28 @@ flowchart LR
 
 ## Current repository support
 
-Agentify currently targets repositories with this contract:
+Agentify targets repositories with this contract:
 
 - an existing Git repository with at least one commit;
 - a canonical `github.com` origin remote;
 - GitHub CLI authentication with repository write, maintain, or admin access;
-- a root `package.json`;
-- at least one deterministic root script named `test`, `test:all`, `check`, `typecheck`, `type-check`, or `lint`;
-- `package-lock.json` or `npm-shrinkwrap.json` when package dependencies are declared;
+- a supported root build manifest with deterministic validation commands;
+- a committed lockfile when the ecosystem requires one for reproducible dependency validation;
 - tracked application source beneath a bounded repository path;
 - credentials for a supported model provider.
+
+Supported build manifests include:
+
+| Ecosystem | Manifest | Typical validation | Lockfile (when required) |
+| --- | --- | --- | --- |
+| Node.js | `package.json` | `npm run test`, `typecheck`, or `lint` scripts | `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock`, or `bun.lock` |
+| Python | `pyproject.toml`, `setup.py`, or `requirements.txt` | `pytest`, `ruff check`, or `mypy` (directly or via `Makefile`) | `uv.lock`, `poetry.lock`, or `Pipfile.lock` |
+| Rust | `Cargo.toml` | `cargo test`, `cargo check` | `Cargo.lock` |
+| Go | `go.mod` | `go test ./...`, `go vet ./...` | `go.sum` |
+| Java (Maven) | `pom.xml` | `mvn -B test` | — |
+| Java (Gradle) | `build.gradle` or `build.gradle.kts` | `./gradlew test` or `check` | `gradle.lockfile` (optional) |
+| Ruby | `Gemfile` | `bundle exec rspec`, `rubocop` | `Gemfile.lock` |
+| Make-based | `Makefile` | `make test`, `check`, `lint`, or `typecheck` targets | — |
 
 Agentify may analyze a repository that is not ready for issue execution, but it keeps issue intake disabled until every readiness blocker is resolved.
 

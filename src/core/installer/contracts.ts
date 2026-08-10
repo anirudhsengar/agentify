@@ -114,9 +114,12 @@ export interface RepositoryValidationApproval {
   mode: "maintainer-approved-unsandboxed";
   approved_by: string;
   approved_at: string;
+  /** SHA-256 of the primary build manifest at approval time. */
   package_json_sha256: string;
+  /** Primary build manifest path; defaults to package.json when absent. */
+  manifest_path?: string;
   lockfile: {
-    path: "package-lock.json" | "npm-shrinkwrap.json";
+    path: string;
     sha256: string;
   } | null;
   commands_sha256: string;

@@ -405,6 +405,7 @@ export class PiSdkRuntime implements AgentRuntime {
         costUsd: sawCost ? costUsd : null,
         aborted,
         diagnostics: {
+          provider: selectedModel?.provider ?? null,
           provider_api: selectedModel?.api ?? null,
           provider_requests: providerRequests,
           forced_tool_choice_requests: forcedToolChoiceRequests,

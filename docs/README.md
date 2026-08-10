@@ -14,6 +14,7 @@ Agentify documentation has one authority for each subject.
 | Build and npm artifact | [Build and package](build-and-package.md) |
 | Release procedure | [Release process](release-process.md) |
 | Security boundary | [Security](../SECURITY.md) |
+| Validation reports | [Live multi-language](validation/live-multi-language-report.md), [Edge-case campaign](validation/edge-case-campaign-report.md), [Toolchain-verified campaign](validation/toolchain-verified-campaign.md) |
 
 `README.md` is the public overview, `AGENTS.md` contains coding-agent rules, and
 `CONTRIBUTING.md` is the maintainer workflow. Git history is the record of design

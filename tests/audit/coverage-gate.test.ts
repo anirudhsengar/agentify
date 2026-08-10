@@ -35,6 +35,16 @@ class SilentUi implements AgentifyUi {
   async promptSecret(): Promise<string> { throw new Error("no prompt"); }
 }
 
+/**
+ * `runAgentifyApp` now issues a cheap tool-free reachability probe before
+ * the real audit session. Test doubles below only model the real audit
+ * call's contract (spawnExplorerStateDir, recoveryPromptIfToolNotCalled,
+ * etc.), so they short-circuit the probe with a trivial success.
+ */
+function isProbeCall(options: AgentRuntimeSessionOptions): boolean {
+  return options.tools.length === 0;
+}
+
 function writeMap(cwd: string, stateDir: string, map: unknown): void {
   fs.mkdirSync(path.join(cwd, stateDir), { recursive: true });
   fs.writeFileSync(
@@ -46,6 +56,7 @@ function writeMap(cwd: string, stateDir: string, map: unknown): void {
 class ScriptedRuntime implements AgentRuntime {
   constructor(private readonly write: (cwd: string, stateDir: string) => void) {}
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
     assert.ok(options.spawnExplorerStateDir);
     this.write(options.cwd, options.spawnExplorerStateDir);
     return { turns: 1, costUsd: null, aborted: false };
@@ -54,6 +65,7 @@ class ScriptedRuntime implements AgentRuntime {
 
 class CoverageClosureRuntime implements AgentRuntime {
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
     writeMap(
       options.cwd,
       options.spawnExplorerStateDir ?? ".agentify/runtime/audit",
@@ -96,6 +108,7 @@ class RecoveryRuntime implements AgentRuntime {
   calls = 0;
 
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
     this.calls += 1;
     assert.ok(options.recoveryPromptIfToolNotCalled);
     assert.equal(options.recoveryPromptIfToolNotCalled.requiredToolName, "write_map_delta");
@@ -109,6 +122,7 @@ class RecoveryRuntime implements AgentRuntime {
 
 class BootstrapRuntime implements AgentRuntime {
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
     const stateDir = options.spawnExplorerStateDir;
     assert.ok(stateDir);
     const draft = JSON.parse(fs.readFileSync(path.join(options.cwd, stateDir, "codebase_map.json"), "utf-8")) as {

@@ -10,6 +10,7 @@ import {
   getProviderEnvValue,
   hasProviderEnvironmentAuth,
   isAgentifyProvider,
+  type AgentifyProviderDefinition,
 } from "./provider-auth.ts";
 import type {
   AgentifyConfig,
@@ -337,6 +338,62 @@ async function promptModelAssignments(
   return models;
 }
 
+/**
+ * Prompt for a fresh API key for `provider` and persist it, overwriting
+ * whatever (possibly invalid) credential is already stored. Also mirrors
+ * the key into `runtimeKeyEnv` for the current process so a same-process
+ * retry picks it up immediately, without waiting on a re-read of
+ * `auth.json` racing a stale environment variable.
+ */
+export async function promptAndStoreProviderCredential(
+  configDir: string,
+  ui: AgentifyUi,
+  provider: AgentifyProvider,
+): Promise<void> {
+  const selected: AgentifyProviderDefinition | undefined = AGENTIFY_PROVIDERS.find(({ value }) => value === provider);
+  if (!selected) throw new Error(`unknown Agentify provider: ${provider}`);
+  if (selected.env.length === 0) {
+    throw new Error(
+      `${selected.label} uses OAuth. Run \`agentify login --provider ${selected.value}\` for setup instructions.`,
+    );
+  }
+  const key = (await ui.promptSecret(credentialPrompt(selected.label, selected.env))).trim();
+  if (!key) throw new Error("No API key provided.");
+  await new AgentifyCredentialStore(authPath(configDir)).set(selected.value, {
+    type: "api_key",
+    key,
+  });
+  const runtimeEnvVar = selected.runtimeKeyEnv?.[0];
+  if (runtimeEnvVar) process.env[runtimeEnvVar] = key;
+}
+
+/**
+ * Full provider onboarding: pick a provider from the entire supported list,
+ * collect a credential for it, then pick models for it. Used both for a
+ * brand-new install (no auth anywhere) and for re-entering setup when the
+ * previously configured provider stops working — in both cases the user
+ * gets the complete picker, not just a re-prompt for the same provider's key.
+ */
+export async function runFullProviderSetup(
+  configDir: string,
+  ui: AgentifyUi,
+  config: AgentifyConfig,
+): Promise<AgentifyConfig> {
+  const providerValue = await ui.promptSelect(
+    "Choose an LLM provider for Agentify:",
+    AGENTIFY_PROVIDERS.map(({ label, value }) => ({ label, value })),
+  );
+  if (!isAgentifyProvider(providerValue)) throw new Error(`Unsupported provider: ${providerValue}`);
+  const selected = AGENTIFY_PROVIDERS.find(({ value }) => value === providerValue)!;
+  if (!getProviderEnvValue(selected.value)) {
+    await promptAndStoreProviderCredential(configDir, ui, selected.value);
+  }
+  const models = await promptModelAssignments(ui, selected.value, configDir);
+  const updated = { ...config, provider: selected.value, models };
+  saveAgentifyConfig(configDir, updated);
+  return updated;
+}
+
 export async function ensureAgentifyConfig(
   configDir: string,
   ui: AgentifyUi,
@@ -349,30 +406,5 @@ export async function ensureAgentifyConfig(
     }
     return config;
   }
-
-  const providerValue = await ui.promptSelect(
-    "Choose an LLM provider for Agentify:",
-    AGENTIFY_PROVIDERS.map(({ label, value }) => ({ label, value })),
-  );
-  if (!isAgentifyProvider(providerValue)) throw new Error(`Unsupported provider: ${providerValue}`);
-  const selected = AGENTIFY_PROVIDERS.find(({ value }) => value === providerValue)!;
-  if (!getProviderEnvValue(selected.value)) {
-    if (selected.env.length === 0) {
-      throw new Error(
-        `${selected.label} uses OAuth. Run \`agentify login --provider ${selected.value}\` for setup instructions.`,
-      );
-    }
-    const key = await ui.promptSecret(credentialPrompt(selected.label, selected.env));
-    if (!key.trim()) throw new Error("No API key provided.");
-    await new AgentifyCredentialStore(authPath(configDir)).set(selected.value, {
-      type: "api_key",
-      key: key.trim(),
-    });
-  }
-  const models = Object.keys(config.models).length > 0
-    ? config.models
-    : await promptModelAssignments(ui, selected.value, configDir);
-  config = { ...config, provider: selected.value, models };
-  saveAgentifyConfig(configDir, config);
-  return config;
+  return runFullProviderSetup(configDir, ui, config);
 }

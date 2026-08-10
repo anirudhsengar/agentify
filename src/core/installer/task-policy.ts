@@ -8,6 +8,7 @@ import {
   sortedTaskStrings,
 } from "../task-lifecycle/serialization.ts";
 import { validateTaskLifecyclePolicy } from "../task-lifecycle/schema.ts";
+import { discoverRepositoryBuildSystem } from "./build-systems/index.ts";
 import type {
   RepositoryInstallationPreflight,
   RepositoryTaskPolicyConfiguration,
@@ -36,6 +37,21 @@ const FORBIDDEN_ACTIONS = [
   "policy expansion by model output",
   "unapproved dependency change",
 ];
+
+const KNOWN_LOCKFILES = [
+  "npm-shrinkwrap.json",
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "bun.lock",
+  "poetry.lock",
+  "uv.lock",
+  "Pipfile.lock",
+  "Cargo.lock",
+  "go.sum",
+  "Gemfile.lock",
+  "gradle.lockfile",
+] as const;
 
 function commandSpec(command: RepositoryInstallationPreflight["commands"][number]): ValidationCommandSpec {
   return {
@@ -66,8 +82,12 @@ function approvalCommandDigest(preflight: RepositoryInstallationPreflight): stri
     .map(commandSpec));
 }
 
+function primaryManifestPath(cwd: string): string {
+  return discoverRepositoryBuildSystem(cwd).manifest?.path ?? "package.json";
+}
+
 function lockfileApproval(cwd: string): RepositoryValidationApproval["lockfile"] {
-  for (const name of ["npm-shrinkwrap.json", "package-lock.json"] as const) {
+  for (const name of KNOWN_LOCKFILES) {
     const absolute = path.join(cwd, name);
     if (fs.existsSync(absolute)) return { path: name, sha256: fileSha256(absolute) };
   }
@@ -80,14 +100,18 @@ export function createRepositoryValidationApproval(input: {
   approvedBy: string;
   approvedAt?: string;
 }): RepositoryValidationApproval {
-  const packageJson = path.join(input.cwd, "package.json");
-  if (!fs.existsSync(packageJson)) throw new Error("validation approval requires package.json");
+  const manifestPath = primaryManifestPath(input.cwd);
+  const manifestAbsolute = path.join(input.cwd, manifestPath);
+  if (!fs.existsSync(manifestAbsolute)) {
+    throw new Error(`validation approval requires ${manifestPath}`);
+  }
   if (!input.approvedBy.trim()) throw new Error("validation approval requires an approving maintainer");
   return {
     mode: "maintainer-approved-unsandboxed",
     approved_by: input.approvedBy.trim(),
     approved_at: input.approvedAt ?? new Date().toISOString(),
-    package_json_sha256: fileSha256(packageJson),
+    package_json_sha256: fileSha256(manifestAbsolute),
+    manifest_path: manifestPath,
     lockfile: lockfileApproval(input.cwd),
     commands_sha256: approvalCommandDigest(input.preflight),
   };
@@ -107,8 +131,9 @@ export function repositoryValidationApprovalCurrent(input: {
     || !SHA256.test(approval.package_json_sha256)
     || !SHA256.test(approval.commands_sha256)
   ) return false;
-  const packageJson = path.join(input.cwd, "package.json");
-  if (!fs.existsSync(packageJson) || fileSha256(packageJson) !== approval.package_json_sha256) return false;
+  const manifestPath = approval.manifest_path ?? "package.json";
+  const manifestAbsolute = path.join(input.cwd, manifestPath);
+  if (!fs.existsSync(manifestAbsolute) || fileSha256(manifestAbsolute) !== approval.package_json_sha256) return false;
   const currentLockfile = lockfileApproval(input.cwd);
   if (currentLockfile?.path !== approval.lockfile?.path || currentLockfile?.sha256 !== approval.lockfile?.sha256) return false;
   return approvalCommandDigest(input.preflight) === approval.commands_sha256;
@@ -206,6 +231,6 @@ export function buildRepositoryTaskPolicyConfiguration(
     validation_execution: VALIDATION_EXECUTION,
     validation_approval: validationApproval,
     policy,
-    instructions: "This repository-specific policy was generated from verified repository identity, tracked application paths, passing validation commands, and explicit maintainer approval of unsandboxed repository validation.",
+    instructions: "This repository-specific policy was generated from verified repository identity, tracked application paths, and passing validation commands, and explicit maintainer approval of unsandboxed repository validation.",
   };
 }

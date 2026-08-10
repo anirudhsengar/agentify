@@ -75,6 +75,21 @@ test("validation resolves npm without a shell on Windows", () => {
   }
 });
 
+test("validation resolves Windows .bat wrappers through cmd.exe without shell:true", () => {
+  if (process.platform !== "win32") return;
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-validation-bat-"));
+  try {
+    fs.writeFileSync(path.join(cwd, "gradlew.bat"), "@echo off\r\n");
+    const invocation = resolveValidationInvocation(["gradlew.bat", "test"], cwd);
+    assert.match(invocation.command.toLowerCase(), /cmd\.exe$/);
+    assert.deepEqual(invocation.args.slice(0, 3), ["/d", "/s", "/c"]);
+    assert.equal(invocation.args[3], path.join(cwd, "gradlew.bat"));
+    assert.deepEqual(invocation.args.slice(4), ["test"]);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("trusted validation runner executes direct argv and records a stable successful tree", async () => {
   const repo = repository();
   try {

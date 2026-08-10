@@ -151,9 +151,26 @@ async function spawnExplorerInheritWithoutExplorerSlotUsesParent(): Promise<void
   }
 }
 
+async function resolverHandlesMissingModelsFieldSafely(): Promise<void> {
+  const parentModel = stubModel("openai", "gpt-4o");
+  const registry = stubRegistry([parentModel]);
+  const config = {
+    schemaVersion: 1,
+    provider: "openai",
+    thinkingLevel: "high",
+  } as unknown as AgentifyConfig;
+
+  const resolved = selectModelForRole(registry, config, "primary");
+  assert.ok(resolved, "resolver should fall back even when models field is absent");
+  assert.equal(resolved.model.provider, "openai");
+  assert.equal(resolved.model.id, "gpt-4o");
+  assert.equal(resolved.source, "provider-default");
+}
+
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "spawnExplorerUsesExplorerSlotNotParentModel", fn: spawnExplorerUsesExplorerSlotNotParentModel },
   { name: "spawnExplorerInheritWithoutExplorerSlotUsesParent", fn: spawnExplorerInheritWithoutExplorerSlotUsesParent },
+  { name: "resolverHandlesMissingModelsFieldSafely", fn: resolverHandlesMissingModelsFieldSafely },
 ];
 
 let passed = 0;

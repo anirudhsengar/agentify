@@ -69,7 +69,10 @@ interface ResolvedValidationInvocation {
   args: string[];
 }
 
-export function resolveValidationInvocation(argv: ReadonlyArray<string>): ResolvedValidationInvocation {
+export function resolveValidationInvocation(
+  argv: ReadonlyArray<string>,
+  cwd: string = process.cwd(),
+): ResolvedValidationInvocation {
   if (argv.length === 0) {
     throw new TaskLifecycleError("invalid_input", "validation command argv cannot be empty");
   }
@@ -81,6 +84,26 @@ export function resolveValidationInvocation(argv: ReadonlyArray<string>): Resolv
       throw new TaskLifecycleError("invalid_input", "trusted npm CLI is unavailable beside the active Node runtime");
     }
     return { command: process.execPath, args: [npmCli, ...argv.slice(1)] };
+  }
+  if (process.platform === "win32" && /\.(?:bat|cmd)$/i.test(executable)) {
+    const resolved = path.isAbsolute(argv[0]) ? path.normalize(argv[0]) : path.resolve(cwd, argv[0]);
+    const root = path.resolve(cwd);
+    const relative = path.relative(root, resolved);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new TaskLifecycleError(
+        "invalid_input",
+        "Windows .bat/.cmd validation scripts must resolve inside the repository cwd",
+      );
+    }
+    const stat = fs.lstatSync(resolved);
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+      throw new TaskLifecycleError(
+        "invalid_input",
+        "Windows .bat/.cmd validation scripts must identify a regular local file",
+      );
+    }
+    const comspec = process.env.ComSpec?.trim() || "cmd.exe";
+    return { command: comspec, args: ["/d", "/s", "/c", resolved, ...argv.slice(1)] };
   }
   return { command: argv[0], args: [...argv.slice(1)] };
 }
@@ -230,7 +253,7 @@ async function runCommand(input: {
     let timedOut = false;
     let settled = false;
     let timeout: ReturnType<typeof setTimeout> | undefined;
-    const invocation = resolveValidationInvocation(input.spec.argv);
+    const invocation = resolveValidationInvocation(input.spec.argv, input.cwd);
     const child = spawn(invocation.command, invocation.args, {
       cwd: input.cwd,
       env: input.environment,

@@ -67,6 +67,31 @@ function truncate(s: string, max: number): string {
   return `${s.slice(0, max - 1)}…`;
 }
 
+/**
+ * Word-wrap `text` to at most `width` columns per line. Every redraw's
+ * cursor math (`frameHeight`, `MOVE_UP`) assumes 1 array row === 1
+ * terminal row, so a message the terminal would otherwise auto-wrap must
+ * be pre-split here — the message text never changes for the life of one
+ * picker session, so this only needs to run once, up front.
+ */
+function wrapText(text: string, width: number): string[] {
+  if (!Number.isFinite(width) || width <= 1) return [text];
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length > width && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  lines.push(current);
+  return lines;
+}
+
 const CURSOR_WIDTH = 2; // "▸ " or "  "
 const CHECKBOX_WIDTH = 3; // "[x]" or "[ ]"
 const INNER_PADDING = 2; // space before hint
@@ -75,7 +100,8 @@ const DEFAULT_TERMINAL_WIDTH = 100;
 const DEFAULT_TERMINAL_HEIGHT = 24;
 const MAX_VIEWPORT_ROWS = 30;
 
-// Picker chrome: message + selected-summary + blank + nav = 4 fixed rows.
+// Picker chrome: message (variable rows, wrapped at render time) +
+// selected-summary + blank + nav = message rows + 3 fixed rows.
 const PICKER_CHROME_ROWS = 4;
 
 /** A single rendered row (no trailing newline). */
@@ -90,7 +116,7 @@ interface FrameRow {
  * overwritten on every redraw).
  */
 function buildFrame(
-  message: string,
+  messageRows: ReadonlyArray<string>,
   choices: ReadonlyArray<CheckboxChoice>,
   cursorIndex: number,
   selected: Set<string>,
@@ -112,7 +138,7 @@ function buildFrame(
   const hintBudget = Math.max(0, safeWidth - fixedChars - labelWidth);
 
   const rows: FrameRow[] = [];
-  rows.push({ text: message });
+  for (const line of messageRows) rows.push({ text: line });
   const selectedLabels = choices
     .filter((choice) => selected.has(choice.value))
     .map((choice) => choice.label);
@@ -299,11 +325,20 @@ export async function runCheckboxPicker(
   // so redraws never push the picker into the scroll buffer.
   const terminalWidth = output.columns ?? DEFAULT_TERMINAL_WIDTH;
   const terminalHeight = output.rows ?? DEFAULT_TERMINAL_HEIGHT;
+  const safeWidth =
+    Number.isFinite(terminalWidth) && terminalWidth > 40
+      ? terminalWidth
+      : DEFAULT_TERMINAL_WIDTH;
+  // The message is constant for the life of this picker session, so its
+  // wrapped row count is computed once and folded into the chrome-row
+  // total — every redraw's MOVE_UP math depends on this being exact.
+  const messageRows = wrapText(message, safeWidth);
+  const chromeRows = messageRows.length + (PICKER_CHROME_ROWS - 1);
   const viewportHeight = Math.max(
     3,
-    Math.min(choices.length, MAX_VIEWPORT_ROWS, terminalHeight - PICKER_CHROME_ROWS),
+    Math.min(choices.length, MAX_VIEWPORT_ROWS, terminalHeight - chromeRows),
   );
-  const frameHeight = PICKER_CHROME_ROWS + viewportHeight;
+  const frameHeight = chromeRows + viewportHeight;
 
   // Initial viewport: anchor at cursorIndex.
   let viewportStart = Math.max(
@@ -326,7 +361,7 @@ export async function runCheckboxPicker(
   // place.
   redraw(
     buildFrame(
-      message,
+      messageRows,
       choices,
       cursorIndex,
       selected,
@@ -372,7 +407,7 @@ export async function runCheckboxPicker(
       );
       redraw(
         buildFrame(
-          message,
+          messageRows,
           choices,
           cursorIndex,
           selected,

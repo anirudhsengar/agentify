@@ -2,6 +2,7 @@ import * as crypto from "node:crypto";
 import * as path from "node:path";
 import { PI_SDK_VERSION } from "../pi-sdk-version.ts";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { AgentRuntimeResult } from "../types.ts";
 import { defaultConfigDir } from "../agentify-config.ts";
 import { AgentifyLog } from "../audit/log.ts";
 import { createGapDraftMap } from "../audit/map-draft.ts";
@@ -79,6 +80,36 @@ function auditActivityForTool(toolName: string): string {
     default:
       return "Reviewing the repository evidence…";
   }
+}
+
+/**
+ * Thrown when every assistant turn in the audit session errored out before
+ * a single tool call was made — the signature of a provider rejecting the
+ * request outright (missing/invalid/expired credentials) rather than an
+ * audit-content problem. Distinct from a generic closure failure so
+ * `runAgentifyApp` can catch it and re-prompt for a credential instead of
+ * just surfacing an opaque coverage error.
+ */
+export class ProviderAuthFailedError extends Error {
+  readonly provider: string;
+  constructor(provider: string, closedCount: number, totalCount: number) {
+    super(
+      `repository audit did not reach structured closure (${closedCount}/${totalCount}); `
+      + `every request to ${provider} ended in an error before any tool call was made; `
+      + `this usually means the stored credentials for ${provider} are missing, invalid, or expired `
+      + `(run \`agentify login --provider ${provider}\` with a valid key and retry)`,
+    );
+    this.name = "ProviderAuthFailedError";
+    this.provider = provider;
+  }
+}
+
+function providerAuthFailure(diagnostics: AgentRuntimeResult["diagnostics"]): string | null {
+  if (!diagnostics || !diagnostics.assistant_stop_reasons.includes("error")) return null;
+  const toolCallsAttempted = Object.values(diagnostics.tool_execution_counts)
+    .reduce((sum, counts) => sum + counts.started, 0);
+  if (toolCallsAttempted > 0) return null;
+  return diagnostics.provider ?? diagnostics.provider_api ?? null;
 }
 
 function mapResult(result: WriteMapResult | undefined): {
@@ -261,6 +292,10 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       agents_md_path: null,
     });
     if (!success) {
+      const failedProvider = providerAuthFailure(runtimeResult.diagnostics);
+      if (failedProvider) {
+        throw new ProviderAuthFailedError(failedProvider, closure.closed.length, COVERAGE_DIMENSIONS.length);
+      }
       const reasons = closure.unresolved
         .slice(0, 8)
         .map((dimension) => `${dimension}: ${closure.reasons[dimension] ?? "not closed"}`);
