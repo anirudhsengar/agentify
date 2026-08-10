@@ -134,6 +134,11 @@ const cases: LiveCase[] = [
         "Cargo.toml": "[package]\nname = \"live_rust\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
         "src/lib.rs": "#[cfg(test)]\nmod tests {\n    #[test]\n    fn it_works() { assert_eq!(2 + 2, 4); }\n}\n",
       });
+      // Discovery always needs Cargo.lock; only generate a real lock when cargo exists.
+      if (!toolAvailable("cargo")) {
+        fs.writeFileSync(path.join(root, "Cargo.lock"), "# agentify live-smoke stub\n");
+        return;
+      }
       const lock = spawnSync("cargo", ["generate-lockfile"], {
         cwd: root,
         encoding: "utf-8",
