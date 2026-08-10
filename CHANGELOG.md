@@ -18,6 +18,7 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Ignore .tmp-live/ local multi-ecosystem probe clones so pack:release clean-tree checks stay green.
 - On Windows, execute `.bat`/`.cmd` validation wrappers (Gradle/Maven) via
   `cmd.exe /d /s /c` with repository cwd confinement so installer and
   task-lifecycle validation no longer fail with `spawnSync EINVAL`.
