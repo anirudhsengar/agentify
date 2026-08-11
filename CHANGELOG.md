@@ -18,6 +18,10 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Register the planner record type in the installed GitHub task-state store so
+  planner consultation results can be persisted as typed machine records;
+  previously every task failed closed at `writeRecord("planner", ...)` with
+  `unsupported machine record type 'planner'`.
 - Ignore .tmp-live/ local multi-ecosystem probe clones so pack:release clean-tree checks stay green.
 - On Windows, execute `.bat`/`.cmd` validation wrappers (Gradle/Maven) via
   `cmd.exe /d /s /c` with repository cwd confinement so installer and

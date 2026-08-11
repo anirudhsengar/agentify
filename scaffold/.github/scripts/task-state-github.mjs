@@ -21,6 +21,7 @@ const STATE_LABELS = new Set([
 ]);
 const RECORD_VALIDATORS = new Map([
   ["plan", "validate-plan"],
+  ["planner", "validate-planner"],
   ["specialist", "validate-specialist"],
   ["builder-call", "validate-builder-call"],
   ["builder", "validate-builder-result"],

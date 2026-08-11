@@ -49,7 +49,7 @@ export function sortedTaskStrings(values: ReadonlyArray<string>): string[] {
 }
 
 export function normalizeTaskPath(value: string, label = "task path"): string {
-  const portable = value.trim().replaceAll("\\", "/").replace(/^\.\//, "");
+  const portable = value.trim().replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/+$/, "");
   if (
     portable.length === 0
     || portable.length > 1_024

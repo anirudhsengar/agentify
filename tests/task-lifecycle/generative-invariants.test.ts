@@ -221,6 +221,18 @@ test("seeded repository paths normalize portably and reject every escape form", 
   }
 });
 
+test("directory-style issue paths with trailing slashes normalize to their scope root", () => {
+  // The documented issue template uses directory paths such as `.github/` in
+  // `## Scope` / `## Out of scope`. These must normalize to the same scope
+  // root instead of failing closed on the empty trailing segment.
+  assert.equal(normalizeTaskPath(".github/"), ".github");
+  assert.equal(normalizeTaskPath("src/example/"), "src/example");
+  assert.equal(normalizeTaskPath("./docs/"), "docs");
+  assert.equal(pathWithinTaskScope(".github/workflows/ci.yml", ".github/"), true);
+  assert.throws(() => normalizeTaskPath(".github//workflows"));
+  assert.throws(() => normalizeTaskPath("/"));
+});
+
 test("seeded JSON key permutations retain canonical bytes and digests", () => {
   for (let seed = 1; seed <= 128; seed += 1) {
     const entries = Array.from({ length: 3 + seed % 7 }, (_, index) => [

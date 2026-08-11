@@ -82,9 +82,36 @@ async function testAlongsideOnUserOwnedFiles(): Promise<void> {
   }
 }
 
+async function testRecordValidatorCoverage(): Promise<void> {
+  // Every machine-record type the lifecycle controller persists through
+  // writeRecord(...) must have a validator entry in the GitHub state store,
+  // or tasks fail closed at runtime with "unsupported machine record type".
+  const root = packageRoot();
+  const scriptsDir = path.join(root, "scaffold", ".github", "scripts");
+  const controller = fs.readFileSync(path.join(scriptsDir, "run-task-lifecycle.mjs"), "utf-8");
+  const stateStore = fs.readFileSync(path.join(scriptsDir, "task-state-github.mjs"), "utf-8");
+
+  const writtenTypes = new Set(
+    [...controller.matchAll(/writeRecord\(\s*"([a-z-]+)"/g)].map((match) => match[1]),
+  );
+  assert.ok(writtenTypes.size > 0, "expected writeRecord type literals in run-task-lifecycle.mjs");
+
+  const validatorsBlock = /RECORD_VALIDATORS\s*=\s*new Map\(\[([\s\S]*?)\]\s*\)/.exec(stateStore)?.[1] ?? "";
+  const validatedTypes = new Set(
+    [...validatorsBlock.matchAll(/\[\s*"([a-z-]+)"\s*,\s*"([a-z-]+)"\s*\]/g)].map((match) => match[1]),
+  );
+  for (const type of writtenTypes) {
+    assert.ok(
+      validatedTypes.has(type),
+      `task-state-github.mjs RECORD_VALIDATORS is missing an entry for record type "${type}"`,
+    );
+  }
+}
+
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "installsManagedScaffoldFiles", fn: testInstallsManagedScaffoldFiles },
   { name: "alongsideOnUserOwnedFiles", fn: testAlongsideOnUserOwnedFiles },
+  { name: "recordValidatorCoverage", fn: testRecordValidatorCoverage },
 ];
 
 let passed = 0;
