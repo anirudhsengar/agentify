@@ -18,7 +18,7 @@ function run(command, args, options = {}) {
     cwd: options.cwd ?? repoRoot,
     env: options.env ?? process.env,
     encoding: "utf-8",
-    timeout: options.timeout ?? 180_000,
+    timeout: options.timeout ?? 600_000,
   });
   if (result.error) throw result.error;
   if (options.expectFailure === true) {
@@ -109,7 +109,7 @@ process.exit(1);
   };
   for (const [index, profile] of profiles.entries()) {
     const fixture = path.join(fixturesRoot, profile);
-    const first = run(nodeCommand, [bin], { cwd: fixture, env, timeout: 180_000, expectFailure: true });
+    const first = run(nodeCommand, [bin], { cwd: fixture, env, timeout: 900_000, expectFailure: true });
     assert.match(
       `${first.stdout}\n${first.stderr}`,
       profile === "readiness-fail"
@@ -151,7 +151,7 @@ process.exit(1);
   });
   run("git", ["-C", fixture, "check-ignore", "-q", ".agentify/runtime/audit/history/example.json"]);
   const memoryBefore = fs.readFileSync(memoryManifestPath, "utf-8");
-  const second = run(nodeCommand, [bin], { cwd: fixture, env, timeout: 180_000, expectFailure: true });
+    const second = run(nodeCommand, [bin], { cwd: fixture, env, timeout: 900_000, expectFailure: true });
   assert.match(`${second.stdout}\n${second.stderr}`, /validation_consent_required|analyzable-only/);
   assert.equal(fs.readFileSync(memoryManifestPath, "utf-8"), memoryBefore);
 

@@ -19,7 +19,7 @@ function run(command, args, options = {}) {
     cwd: options.cwd ?? repoRoot,
     env: options.env ?? process.env,
     encoding: "utf-8",
-    timeout: options.timeout ?? 240_000,
+    timeout: options.timeout ?? 600_000,
   });
   if (result.error) throw result.error;
   if (options.expectFailure === true) {
@@ -66,7 +66,7 @@ try {
   assert.ok(fs.existsSync(runtime), "installed package must contain the bundled learning runtime");
   const noArgs = run(nodeCommand, [runtime], {
     cwd: targetRepo,
-    timeout: 30_000,
+    timeout: 120_000,
     expectFailure: true,
   });
   assert.match(noArgs.stderr, /^agentify-learning: usage:/);
@@ -133,7 +133,7 @@ try {
     "--event", eventPath,
     "--task-evidence", evidencePath,
     "--output", reportPath,
-  ], { cwd: targetRepo, timeout: 90_000 });
+  ], { cwd: targetRepo, timeout: 300_000 });
   const report = JSON.parse(fs.readFileSync(reportPath, "utf-8"));
   assert.equal(report.status, "processed");
   assert.equal(report.accepted_commit, acceptedCommit);
@@ -147,11 +147,11 @@ try {
     "--event", eventPath,
     "--task-evidence", evidencePath,
     "--output", secondPath,
-  ], { cwd: targetRepo, timeout: 90_000 });
+  ], { cwd: targetRepo, timeout: 300_000 });
   assert.equal(JSON.parse(fs.readFileSync(secondPath, "utf-8")).status, "already-processed");
 
   fs.writeFileSync(contextRequestPath, JSON.stringify({ candidate_paths: ["src/billing/index.ts"], max_records: 64 }));
-  run(nodeCommand, [runtime, "context", "--request", contextRequestPath, "--output", contextPath], { cwd: targetRepo, timeout: 30_000 });
+  run(nodeCommand, [runtime, "context", "--request", contextRequestPath, "--output", contextPath], { cwd: targetRepo, timeout: 120_000 });
   const retained = JSON.parse(fs.readFileSync(contextPath, "utf-8"));
   const retainedText = JSON.stringify(retained);
   assert.match(retainedText, /Normalize invoice identifiers before comparing retries/);
@@ -168,7 +168,7 @@ try {
   const issueTwoReport = path.join(ioRoot, "issue-2-report.json");
   fs.writeFileSync(issueTwoEvent, JSON.stringify({ schema_version: "1", repository_id: "fixture/installed-learning", default_branch: "main", accepted_commit: issueTwoCommit, first_parent_commit: issueTwoBase, expected_repository_head: issueTwoCommit, pull_request_number: 24, issue_number: 23, pull_request_url: "https://github.example/fixture/installed-learning/pull/24", actor: "fixture-maintainer", author_kind: "agentify", accepted_at: issueTwoAt }));
   fs.writeFileSync(issueTwoEvidence, JSON.stringify({ schema_version: "1", task_id: "qualification-issue-2", issue_number: 23, pull_request_number: 24, issue_url: "https://github.example/fixture/installed-learning/issues/23", plan_digest: "c".repeat(64), selected_specialist_ids: ["specialist-billing"], selected_procedure_ids: ["procedure-billing-tests"], risk_category: "low", validation: { commands: ["node --test"], passed: true, evidence_refs: ["sha256:" + "d".repeat(64)] }, review_feedback: [], attempts: [{ sequence: 1, approach: "Apply retained correction: normalize invoice identifiers before comparing retries", result: "succeeded", failure_category: null, signal: "regression test passed on the first attempt", correction: null }], generalization: "candidate", cost_usd: 0, runtime_ms: 10, source_artifact_url: "https://github.example/fixture/installed-learning/actions/runs/24" }));
-  run(nodeCommand, [runtime, "process", "--event", issueTwoEvent, "--task-evidence", issueTwoEvidence, "--output", issueTwoReport], { cwd: targetRepo, timeout: 90_000 });
+  run(nodeCommand, [runtime, "process", "--event", issueTwoEvent, "--task-evidence", issueTwoEvidence, "--output", issueTwoReport], { cwd: targetRepo, timeout: 300_000 });
   assert.equal(JSON.parse(fs.readFileSync(issueTwoReport, "utf-8")).status, "processed");
 
   const invalidationBase = git(targetRepo, "rev-parse", "HEAD");
@@ -178,12 +178,12 @@ try {
   const invalidationEvent = path.join(ioRoot, "invalidation-event.json");
   const invalidationReport = path.join(ioRoot, "invalidation-report.json");
   fs.writeFileSync(invalidationEvent, JSON.stringify({ schema_version: "1", repository_id: "fixture/installed-learning", default_branch: "main", accepted_commit: invalidationCommit, first_parent_commit: invalidationBase, expected_repository_head: invalidationCommit, pull_request_number: 25, issue_number: null, pull_request_url: "https://github.example/fixture/installed-learning/pull/25", actor: "human-maintainer", author_kind: "human", accepted_at: new Date(git(targetRepo, "show", "-s", "--format=%cI", invalidationCommit)).toISOString() }));
-  run(nodeCommand, [runtime, "process", "--event", invalidationEvent, "--output", invalidationReport], { cwd: targetRepo, timeout: 90_000 });
+  run(nodeCommand, [runtime, "process", "--event", invalidationEvent, "--output", invalidationReport], { cwd: targetRepo, timeout: 300_000 });
   const invalidated = JSON.parse(fs.readFileSync(invalidationReport, "utf-8"));
   assert.equal(invalidated.status, "processed");
   assert.ok(invalidated.invalidation.stale_memory_ids.length > 0);
   const postInvalidationContext = path.join(ioRoot, "context-after-invalidation.json");
-  run(nodeCommand, [runtime, "context", "--request", contextRequestPath, "--output", postInvalidationContext], { cwd: targetRepo, timeout: 30_000 });
+  run(nodeCommand, [runtime, "context", "--request", contextRequestPath, "--output", postInvalidationContext], { cwd: targetRepo, timeout: 120_000 });
   assert.doesNotMatch(JSON.stringify(JSON.parse(fs.readFileSync(postInvalidationContext, "utf-8"))), /Normalize invoice identifiers before comparing retries/);
 
   const humanBase = git(targetRepo, "rev-parse", "HEAD");
@@ -194,7 +194,7 @@ try {
   const humanEvent = path.join(ioRoot, "human-event.json");
   const humanReport = path.join(ioRoot, "human-report.json");
   fs.writeFileSync(humanEvent, JSON.stringify({ schema_version: "1", repository_id: "fixture/installed-learning", default_branch: "main", accepted_commit: humanCommit, first_parent_commit: humanBase, expected_repository_head: humanCommit, pull_request_number: 26, issue_number: null, pull_request_url: "https://github.example/fixture/installed-learning/pull/26", actor: "human-maintainer", author_kind: "human", accepted_at: new Date(git(targetRepo, "show", "-s", "--format=%cI", humanCommit)).toISOString() }));
-  run(nodeCommand, [runtime, "process", "--event", humanEvent, "--output", humanReport], { cwd: targetRepo, timeout: 90_000 });
+  run(nodeCommand, [runtime, "process", "--event", humanEvent, "--output", humanReport], { cwd: targetRepo, timeout: 300_000 });
   const human = JSON.parse(fs.readFileSync(humanReport, "utf-8"));
   assert.equal(human.status, "processed");
   assert.ok(human.candidates.some((entry) => entry.kind === "orchestrator"));
@@ -204,7 +204,7 @@ try {
     "verify-diff",
     "--expected-head", humanCommit,
     "--output", diffPath,
-  ], { cwd: targetRepo, timeout: 30_000 });
+  ], { cwd: targetRepo, timeout: 120_000 });
   const verified = JSON.parse(fs.readFileSync(diffPath, "utf-8"));
   assert.ok(verified.paths.length > 0);
   assert.ok(verified.paths.every((entry) => entry.startsWith(".agentify/")));

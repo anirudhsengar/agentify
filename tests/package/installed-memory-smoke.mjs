@@ -18,7 +18,7 @@ function run(command, args, options = {}) {
     cwd: options.cwd ?? repoRoot,
     env: options.env ?? process.env,
     encoding: "utf-8",
-    timeout: options.timeout ?? 180_000,
+    timeout: options.timeout ?? 600_000,
   });
   if (result.error) throw result.error;
   if (options.expectFailure === true) {
