@@ -15,7 +15,10 @@ export const COMMAND_TIMEOUTS: Readonly<Record<InstallerCommandKind, number>> = 
   typecheck: 10 * 60_000,
   lint: 10 * 60_000,
   test: 30 * 60_000,
-  package: 15 * 60_000,
+  // Exact-artifact qualification packs, installs, and smoke-runs the real
+  // tarball five times; on Windows hosts under load this exceeds 30 minutes
+  // even when healthy (each smoke performs a full npm install of the tarball).
+  package: 90 * 60_000,
 };
 
 export const VALIDATION_SCRIPT_NAMES: Readonly<Record<
@@ -209,10 +212,14 @@ export function collectBlockers(
   } else if (runValidation && commands.some((command) => (
     command.kind !== "install" && command.assessment === "failed"
   ))) {
+    const failing = commands
+      .filter((command) => command.kind !== "install" && command.assessment === "failed")
+      .map((command) => `${command.command_id}: ${command.detail}`)
+      .join(" | ");
     blockers.push({
       code: "validation_failed",
       message: "At least one required repository validation command did not pass.",
-      remediation: "Repair the failing validation command, then rerun the installer verification.",
+      remediation: `Repair the failing validation command, then rerun the installer verification. Failing: ${failing}`,
     });
   }
   return blockers;

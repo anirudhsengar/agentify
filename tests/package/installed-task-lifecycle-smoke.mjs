@@ -19,7 +19,7 @@ function run(command, args, options = {}) {
     cwd: options.cwd ?? repoRoot,
     env: options.env ?? process.env,
     encoding: "utf8",
-    timeout: options.timeout ?? 240_000,
+    timeout: options.timeout ?? 600_000,
   });
   if (result.error) throw result.error;
   if (options.expectFailure === true) {
@@ -85,7 +85,7 @@ try {
   const branchInput = path.join(targetRepo, "branch-input.json");
   const branchOutput = path.join(targetRepo, "branch-output.json");
   fs.writeFileSync(branchInput, JSON.stringify({ issue_number: 152, issue_title: "Implement task lifecycle" }));
-  run(nodeCommand, [runtime, "branch-name", branchInput, branchOutput], { cwd: targetRepo, timeout: 30_000 });
+  run(nodeCommand, [runtime, "branch-name", branchInput, branchOutput], { cwd: targetRepo, timeout: 120_000 });
   assert.deepEqual(JSON.parse(fs.readFileSync(branchOutput, "utf8")), {
     branch: "agentify/issue-152-implement-task-lifecycle",
   });
@@ -112,7 +112,7 @@ try {
     comment_updated_at: null,
     received_at: "2026-08-01T00:00:00.000Z",
   }));
-  run(nodeCommand, [runtime, "parse-event", eventInput, eventOutput], { cwd: targetRepo, timeout: 30_000 });
+  run(nodeCommand, [runtime, "parse-event", eventInput, eventOutput], { cwd: targetRepo, timeout: 120_000 });
   const parsed = JSON.parse(fs.readFileSync(eventOutput, "utf8"));
   assert.equal(parsed.disposition, "accepted");
   assert.equal(parsed.command, "queue");
@@ -134,16 +134,16 @@ try {
   const initializeInput = path.join(targetRepo, "initialize-input.json");
   const initializeOutput = path.join(targetRepo, "initialize-output.json");
   fs.writeFileSync(initializeInput, JSON.stringify({ repository: { repository_id: "123", full_name: "fixture/repository", default_branch: "main" }, issue_number: 152, expected_base_commit: "a".repeat(40), policy, event_id: "create-152", actor: "maintainer", now: "2026-08-01T00:00:00.000Z" }));
-  run(nodeCommand, [runtime, "initialize", initializeInput, initializeOutput], { cwd: targetRepo, timeout: 30_000 });
+  run(nodeCommand, [runtime, "initialize", initializeInput, initializeOutput], { cwd: targetRepo, timeout: 120_000 });
   const renderOutput = path.join(targetRepo, "render-output.json");
-  run(nodeCommand, [runtime, "render-state", initializeOutput, renderOutput], { cwd: targetRepo, timeout: 30_000 });
+  run(nodeCommand, [runtime, "render-state", initializeOutput, renderOutput], { cwd: targetRepo, timeout: 120_000 });
   const rendered = JSON.parse(fs.readFileSync(renderOutput, "utf8"));
   assert.match(rendered.body, /agentify-task-state:v1/);
   assert.deepEqual(rendered.labels, ["agentify:new"]);
   const readinessInput = path.join(targetRepo, "readiness-input.json");
   const readinessOutput = path.join(targetRepo, "readiness-output.json");
   fs.writeFileSync(readinessInput, JSON.stringify({ state: JSON.parse(fs.readFileSync(initializeOutput, "utf8")), decision: { disposition: "ready", reasons: [], clarification_questions: [], risk_category: "low" }, expected_revision: 1, event_id: "readiness-152", actor: "orchestrator", now: "2026-08-01T00:00:01.000Z" }));
-  run(nodeCommand, [runtime, "record-readiness", readinessInput, readinessOutput], { cwd: targetRepo, timeout: 30_000 });
+  run(nodeCommand, [runtime, "record-readiness", readinessInput, readinessOutput], { cwd: targetRepo, timeout: 120_000 });
   assert.equal(JSON.parse(fs.readFileSync(readinessOutput, "utf8")).state.current_state, "ready");
 
   const unauthorizedInput = path.join(targetRepo, "unauthorized-input.json");
@@ -153,7 +153,7 @@ try {
     delivery_id: "delivery-unauthorized",
     actor: { login: "attacker", type: "User", permission: "read" },
   }));
-  run(nodeCommand, [runtime, "parse-event", unauthorizedInput, unauthorizedOutput], { cwd: targetRepo, timeout: 30_000 });
+  run(nodeCommand, [runtime, "parse-event", unauthorizedInput, unauthorizedOutput], { cwd: targetRepo, timeout: 120_000 });
   assert.equal(JSON.parse(fs.readFileSync(unauthorizedOutput, "utf8")).disposition, "unauthorized");
 
   run("git", ["init", "-q"], { cwd: publicationRepo });
@@ -226,7 +226,7 @@ console.error("unsupported fake GitHub invocation: " + args.join(" ")); process.
   const publicationOutput = path.join(targetRepo, "publication-output.json");
   fs.writeFileSync(publicationInput, JSON.stringify({ repo_root: publicationRepo, repository: "qualification/lifecycle", task_id: taskId, issue_number: 152, expected_base_commit: base, expected_head_commit: head, plan_digest: planDigest, branch, base_branch: "main", allowed_paths: ["src"], protected_paths: [".github", ".agentify", "package.json"], title: "Implement qualified lifecycle", body: "Implements #152.\n\nValidated by the exact installed artifact." }));
   const publicationEnv = { ...process.env, GH_TOKEN: "qualification-placeholder", NODE_ENV: "test", AGENTIFY_GH_TEST_DRIVER: fakeGh, FAKE_GITHUB_STATE: fakeState, FAKE_GITHUB_BARE: publicationRemote, FAKE_GITHUB_BASE: base };
-  run(nodeCommand, [publisher, publicationInput, publicationOutput], { cwd: publicationRepo, env: publicationEnv, timeout: 60_000 });
+  run(nodeCommand, [publisher, publicationInput, publicationOutput], { cwd: publicationRepo, env: publicationEnv, timeout: 240_000 });
   const published = JSON.parse(fs.readFileSync(publicationOutput, "utf8"));
   assert.equal(published.status, "draft-pr-open");
   assert.equal(published.draft, true);
@@ -234,12 +234,12 @@ console.error("unsupported fake GitHub invocation: " + args.join(" ")); process.
   assert.equal(run("git", ["--git-dir", publicationRemote, "rev-parse", "refs/heads/main"]).stdout.trim(), base);
   assert.equal(run("git", ["--git-dir", publicationRemote, "rev-parse", `refs/heads/${branch}`]).stdout.trim(), head);
   const duplicateOutput = path.join(targetRepo, "publication-duplicate.json");
-  run(nodeCommand, [publisher, publicationInput, duplicateOutput], { cwd: publicationRepo, env: publicationEnv, timeout: 60_000 });
+  run(nodeCommand, [publisher, publicationInput, duplicateOutput], { cwd: publicationRepo, env: publicationEnv, timeout: 240_000 });
   assert.equal(JSON.parse(fs.readFileSync(duplicateOutput, "utf8")).number, published.number);
   const forbiddenDriver = run(nodeCommand, [publisher, publicationInput, path.join(targetRepo, "publication-forbidden.json")], {
     cwd: publicationRepo,
     env: { ...publicationEnv, NODE_ENV: "production" },
-    timeout: 60_000,
+    timeout: 240_000,
     expectFailure: true,
   });
   assert.match(forbiddenDriver.stderr, /fake GitHub driver is restricted to test qualification/);

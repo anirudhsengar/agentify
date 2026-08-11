@@ -31,6 +31,16 @@ All notable changes to Agentify are documented here.
 - Add `tests/installer/edge-case-campaign.test.ts` covering 23 synthetic
   installer/resolver edge cases (lockfile policy, unsafe scripts, manifest
   precedence, multi-ecosystem blockers).
+- Raise the installer `package` validation command timeout from 15 to 90
+  minutes: exact-artifact qualification packs, installs, and smoke-runs the
+  real tarball repeatedly and legitimately exceeds 15 minutes on Windows
+  hosts, so installation previously always failed at the `package` step.
+- Raise package smoke-test spawn timeouts (defaults to 600s, slower
+  installer fixture runs to 900s) so the installed-artifact suite passes on
+  slow or heavily loaded Windows machines.
+- The installer `validation_failed` blocker now names the failing validation
+  command ids and their captured failure details instead of a bare generic
+  remediation, so diagnosis no longer requires instrumenting the installer.
 
 ### Security
 
