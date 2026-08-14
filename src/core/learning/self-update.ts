@@ -82,27 +82,6 @@ function assertPathLimit(paths: string[]): string[] {
   return normalized;
 }
 
-function changedPaths(cwd: string): { paths: string[]; untracked: string[] } {
-  const tracked = pathsFromNameStatus(runGit(cwd, [
-    "diff",
-    "--name-status",
-    "-z",
-    "--find-renames",
-    "--find-copies",
-    "--find-copies-harder",
-    "HEAD",
-    "--",
-  ]));
-  const untracked = runGit(cwd, ["ls-files", "--others", "--exclude-standard", "-z", "--"])
-    .toString("utf-8")
-    .split("\0")
-    .filter(Boolean);
-  return {
-    paths: assertPathLimit([...tracked, ...untracked]),
-    untracked: assertPathLimit(untracked),
-  };
-}
-
 function committedChangedPaths(cwd: string, base: string, head: string): string[] {
   return assertPathLimit(pathsFromNameStatus(runGit(cwd, [
     "diff",
@@ -153,16 +132,27 @@ function assertPublicationMetrics(metrics: LearningPublicationMetrics): void {
   }
 }
 
-function workingPublicationMetrics(
-  cwd: string,
-  paths: ReadonlyArray<string>,
-): LearningPublicationMetrics {
+function workingDiffSnapshot(cwd: string): {
+  paths: string[];
+  metrics: LearningPublicationMetrics;
+} {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-learning-index-"));
   const temporaryIndex = path.join(temporaryRoot, "index");
   const env = { ...process.env, GIT_INDEX_FILE: temporaryIndex };
   try {
     runGit(cwd, ["read-tree", "HEAD"], undefined, env);
     runGit(cwd, ["add", "-A", "--"], undefined, env);
+    const paths = assertPathLimit(pathsFromNameStatus(runGit(cwd, [
+      "diff",
+      "--cached",
+      "--name-status",
+      "-z",
+      "--find-renames",
+      "--find-copies",
+      "--find-copies-harder",
+      "HEAD",
+      "--",
+    ], undefined, env)));
     const patch = runGit(
       cwd,
       ["diff", "--cached", "--binary", "--full-index", "HEAD", "--"],
@@ -180,7 +170,7 @@ function workingPublicationMetrics(
       )),
     };
     assertPublicationMetrics(metrics);
-    return metrics;
+    return { paths, metrics };
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });
   }
@@ -280,8 +270,8 @@ export function verifyLearningSelfUpdateDiff(
       `learning self-update expected HEAD ${expectedHead}, found ${currentHead}`,
     );
   }
-  const changed = changedPaths(cwd);
-  const paths = changed.paths;
+  const snapshot = workingDiffSnapshot(cwd);
+  const paths = snapshot.paths;
   for (const relativePath of paths) {
     if (
       relativePath.startsWith(".agentify/runtime/")
@@ -323,7 +313,7 @@ export function verifyLearningSelfUpdateDiff(
   return {
     expected_head: expectedHead,
     paths,
-    metrics: workingPublicationMetrics(cwd, paths),
+    metrics: snapshot.metrics,
   };
 }
 

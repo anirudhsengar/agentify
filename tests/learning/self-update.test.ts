@@ -10,7 +10,10 @@ import {
   isLearningManagedPath,
   isKnowledgeOnlyChange,
 } from "../../src/core/learning/knowledge-paths.ts";
-import { verifyLearningSelfUpdateDiff } from "../../src/core/learning/self-update.ts";
+import {
+  verifyCommittedLearningDiff,
+  verifyLearningSelfUpdateDiff,
+} from "../../src/core/learning/self-update.ts";
 
 function git(cwd: string, ...args: string[]): string {
   const result = spawnSync("git", ["-C", cwd, ...args], {
@@ -222,6 +225,28 @@ test("knowledge-only classification validates previous and current paths", () =>
     path: "src/fact.json",
     previous_path: ".agentify/knowledge/fact.json",
   }]), false);
+});
+
+test("working and committed copy detection produce identical publication reports", () => {
+  const fixture = repository();
+  try {
+    const source = ".agentify/knowledge/codebase/revision-1.json";
+    const destination = ".agentify/knowledge/codebase/revision-2.json";
+    write(fixture.cwd, source, "{\"same\":true}\n");
+    git(fixture.cwd, "add", source);
+    git(fixture.cwd, "commit", "-qm", "add first history revision");
+    const head = git(fixture.cwd, "rev-parse", "HEAD");
+    write(fixture.cwd, destination, "{\"same\":true}\n");
+    const working = verifyLearningSelfUpdateDiff(fixture.cwd, head);
+    for (const relativePath of working.paths) git(fixture.cwd, "add", "--", relativePath);
+    git(fixture.cwd, "commit", "-qm", "add copied history revision");
+    const proposal = git(fixture.cwd, "rev-parse", "HEAD");
+    const committed = verifyCommittedLearningDiff(fixture.cwd, head, proposal);
+    assert.deepEqual(committed.paths, working.paths);
+    assert.deepEqual(committed.metrics, working.metrics);
+  } finally {
+    fs.rmSync(fixture.cwd, { recursive: true, force: true });
+  }
 });
 
 test("learning publication is bounded by reviewable path, byte, and line limits", () => {
