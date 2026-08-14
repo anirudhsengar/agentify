@@ -13,6 +13,7 @@ import {
   listRecentFirstParentCommits,
   readCommitMetadata,
   readFirstParent,
+  readLearningInstallationCommit,
   readLearningHead,
 } from "./git.ts";
 import { processAcceptedMerge } from "./engine.ts";
@@ -40,11 +41,18 @@ export function reconcileAcceptedMerges(
 ): ReconciliationReport {
   const maximum = boundedCommitCount(input.max_commits);
   const head = readLearningHead(input.cwd);
-  const considered = listRecentFirstParentCommits(input.cwd, maximum);
+  const installationCommit = readLearningInstallationCommit(input.cwd);
+  const recent = listRecentFirstParentCommits(input.cwd, maximum);
+  const installationIndex = recent.indexOf(installationCommit);
+  const available = installationIndex < 0
+    ? recent
+    : recent.slice(installationIndex);
+  const considered: string[] = [];
   const processed: ReconciliationReport["processed"] = [];
   const skipped: string[] = [];
 
-  for (const commit of considered) {
+  for (const commit of available) {
+    considered.push(commit);
     if (isCompleted(input.cwd, commit)) {
       skipped.push(commit);
       continue;
@@ -83,6 +91,7 @@ export function reconcileAcceptedMerges(
       skipped.push(commit);
     } else {
       processed.push(report);
+      if (processed.length >= maximum) break;
     }
   }
 

@@ -5,6 +5,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import {
+  applicationLearningChanges,
+  isAgentifyManagedPath,
   isLearningManagedPath,
   isKnowledgeOnlyChange,
 } from "../../src/core/learning/knowledge-paths.ts";
@@ -48,6 +50,35 @@ test("learning update allowlist excludes policy, workflow, and application paths
   assert.equal(isLearningManagedPath("package.json"), false);
   assert.equal(isLearningManagedPath("package-lock.json"), false);
   assert.equal(isLearningManagedPath("src/index.ts"), false);
+});
+
+test("learning input excludes Agentify-owned paths without hiding application changes", () => {
+  assert.equal(isAgentifyManagedPath(".agentify/policies/runtime.json"), true);
+  assert.equal(isAgentifyManagedPath(".github/agentify/learning-runtime.mjs"), true);
+  assert.equal(isAgentifyManagedPath(".github/workflows/agentify-learn.yml"), true);
+  assert.equal(isAgentifyManagedPath("AGENTS.md"), true);
+  assert.equal(isAgentifyManagedPath(".github/workflows/ci.yml"), false);
+  assert.equal(isAgentifyManagedPath("src/index.ts"), false);
+  assert.deepEqual(applicationLearningChanges([
+    { status: "modified", path: ".github/agentify/task-runtime.mjs", previous_path: null },
+    { status: "modified", path: "src/index.ts", previous_path: null },
+  ]), [
+    { status: "modified", path: "src/index.ts", previous_path: null },
+  ]);
+  assert.deepEqual(applicationLearningChanges([{
+    status: "renamed",
+    path: ".agentify/knowledge/retired.json",
+    previous_path: "src/retired.json",
+  }]), [{
+    status: "deleted",
+    path: "src/retired.json",
+    previous_path: null,
+  }]);
+  assert.deepEqual(applicationLearningChanges([{
+    status: "copied",
+    path: ".agentify/knowledge/copied.json",
+    previous_path: "src/source.json",
+  }]), []);
 });
 
 test("self-update verifier accepts only regular Agentify knowledge files", () => {

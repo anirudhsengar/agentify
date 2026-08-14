@@ -37,7 +37,8 @@ import type {
 } from "./contracts.ts";
 import { LEARNING_SCHEMA_VERSION } from "./contracts.ts";
 import { acceptedChangedPaths, inspectAcceptedMerge } from "./git.ts";
-import { isKnowledgeOnlyChange } from "./knowledge-paths.ts";
+import { applicationLearningChanges } from "./knowledge-paths.ts";
+import { learningAuthorshipTag } from "./authorship.ts";
 import {
   resolveLearningPolicy,
   validateAcceptedMergeEvent,
@@ -381,7 +382,7 @@ function learningRunDraft(
     tags: sortedUniqueStrings([
       "learning-run",
       learningRunTag(event.accepted_commit),
-      event.author_kind === "agentify" ? "agentify-authored" : "human-authored",
+      learningAuthorshipTag(event.author_kind),
     ]),
     proposed_at: event.accepted_at,
     payload: {
@@ -478,10 +479,17 @@ export function processAcceptedMerge(
     );
   }
 
-  const changes = inspectAcceptedMerge(input.cwd, event, policy);
-  if (isKnowledgeOnlyChange(changes)) {
+  const inspectedChanges = inspectAcceptedMerge(input.cwd, event, policy);
+  const changes = applicationLearningChanges(inspectedChanges);
+  if (changes.length > policy.max_changed_files) {
+    throw new TeamMemoryError(
+      "capacity_exceeded",
+      `accepted application change contains more than ${policy.max_changed_files} changed files`,
+    );
+  }
+  if (changes.length === 0) {
     removeJournal(input.cwd, event.accepted_commit);
-    return knowledgeOnlyReport(event, changes);
+    return knowledgeOnlyReport(event, inspectedChanges);
   }
   const completed = completedLearningRecord(input.cwd, event.accepted_commit);
   if (completed !== null) {

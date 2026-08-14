@@ -7,6 +7,7 @@ import {
 } from "./artifacts/managed-markers.ts";
 import type { ArtifactWrite } from "./types.ts";
 import type { RepositoryTaskPolicyConfiguration } from "./installer/contracts.ts";
+import { AGENTIFY_INSTALLED_CONTROL_PATHS } from "./artifacts/managed-installation-paths.ts";
 
 export interface InstallScaffoldRuntimeOptions {
   cwd: string;
@@ -14,18 +15,6 @@ export interface InstallScaffoldRuntimeOptions {
   taskPolicyConfiguration?: RepositoryTaskPolicyConfiguration;
   knownManagedPaths?: ReadonlySet<string>;
 }
-
-const FOCUSED_SCAFFOLD_PATHS = new Set([
-  "AGENTS.md",
-  "SETUP.md",
-  ".github/agentify-task-policy.json",
-  ".github/scripts/complete-accepted-task-merge.mjs",
-  ".github/scripts/publish-task-draft.mjs",
-  ".github/scripts/run-task-lifecycle.mjs",
-  ".github/scripts/task-state-github.mjs",
-  ".github/workflows/agentify-issue.yml",
-  ".github/workflows/agentify-learn.yml",
-]);
 
 function listFiles(root: string): string[] {
   const out: string[] = [];
@@ -120,7 +109,7 @@ export function installScaffoldRuntime(options: InstallScaffoldRuntimeOptions): 
   for (const source of listFiles(scaffoldRoot)) {
     const relative = path.relative(scaffoldRoot, source);
     const portableRelative = relative.split(path.sep).join("/");
-    if (!FOCUSED_SCAFFOLD_PATHS.has(portableRelative)) continue;
+    if (!AGENTIFY_INSTALLED_CONTROL_PATHS.has(portableRelative)) continue;
     const destination = path.join(options.cwd, relative);
     const policyContent = portableRelative === ".github/agentify-task-policy.json"
       && options.taskPolicyConfiguration

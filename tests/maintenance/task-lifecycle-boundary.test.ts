@@ -136,12 +136,13 @@ test("installed readiness consumes installer-attested policy and service facts",
 
 test("fresh scaffold installation uses an exact focused allowlist", () => {
   const installer = read("src/core/scaffold-installer.ts");
-  assert.match(installer, /FOCUSED_SCAFFOLD_PATHS/);
+  const managedPaths = read("src/core/artifacts/managed-installation-paths.ts");
+  assert.match(installer, /AGENTIFY_INSTALLED_CONTROL_PATHS/);
   for (const unrelated of [
     "agent-command.yml", "agent-implement.yml", "agent-implement-pr.yml",
     "agent-review.yml", "agent-update-branch.yml",
   ]) {
-    assert.doesNotMatch(installer, new RegExp(unrelated.replace(".", "\\.")));
+    assert.doesNotMatch(managedPaths, new RegExp(unrelated.replace(".", "\\.")));
   }
   assert.match(installer, /dist", "task-runtime\.mjs"/);
   assert.match(installer, /\.github", "agentify", "task-runtime\.mjs"/);

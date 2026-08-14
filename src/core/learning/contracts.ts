@@ -11,6 +11,7 @@ import type {
 
 export const LEARNING_SCHEMA_VERSION = "1" as const;
 export const MAX_LEARNING_CHANGED_FILES = 256;
+export const MAX_LEARNING_INSPECTED_FILES = 4_096;
 export const MAX_LEARNING_CANDIDATES = 32;
 export const MAX_LEARNING_ATTEMPTS = 16;
 export const MAX_LEARNING_REVIEW_FEEDBACK = 32;

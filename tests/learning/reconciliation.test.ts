@@ -40,6 +40,11 @@ test("bounded reconciliation catches missed accepted commits idempotently", () =
     write(cwd, "src/index.ts", "export const version = 1;\n");
     git(cwd, "add", ".");
     git(cwd, "commit", "-qm", "initial repository");
+    for (let index = 0; index < 4; index += 1) {
+      write(cwd, `src/history-${index}.ts`, `export const history${index} = true;\n`);
+      git(cwd, "add", `src/history-${index}.ts`);
+      git(cwd, "commit", "-qm", `historical change ${index}`);
+    }
     const initial = git(cwd, "rev-parse", "HEAD");
     const observedAt = readGitCommitTimestamp(cwd, initial);
     const bootstrap = buildSpecialistEvidenceReference({
@@ -58,6 +63,9 @@ test("bounded reconciliation catches missed accepted commits idempotently", () =
       actor: "agentify-installer",
       options: { now: () => new Date(observedAt) },
     });
+    git(cwd, "add", ".agentify");
+    git(cwd, "commit", "-qm", "install Agentify team memory");
+    const installation = git(cwd, "rev-parse", "HEAD");
 
     write(cwd, "src/index.ts", "export const version = 2;\n");
     git(cwd, "add", "src/index.ts");
@@ -79,7 +87,9 @@ test("bounded reconciliation catches missed accepted commits idempotently", () =
       firstRun.processed.map((report) => report.accepted_commit),
       [second, third],
     );
-    assert.ok(firstRun.skipped_commits.includes(initial));
+    assert.deepEqual(firstRun.considered_commits, [installation, second, third]);
+    assert.ok(!firstRun.considered_commits.includes(initial));
+    assert.ok(firstRun.skipped_commits.includes(installation));
     assert.equal(
       listMemoryRecords(cwd, { tag: `learning-run-${second}` }).length,
       1,
@@ -98,6 +108,70 @@ test("bounded reconciliation catches missed accepted commits idempotently", () =
     assert.deepEqual(secondRun.processed, []);
     assert.ok(secondRun.skipped_commits.includes(second));
     assert.ok(secondRun.skipped_commits.includes(third));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("reconciliation ignores Agentify upgrades and filters mixed managed changes", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-learning-managed-"));
+  try {
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    write(cwd, "package.json", "{}\n");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "fixture");
+    const initial = git(cwd, "rev-parse", "HEAD");
+    const observedAt = readGitCommitTimestamp(cwd, initial);
+    const evidence = buildSpecialistEvidenceReference({
+      cwd,
+      supportingCommit: initial,
+      repositoryPath: "package.json",
+      sourceType: "validated_bootstrap",
+      observedAt,
+      actor: "test-installer",
+    });
+    initializeTeamMemoryStore({
+      cwd,
+      repositoryId: "fixture/managed-reconciliation",
+      supportingCommit: initial,
+      evidence: [evidence],
+      actor: "agentify-installer",
+      options: { now: () => new Date(observedAt) },
+    });
+    write(cwd, ".github/agentify/task-runtime.mjs", "// installed runtime\n");
+    git(cwd, "add", ".agentify", ".github/agentify/task-runtime.mjs");
+    git(cwd, "commit", "-qm", "install Agentify");
+
+    write(cwd, ".github/agentify/task-runtime.mjs", "// upgraded runtime\n");
+    git(cwd, "add", ".github/agentify/task-runtime.mjs");
+    git(cwd, "commit", "-qm", "upgrade Agentify runtime");
+    const upgrade = git(cwd, "rev-parse", "HEAD");
+
+    write(cwd, ".github/workflows/agentify-learn.yml", "# agentify:managed\nname: learn\n");
+    write(cwd, "src/application.ts", "export const value = 1;\n");
+    git(cwd, "add", ".github/workflows/agentify-learn.yml", "src/application.ts");
+    git(cwd, "commit", "-qm", "mixed application and Agentify update");
+    const mixed = git(cwd, "rev-parse", "HEAD");
+
+    const report = reconcileAcceptedMerges({
+      cwd,
+      repository_id: "fixture/managed-reconciliation",
+      default_branch: "main",
+      max_commits: 8,
+    });
+    assert.deepEqual(report.processed.map((entry) => entry.accepted_commit), [mixed]);
+    assert.ok(report.skipped_commits.includes(upgrade));
+    assert.deepEqual(report.processed[0]?.changes, [{
+      status: "added",
+      path: "src/application.ts",
+      previous_path: null,
+    }]);
+    const learned = listMemoryRecords(cwd, { tag: `learning-run-${mixed}` });
+    assert.equal(learned.length, 1);
+    assert.ok(learned[0]?.tags.includes("unknown-authored"));
+    assert.ok(!learned[0]?.tags.includes("human-authored"));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -155,31 +229,36 @@ test("knowledge-only reconciliation is a repeatable repository no-op", () => {
     });
     git(cwd, "add", ".agentify");
     git(cwd, "commit", "-qm", "chore(agentify): install knowledge");
-    const knowledgeCommit = git(cwd, "rev-parse", "HEAD");
+    const installationCommit = git(cwd, "rev-parse", "HEAD");
     const direct = processAcceptedMerge({
       cwd,
       event: {
         schema_version: "1",
         repository_id: "fixture/knowledge-noop",
         default_branch: "main",
-        accepted_commit: knowledgeCommit,
+        accepted_commit: installationCommit,
         first_parent_commit: initial,
-        expected_repository_head: knowledgeCommit,
+        expected_repository_head: installationCommit,
         pull_request_number: 1,
         issue_number: null,
         pull_request_url: "https://github.example/fixture/knowledge-noop/pull/1",
         actor: "knowledge-maintainer",
         author_kind: "agentify",
-        accepted_at: readGitCommitTimestamp(cwd, knowledgeCommit),
+        accepted_at: readGitCommitTimestamp(cwd, installationCommit),
       },
     });
     assert.equal(direct.status, "knowledge-only");
     assert.deepEqual(direct.candidates, []);
     assert.equal(git(cwd, "status", "--porcelain"), "");
     assert.equal(
-      listMemoryRecords(cwd, { tag: `learning-run-${knowledgeCommit}` }).length,
+      listMemoryRecords(cwd, { tag: `learning-run-${installationCommit}` }).length,
       0,
     );
+
+    write(cwd, ".agentify/.gitignore", "runtime/\nstate-transactions/\n*.lock\n# refreshed\n");
+    git(cwd, "add", ".agentify/.gitignore");
+    git(cwd, "commit", "-qm", "chore(agentify): refresh knowledge");
+    const knowledgeCommit = git(cwd, "rev-parse", "HEAD");
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const report = reconcileAcceptedMerges({

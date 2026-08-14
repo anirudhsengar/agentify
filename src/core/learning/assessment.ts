@@ -29,6 +29,7 @@ import {
   acceptedChangedPaths,
   buildAcceptedMergeEvidence,
 } from "./git.ts";
+import { learningAuthorshipTag } from "./authorship.ts";
 import { isKnowledgeOnlyChange } from "./knowledge-paths.ts";
 
 function stableId(prefix: string, value: unknown): string {
@@ -127,7 +128,7 @@ function mergeSummaryCandidate(
     tags: sortedUniqueStrings([
       "accepted-merge",
       `commit-${event.accepted_commit.slice(0, 16)}`,
-      event.author_kind === "agentify" ? "agentify-authored" : "human-authored",
+      learningAuthorshipTag(event.author_kind),
     ]),
     proposed_at: event.accepted_at,
     payload: {

@@ -12,6 +12,7 @@ import type {
   LearningPolicy,
   MergeChangeStatus,
 } from "./contracts.ts";
+import { MAX_LEARNING_INSPECTED_FILES } from "./contracts.ts";
 
 const GIT_OBJECT = /^[0-9a-f]{40,64}$/;
 const GIT_BUFFER_LIMIT = 32 * 1024 * 1024;
@@ -202,7 +203,10 @@ export function inspectAcceptedMerge(
       `cannot inspect final accepted diff: ${gitError(result)}`,
     );
   }
-  return parseChangedFiles(result.stdout, policy.max_changed_files);
+  return parseChangedFiles(
+    result.stdout,
+    Math.max(policy.max_changed_files, MAX_LEARNING_INSPECTED_FILES),
+  );
 }
 
 function externalDiffEvidence(
@@ -303,6 +307,35 @@ export function listRecentFirstParentCommits(
     .map((value) => value.trim())
     .filter((value) => GIT_OBJECT.test(value))
     .reverse();
+}
+
+export function readLearningInstallationCommit(cwdInput: string): string {
+  const cwd = learningRepositoryRoot(cwdInput);
+  const result = runGit(cwd, [
+    "log",
+    "--first-parent",
+    "--diff-filter=A",
+    "--format=%H",
+    "-n",
+    "1",
+    "HEAD",
+    "--",
+    ".agentify/manifest.json",
+  ]);
+  if (result.status !== 0) {
+    throw new TeamMemoryError(
+      "invalid_input",
+      `cannot locate Agentify installation commit: ${gitError(result)}`,
+    );
+  }
+  const commit = result.stdout.toString("utf-8").trim();
+  if (!GIT_OBJECT.test(commit)) {
+    throw new TeamMemoryError(
+      "not_initialized",
+      "cannot reconcile learning before the committed Agentify installation is present",
+    );
+  }
+  return commit;
 }
 
 export function readCommitMetadata(cwdInput: string, commit: string): {
