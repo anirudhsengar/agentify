@@ -8,6 +8,7 @@ import {
   synchronizeRepositorySpecialists,
 } from "../../src/core/specialists/index.ts";
 import { makeSpecialistFixtureMap } from "../fixtures/specialist-map.ts";
+import { installSelfUpdatePolicy } from "../learning/installation-fixture.ts";
 
 const cwd = path.resolve(process.argv[2] ?? "");
 if (!process.argv[2]) throw new Error("target repository path is required");
@@ -60,6 +61,7 @@ initializeTeamMemoryStore({
   actor: "agentify-installer",
   options: { now: () => new Date(observedAt) },
 });
+installSelfUpdatePolicy({ cwd, supportingCommit: commit, observedAt });
 write(
   ".agentify/runtime/audit/codebase_map.json",
   `${JSON.stringify(makeSpecialistFixtureMap(), null, 2)}\n`,
