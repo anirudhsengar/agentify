@@ -7,19 +7,20 @@ import type {
 } from "./contracts.ts";
 import {
   LEARNING_SCHEMA_VERSION,
+  DEFAULT_RECONCILIATION_COMMITS,
   MAX_RECONCILIATION_COMMITS,
 } from "./contracts.ts";
 import {
   listRecentFirstParentCommits,
   readCommitMetadata,
   readFirstParent,
-  readLearningInstallationCommit,
+  readLearningInstallationFloor,
   readLearningHead,
 } from "./git.ts";
 import { processAcceptedMerge } from "./engine.ts";
 
 function boundedCommitCount(value: number | undefined): number {
-  const resolved = value ?? 20;
+  const resolved = value ?? DEFAULT_RECONCILIATION_COMMITS;
   if (!Number.isSafeInteger(resolved) || resolved < 1 || resolved > MAX_RECONCILIATION_COMMITS) {
     throw new TeamMemoryError(
       "invalid_input",
@@ -41,12 +42,12 @@ export function reconcileAcceptedMerges(
 ): ReconciliationReport {
   const maximum = boundedCommitCount(input.max_commits);
   const head = readLearningHead(input.cwd);
-  const installationCommit = readLearningInstallationCommit(input.cwd);
-  const recent = listRecentFirstParentCommits(input.cwd, maximum);
-  const installationIndex = recent.indexOf(installationCommit);
+  const installationFloor = readLearningInstallationFloor(input.cwd);
+  const recent = listRecentFirstParentCommits(input.cwd, MAX_RECONCILIATION_COMMITS);
+  const installationIndex = recent.indexOf(installationFloor);
   const available = installationIndex < 0
     ? recent
-    : recent.slice(installationIndex);
+    : recent.slice(installationIndex + 1);
   const considered: string[] = [];
   const processed: ReconciliationReport["processed"] = [];
   const skipped: string[] = [];

@@ -12,6 +12,7 @@ import { buildLearningContext } from "./context.ts";
 import { processAcceptedMerge } from "./engine.ts";
 import { reconcileAcceptedMerges } from "./reconciliation.ts";
 import { verifyLearningSelfUpdateDiff } from "./self-update.ts";
+import { adoptLearningProposal } from "./proposal.ts";
 import {
   validateAcceptedMergeEvent,
   validateAcceptedTaskEvidence,
@@ -23,6 +24,7 @@ function usage(): never {
   throw new Error(`usage:
   agentify-learning process --event <json> [--task-evidence <json>] [--candidates <json>] --output <json>
   agentify-learning reconcile --repository-id <owner/repo> --default-branch <branch> [--max-commits <n>] --output <json>
+  agentify-learning adopt-proposal --repository-id <owner/repo> --proposal <sha> --expected-head <sha> --output <json>
   agentify-learning verify-diff --expected-head <sha> --output <json>
   agentify-learning context [--request <json>] --output <json>`);
 }
@@ -129,6 +131,15 @@ async function main(): Promise<void> {
           required(flags, "--expected-head"),
         ),
       );
+      return;
+    }
+    case "adopt-proposal": {
+      writeJsonFile(output, adoptLearningProposal({
+        cwd: process.cwd(),
+        repository_id: required(flags, "--repository-id"),
+        proposal_commit: required(flags, "--proposal"),
+        expected_head: required(flags, "--expected-head"),
+      }));
       return;
     }
     case "context": {

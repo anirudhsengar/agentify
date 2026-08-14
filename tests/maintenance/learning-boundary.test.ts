@@ -58,6 +58,7 @@ test("trusted workflow publishes only an unmerged knowledge-maintenance PR", () 
   const architecture = read("docs/architecture/continuous-learning.md");
 
   assert.match(workflow, /pull_request_target:\s*\n\s*types: \[closed\]/);
+  assert.match(workflow, /schedule:\s*\n\s*- cron:/);
   assert.match(workflow, /github\.event\.pull_request\.merged == true/);
   assert.match(workflow, /verify-diff/);
   assert.match(workflow, /persist-credentials: false/);
@@ -66,6 +67,27 @@ test("trusted workflow publishes only an unmerged knowledge-maintenance PR", () 
   assert.match(workflow, /gh pr create/);
   assert.match(workflow, /agentify\/knowledge-maintenance/);
   assert.match(workflow, /force-with-lease/);
+  assert.match(workflow, /adopt-proposal/);
+  assert.match(workflow, /Agentify-Proposal-Version: 1/);
+  assert.match(workflow, /EXPECTED_REMOTE_SHA/);
+  assert.match(workflow, /PROPOSAL_PR_NUMBER/);
+  assert.match(workflow, /closed_unmerged/);
+  assert.match(workflow, /metrics\.patch_bytes/);
+  assert.ok(
+    workflow.indexOf("adopt-proposal") < workflow.indexOf("learning-runtime.mjs reconcile"),
+    "pending knowledge must be resumed before reconciliation",
+  );
+  assert.ok(
+    workflow.indexOf("gh auth setup-git") < workflow.indexOf("git ls-remote"),
+    "private-repository Git access must be authenticated before proposal discovery",
+  );
+  assert.doesNotMatch(workflow, /outputs\.current|current=true|current=false/);
+  assert.match(workflow, /git write-tree/);
+  const publishStep = workflow.slice(
+    workflow.indexOf("- name: Publish a dedicated knowledge-maintenance pull request"),
+  );
+  assert.doesNotMatch(publishStep, /git ls-remote/);
+  assert.doesNotMatch(publishStep, /gh pr list/);
   assert.match(workflow, /steps\.commit\.outputs\.created == 'true'/);
   assert.doesNotMatch(workflow, /gh pr merge|--auto|auto-merge|push --force(?:\s|$)/);
   assert.doesNotMatch(workflow, /PI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|MINIMAX_API_KEY/);

@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { TeamMemoryError } from "../memory/contracts.ts";
+import { readMemoryRecord } from "../memory/index.ts";
 import { normalizeMemoryRepositoryPath } from "../memory/paths.ts";
 import type { EvidenceReference } from "../memory/schema.ts";
 import { digestCanonical, sortedUniqueStrings } from "../memory/serialization.ts";
@@ -309,33 +310,60 @@ export function listRecentFirstParentCommits(
     .reverse();
 }
 
-export function readLearningInstallationCommit(cwdInput: string): string {
+export function readLearningInstallationFloor(cwdInput: string): string {
   const cwd = learningRepositoryRoot(cwdInput);
-  const result = runGit(cwd, [
-    "log",
+  const policy = readMemoryRecord(cwd, "self-update-allowlist");
+  if (
+    policy.kind !== "policy"
+    || policy.memory_id !== "self-update-allowlist"
+    || policy.revision !== 1
+    || policy.owning_agent_id !== "knowledge-maintainer"
+    || policy.source_type !== "maintainer_instruction"
+    || policy.payload.policy_key !== "self-update-allowlist"
+    || !policy.accepted_candidate_ids.includes("installer-self-update-policy-v1")
+    || policy.human_attribution === null
+    || policy.human_attribution.source_ref !== `installer:${policy.supporting_commit}`
+    || !policy.evidence.some((entry) =>
+      entry.commit_sha === policy.supporting_commit
+      && entry.source_type === "maintainer_instruction"
+    )
+  ) {
+    throw new TeamMemoryError(
+      "corrupt_state",
+      "self-update policy does not contain recognized installer provenance",
+    );
+  }
+  const floor = resolveLearningCommit(cwd, policy.supporting_commit);
+  const reachable = runGit(cwd, ["merge-base", "--is-ancestor", floor, "HEAD"]);
+  if (reachable.status !== 0) {
+    throw new TeamMemoryError(
+      "revision_conflict",
+      `Agentify installation floor ${floor} is not reachable from repository HEAD`,
+    );
+  }
+  const distanceResult = runGit(cwd, [
+    "rev-list",
     "--first-parent",
-    "--diff-filter=A",
-    "--format=%H",
-    "-n",
-    "1",
-    "HEAD",
-    "--",
-    ".agentify/manifest.json",
+    "--count",
+    `${floor}..HEAD`,
   ]);
-  if (result.status !== 0) {
+  if (distanceResult.status !== 0) {
     throw new TeamMemoryError(
       "invalid_input",
-      `cannot locate Agentify installation commit: ${gitError(result)}`,
+      `cannot validate Agentify installation history: ${gitError(distanceResult)}`,
     );
   }
-  const commit = result.stdout.toString("utf-8").trim();
-  if (!GIT_OBJECT.test(commit)) {
+  const distance = Number(distanceResult.stdout.toString("utf-8").trim());
+  if (!Number.isSafeInteger(distance) || distance < 0) {
+    throw new TeamMemoryError("invalid_input", "git returned an invalid installation distance");
+  }
+  if (resolveLearningCommit(cwd, `HEAD~${distance}`) !== floor) {
     throw new TeamMemoryError(
-      "not_initialized",
-      "cannot reconcile learning before the committed Agentify installation is present",
+      "revision_conflict",
+      `Agentify installation floor ${floor} is outside the first-parent history`,
     );
   }
-  return commit;
+  return floor;
 }
 
 export function readCommitMetadata(cwdInput: string, commit: string): {

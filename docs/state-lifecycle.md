@@ -53,3 +53,10 @@ Versioned identity, policy, knowledge, history, and the canonical audit map are
 committed. Audit history, other runtime data, and transaction journals are
 ignored. Automatic learning may update only its explicit allowlist; operational
 state never enters a committed learning change.
+
+Unmerged learning state lives in a single validated commit on the dedicated
+knowledge-maintenance branch. Scheduled runs begin from the trusted default
+branch and materialize that commit without moving `HEAD`, then validate the
+manifest and immutable history before reconciliation. This makes learning-run
+receipts visible across fresh workflow checkouts without treating operational
+runner state as durable or silently replacing an unrecognized branch.

@@ -25,6 +25,7 @@ import type {
   LearningAssessment,
   LearningPolicy,
 } from "./contracts.ts";
+import { MAX_LEARNING_EVIDENCE_REFERENCES } from "./contracts.ts";
 import {
   acceptedChangedPaths,
   buildAcceptedMergeEvidence,
@@ -247,7 +248,7 @@ export function assessAcceptedMerge(input: {
     input.cwd,
     input.event,
     input.changes,
-    Math.min(128, input.policy.max_changed_files),
+    Math.min(MAX_LEARNING_EVIDENCE_REFERENCES, input.policy.max_changed_files),
   );
   const portfolio = loadCurrentPortfolio(input.cwd, input.event.accepted_commit);
   const invalidation = portfolio === null

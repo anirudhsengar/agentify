@@ -86,7 +86,7 @@
     "test:scaffold-e2e": "bash scaffold/tests/run.sh",
     "test:security-redteam": "tsx tests/audit/defense-hardening.test.ts && bash scaffold/tests/test-agentify-issue-lifecycle.sh && bash scaffold/tests/test-agentify-learn-lifecycle.sh",
     "test:specialists": "tsx tests/specialists/specialist-discovery.test.ts && tsx tests/specialists/specialist-persistence.test.ts && tsx tests/specialists/specialist-runtime.test.ts",
-    "test:learning": "tsx tests/learning/merge-learning.test.ts && tsx tests/learning/reconciliation.test.ts && tsx tests/learning/self-update.test.ts",
+    "test:learning": "tsx tests/learning/merge-learning.test.ts && tsx tests/learning/reconciliation.test.ts && tsx tests/learning/self-update.test.ts && tsx tests/learning/proposal.test.ts",
     "test:lifecycle": "tsx tests/task-lifecycle/task-lifecycle.test.ts && tsx tests/task-lifecycle/builder-tools.test.ts && tsx tests/task-lifecycle/generative-invariants.test.ts && tsx tests/task-lifecycle/validation-runner.test.ts && tsx tests/task-lifecycle/github-runtime.test.ts",
     "test:installer": "tsx tests/installer/one-time-installer.test.ts",
     "verify:source": "npm run typecheck && npm run test:all",

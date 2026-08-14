@@ -60,6 +60,7 @@ try {
     cwd: installRoot,
   });
   run(nodeCommand, [tsxCliPath, "tests/package/seed-installed-learning-fixture.ts", targetRepo]);
+  git(targetRepo, "config", "core.autocrlf", "false");
 
   const installedRoot = path.join(installRoot, "node_modules", packageJson.name);
   const runtime = path.join(installedRoot, "dist", "learning-runtime.mjs");
@@ -199,15 +200,55 @@ try {
   assert.equal(human.status, "processed");
   assert.ok(human.candidates.some((entry) => entry.kind === "orchestrator"));
 
+  fs.writeFileSync(path.join(targetRepo, "src", "reconciled.ts"), "export const reconciledValue = 1;\n");
+  git(targetRepo, "add", "src/reconciled.ts");
+  git(targetRepo, "commit", "-qm", "missed accepted change for reconciliation");
+  const reconciledCommit = git(targetRepo, "rev-parse", "HEAD");
+  const reconcileReport = path.join(ioRoot, "reconcile-report.json");
+  run(nodeCommand, [
+    runtime,
+    "reconcile",
+    "--repository-id", "fixture/installed-learning",
+    "--default-branch", "main",
+    "--max-commits", "1",
+    "--output", reconcileReport,
+  ], { cwd: targetRepo, timeout: 300_000 });
+  const reconciled = JSON.parse(fs.readFileSync(reconcileReport, "utf-8"));
+  assert.deepEqual(reconciled.processed.map((entry) => entry.accepted_commit), [reconciledCommit]);
+
   run(nodeCommand, [
     runtime,
     "verify-diff",
-    "--expected-head", humanCommit,
+    "--expected-head", reconciledCommit,
     "--output", diffPath,
   ], { cwd: targetRepo, timeout: 120_000 });
   const verified = JSON.parse(fs.readFileSync(diffPath, "utf-8"));
   assert.ok(verified.paths.length > 0);
   assert.ok(verified.paths.every((entry) => entry.startsWith(".agentify/")));
+  for (const relativePath of verified.paths) git(targetRepo, "add", "--", relativePath);
+  git(
+    targetRepo,
+    "commit",
+    "-qm",
+    "chore(agentify): refresh repository knowledge\n\n"
+      + "Agentify-Proposal-Version: 1\n"
+      + "Agentify-Proposal-Repository: fixture/installed-learning\n"
+      + `Agentify-Proposal-Base: ${reconciledCommit}`,
+  );
+  const proposalCommit = git(targetRepo, "rev-parse", "HEAD");
+  git(targetRepo, "switch", "--detach", "--quiet", reconciledCommit);
+  const adoptionPath = path.join(ioRoot, "proposal-adoption.json");
+  run(nodeCommand, [
+    runtime,
+    "adopt-proposal",
+    "--repository-id", "fixture/installed-learning",
+    "--proposal", proposalCommit,
+    "--expected-head", reconciledCommit,
+    "--output", adoptionPath,
+  ], { cwd: targetRepo, timeout: 300_000 });
+  const adoption = JSON.parse(fs.readFileSync(adoptionPath, "utf-8"));
+  assert.equal(adoption.proposal_commit, proposalCommit);
+  assert.deepEqual(adoption.paths, verified.paths);
   fs.rmSync(diffPath);
 
   writeQualificationReceipt("installed-learning-smoke.mjs", [
@@ -216,6 +257,8 @@ try {
     "learning.correction-retained-in-context",
     "learning.changed-path-invalidates-context",
     "learning.human-merge-refreshes-knowledge",
+    "learning.scheduled-reconciliation-processes-missed-commit",
+    "learning.pending-proposal-resumes-in-fresh-checkout",
     "learning.output-confined-to-agentify-paths",
   ]);
   console.log(`installed repeated-learning qualification passed: bounded correction retained for Issue 2, later invalidated, and a human-authored merge refreshed knowledge (${packageJson.name}@${packageJson.version}).`);

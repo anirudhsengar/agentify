@@ -18,6 +18,15 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Keep scheduled accepted-merge reconciliation enabled while preventing its
+  first run from replaying pre-install repository history or treating installed
+  Agentify workflows, runtimes, policy, and memory as application changes.
+- Resume a validated open knowledge-maintenance proposal before each fresh
+  workflow run, so pending learning receipts remain visible, repeated runs are
+  idempotent, and branch updates use the preflight-pinned force-with-lease SHA.
+- Bound each automatic knowledge proposal to 64 changed paths, 512 KiB of patch
+  payload, and 5,000 changed lines, and drain the recent reconciliation backlog
+  in smaller reviewable batches instead of publishing a single amplified diff.
 - Register the planner record type in the installed GitHub task-state store so
   planner consultation results can be persisted as typed machine records;
   previously every task failed closed at `writeRecord("planner", ...)` with

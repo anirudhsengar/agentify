@@ -12,10 +12,15 @@ import type {
 export const LEARNING_SCHEMA_VERSION = "1" as const;
 export const MAX_LEARNING_CHANGED_FILES = 256;
 export const MAX_LEARNING_INSPECTED_FILES = 4_096;
+export const MAX_LEARNING_EVIDENCE_REFERENCES = 8;
 export const MAX_LEARNING_CANDIDATES = 32;
 export const MAX_LEARNING_ATTEMPTS = 16;
 export const MAX_LEARNING_REVIEW_FEEDBACK = 32;
 export const MAX_RECONCILIATION_COMMITS = 32;
+export const DEFAULT_RECONCILIATION_COMMITS = 4;
+export const MAX_LEARNING_PUBLICATION_PATHS = 64;
+export const MAX_LEARNING_PUBLICATION_BYTES = 512 * 1024;
+export const MAX_LEARNING_PUBLICATION_LINES = 5_000;
 export const DEFAULT_LEARNING_RUNTIME_MS = 5 * 60 * 1000;
 
 export type AcceptedChangeAuthorKind = "agentify" | "human" | "unknown";

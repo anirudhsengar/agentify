@@ -223,3 +223,52 @@ test("knowledge-only classification validates previous and current paths", () =>
     previous_path: ".agentify/knowledge/fact.json",
   }]), false);
 });
+
+test("learning publication is bounded by reviewable path, byte, and line limits", () => {
+  const tooManyPaths = repository();
+  try {
+    for (let index = 0; index < 65; index += 1) {
+      write(
+        tooManyPaths.cwd,
+        `.agentify/knowledge/codebase/fact-${index}.json`,
+        "{}\n",
+      );
+    }
+    assert.throws(
+      () => verifyLearningSelfUpdateDiff(tooManyPaths.cwd, tooManyPaths.head),
+      /more than 64 paths/,
+    );
+  } finally {
+    fs.rmSync(tooManyPaths.cwd, { recursive: true, force: true });
+  }
+
+  const tooManyBytes = repository();
+  try {
+    write(
+      tooManyBytes.cwd,
+      ".agentify/knowledge/codebase/large.json",
+      "x".repeat(512 * 1024 + 1),
+    );
+    assert.throws(
+      () => verifyLearningSelfUpdateDiff(tooManyBytes.cwd, tooManyBytes.head),
+      /524288-byte publication limit/,
+    );
+  } finally {
+    fs.rmSync(tooManyBytes.cwd, { recursive: true, force: true });
+  }
+
+  const tooManyLines = repository();
+  try {
+    write(
+      tooManyLines.cwd,
+      ".agentify/knowledge/codebase/many-lines.json",
+      `${Array.from({ length: 5_001 }, () => "x").join("\n")}\n`,
+    );
+    assert.throws(
+      () => verifyLearningSelfUpdateDiff(tooManyLines.cwd, tooManyLines.head),
+      /5000-line publication limit/,
+    );
+  } finally {
+    fs.rmSync(tooManyLines.cwd, { recursive: true, force: true });
+  }
+});

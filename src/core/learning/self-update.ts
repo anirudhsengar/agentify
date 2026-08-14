@@ -1,18 +1,28 @@
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { TeamMemoryError } from "../memory/contracts.ts";
 import { normalizeMemoryRepositoryPath } from "../memory/paths.ts";
 import { sortedUniqueStrings } from "../memory/serialization.ts";
 import { learningRepositoryRoot, readLearningHead } from "./git.ts";
 import { isLearningManagedPath } from "./knowledge-paths.ts";
+import {
+  MAX_LEARNING_PUBLICATION_BYTES,
+  MAX_LEARNING_PUBLICATION_LINES,
+  MAX_LEARNING_PUBLICATION_PATHS,
+} from "./contracts.ts";
 
-const MAX_SELF_UPDATE_PATHS = 512;
-
-function runGit(cwd: string, args: ReadonlyArray<string>): Buffer {
+function runGit(
+  cwd: string,
+  args: ReadonlyArray<string>,
+  maxBuffer = 32 * 1024 * 1024,
+  env: NodeJS.ProcessEnv = process.env,
+): Buffer {
   const result = spawnSync("git", ["-C", cwd, ...args], {
     encoding: null,
-    maxBuffer: 32 * 1024 * 1024,
+    env,
+    maxBuffer,
     windowsHide: true,
   });
   if (result.error) {
@@ -34,19 +44,10 @@ function runGit(cwd: string, args: ReadonlyArray<string>): Buffer {
   return Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.from(result.stdout ?? "");
 }
 
-function changedPaths(cwd: string): string[] {
-  const fields = runGit(cwd, [
-    "diff",
-    "--name-status",
-    "-z",
-    "--find-renames",
-    "--find-copies",
-    "--find-copies-harder",
-    "HEAD",
-    "--",
-  ]).toString("utf-8").split("\0");
+function pathsFromNameStatus(output: Buffer): string[] {
+  const fields = output.toString("utf-8").split("\0");
   if (fields.at(-1) === "") fields.pop();
-  const tracked: string[] = [];
+  const paths: string[] = [];
   for (let index = 0; index < fields.length;) {
     const status = fields[index++];
     if (!status) {
@@ -56,29 +57,152 @@ function changedPaths(cwd: string): string[] {
     if (!previousOrCurrent) {
       throw new TeamMemoryError("invalid_input", `learning diff ${status} path is missing`);
     }
-    tracked.push(previousOrCurrent);
+    paths.push(previousOrCurrent);
     if (status.startsWith("R") || status.startsWith("C")) {
       const current = fields[index++];
       if (!current) {
         throw new TeamMemoryError("invalid_input", `learning diff ${status} destination is missing`);
       }
-      tracked.push(current);
+      paths.push(current);
     }
   }
+  return paths;
+}
+
+function assertPathLimit(paths: string[]): string[] {
+  const normalized = sortedUniqueStrings(paths.map((value) =>
+    normalizeMemoryRepositoryPath(value, "learning changed path")
+  ));
+  if (normalized.length > MAX_LEARNING_PUBLICATION_PATHS) {
+    throw new TeamMemoryError(
+      "capacity_exceeded",
+      `learning update changes more than ${MAX_LEARNING_PUBLICATION_PATHS} paths`,
+    );
+  }
+  return normalized;
+}
+
+function changedPaths(cwd: string): { paths: string[]; untracked: string[] } {
+  const tracked = pathsFromNameStatus(runGit(cwd, [
+    "diff",
+    "--name-status",
+    "-z",
+    "--find-renames",
+    "--find-copies",
+    "--find-copies-harder",
+    "HEAD",
+    "--",
+  ]));
   const untracked = runGit(cwd, ["ls-files", "--others", "--exclude-standard", "-z", "--"])
     .toString("utf-8")
     .split("\0")
     .filter(Boolean);
-  const paths = sortedUniqueStrings([...tracked, ...untracked].map((value) =>
-    normalizeMemoryRepositoryPath(value, "learning changed path")
-  ));
-  if (paths.length > MAX_SELF_UPDATE_PATHS) {
+  return {
+    paths: assertPathLimit([...tracked, ...untracked]),
+    untracked: assertPathLimit(untracked),
+  };
+}
+
+function committedChangedPaths(cwd: string, base: string, head: string): string[] {
+  return assertPathLimit(pathsFromNameStatus(runGit(cwd, [
+    "diff",
+    "--name-status",
+    "-z",
+    "--find-renames",
+    "--find-copies",
+    "--find-copies-harder",
+    base,
+    head,
+    "--",
+  ])));
+}
+
+function changedLinesFromNumstat(output: Buffer): number {
+  return output.toString("utf-8")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .reduce((total, row) => {
+      const [added, deleted] = row.split("\t");
+      const additions = added === "-" ? 0 : Number(added);
+      const deletions = deleted === "-" ? 0 : Number(deleted);
+      if (!Number.isSafeInteger(additions) || !Number.isSafeInteger(deletions)) {
+        throw new TeamMemoryError("invalid_input", "git returned invalid learning diff statistics");
+      }
+      return total + additions + deletions;
+    }, 0);
+}
+
+export interface LearningPublicationMetrics {
+  path_count: number;
+  patch_bytes: number;
+  changed_lines: number;
+}
+
+function assertPublicationMetrics(metrics: LearningPublicationMetrics): void {
+  if (metrics.patch_bytes > MAX_LEARNING_PUBLICATION_BYTES) {
     throw new TeamMemoryError(
       "capacity_exceeded",
-      `learning update changes more than ${MAX_SELF_UPDATE_PATHS} paths`,
+      `learning update exceeds the ${MAX_LEARNING_PUBLICATION_BYTES}-byte publication limit`,
     );
   }
-  return paths;
+  if (metrics.changed_lines > MAX_LEARNING_PUBLICATION_LINES) {
+    throw new TeamMemoryError(
+      "capacity_exceeded",
+      `learning update exceeds the ${MAX_LEARNING_PUBLICATION_LINES}-line publication limit`,
+    );
+  }
+}
+
+function workingPublicationMetrics(
+  cwd: string,
+  paths: ReadonlyArray<string>,
+): LearningPublicationMetrics {
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-learning-index-"));
+  const temporaryIndex = path.join(temporaryRoot, "index");
+  const env = { ...process.env, GIT_INDEX_FILE: temporaryIndex };
+  try {
+    runGit(cwd, ["read-tree", "HEAD"], undefined, env);
+    runGit(cwd, ["add", "-A", "--"], undefined, env);
+    const patch = runGit(
+      cwd,
+      ["diff", "--cached", "--binary", "--full-index", "HEAD", "--"],
+      undefined,
+      env,
+    );
+    const metrics = {
+      path_count: paths.length,
+      patch_bytes: patch.byteLength,
+      changed_lines: changedLinesFromNumstat(runGit(
+        cwd,
+        ["diff", "--cached", "--numstat", "HEAD", "--"],
+        undefined,
+        env,
+      )),
+    };
+    assertPublicationMetrics(metrics);
+    return metrics;
+  } finally {
+    fs.rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+function committedPublicationMetrics(
+  cwd: string,
+  base: string,
+  head: string,
+  pathCount: number,
+): LearningPublicationMetrics {
+  const patch = runGit(
+    cwd,
+    ["diff", "--binary", "--full-index", base, head, "--"],
+  );
+  const metrics = {
+    path_count: pathCount,
+    patch_bytes: patch.byteLength,
+    changed_lines: changedLinesFromNumstat(runGit(cwd, ["diff", "--numstat", base, head, "--"])),
+  };
+  assertPublicationMetrics(metrics);
+  return metrics;
 }
 
 function assertRegularGitEntries(cwd: string, relativePath: string): void {
@@ -93,6 +217,26 @@ function assertRegularGitEntries(cwd: string, relativePath: string): void {
         throw new TeamMemoryError(
           "unsafe_path",
           `learning self-update path is not a regular Git file: ${relativePath} (${mode})`,
+        );
+      }
+    }
+  }
+}
+
+function assertRegularTreeEntries(
+  cwd: string,
+  refs: ReadonlyArray<string>,
+  relativePath: string,
+): void {
+  for (const ref of refs) {
+    const records = runGit(cwd, ["ls-tree", "-z", ref, "--", relativePath])
+      .toString("utf-8").split("\0").filter(Boolean);
+    for (const record of records) {
+      const mode = record.slice(0, record.indexOf(" "));
+      if (mode !== "100644" && mode !== "100755") {
+        throw new TeamMemoryError(
+          "unsafe_path",
+          `learning proposal path is not a regular Git file: ${relativePath} (${mode})`,
         );
       }
     }
@@ -121,6 +265,7 @@ function assertNoSymlinkAncestors(cwd: string, relativePath: string): void {
 export interface LearningDiffVerification {
   expected_head: string;
   paths: string[];
+  metrics: LearningPublicationMetrics;
 }
 
 export function verifyLearningSelfUpdateDiff(
@@ -135,7 +280,8 @@ export function verifyLearningSelfUpdateDiff(
       `learning self-update expected HEAD ${expectedHead}, found ${currentHead}`,
     );
   }
-  const paths = changedPaths(cwd);
+  const changed = changedPaths(cwd);
+  const paths = changed.paths;
   for (const relativePath of paths) {
     if (
       relativePath.startsWith(".agentify/runtime/")
@@ -174,5 +320,40 @@ export function verifyLearningSelfUpdateDiff(
       throw error;
     }
   }
-  return { expected_head: expectedHead, paths };
+  return {
+    expected_head: expectedHead,
+    paths,
+    metrics: workingPublicationMetrics(cwd, paths),
+  };
+}
+
+export interface CommittedLearningDiffVerification {
+  base_commit: string;
+  head_commit: string;
+  paths: string[];
+  metrics: LearningPublicationMetrics;
+}
+
+export function verifyCommittedLearningDiff(
+  cwdInput: string,
+  baseCommit: string,
+  headCommit: string,
+): CommittedLearningDiffVerification {
+  const cwd = learningRepositoryRoot(cwdInput);
+  const paths = committedChangedPaths(cwd, baseCommit, headCommit);
+  for (const relativePath of paths) {
+    if (!isLearningManagedPath(relativePath)) {
+      throw new TeamMemoryError(
+        "policy_violation",
+        `learning proposal cannot modify ${relativePath}`,
+      );
+    }
+    assertRegularTreeEntries(cwd, [baseCommit, headCommit], relativePath);
+  }
+  return {
+    base_commit: baseCommit,
+    head_commit: headCommit,
+    paths,
+    metrics: committedPublicationMetrics(cwd, baseCommit, headCommit, paths.length),
+  };
 }

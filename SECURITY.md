@@ -100,6 +100,14 @@ first parent, and expected default-branch head. Its write allowlist excludes
 application source, dependencies, workflows, permissions, operational state,
 runtime code, and protected policy.
 
+Scheduled learning excludes pre-install history and Agentify-owned files from
+application evidence. A pending knowledge proposal is resumed only when its
+same-repository open pull request, single-commit shape, repository and base
+trailers, first-parent ancestry, allowlisted regular-file diff, publication
+limits, manifest, and immutable memory history all validate. Branch replacement
+uses the proposal SHA captured at preflight as an exact force-with-lease value;
+concurrent or unrecognized maintenance-branch changes fail closed.
+
 ## Supply chain
 
 The npm artifact exposes only the `agentify` executable and `package.json`, omits

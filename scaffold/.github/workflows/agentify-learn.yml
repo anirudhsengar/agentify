@@ -8,7 +8,7 @@ on:
       max_commits:
         description: Maximum recent first-parent commits to reconcile
         required: false
-        default: "20"
+        default: "4"
   schedule:
     - cron: "23 3 * * *"
 
@@ -52,6 +52,79 @@ jobs:
       - name: Capture expected default-branch head
         id: head
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Validate and resume an existing knowledge proposal
+        id: proposal
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPECTED_HEAD: ${{ steps.head.outputs.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          branch="agentify/knowledge-maintenance"
+          gh auth setup-git
+          remote_sha=$(git ls-remote --heads origin "refs/heads/${branch}" | cut -f1)
+          echo "remote_sha=${remote_sha}" >> "$GITHUB_OUTPUT"
+          if [ -n "$remote_sha" ]; then
+            git fetch --no-tags origin "refs/heads/${branch}:refs/remotes/origin/${branch}"
+            test "$(git rev-parse "refs/remotes/origin/${branch}")" = "$remote_sha"
+          fi
+
+          owner="${GITHUB_REPOSITORY%%/*}"
+          proposals=$(gh api --method GET "repos/${GITHUB_REPOSITORY}/pulls" \
+            -f state=open \
+            -f base="$DEFAULT_BRANCH" \
+            -f head="${owner}:${branch}")
+          proposal_count=$(jq 'length' <<<"$proposals")
+          test "$proposal_count" -le 1
+          if [ "$proposal_count" = "0" ]; then
+            if [ -n "$remote_sha" ]; then
+              closed=$(gh api --method GET "repos/${GITHUB_REPOSITORY}/pulls" \
+                -f state=closed \
+                -f base="$DEFAULT_BRANCH" \
+                -f head="${owner}:${branch}" \
+                -f per_page=100)
+              matching_closed=$(jq --arg sha "$remote_sha" --arg repository "$GITHUB_REPOSITORY" \
+                '[.[] | select(.head.sha == $sha and .head.repo.full_name == $repository)]' \
+                <<<"$closed")
+              closed_unmerged=$(jq --arg repository "$GITHUB_REPOSITORY" \
+                '[.[] | select(.head.repo.full_name == $repository and .merged_at == null)] | length' \
+                <<<"$closed")
+              test "$closed_unmerged" = "0" || {
+                echo "The knowledge-maintenance proposal was closed without merge." >&2
+                exit 1
+              }
+              merged=$(jq '[.[] | select(.merged_at != null)] | length' <<<"$matching_closed")
+              if [ "$merged" = "0" ]; then
+                node .github/agentify/learning-runtime.mjs adopt-proposal \
+                  --repository-id "$GITHUB_REPOSITORY" \
+                  --proposal "$remote_sha" \
+                  --expected-head "$EXPECTED_HEAD" \
+                  --output "${RUNNER_TEMP}/agentify-learning-proposal.json"
+                echo "proposal_sha=${remote_sha}" >> "$GITHUB_OUTPUT"
+                echo "pr_number=" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+            echo "proposal_sha=" >> "$GITHUB_OUTPUT"
+            echo "pr_number=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          test -n "$remote_sha"
+          proposal_number=$(jq -r '.[0].number' <<<"$proposals")
+          proposal_sha=$(jq -r '.[0].head.sha' <<<"$proposals")
+          proposal_repository=$(jq -r '.[0].head.repo.full_name' <<<"$proposals")
+          test "$proposal_repository" = "$GITHUB_REPOSITORY"
+          test "$proposal_sha" = "$remote_sha"
+          node .github/agentify/learning-runtime.mjs adopt-proposal \
+            --repository-id "$GITHUB_REPOSITORY" \
+            --proposal "$proposal_sha" \
+            --expected-head "$EXPECTED_HEAD" \
+            --output "${RUNNER_TEMP}/agentify-learning-proposal.json"
+          proposal_parent=$(jq -r '.proposal_parent' "${RUNNER_TEMP}/agentify-learning-proposal.json")
+          test -n "$proposal_parent"
+          echo "proposal_sha=${proposal_sha}" >> "$GITHUB_OUTPUT"
+          echo "pr_number=${proposal_number}" >> "$GITHUB_OUTPUT"
 
       - name: Build accepted-merge event
         if: github.event_name == 'pull_request_target'
@@ -114,7 +187,7 @@ jobs:
       - name: Reconcile missed accepted commits
         if: github.event_name != 'pull_request_target'
         env:
-          MAX_COMMITS: ${{ github.event.inputs.max_commits || '20' }}
+          MAX_COMMITS: ${{ github.event.inputs.max_commits || '4' }}
         run: |
           node .github/agentify/learning-runtime.mjs reconcile \
             --repository-id "${GITHUB_REPOSITORY}" \
@@ -132,6 +205,8 @@ jobs:
             --output "${RUNNER_TEMP}/agentify-learning-diff.json"
           count=$(jq '.paths | length' "${RUNNER_TEMP}/agentify-learning-diff.json")
           echo "count=${count}" >> "$GITHUB_OUTPUT"
+          echo "bytes=$(jq '.metrics.patch_bytes' "${RUNNER_TEMP}/agentify-learning-diff.json")" >> "$GITHUB_OUTPUT"
+          echo "lines=$(jq '.metrics.changed_lines' "${RUNNER_TEMP}/agentify-learning-diff.json")" >> "$GITHUB_OUTPUT"
 
       - name: Commit verified knowledge update
         id: commit
@@ -150,7 +225,18 @@ jobs:
             echo "created=false" >> "$GITHUB_OUTPUT"
             exit 0
           }
-          git commit -m "chore(agentify): refresh repository knowledge"
+          proposal_sha="${{ steps.proposal.outputs.proposal_sha }}"
+          if [ -n "$proposal_sha" ] && \
+             [ "$(git write-tree)" = "$(git rev-parse "${proposal_sha}^{tree}")" ]; then
+            echo "The existing knowledge proposal already has the verified tree."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit \
+            -m "chore(agentify): refresh repository knowledge" \
+            -m "Agentify-Proposal-Version: 1" \
+            -m "Agentify-Proposal-Repository: ${GITHUB_REPOSITORY}" \
+            -m "Agentify-Proposal-Base: ${EXPECTED_HEAD}"
           echo "created=true" >> "$GITHUB_OUTPUT"
 
       - name: Publish a dedicated knowledge-maintenance pull request
@@ -159,13 +245,29 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EXPECTED_HEAD: ${{ steps.head.outputs.sha }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EXPECTED_REMOTE_SHA: ${{ steps.proposal.outputs.remote_sha }}
+          PROPOSAL_PR_NUMBER: ${{ steps.proposal.outputs.pr_number }}
         run: |
           branch="agentify/knowledge-maintenance"
-          remote_sha=$(git ls-remote --heads origin "refs/heads/${branch}" | cut -f1)
           gh auth setup-git
-          if [ -n "$remote_sha" ]; then
+          owner="${GITHUB_REPOSITORY%%/*}"
+          if [ -n "$PROPOSAL_PR_NUMBER" ]; then
+            proposal=$(gh api --method GET "repos/${GITHUB_REPOSITORY}/pulls/${PROPOSAL_PR_NUMBER}")
+            test "$(jq -r '.state' <<<"$proposal")" = "open"
+            test "$(jq -r '.base.ref' <<<"$proposal")" = "$DEFAULT_BRANCH"
+            test "$(jq -r '.head.ref' <<<"$proposal")" = "$branch"
+            test "$(jq -r '.head.repo.full_name' <<<"$proposal")" = "$GITHUB_REPOSITORY"
+            test "$(jq -r '.head.sha' <<<"$proposal")" = "$EXPECTED_REMOTE_SHA"
+          else
+            proposals=$(gh api --method GET "repos/${GITHUB_REPOSITORY}/pulls" \
+              -f state=open \
+              -f base="$DEFAULT_BRANCH" \
+              -f head="${owner}:${branch}")
+            test "$(jq 'length' <<<"$proposals")" = "0"
+          fi
+          if [ -n "$EXPECTED_REMOTE_SHA" ]; then
             git push origin "HEAD:refs/heads/${branch}" \
-              "--force-with-lease=refs/heads/${branch}:${remote_sha}"
+              "--force-with-lease=refs/heads/${branch}:${EXPECTED_REMOTE_SHA}"
           else
             git push origin "HEAD:refs/heads/${branch}" \
               "--force-with-lease=refs/heads/${branch}:"
@@ -179,22 +281,30 @@ jobs:
             echo "- Expected base: \`${EXPECTED_HEAD}\`"
             echo "- Trigger: \`${GITHUB_EVENT_NAME}\`"
             echo "- Run: \`${GITHUB_RUN_ID}\`"
+            echo "- Changed knowledge paths: \`${{ steps.diff.outputs.count }}\`"
+            echo "- Patch bytes: \`${{ steps.diff.outputs.bytes }}\`"
+            echo "- Changed lines: \`${{ steps.diff.outputs.lines }}\`"
             echo "- Automatic application merge remains disabled."
             echo
             echo "The trusted learning runtime rejected application source, dependencies, policy, workflow code, operational journals, symlinks, and paths outside the knowledge allowlist before this branch was published."
           } > "$body_file"
-          pr_number=$(gh pr list \
-            --state open \
-            --base "$DEFAULT_BRANCH" \
-            --head "$branch" \
-            --json number \
-            --jq '.[0].number // empty' \
-            --limit 1)
-          if [ -n "$pr_number" ]; then
-            gh pr edit "$pr_number" \
+          published_sha=$(git rev-parse HEAD)
+          if [ -n "$PROPOSAL_PR_NUMBER" ]; then
+            proposal=$(gh api --method GET "repos/${GITHUB_REPOSITORY}/pulls/${PROPOSAL_PR_NUMBER}")
+            test "$(jq -r '.state' <<<"$proposal")" = "open"
+            test "$(jq -r '.base.ref' <<<"$proposal")" = "$DEFAULT_BRANCH"
+            test "$(jq -r '.head.ref' <<<"$proposal")" = "$branch"
+            test "$(jq -r '.head.repo.full_name' <<<"$proposal")" = "$GITHUB_REPOSITORY"
+            test "$(jq -r '.head.sha' <<<"$proposal")" = "$published_sha"
+            gh pr edit "$PROPOSAL_PR_NUMBER" \
               --title "chore(agentify): refresh repository knowledge" \
               --body-file "$body_file"
           else
+            proposals=$(gh api --method GET "repos/${GITHUB_REPOSITORY}/pulls" \
+              -f state=open \
+              -f base="$DEFAULT_BRANCH" \
+              -f head="${owner}:${branch}")
+            test "$(jq 'length' <<<"$proposals")" = "0"
             gh pr create \
               --base "$DEFAULT_BRANCH" \
               --head "$branch" \
