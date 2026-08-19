@@ -79,6 +79,7 @@ Supported build manifests include:
 | Java (Gradle) | `build.gradle` or `build.gradle.kts` | `./gradlew test` or `check` | `gradle.lockfile` (optional) |
 | Ruby | `Gemfile` | `bundle exec rspec`, `rubocop` | `Gemfile.lock` |
 | Make-based | `Makefile` | `make test`, `check`, `lint`, or `typecheck` targets | — |
+| Shell | `build.sh`, `compile.sh`, `test.sh`, `lint.sh`, `get.sh`, `setup.sh`, etc. | `bash build.sh`, `bash test.sh`, etc. Install scripts (`get.sh`, `setup.sh`) are identified but not executed as validation | — |
 
 Agentify may analyze a repository that is not ready for issue execution, but it keeps issue intake disabled until every readiness blocker is resolved.
 

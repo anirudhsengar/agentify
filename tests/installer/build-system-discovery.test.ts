@@ -150,6 +150,60 @@ async function testPythonValidationApprovalBinding(): Promise<void> {
   }
 }
 
+async function testShellScriptDiscovery(): Promise<void> {
+  const cwd = tempDir("agentify-build-shell-");
+  try {
+    fs.writeFileSync(path.join(cwd, "compile.sh"), "#!/usr/bin/env bash\nset -e\necho compiled\n");
+    fs.chmodSync(path.join(cwd, "compile.sh"), 0o755);
+    fs.writeFileSync(path.join(cwd, "test.sh"), "#!/usr/bin/env bash\nset -e\necho tested\n");
+    fs.chmodSync(path.join(cwd, "test.sh"), 0o755);
+    const { commands, manifest } = discoverRepositoryCommands(cwd, fakeRunner(cwd), false);
+    assert.equal(manifest?.path, "compile.sh");
+    assert.equal(manifest?.ecosystem, "shell");
+    assert.ok(commands.some((command) => command.kind === "build" && command.argv.join(" ") === "bash compile.sh"));
+    assert.ok(commands.some((command) => command.kind === "test" && command.argv.join(" ") === "bash test.sh"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testShellScriptMarkedUnsafeWhenNetworkAccessed(): Promise<void> {
+  const cwd = tempDir("agentify-build-shell-unsafe-");
+  try {
+    fs.writeFileSync(
+      path.join(cwd, "build.sh"),
+      "#!/usr/bin/env bash\ncurl -s https://example.invalid > /dev/null\n",
+    );
+    fs.chmodSync(path.join(cwd, "build.sh"), 0o755);
+    const { commands, blockers } = discoverRepositoryCommands(cwd, fakeRunner(cwd), false);
+    assert.ok(commands.some((command) => command.kind === "build" && command.assessment === "unsafe"));
+    assert.ok(blockers.some((entry) => entry.code === "unsafe_network_or_deployment"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testShellValidationApprovalBinding(): Promise<void> {
+  const cwd = tempDir("agentify-build-shell-approval-");
+  try {
+    fs.writeFileSync(path.join(cwd, "build.sh"), "#!/usr/bin/env bash\necho ok\n");
+    fs.chmodSync(path.join(cwd, "build.sh"), 0o755);
+    const runner = fakeRunner(cwd);
+    const preflight = inspectRepositoryForInstallation({ cwd, runner, runValidation: true });
+    const approval = createRepositoryValidationApproval({
+      cwd,
+      preflight,
+      approvedBy: "maintainer",
+      approvedAt: "2026-08-05T00:00:00.000Z",
+    });
+    assert.equal(approval.manifest_path, "build.sh");
+    assert.equal(approval.lockfile, null);
+    assert.equal(repositoryValidationApprovalCurrent({ cwd, preflight, approval }), true);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function testUnsupportedRepository(): Promise<void> {
   const cwd = tempDir("agentify-build-none-");
   try {
@@ -167,6 +221,9 @@ const tests = [
   { name: "go module discovery", fn: testGoModuleDiscovery },
   { name: "makefile discovery", fn: testMakefileDiscovery },
   { name: "python validation approval binding", fn: testPythonValidationApprovalBinding },
+  { name: "shell script discovery", fn: testShellScriptDiscovery },
+  { name: "shell script marked unsafe when network accessed", fn: testShellScriptMarkedUnsafeWhenNetworkAccessed },
+  { name: "shell validation approval binding", fn: testShellValidationApprovalBinding },
   { name: "unsupported repository", fn: testUnsupportedRepository },
 ];
 

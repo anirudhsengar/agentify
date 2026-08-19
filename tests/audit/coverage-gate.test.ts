@@ -46,6 +46,8 @@ function isProbeCall(options: AgentRuntimeSessionOptions): boolean {
 }
 
 function writeMap(cwd: string, stateDir: string, map: unknown): void {
+  fs.mkdirSync(cwd, { recursive: true });
+  fs.writeFileSync(path.join(cwd, "README.md"), "Test fixture evidence citation.");
   fs.mkdirSync(path.join(cwd, stateDir), { recursive: true });
   fs.writeFileSync(
     path.join(cwd, stateDir, "codebase_map.json"),
@@ -151,6 +153,74 @@ function testClosureRejectsEmptyEvidence(): void {
   const result = assessCoverageClosure(map);
   assert.ok(result.unresolved.includes("D4_conventions"));
   assert.match(result.reasons.D4_conventions ?? "", /evidence_summary/);
+}
+
+function testClosureRejectsMissingEvidenceCitations(): void {
+  const map = makeValidCodebaseMap();
+  map.coverage.D4_conventions = {
+    status: "covered",
+    confidence: "high",
+    evidence_summary: "Valid summary.",
+    evidence: [],
+  };
+  const result = assessCoverageClosure(map);
+  assert.ok(result.unresolved.includes("D4_conventions"));
+  assert.match(result.reasons.D4_conventions ?? "", /no evidence citations were provided/);
+}
+
+function testClosureRejectsNonExistentPositiveEvidence(): void {
+  const cwd = tempDir("evidence-positive-missing");
+  try {
+    const map = makeValidCodebaseMap();
+    map.coverage.D1_topography = {
+      status: "covered",
+      confidence: "high",
+      evidence_summary: "Topography documented.",
+      evidence: [{ path: "nonexistent-file.ts", excerpt: "excerpt", kind: "positive" }],
+    };
+    const result = assessCoverageClosure(map, { cwd });
+    assert.ok(result.unresolved.includes("D1_topography"));
+    assert.match(result.reasons.D1_topography ?? "", /positive evidence path does not exist/);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+function testClosureRejectsExistingAbsenceEvidence(): void {
+  const cwd = tempDir("evidence-absence-exists");
+  try {
+    fs.writeFileSync(path.join(cwd, "existing.ts"), "content");
+    const map = makeValidCodebaseMap();
+    map.coverage.D9_process = {
+      status: "covered",
+      confidence: "high",
+      evidence_summary: "No process documented.",
+      evidence: [{ path: "existing.ts", excerpt: "Absence note", kind: "absence" }],
+    };
+    const result = assessCoverageClosure(map, { cwd });
+    assert.ok(result.unresolved.includes("D9_process"));
+    assert.match(result.reasons.D9_process ?? "", /absence evidence path exists/);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+function testClosureRejectsEscapingEvidenceCitation(): void {
+  const cwd = tempDir("evidence-escaping");
+  try {
+    const map = makeValidCodebaseMap();
+    map.coverage.D1_topography = {
+      status: "covered",
+      confidence: "high",
+      evidence_summary: "Topography documented.",
+      evidence: [{ path: "../../etc/passwd", excerpt: "root:x:0:0", kind: "positive" }],
+    };
+    const result = assessCoverageClosure(map, { cwd });
+    assert.ok(result.unresolved.includes("D1_topography"));
+    assert.match(result.reasons.D1_topography ?? "", /escapes repository root/);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
 }
 
 function testClosureRejectsPitfallsWithoutSubstance(): void {
@@ -262,10 +332,10 @@ function testClosureRejectsWeakDimensionEvidence(): void {
 
 async function testWriteMapReturnsClosureReasons(): Promise<void> {
   const cwd = tempDir("write-map-feedback");
+  fs.writeFileSync(path.join(cwd, "README.md"), "Test fixture evidence citation.");
+  const { writeMapTool } = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
   const map = makeValidCodebaseMap();
   map.validation_surface.test_command = "";
-
-  const { writeMapTool } = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
   const result = await writeMapTool.execute(
     "test-write-map",
     { map } as never,
@@ -367,6 +437,10 @@ async function testIntentionalCoverageClosureIsNotReportedAsAbort(): Promise<voi
 const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "closureAllCovered", fn: testClosureAllCovered },
   { name: "closureRejectsEmptyEvidence", fn: testClosureRejectsEmptyEvidence },
+  { name: "closureRejectsMissingEvidenceCitations", fn: testClosureRejectsMissingEvidenceCitations },
+  { name: "closureRejectsNonExistentPositiveEvidence", fn: testClosureRejectsNonExistentPositiveEvidence },
+  { name: "closureRejectsExistingAbsenceEvidence", fn: testClosureRejectsExistingAbsenceEvidence },
+  { name: "closureRejectsEscapingEvidenceCitation", fn: testClosureRejectsEscapingEvidenceCitation },
   { name: "closureRejectsPitfallsWithoutSubstance", fn: testClosureRejectsPitfallsWithoutSubstance },
   { name: "closureRejectsGapStatus", fn: testClosureRejectsGapStatus },
   { name: "closureRejectsWeakDimensionEvidence", fn: testClosureRejectsWeakDimensionEvidence },

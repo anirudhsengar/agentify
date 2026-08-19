@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Focused product boundary for the install-once repository team.
 set -euo pipefail
+export LC_ALL=C
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"

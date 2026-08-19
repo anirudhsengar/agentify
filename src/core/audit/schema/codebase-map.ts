@@ -52,7 +52,7 @@ export const CodebaseMapSchema = Type.Object({
   customization_evidence: Type.Optional(CustomizationEvidenceSchema),
   expert_evidence: Type.Optional(ExpertEvidenceSchema),
   artifact_intents: Type.Optional(ArtifactIntentsSchema),
-});
+}, { additionalProperties: false });
 
 export type CodebaseMap = Static<typeof CodebaseMapSchema>;
 
@@ -89,6 +89,6 @@ export const PartialCodebaseMapSchema = Type.Object({
   customization_evidence: Type.Optional(CustomizationEvidenceSchema),
   expert_evidence: Type.Optional(ExpertEvidenceSchema),
   artifact_intents: Type.Optional(ArtifactIntentsSchema),
-});
+}, { additionalProperties: false });
 
 export type PartialCodebaseMap = Static<typeof PartialCodebaseMapSchema>;

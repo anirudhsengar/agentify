@@ -31,7 +31,7 @@ paths, state transitions, and evidence before performing bounded mutations.
 | Assurance | Agentify provides |
 | --- | --- |
 | Enforced | Model tool allowlists, path and branch boundaries, typed state transitions, and GitHub credential separation |
-| Detected and rejected | Repository mutation during validation and validation-policy hash drift |
+| Detected and rejected | Repository mutation during validation, validation-policy hash drift, and covered audit claims that lack verifiable repository-path evidence |
 | Mitigated | Common credential variables are removed from validation child environments |
 | Not provided | OS-level sandboxing or network isolation for repository validation |
 
@@ -41,6 +41,11 @@ All repository paths are normalized and must remain inside the physical
 repository root. Writable operations reject absolute paths, traversal, protected
 paths, unsafe symlinks, and roots that cannot be verified. Managed files require
 recognized ownership markers and expected bytes. User-owned files are preserved.
+
+The repository audit coverage gate requires every `covered` dimension to cite
+real repository paths. Positive citations must point at existing repository paths
+under the root; absence citations must point at a checked nonexistent path. The
+trusted gate rejects covered claims that cannot be grounded in repository evidence.
 
 Persistent state has one root, `.agentify`. Initialization fails closed on
 unrecognized content. Durable records carry supporting commits and real-byte

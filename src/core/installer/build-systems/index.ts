@@ -6,6 +6,7 @@ import { discoverNodeBuildSystem } from "./node.ts";
 import { discoverPythonBuildSystem } from "./python.ts";
 import { discoverRubyBuildSystem } from "./ruby.ts";
 import { discoverRustBuildSystem } from "./rust.ts";
+import { discoverShellBuildSystem } from "./shell.ts";
 import {
   collectBlockers,
   runDiscoveredCommands,
@@ -21,6 +22,7 @@ const DISCOVERERS = [
   discoverJavaBuildSystem,
   discoverRubyBuildSystem,
   discoverMakefileBuildSystem,
+  discoverShellBuildSystem,
 ] as const;
 
 function selectBuildSystem(cwd: string): BuildSystemDiscovery | null {
@@ -59,7 +61,7 @@ export function discoverRepositoryCommands(
       blockers: [{
         code: "unsupported_build_system",
         message: "No supported build manifest was found.",
-        remediation: "Add a deterministic build manifest (package.json, pyproject.toml, Cargo.toml, go.mod, pom.xml, build.gradle, Gemfile, or Makefile) with explicit validation commands.",
+        remediation: "Add a deterministic build manifest (package.json, pyproject.toml, Cargo.toml, go.mod, pom.xml, build.gradle, Gemfile, Makefile, or root shell scripts such as build.sh/compile.sh/test.sh/lint.sh) with explicit validation commands.",
       }],
     };
   }

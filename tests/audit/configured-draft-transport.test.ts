@@ -30,6 +30,7 @@ async function execute(
 }
 
 const cwd = tempDir();
+fs.writeFileSync(path.join(cwd, "README.md"), "Test fixture evidence citation.");
 try {
   const first = createWriteMapTools({ stateDir: ".agentify/runtime/audit-a" });
   const second = createWriteMapTools({ stateDir: ".agentify/runtime/audit-b" });

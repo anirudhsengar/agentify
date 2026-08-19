@@ -11,10 +11,18 @@ import {
 } from "../../src/core/audit/schema.ts";
 
 function coveredMatrix(): CodebaseMap["coverage"] {
+  const evidence = [
+    {
+      path: "README.md" as const,
+      excerpt: "Test fixture evidence citation." as const,
+      kind: "positive" as const,
+    },
+  ];
   const entry = {
     status: "covered" as const,
     confidence: "high" as const,
     evidence_summary: "Explored for this test fixture.",
+    evidence,
   };
   const matrix = {} as Record<string, typeof entry>;
   for (const dim of COVERAGE_DIMENSIONS) matrix[dim] = { ...entry };

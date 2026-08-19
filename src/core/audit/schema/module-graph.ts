@@ -4,7 +4,12 @@ import { Type } from "typebox";
 const ModuleEdgeSchema = Type.Object({
     from: Type.String(),
     to: Type.String(),
-    kind: StringEnum(["import", "state", "rpc"]),
+    kind: Type.String({
+        description:
+            "Edge kind. Use one of the standard labels (import, state, rpc) " +
+            "or a repository-specific label (e.g., process_boundary, declarative, " +
+            "name_reference, ant_import, make_target).",
+    }),
 });
 
 const ClientServerSplitSchema = Type.Object({

@@ -344,6 +344,59 @@ async function noManifest(): Promise<void> {
   }
 }
 
+async function shellBuildAndTest(): Promise<void> {
+  const cwd = tempDir("edge-shell-");
+  try {
+    writeRepo(cwd, {
+      "build.sh": "#!/usr/bin/env bash\nset -e\necho built\n",
+      "test.sh": "#!/usr/bin/env bash\nset -e\necho tested\n",
+    });
+    const { manifest, commands, blockers } = discoverRepositoryCommands(cwd, fakeRunner(cwd), false);
+    assert.equal(manifest?.path, "build.sh");
+    assert.equal(manifest?.ecosystem, "shell");
+    assert.ok(commands.some((command) => command.kind === "build" && command.argv.join(" ") === "bash build.sh"));
+    assert.ok(commands.some((command) => command.kind === "test" && command.argv.join(" ") === "bash test.sh"));
+    assert.equal(blockers.length, 0);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function shellBuildOnlyNoTest(): Promise<void> {
+  const cwd = tempDir("edge-shell-buildonly-");
+  try {
+    writeRepo(cwd, { "compile.sh": "#!/usr/bin/env bash\nset -e\necho compiled\n" });
+    const { commands, blockers } = discoverRepositoryCommands(cwd, fakeRunner(cwd), false);
+    assert.ok(commands.some((command) => command.kind === "build" && command.required));
+    assert.equal(blockers.length, 0, `expected no blockers, got ${JSON.stringify(blockers)}`);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function shellUnsafeNetworkBlocked(): Promise<void> {
+  const cwd = tempDir("edge-shell-unsafe-");
+  try {
+    writeRepo(cwd, { "build.sh": "#!/usr/bin/env bash\ngit clone https://github.com/example/repo\n" });
+    const { blockers } = discoverRepositoryCommands(cwd, fakeRunner(cwd), false);
+    assert.ok(hasBlocker(blockers, "unsafe_network_or_deployment"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function installScriptIsNotValidation(): Promise<void> {
+  const cwd = tempDir("edge-shell-install-");
+  try {
+    writeRepo(cwd, { "get.sh": "#!/usr/bin/env bash\ngit clone https://github.com/example/repo\n" });
+    const { commands, blockers } = discoverRepositoryCommands(cwd, fakeRunner(cwd), false);
+    assert.ok(commands.some((command) => command.kind === "install"));
+    assert.ok(hasBlocker(blockers, "missing_deterministic_validation"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function multiManifestNodeWins(): Promise<void> {
   const cwd = tempDir("edge-multi-");
   try {
@@ -423,6 +476,10 @@ const tests = [
   { name: "ruby no gemfile lock", fn: rubyNoGemfileLock },
   { name: "makefile only no test target", fn: makefileOnlyNoTestTarget },
   { name: "no manifest", fn: noManifest },
+  { name: "shell build and test", fn: shellBuildAndTest },
+  { name: "shell build only no test", fn: shellBuildOnlyNoTest },
+  { name: "shell unsafe network blocked", fn: shellUnsafeNetworkBlocked },
+  { name: "install script is not validation", fn: installScriptIsNotValidation },
   { name: "multi manifest node wins", fn: multiManifestNodeWins },
   { name: "resolver empty models", fn: resolverEmptyModels },
   { name: "resolver only explorer slot", fn: resolverOnlyExplorerSlot },

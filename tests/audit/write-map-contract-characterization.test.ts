@@ -24,7 +24,9 @@ const MAX_MAP_FILE_BYTES = 1_000_000;
 const MAX_INLINE_MAP_BYTES = 100_000;
 
 function tempDir(name: string): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), `agentify-write-map-${name}-`));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `agentify-write-map-${name}-`));
+  fs.writeFileSync(path.join(dir, "README.md"), "Test fixture evidence citation.");
+  return dir;
 }
 
 function cloneMap(map: CodebaseMap = makeValidCodebaseMap()): CodebaseMap {
@@ -102,6 +104,8 @@ async function testToolDefinitionContract(): Promise<void> {
       "validates, and writes the canonical map. Gap entries in the coverage block are " +
       "allowed in the data and reported in the result; weak `covered` entries are " +
       "also reported with the same closure rules as the final post-run gate. " +
+      "Every `covered` dimension must include `evidence`: an array of `{ path, excerpt, kind }` " +
+      "citations to real repository paths; the gate rejects covered claims that cannot be grounded. " +
       "Audit sessions do not have a general-purpose write tool, so do not attempt to " +
       "create a draft file yourself. " +
       "Call multiple times during exploration to persist progress; call once with the " +
@@ -113,17 +117,7 @@ async function testToolDefinitionContract(): Promise<void> {
   assert.equal(writeMapDeltaTool.label, "Write Codebase Map Delta");
   assert.equal(
     writeMapDeltaTool.description,
-    "Merge a partial delta into the canonical codebase map. Used by `gap_filler` " +
-      "sub-agents to close a single dimension's gap without re-persisting the entire " +
-      "map. Agentify merges the delta and strictly validates the complete result. The merge " +
-      "strategy controls how delta fields are combined with the existing map " +
-      "(`shallow_overwrite` = default, `deep_merge` = recursive merge, `append` = " +
-      "push onto arrays). If `dimension` is provided, the corresponding coverage " +
-      "entry is proposed as `covered` with the delta's `confidence` and `evidence_summary`; " +
-      "Agentify persists it as `gap` when the merged map still fails that dimension's substance gate. " +
-      "For D3_type_contract, pass the typed top-level `observed_type_contract` parameter so Agentify " +
-      "places the observed path, name, and fields into the canonical contract surface. " +
-      "Per-dimension gap_filler count is tracked (soft ceiling of 3, no hard cap; observability only).",
+    "Merge a partial delta into the canonical codebase map. Each call should close one dimension by including both the dimension data AND the matching coverage entry. Merging does not silently strip or invent arrays: the arrays and objects you provide overwrite the matching fields in the map. If a field is still empty after the merge, your delta did not include it. Use `shallow_overwrite` (default) for a clean top-level replacement, `deep_merge` to merge nested objects recursively, or `append` to concatenate arrays. When `dimension` is provided, the coverage entry is proposed as `covered`; Agentify downgrades it to `gap` only if the evidence or substance check fails. Every `covered` claim must include `evidence`: an array of `{ path, excerpt, kind }` citations to real repository paths. D1 example: `delta: { skeleton: { top_level_tree: ['README.md', 'get.sh', 'compile.sh'], entry_points: [{ path: 'get.sh', role: 'SDK acquisition script', language: 'bash', run_command: 'bash get.sh' }], first_5_files_for_fresh_agent: [{ path: 'README.md', why: 'project overview' }] }, coverage: { D1_topography: { status: 'covered', confidence: 'high', evidence_summary: 'Topography anchored to real root files.', evidence: [{ path: 'README.md', excerpt: 'Adoptium AQAvit test suite', kind: 'positive' }] } } }`. D3 example: `delta: { observed_type_contract: { kind: 'typescript_interface', path: 'src/types.ts', name: 'Observed', fields: ['id', 'name'] }, coverage: { D3_type_contract: { status: 'covered', ... } } }` or `delta: { type_contract_surface: { stable_types: [{ path: 'src/types.ts', name: 'BuildEnv', purpose: 'shared make vars' }] }, coverage: { D3_type_contract: { ... } } }`. D8 example: `delta: { security_surface: { paths: { zero_access: ['.env', '*.pem', 'secrets.*'] }, bash_blocked_patterns: [{ pattern: 'eval $(aws sts assume-role ...)', source: 'JenkinsfileBase' }] }, coverage: { D8_security: { ... } } }`.Keep the delta small but complete for the one dimension you are closing.",
   );
   assert.strictEqual(writeMapDeltaTool.parameters, WriteMapDeltaParamsSchema);
   assert.ok(CodebaseMapSchema);
@@ -510,7 +504,9 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
     resultText(coverageResult),
     `Wrote codebase map to ${coverageCanonical} (${coverageSize} bytes). Source: (inline). ` +
       "9/10 coverage dimensions closed. Unresolved: D6_validation: covered but test/validation command evidence is empty. " +
-      "Unsupported covered claims persisted as gap: D6_validation.",
+      "Unsupported covered claims persisted as gap: D6_validation. " +
+      "Repair guidance: D6_validation: covered but test/validation command evidence is empty " +
+      "(include validation_surface.test_command and per_change_type.chore/bug/feature.mandatory arrays).",
   );
   assert.equal(readJson(coverageCanonical).coverage.D6_validation.status, "gap");
   assert.deepEqual(resultDetails(coverageResult).downgraded_dimensions, ["D6_validation"]);
@@ -591,6 +587,7 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
       dimension: "D1_topography",
       confidence: "high",
       evidence_summary: "Confirmed the command-line entry point.",
+      evidence: [{ path: "README.md", excerpt: "Fixture evidence for D1_topography.", kind: "positive" }],
     },
     bootstrapDeltaCwd,
   );
@@ -669,10 +666,11 @@ async function testSubstanceFailuresPersistAsGapsWithRepairGuidance(): Promise<v
   assert.equal(persisted.coverage.D3_type_contract.status, "gap");
   assert.equal(persisted.coverage.D8_security.status, "gap");
   assert.deepEqual(resultDetails(result).downgraded_dimensions, ["D3_type_contract", "D8_security"]);
-  assert.match(resultText(result), /D3_type_contract repair: retry write_map_delta/);
+  assert.match(resultText(result), /D3_type_contract:/);
   assert.match(resultText(result), /observed_type_contract/);
   assert.match(resultText(result), /One real type is sufficient in a small repository/);
-  assert.match(resultText(result), /D8_security repair: keep paths\.zero_access non-empty/);
+  assert.match(resultText(result), /D8_security:/);
+  assert.match(resultText(result), /paths\.zero_access/);
   assert.match(resultText(result), /damage_control_rules/);
 
   const typeResult = await executeTool(
@@ -681,6 +679,7 @@ async function testSubstanceFailuresPersistAsGapsWithRepairGuidance(): Promise<v
       dimension: "D3_type_contract",
       confidence: "high",
       evidence_summary: "Observed the AddInput interface in the typed public contract.",
+      evidence: [{ path: "README.md", excerpt: "Fixture evidence for D3_type_contract.", kind: "positive" }],
       merge_strategy: "deep_merge",
       observed_type_contract: {
         kind: "typescript_interface",
@@ -724,6 +723,7 @@ async function testSubstanceFailuresPersistAsGapsWithRepairGuidance(): Promise<v
       dimension: "D8_security",
       confidence: "high",
       evidence_summary: "SECURITY.md forbids reading or committing credential files.",
+      evidence: [{ path: "README.md", excerpt: "Fixture evidence for D8_security.", kind: "positive" }],
       merge_strategy: "deep_merge",
       delta: {
         security_surface: {
@@ -810,6 +810,21 @@ async function testBootstrapMapRejectsRegressiveFullWrite(): Promise<void> {
   assert.equal(readJson(tools.canonicalMapPath(cwd)).coverage.D1_topography.status, "covered");
 }
 
+async function testPreventsPrototypePollutionInDottedKeyExpansion(): Promise<void> {
+  const cwd = tempDir("proto-pollution");
+  const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+  const maliciousDelta = {
+    "__proto__.polluted": "yes",
+    "constructor.prototype.polluted2": "yes",
+    skeleton: {
+      top_level_tree: ["src/"],
+    },
+  };
+  await executeTool(tools.writeMapDeltaTool, { delta: maliciousDelta }, cwd);
+  assert.equal((Object.prototype as unknown as Record<string, unknown>).polluted, undefined);
+  assert.equal((Object.prototype as unknown as Record<string, unknown>).polluted2, undefined);
+}
+
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "tool definition contract", fn: testToolDefinitionContract },
   { name: "nullable object transport normalization", fn: testNullableObjectTransportNormalization },
@@ -829,6 +844,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "observability and explicit factory contract", fn: testObservabilityAndFactoryContract },
   { name: "bootstrap map rejects regressive full write", fn: testBootstrapMapRejectsRegressiveFullWrite },
   { name: "substance failures persist as gaps with repair guidance", fn: testSubstanceFailuresPersistAsGapsWithRepairGuidance },
+  { name: "prevents prototype pollution in dotted key expansion", fn: testPreventsPrototypePollutionInDottedKeyExpansion },
 ];
 
 let passed = 0;

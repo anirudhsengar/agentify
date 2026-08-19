@@ -30,6 +30,12 @@ const AUDIT_TOOL_ALLOWLIST = [
   "spawn_explorer",
 ];
 
+// Reasonable audit guardrails. The output cap prevents providers from
+// truncating a large tool-call payload, and the wall-clock timeout stops a
+// runaway session before it racks up thousands of fruitless turns.
+const AUDIT_MAX_OUTPUT_TOKENS = 16_384;
+const AUDIT_TIMEOUT_MS = 30 * 60 * 1000;
+
 type AssistantUsage = {
   input?: number;
   output?: number;
@@ -210,13 +216,15 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       spawnExplorerStateDir: stateDir,
       signal: controller.signal,
       inactivityTimeoutMs: 5 * 60 * 1000,
+      timeoutMs: AUDIT_TIMEOUT_MS,
+      maxOutputTokens: AUDIT_MAX_OUTPUT_TOKENS,
       recoveryPromptIfToolNotCalled: {
         requiredToolName: bootstrappedGapDraft ? "write_map_delta" : "write_map",
         maxAttempts: 2,
         userPrompt: "Read the current map and submit the strongest evidence already gathered through write_map_delta. Leave genuinely unsupported dimensions as gaps; do not return prose.",
         shouldRecover: () => {
           const map = loadCanonicalMapAt(context.cwd, stateDir);
-          return map !== null && assessCoverageClosure(map).unresolved.length > 0;
+          return map !== null && assessCoverageClosure(map, { cwd: context.cwd }).unresolved.length > 0;
         },
       },
       onEvent: (event) => {
@@ -231,7 +239,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
           observedTurns += 1;
           if (typeof usage?.cost?.total === "number") observedCost += usage.cost.total;
           const currentMap = loadCanonicalMapAt(context.cwd, stateDir);
-          if (currentMap && assessCoverageClosure(currentMap).unresolved.length === 0) {
+          if (currentMap && assessCoverageClosure(currentMap, { cwd: context.cwd }).unresolved.length === 0) {
             controlledClosure = true;
             controller.abort();
           }
@@ -272,7 +280,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     const map = loadCanonicalMapAt(context.cwd, stateDir);
     const closure = map === null
       ? { closed: [] as string[], unresolved: [...COVERAGE_DIMENSIONS], reasons: {} as Record<string, string> }
-      : assessCoverageClosure(map);
+      : assessCoverageClosure(map, { cwd: context.cwd });
     const intentionallyStopped = runtimeResult.aborted && controlledClosure;
     const success = map !== null && closure.unresolved.length === 0 && (!runtimeResult.aborted || intentionallyStopped);
     const status = success ? "success" : runtimeResult.aborted ? "aborted" : "partial";

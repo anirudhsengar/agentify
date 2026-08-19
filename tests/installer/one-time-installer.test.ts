@@ -78,6 +78,7 @@ function tempRepo(prefix: string, scripts: Record<string, string> = {
   fs.writeFileSync(path.join(cwd, "tests", "index.test.ts"), "// test\n");
   fs.writeFileSync(path.join(cwd, "package.json"), `${JSON.stringify({ scripts }, null, 2)}\n`);
   fs.writeFileSync(path.join(cwd, "package-lock.json"), "{}\n");
+  fs.writeFileSync(path.join(cwd, "README.md"), "# Test fixture\n");
   return cwd;
 }
 

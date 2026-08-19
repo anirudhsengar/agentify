@@ -1,20 +1,20 @@
 {
   "serialization": {
     "codebase_map": {
-      "sha256": "899fbf87b7716a66f933eeb644a15c2ca7be0030d6f18b920124a289c737ee39",
-      "bytes": 40080
+      "sha256": "bb5753bce0a2d213fe76a6849043944f8b526d4f53a2cc5827592ff5c60a3a01",
+      "bytes": 49532
     },
     "partial_codebase_map": {
-      "sha256": "426bd66d813e01f737382106f0e73ec30e4f66fb1cd8fc94a5f2cab578290f89",
-      "bytes": 39511
+      "sha256": "384e593782a26ca09b9a3fab71fc2c4966fc1fd70706dbfc5544866ec57b2ddc",
+      "bytes": 48963
     },
     "write_map_params": {
       "sha256": "31495d351ed9f3b38ca146bb3c16d48839b09dc196c846027d0f27ed1e51a3e6",
       "bytes": 1533
     },
     "write_map_delta_params": {
-      "sha256": "d556eefdc81d2c5f8e915a49958934c0a69087a24945dd4ea0dcbc327bb277bd",
-      "bytes": 2333
+      "sha256": "0f96f25d8e1b0c2ef0aae96af616c6483bba92a7625cfb2155956a462fbf7b24",
+      "bytes": 3516
     }
   },
   "required": {
@@ -100,6 +100,7 @@
       "dimension",
       "confidence",
       "evidence_summary",
+      "evidence",
       "observed_type_contract",
       "delta",
       "merge_strategy"

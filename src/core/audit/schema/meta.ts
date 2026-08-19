@@ -42,18 +42,13 @@ const LifecycleSchema = Type.Object({
         description: 'e.g., "plan->build->test->review->document"',
     }),
     issue_types: Type.Array(
-        StringEnum([
-            "chore",
-            "bug",
-            "feature",
-            "refactor",
-            "security",
-            "docs",
-            "test",
-            "perf",
-            "chore_deps",
-        ] as const),
-        { description: "e.g., [chore, bug, feature]" },
+        Type.String(),
+        {
+            description:
+                "Observed issue classes. Use the issue/template names found in the " +
+                "repository (e.g. 'bug_report', 'release_tables', 'feature', 'bug') " +
+                "or ['none_documented'] if no issue classes are documented.",
+        },
     ),
     review_loop: Type.Object({
         present: Type.Boolean(),

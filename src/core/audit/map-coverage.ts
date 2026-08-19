@@ -13,8 +13,8 @@ export interface FormattedCoverageClosure {
     warnings: string[] | null;
 }
 
-export function formatCoverageClosure(map: CodebaseMap): FormattedCoverageClosure {
-    const closure = assessCoverageClosure(map);
+export function formatCoverageClosure(map: CodebaseMap, cwd?: string): FormattedCoverageClosure {
+    const closure = assessCoverageClosure(map, { cwd });
     const warnings =
         closure.unresolved.length > 0
             ? closure.unresolved.map((dimension) =>

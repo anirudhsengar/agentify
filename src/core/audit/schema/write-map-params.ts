@@ -1,6 +1,7 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type, type Static } from "typebox";
 import { COVERAGE_DIMENSIONS } from "../coverage.ts";
+import { EvidenceCitationSchema } from "./primitives.ts";
 
 const SerializedMapTransportSchema = Type.String({
   description:
@@ -13,7 +14,10 @@ const InlineMapTransportSchema = Type.Record(Type.String(), Type.Unknown(), {
 
 const MapTransportSchema = Type.Union([InlineMapTransportSchema, SerializedMapTransportSchema]);
 const DeltaTransportSchema = Type.Record(Type.String(), Type.Unknown(), {
-  description: "Incremental map update transport. Agentify merges this into the canonical map and strictly validates the complete result.",
+  description:
+    "Incremental map update transport. Agentify merges this into the canonical map and strictly validates the complete result. " +
+    "Keep this object small: include only the top-level keys (e.g. `skeleton`, `coverage`, `pitfalls`) needed for the one dimension you are closing. " +
+    "Never put the entire map here; use `write_map` for a complete replacement.",
 });
 
 const ObservedTypeContractSchema = Type.Object({
@@ -71,6 +75,13 @@ export const WriteMapDeltaParamsSchema = Type.Object({
     Type.String({
       description:
         "1-2 sentence evidence summary stored with the coverage record and consumed by trusted closure, specialist-discovery, and task-planning code.",
+    }),
+  ),
+  evidence: Type.Optional(
+    Type.Array(EvidenceCitationSchema, {
+      description:
+        "Citations to real repository paths that support the dimension coverage claim. " +
+        "Required when `dimension` is provided and the claim is `covered`; the installer gate verifies these citations.",
     }),
   ),
   observed_type_contract: Type.Optional(ObservedTypeContractSchema),

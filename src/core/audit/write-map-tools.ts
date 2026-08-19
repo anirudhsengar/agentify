@@ -79,16 +79,32 @@ const MAP_TOP_LEVEL_KEYS = new Set([
 
 type CoverageDimensionName = (typeof COVERAGE_DIMENSIONS)[number];
 
-const COVERAGE_REPAIR_HINTS: Partial<Record<CoverageDimensionName, string>> = {
+const COVERAGE_REPAIR_HINTS: Record<CoverageDimensionName, string> = {
+    D1_topography:
+        "include skeleton.top_level_tree (array of root paths), skeleton.entry_points " +
+        "(array of { path, role, language, run_command }), and " +
+        "skeleton.first_5_files_for_fresh_agent (array of { path, why }) in the same delta",
+    D2_module_boundaries:
+        "include module_graph.edges (array of { source, target, kind }) or module_graph.shared_abstractions",
     D3_type_contract:
-        "retry write_map_delta with the top-level parameter " +
-        "observed_type_contract: { kind: \"typescript_interface\", path: \"src/types.ts\", " +
-        "name: \"ObservedName\", fields: [\"realField\"] } (adapt values to evidence), or add " +
-        "type_contract_surface.typescript_interfaces, stable_types, or one_type_trace in delta. " +
-        "One real type is sufficient in a small repository; never leave every contract field empty when evidence exists",
+        "use the top-level observed_type_contract parameter, or include " +
+        "type_contract_surface.typescript_interfaces, pydantic_models, db_models, stable_types, or one_type_trace. " +
+        "One real type is sufficient in a small repository",
+    D4_conventions:
+        "include conventions.naming.files, conventions.naming.functions, and conventions.logging.pattern",
+    D5_pitfalls:
+        "include pitfalls array with at least one entry: { module, what, consequence, source_reference, line_ref }",
+    D6_validation:
+        "include validation_surface.test_command and per_change_type.chore/bug/feature.mandatory arrays",
+    D7_operational:
+        "include operational_surface.build.command, operational_surface.run.command, and operational_surface.git_workflow.main_branch",
     D8_security:
-        "keep paths.zero_access non-empty and add at least one evidence-backed bash_blocked_patterns " +
-        "or damage_control_rules entry (for example a documented rule forbidding credential reads or commits)",
+        "include security_surface.paths.zero_access and at least one evidence-backed " +
+        "bash_blocked_patterns or damage_control_rules entry",
+    D9_process:
+        "include meta.lifecycle.sdlc_model (string) and meta.lifecycle.issue_types (array of strings)",
+    D10_documentation:
+        "include meta.documentation.readme_metrics with present=true and section_count>0, or has_ai_docs/has_app_docs/has_specs true",
 };
 
 function downgradeUnsupportedCoverage(
@@ -105,12 +121,20 @@ function downgradeUnsupportedCoverage(
     return downgraded;
 }
 
-function formatCoverageRepairGuidance(closure: FormattedCoverageClosure): string {
-    const repairs = closure.unresolved.flatMap((dimension) => {
+function formatCoverageRepairGuidance(
+    closure: FormattedCoverageClosure,
+    focusDimension?: CoverageDimensionName | null,
+): string {
+    if (closure.unresolved.length === 0) return "";
+    const ordered = focusDimension !== undefined && focusDimension !== null
+        ? [focusDimension, ...closure.unresolved.filter((d) => d !== focusDimension)]
+        : closure.unresolved;
+    const repairs = ordered.map((dimension) => {
+        const reason = closure.reasons[dimension] ?? "not closed";
         const hint = COVERAGE_REPAIR_HINTS[dimension];
-        return hint ? [`${dimension} repair: ${hint}`] : [];
+        return `${dimension}: ${reason} (${hint})`;
     });
-    return repairs.length > 0 ? ` Repair guidance: ${repairs.join("; ")}.` : "";
+    return ` Repair guidance: ${repairs.join("; ")}.`;
 }
 
 function injectObservedTypeContract(
@@ -226,6 +250,277 @@ function normalizePitfallLineReferences(map: UnknownRecord): void {
     }
 }
 
+function looksLikeJsonString(value: string): boolean {
+    const trimmed = value.trim();
+    return (trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"));
+}
+
+function maybeParseStringifiedNestedValue(value: unknown): unknown {
+    if (typeof value !== "string" || !looksLikeJsonString(value)) return value;
+    try {
+        const parsed = JSON.parse(value) as unknown;
+        return parsed;
+    } catch {
+        return value;
+    }
+}
+
+const DANGEROUS_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+
+function setNestedPath(target: UnknownRecord, dottedPath: string, value: unknown): void {
+    const parts = dottedPath.split(".");
+    if (parts.some((part) => DANGEROUS_OBJECT_KEYS.has(part))) {
+        return;
+    }
+    let current: UnknownRecord = target;
+    for (let i = 0; i < parts.length - 1; i += 1) {
+        const part = parts[i];
+        const next = current[part];
+        if (next === null || typeof next !== "object" || Array.isArray(next)) {
+            current[part] = {};
+        }
+        current = current[part] as UnknownRecord;
+    }
+    const lastPart = parts[parts.length - 1];
+    if (lastPart && !DANGEROUS_OBJECT_KEYS.has(lastPart)) {
+        current[lastPart] = value;
+    }
+}
+
+function expandDottedKeysInPlace(value: unknown): unknown {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        return value;
+    }
+    const record = value as UnknownRecord;
+    const dotted: Array<[string, unknown]> = [];
+    for (const [key, rawValue] of Object.entries(record)) {
+        const expanded = maybeParseStringifiedNestedValue(expandDottedKeysInPlace(rawValue));
+        if (typeof key === "string" && key.includes(".")) {
+            dotted.push([key, expanded]);
+            delete record[key];
+        } else {
+            record[key] = expanded;
+        }
+    }
+    for (const [dottedKey, dottedValue] of dotted) {
+        setNestedPath(record, dottedKey, dottedValue);
+    }
+    return record;
+}
+
+const LIFECYCLE_CAMEL_CASE_FIELDS: Record<string, string> = {
+    sdlcModel: "sdlc_model",
+    issueTypes: "issue_types",
+    reviewLoop: "review_loop",
+    documentationLoop: "documentation_loop",
+    conditionalDocs: "conditional_docs",
+    aiwScripts: "aiw_scripts",
+    agentDefinitions: "agent_definitions",
+};
+
+function normalizeLifecycleCamelCase(map: UnknownRecord): void {
+    const meta = map.meta;
+    if (meta === null || typeof meta !== "object" || Array.isArray(meta)) return;
+    const metaRecord = meta as UnknownRecord;
+    const lifecycle = metaRecord.lifecycle;
+    if (lifecycle === null || typeof lifecycle !== "object" || Array.isArray(lifecycle)) return;
+    const lifecycleRecord = lifecycle as UnknownRecord;
+    for (const [key, mapped] of Object.entries(LIFECYCLE_CAMEL_CASE_FIELDS)) {
+        if (key in lifecycleRecord) {
+            lifecycleRecord[mapped] = lifecycleRecord[key];
+            delete lifecycleRecord[key];
+        }
+    }
+}
+
+function extractIssueTemplateName(path: string): string | undefined {
+    const match = /([^/]+)\.md$/i.exec(path);
+    if (!match) return undefined;
+    const name = match[1];
+    // Some templates are named like "bug_report.md" or "01-bug-report.md".
+    return name;
+}
+
+function inferIssueTypesFromD9Evidence(map: UnknownRecord): string[] | undefined {
+    const coverage = map.coverage;
+    if (coverage === null || typeof coverage !== "object" || Array.isArray(coverage)) return undefined;
+    const d9 = (coverage as UnknownRecord).D9_process;
+    if (d9 === null || typeof d9 !== "object" || Array.isArray(d9)) return undefined;
+    const evidence = (d9 as UnknownRecord).evidence;
+    if (!Array.isArray(evidence)) return undefined;
+    const issueTypes: string[] = [];
+    for (const citation of evidence) {
+        if (citation === null || typeof citation !== "object" || Array.isArray(citation)) continue;
+        const record = citation as UnknownRecord;
+        const citationPath = typeof record.path === "string" ? record.path : "";
+        if (citationPath.startsWith(".github/ISSUE_TEMPLATE/")) {
+            const name = extractIssueTemplateName(citationPath);
+            if (name && !issueTypes.includes(name)) issueTypes.push(name);
+        }
+    }
+    return issueTypes.length > 0 ? issueTypes : undefined;
+}
+
+function normalizeIssueTypes(map: UnknownRecord): void {
+    const meta = map.meta;
+    if (meta === null || typeof meta !== "object" || Array.isArray(meta)) return;
+    const metaRecord = meta as UnknownRecord;
+    const lifecycle = metaRecord.lifecycle;
+    if (lifecycle === null || typeof lifecycle !== "object" || Array.isArray(lifecycle)) return;
+    const lifecycleRecord = lifecycle as UnknownRecord;
+
+    let issueTypes = lifecycleRecord.issue_types;
+
+    // Some providers serialize issue_types as a JSON string.
+    if (typeof issueTypes === "string") {
+        issueTypes = maybeParseStringifiedNestedValue(issueTypes);
+    }
+
+    // Some providers emit an array of { name: "bug_report" } objects.
+    if (Array.isArray(issueTypes)) {
+        issueTypes = issueTypes.map((entry) => {
+            if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return entry;
+            const record = entry as UnknownRecord;
+            if (typeof record.name === "string") return record.name;
+            if (typeof record.id === "string") return record.id;
+            return entry;
+        });
+    }
+
+    // If still empty, derive from D9 evidence that cites ISSUE_TEMPLATE files.
+    if (!Array.isArray(issueTypes) || issueTypes.length === 0) {
+        const inferred = inferIssueTypesFromD9Evidence(map);
+        if (inferred) {
+            issueTypes = inferred;
+        }
+    }
+
+    lifecycleRecord.issue_types = Array.isArray(issueTypes)
+        ? issueTypes.filter((entry): entry is unknown => entry !== null && entry !== undefined).map((entry) => String(entry))
+        : [];
+}
+
+function repairD9Coverage(map: UnknownRecord): void {
+    const coverage = map.coverage;
+    if (coverage === null || typeof coverage !== "object" || Array.isArray(coverage)) return;
+    const d9 = (coverage as UnknownRecord).D9_process;
+    if (d9 === null || typeof d9 !== "object" || Array.isArray(d9)) return;
+    const d9Record = d9 as UnknownRecord;
+
+    const meta = map.meta;
+    const lifecycle = meta !== null && typeof meta === "object" && !Array.isArray(meta)
+        ? (meta as UnknownRecord).lifecycle
+        : undefined;
+    const lifecycleRecord = lifecycle !== null && typeof lifecycle === "object" && !Array.isArray(lifecycle)
+        ? lifecycle as UnknownRecord
+        : undefined;
+
+    const sdlcModel = lifecycleRecord?.sdlc_model;
+    const issueTypes = lifecycleRecord?.issue_types;
+    const hasSubstance = typeof sdlcModel === "string" && sdlcModel.length > 0
+        && Array.isArray(issueTypes) && issueTypes.length > 0;
+    if (!hasSubstance) return;
+
+    const evidence = d9Record.evidence;
+    const hasEvidence = Array.isArray(evidence) && evidence.length > 0;
+    if (!hasEvidence) return;
+
+    if (d9Record.status !== "covered") {
+        d9Record.status = "covered";
+        if (typeof d9Record.confidence !== "string" || d9Record.confidence.length === 0) {
+            d9Record.confidence = "high";
+        }
+        if (typeof d9Record.evidence_summary !== "string" || d9Record.evidence_summary.length === 0) {
+            d9Record.evidence_summary = "Lifecycle and issue process derived from repository templates and contribution docs.";
+        }
+    }
+}
+
+function repairModuleGraphOrphans(map: UnknownRecord): void {
+    const moduleGraph = map.module_graph;
+    const graphRecord = moduleGraph !== null && typeof moduleGraph === "object" && !Array.isArray(moduleGraph)
+        ? moduleGraph as UnknownRecord
+        : undefined;
+
+    const moduleGraphKeys = [
+        "edges",
+        "parallelizable_subtrees",
+        "shared_state",
+        "client_server_split",
+        "shared_abstractions",
+        "import_depth",
+        "circular_dependencies",
+        "monorepo_workspace",
+    ];
+
+    for (const key of moduleGraphKeys) {
+        if (!(key in map)) continue;
+        const value = map[key];
+        if (value === undefined) continue;
+        const current = graphRecord?.[key];
+        const currentIsEmpty = current === undefined
+            || (Array.isArray(current) && current.length === 0)
+            || (current === null);
+        if (!currentIsEmpty) continue;
+
+        const target = graphRecord ?? (map.module_graph = {} as unknown) as UnknownRecord;
+        target[key] = value;
+        delete map[key];
+    }
+
+    // The model occasionally flattens a single module_graph.shared_state entry
+    // into parallel top-level arrays. When we see a matching set, reconstruct
+    // descriptive shared_state strings.
+    const hasFlattenedSet =
+        Array.isArray(map.name)
+        && Array.isArray(map.path)
+        && Array.isArray(map.role)
+        && Array.isArray(map.kind)
+        && map.name.length > 0
+        && map.name.length === map.path.length
+        && map.name.length === map.role.length
+        && map.name.length === map.kind.length;
+    if (hasFlattenedSet) {
+        const names = map.name as unknown[];
+        const paths = map.path as unknown[];
+        const roles = map.role as unknown[];
+        const kinds = map.kind as unknown[];
+        const reconstructed = names.map((n, i) => `${String(n)} (${String(roles[i])}) [${String(kinds[i])}] at ${String(paths[i])}`);
+        const target = graphRecord ?? (map.module_graph = {} as unknown) as UnknownRecord;
+        const shared = Array.isArray(target.shared_state) ? target.shared_state as unknown[] : [];
+        target.shared_state = [...shared, ...reconstructed];
+        delete map.name;
+        delete map.path;
+        delete map.role;
+        delete map.kind;
+    }
+
+    // An exploration_log entry can be emitted as a top-level `item` object.
+    const item = map.item;
+    if (
+        item !== null
+        && typeof item === "object"
+        && !Array.isArray(item)
+        && typeof (item as UnknownRecord).ts === "string"
+        && typeof (item as UnknownRecord).action === "string"
+        && typeof (item as UnknownRecord).target === "string"
+        && typeof (item as UnknownRecord).observation === "string"
+    ) {
+        const log = Array.isArray(map.exploration_log) ? map.exploration_log as unknown[] : [];
+        log.push(item);
+        map.exploration_log = log;
+        delete map.item;
+    }
+}
+
+function repairMapShape(map: UnknownRecord): void {
+    expandDottedKeysInPlace(map);
+    repairModuleGraphOrphans(map);
+    normalizeLifecycleCamelCase(map);
+    normalizeIssueTypes(map);
+    repairD9Coverage(map);
+}
+
 /**
  * Some OpenAI-compatible providers serialize a null value for an object-or-null
  * field as an empty object. Normalize only those known nullable object fields
@@ -280,6 +575,10 @@ function prepareMapArguments<T>(input: unknown): T {
     }
 
     const codebaseMap = candidate as UnknownRecord;
+    // Anthropic-compatible MiniMax M3 occasionally emits dotted keys
+    // ("meta.lifecycle.issue_types"), camelCase lifecycle fields, and
+    // stringified nested values. Repair those before the strict schema gate.
+    repairMapShape(codebaseMap);
     normalizePartialArtifactIntents(codebaseMap);
     normalizeNumericEvidence(codebaseMap);
     normalizePitfallLineReferences(codebaseMap);
@@ -312,6 +611,8 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
             "validates, and writes the canonical map. Gap entries in the coverage block are " +
             "allowed in the data and reported in the result; weak `covered` entries are " +
             "also reported with the same closure rules as the final post-run gate. " +
+            "Every `covered` dimension must include `evidence`: an array of `{ path, excerpt, kind }` " +
+            "citations to real repository paths; the gate rejects covered claims that cannot be grounded. " +
             "Audit sessions do not have a general-purpose write tool, so do not attempt to " +
             "create a draft file yourself. " +
             "Call multiple times during exploration to persist progress; call once with the " +
@@ -450,9 +751,9 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
 
             const validMap = validation.value;
             const existingMap = readCanonicalMap(ctx.cwd, context);
-            const closure = formatCoverageClosure(validMap);
+            const closure = formatCoverageClosure(validMap, ctx.cwd);
             if (existingMap !== null && isBootstrapDraft(existingMap)) {
-                const existingClosure = formatCoverageClosure(existingMap);
+                const existingClosure = formatCoverageClosure(existingMap, ctx.cwd);
                 if (closure.closed.length < existingClosure.closed.length) {
                     return {
                         content: [
@@ -534,17 +835,21 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
         name: "write_map_delta",
         label: "Write Codebase Map Delta",
         description:
-            "Merge a partial delta into the canonical codebase map. Used by `gap_filler` " +
-            "sub-agents to close a single dimension's gap without re-persisting the entire " +
-            "map. Agentify merges the delta and strictly validates the complete result. The merge " +
-            "strategy controls how delta fields are combined with the existing map " +
-            "(`shallow_overwrite` = default, `deep_merge` = recursive merge, `append` = " +
-            "push onto arrays). If `dimension` is provided, the corresponding coverage " +
-            "entry is proposed as `covered` with the delta's `confidence` and `evidence_summary`; " +
-            "Agentify persists it as `gap` when the merged map still fails that dimension's substance gate. " +
-            "For D3_type_contract, pass the typed top-level `observed_type_contract` parameter so Agentify " +
-            "places the observed path, name, and fields into the canonical contract surface. " +
-            "Per-dimension gap_filler count is tracked (soft ceiling of 3, no hard cap; observability only).",
+            "Merge a partial delta into the canonical codebase map. Each call should close one " +
+            "dimension by including both the dimension data AND the matching coverage entry. " +
+            "Merging does not silently strip or invent arrays: the arrays and objects you provide " +
+            "overwrite the matching fields in the map. If a field is still empty after the merge, " +
+            "your delta did not include it. " +
+            "Use `shallow_overwrite` (default) for a clean top-level replacement, `deep_merge` to " +
+            "merge nested objects recursively, or `append` to concatenate arrays. " +
+            "When `dimension` is provided, the coverage entry is proposed as `covered`; " +
+            "Agentify downgrades it to `gap` only if the evidence or substance check fails. " +
+            "Every `covered` claim must include `evidence`: an array of `{ path, excerpt, kind }` " +
+            "citations to real repository paths. " +
+            "D1 example: `delta: { skeleton: { top_level_tree: ['README.md', 'get.sh', 'compile.sh'], entry_points: [{ path: 'get.sh', role: 'SDK acquisition script', language: 'bash', run_command: 'bash get.sh' }], first_5_files_for_fresh_agent: [{ path: 'README.md', why: 'project overview' }] }, coverage: { D1_topography: { status: 'covered', confidence: 'high', evidence_summary: 'Topography anchored to real root files.', evidence: [{ path: 'README.md', excerpt: 'Adoptium AQAvit test suite', kind: 'positive' }] } } }`. " +
+            "D3 example: `delta: { observed_type_contract: { kind: 'typescript_interface', path: 'src/types.ts', name: 'Observed', fields: ['id', 'name'] }, coverage: { D3_type_contract: { status: 'covered', ... } } }` or `delta: { type_contract_surface: { stable_types: [{ path: 'src/types.ts', name: 'BuildEnv', purpose: 'shared make vars' }] }, coverage: { D3_type_contract: { ... } } }`. " +
+            "D8 example: `delta: { security_surface: { paths: { zero_access: ['.env', '*.pem', 'secrets.*'] }, bash_blocked_patterns: [{ pattern: 'eval $(aws sts assume-role ...)', source: 'JenkinsfileBase' }] }, coverage: { D8_security: { ... } } }`." +
+            "Keep the delta small but complete for the one dimension you are closing.",
         parameters: WriteMapDeltaParamsSchema,
         prepareArguments: prepareMapArguments,
         async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -568,7 +873,13 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
 
             if (prepared.delta === null || typeof prepared.delta !== "object" || Array.isArray(prepared.delta)) {
                 return {
-                    content: [{ type: "text", text: "Error: write_map_delta requires an object delta." }],
+                    content: [{
+                        type: "text",
+                        text:
+                            "Error: write_map_delta requires `delta` to be a JSON object. " +
+                            "Omit `delta` only to record a no-op exploration log. " +
+                            "To close a dimension, pass a small object such as `delta: { coverage: { D9_process: { status: 'covered', confidence: 'high', evidence_summary: 'No agentic layer observed.', evidence: [{ path: '.pi/', excerpt: 'No .pi/ directory present.', kind: 'absence' }] } } }`.",
+                    }],
                     isError: true,
                     details: undefined as unknown as Record<string, unknown>,
                 };
@@ -615,6 +926,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                     const canCloseTopography = Array.isArray(topographyEntryPoints)
                         && topographyEntryPoints.some(isTopographyEntryPoint);
                     const coverage = (merged.coverage ?? {}) as Record<string, unknown>;
+                    const existingEntry = (coverage[dim] ?? {}) as Record<string, unknown>;
                     coverage[dim] = {
                         status: dim === "D1_topography" && !canCloseTopography ? "gap" : "covered",
                         confidence,
@@ -622,6 +934,10 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                             dim === "D1_topography" && !canCloseTopography
                                 ? `${evidenceSummary} Add skeleton.entry_points before closing D1_topography.`
                                 : evidenceSummary,
+                        evidence:
+                            params.evidence
+                            ?? existingEntry.evidence
+                            ?? [],
                     };
                     merged.coverage = coverage;
                 }
@@ -641,6 +957,10 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                     observation: `merged delta from write_map_delta (strategy=${mergeStrategy})`,
                 });
                 merged.exploration_log = log;
+                // Re-apply shape repair to the merged map so any bad fields
+                // inherited from the existing map (or malformed deltas) are
+                // normalized before schema validation and the coverage gate.
+                repairMapShape(merged as UnknownRecord);
                 return merged;
             };
 
@@ -692,7 +1012,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                         "Add a non-empty skeleton.top_level_tree, skeleton.entry_points objects with path, role, language, and run_command, plus first_5_files_for_fresh_agent objects with path and why before closing D1_topography.",
                 };
             }
-            const closure = formatCoverageClosure(validMap);
+            const closure = formatCoverageClosure(validMap, ctx.cwd);
             const downgradedDimensions = downgradeUnsupportedCoverage(validMap, closure);
             let writeResult: { path: string; size_bytes: number };
             try {
@@ -714,7 +1034,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 (downgradedDimensions.length > 0
                     ? ` Unsupported covered claims persisted as gap: ${downgradedDimensions.join(", ")}.`
                     : "") +
-                formatCoverageRepairGuidance(closure) +
+                formatCoverageRepairGuidance(closure, params.dimension as CoverageDimensionName | null | undefined) +
                 (needsTopographyEvidence
                     ? " To close D1, retry with `delta: { skeleton: { top_level_tree: [\"src/\"], entry_points: [{ path: \"path/to/entry\", role: \"what it starts\", language: \"language\", run_command: \"documented command\" }], first_5_files_for_fresh_agent: [{ path: \"README.md\", why: \"starting context\" }] } }`."
                     : "") +

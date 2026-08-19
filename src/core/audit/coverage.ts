@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type { CodebaseMap } from "./schema.ts";
 
 export const COVERAGE_DIMENSIONS = [
@@ -34,6 +36,11 @@ export interface CoverageClosureResult {
     unresolved: CoverageDimension[];
     /** Human-readable reasons keyed by dimension for the unresolved set. */
     reasons: Record<string, string>;
+}
+
+export interface CoverageClosureOptions {
+    /** Repository root for verifying that evidence citations point at real paths. */
+    cwd?: string;
 }
 
 /**
@@ -176,13 +183,82 @@ function assessDimensionSubstance(map: CodebaseMap, dimension: CoverageDimension
     }
 }
 
+interface EvidenceCitationLike {
+    path: string;
+    excerpt: string;
+    kind: "positive" | "absence";
+}
+
+function isEvidenceCitationLike(value: unknown): value is EvidenceCitationLike {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+    const record = value as Record<string, unknown>;
+    return (
+        typeof record.path === "string"
+        && typeof record.excerpt === "string"
+        && (record.kind === "positive" || record.kind === "absence")
+    );
+}
+
+function evidencePathUnderRoot(cwd: string, citationPath: string): { absolute: string; underRoot: boolean } {
+    const resolved = path.resolve(cwd, citationPath);
+    const root = path.resolve(cwd);
+    const separator = path.sep;
+    // Resolve-normalized paths under the root must either equal the root or start with root + separator.
+    const underRoot = resolved === root || resolved.startsWith(`${root}${separator}`);
+    return { absolute: resolved, underRoot };
+}
+
+function verifyCitationTarget(cwd: string, citation: EvidenceCitationLike): string | null {
+    const { absolute, underRoot } = evidencePathUnderRoot(cwd, citation.path);
+    if (!underRoot) {
+        return `covered but evidence citation path escapes repository root: ${citation.path}`;
+    }
+    let exists: boolean;
+    try {
+        exists = fs.existsSync(absolute);
+    } catch {
+        exists = false;
+    }
+    if (citation.kind === "positive" && !exists) {
+        return `covered but positive evidence path does not exist: ${citation.path}`;
+    }
+    if (citation.kind === "absence" && exists) {
+        return `covered but absence evidence path exists: ${citation.path}`;
+    }
+    return null;
+}
+
+function assessEvidenceCitations(
+    entry: { evidence?: readonly EvidenceCitationLike[] },
+    dimension: CoverageDimension,
+    cwd?: string,
+): string | null {
+    const evidence = entry.evidence;
+    if (!Array.isArray(evidence) || evidence.length === 0) {
+        return "covered but no evidence citations were provided";
+    }
+    for (const citation of evidence) {
+        if (!isEvidenceCitationLike(citation)) {
+            return `covered but ${dimension} evidence is missing path, excerpt, or kind`;
+        }
+        if (cwd !== undefined) {
+            const failure = verifyCitationTarget(cwd, citation);
+            if (failure !== null) return failure;
+        }
+    }
+    return null;
+}
+
 /**
  * Decide, per dimension, whether the map has closed it for real.
  * A dimension is closed only when its coverage entry is `covered`,
- * its `evidence_summary` is non-empty, and any dimension-specific
- * substance rule is satisfied.
+ * its `evidence_summary` is non-empty, its evidence citations are present,
+ * and any dimension-specific substance rule is satisfied.
  */
-export function assessCoverageClosure(map: CodebaseMap): CoverageClosureResult {
+export function assessCoverageClosure(
+    map: CodebaseMap,
+    options?: CoverageClosureOptions,
+): CoverageClosureResult {
     const closed: CoverageDimension[] = [];
     const unresolved: CoverageDimension[] = [];
     const reasons: Record<string, string> = {};
@@ -197,6 +273,12 @@ export function assessCoverageClosure(map: CodebaseMap): CoverageClosureResult {
         if (!isNonEmptyString(entry.evidence_summary)) {
             unresolved.push(dimension);
             reasons[dimension] = "covered but evidence_summary is empty";
+            continue;
+        }
+        const evidenceFailure = assessEvidenceCitations(entry, dimension, options?.cwd);
+        if (evidenceFailure !== null) {
+            unresolved.push(dimension);
+            reasons[dimension] = evidenceFailure;
             continue;
         }
         const substanceFailure = assessDimensionSubstance(map, dimension);

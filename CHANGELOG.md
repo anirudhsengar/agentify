@@ -6,6 +6,15 @@ All notable changes to Agentify are documented here.
 
 ### Added
 
+- Evidence-backed audit coverage gate: every dimension marked `covered` must
+  include citations to real repository paths (`evidence: [{ path, excerpt,
+  kind }]`). The installer and `write_map`/`write_map_delta` tools verify that
+  positive citations point at existing files and absence citations point at
+  missing paths, so the model cannot fabricate coverage by claiming nonexistent
+  evidence.
+- Builder prompt coverage and evidence contract with explicit guidance that a
+  pre-agentic repository can honestly close `D9_process` by recording the
+  absence of the agentic layer directories.
 - Multi-ecosystem repository support during installation: Node.js, Python,
   Rust, Go, Java (Maven and Gradle), Ruby, and Makefile-based projects can
   now be inspected, validated, and configured without requiring `package.json`.
@@ -15,9 +24,33 @@ All notable changes to Agentify are documented here.
 - The builder may inspect, edit, and self-check across a bounded turn budget
   before its terminal typed submission, instead of one single-shot whole-file
   call.
+- Shell-script build-system discovery for repositories that use root-level
+  scripts (`build.sh`, `compile.sh`, `test.sh`, `lint.sh`, `get.sh`, `setup.sh`,
+  etc.) instead of a package manifest. Install scripts are identified but not
+  run as validation; build/test/lint/typecheck scripts are discovered, screened
+  for network/deployment/credential/destructive content, and proposed as
+  maintainer-approved validation commands.
 
 ### Fixed
 
+- Audit prompt and `write_map_delta` tool now require both the dimension data
+  and the matching coverage entry in every delta, and the tool result explicitly
+  lists the per-dimension reason and the exact fields still needed. This fixes
+  the non-deterministic 3/10 failure where the model wrote coverage annotations
+  without the corresponding `skeleton`, `module_graph`, `type_contract_surface`,
+  `security_surface`, etc., and then stopped because it thought the runtime had
+  stripped the arrays.
+- Repair provider-induced map shape errors before the schema gate, fixing
+  Anthropic-compatible MiniMax-M3 output: dotted keys (`meta.lifecycle.issue_types`),
+  camelCase lifecycle fields, stringified nested values, top-level `module_graph`
+  orphan keys, and flattened `shared_state` arrays are now normalized so the model
+  gets bounded recovery turns instead of an immediate 9/10 failure.
+- D9_process closure no longer depends on a closed `issue_types` enum; the
+  schema now accepts the template/issue names the model finds in the repository,
+  and the repair layer infers them from D9 evidence when absent.
+- Module graph edges accept repository-specific `kind` labels (e.g.
+  `process_boundary`, `ant_import`) instead of a restrictive `import|state|rpc`
+  enum, so real makefile/ant-driven boundaries validate cleanly.
 - Keep scheduled accepted-merge reconciliation enabled while preventing its
   first run from replaying pre-install repository history or treating installed
   Agentify workflows, runtimes, policy, and memory as application changes.
