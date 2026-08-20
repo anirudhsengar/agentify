@@ -199,7 +199,7 @@ function installValidationSmokeAsset(cwd: string): boolean {
  * When no repository validation command verifies, Agentify adds one: an
  * Agentify-owned, dependency-free smoke validator installed under
  * `.github/agentify/` that checks tracked JSON validity, JavaScript syntax,
- * manifest/lockfile coherence, and committed-secret patterns. Returns the
+ * and committed-secret patterns. Returns the
  * verified command, or null when the validator could not be installed or did
  * not pass on the current tree.
  */
@@ -226,7 +226,7 @@ export function scaffoldValidationSmokeCommand(
     assessment: "verified",
     exit_code: result.status,
     output_digest: crypto.createHash("sha256").update(output).digest("hex"),
-    detail: "Agentify-installed deterministic validation smoke: tracked JSON validity, JavaScript syntax, manifest/lockfile coherence, and committed-secret scan",
+    detail: "Agentify-installed deterministic validation smoke: tracked JSON validity, JavaScript syntax, and committed-secret scan",
   };
 }
 

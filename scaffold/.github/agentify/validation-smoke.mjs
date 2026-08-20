@@ -3,9 +3,11 @@
 //
 // Agentify validation smoke: deterministic, dependency-free repository checks
 // installed when the repository has no verifiable validation command of its
-// own. Checks tracked-file JSON validity, JavaScript syntax, manifest/lockfile
-// coherence, and committed-secret patterns. Exits 1 with a report on any
-// failure. Agentify owns this file; do not edit it by hand.
+// own. Checks tracked-file JSON validity, JavaScript syntax, and
+// committed-secret patterns. Only certainly-broken content fails the smoke:
+// shape and coherence judgments belong to the repository's own tooling.
+// Exits 1 with a report on any failure. Agentify owns this file; do not edit
+// it by hand.
 
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
@@ -102,17 +104,6 @@ function main() {
           fail(failures, "secret-scan", `${relative} matches ${pattern.name} pattern`);
         }
       }
-    }
-  }
-
-  if (tracked.includes("package-lock.json")) {
-    try {
-      const lock = JSON.parse(fs.readFileSync(path.join(cwd, "package-lock.json"), "utf-8"));
-      if (typeof lock.lockfileVersion !== "number" || (typeof lock.packages !== "object" && typeof lock.dependencies !== "object")) {
-        fail(failures, "manifest", "package-lock.json lacks lockfileVersion and a packages/dependencies map");
-      }
-    } catch (error) {
-      fail(failures, "manifest", `cannot read package-lock.json: ${error.message}`);
     }
   }
 
