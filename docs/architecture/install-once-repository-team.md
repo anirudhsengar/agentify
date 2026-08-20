@@ -61,7 +61,11 @@ The local installer performs these steps in order:
 6. initialize persistent identity and self-update policy;
 7. run a read-only structured repository audit;
 8. if discovery did not verify a required command, refine validation from the
-   audited validation surface (or a deterministic git-tree check) and re-verify;
+   audited validation surface and re-verify; when no repository command can be
+   verified at all, install the Agentify-owned validation smoke
+   (`.github/agentify/validation-smoke.mjs`: tracked-JSON validity, JavaScript
+   syntax, manifest/lockfile coherence, and committed-secret scan) and record
+   the verified smoke command in the task policy;
 9. derive and persist specialists and procedures from repository evidence;
 10. install the issue and learning workflows plus their trusted runtimes;
 11. write a repository-bound task policy with the attested manifest, command,

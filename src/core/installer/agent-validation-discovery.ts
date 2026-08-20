@@ -12,6 +12,7 @@ import type {
 import { DEFAULT_INSTALLER_PROCESS_RUNNER } from "./process-runner.ts";
 import { commandId, COMMAND_TIMEOUTS, unsafeReason } from "./build-systems/shared.ts";
 import { createRepositoryValidationApproval } from "./task-policy.ts";
+import { packageRoot } from "../pi-sdk-runtime.ts";
 
 export interface ParsedCommandTarget {
   program: string;
@@ -162,28 +163,70 @@ export function testAuditedValidationCommand(
   };
 }
 
-export function createFallbackValidationCommand(
+export const VALIDATION_SMOKE_RELATIVE_PATH = ".github/agentify/validation-smoke.mjs";
+
+/**
+ * Install the Agentify-owned validation smoke asset. The asset embeds the
+ * managed marker, so byte-identical reinstalls are no-ops and marker-bearing
+ * earlier copies may be refreshed; a marker-less file at the path belongs to
+ * the user and is never clobbered here (the scaffold installer reports the
+ * conflict instead).
+ */
+function installValidationSmokeAsset(cwd: string): boolean {
+  const source = path.join(packageRoot(), "scaffold", ...VALIDATION_SMOKE_RELATIVE_PATH.split("/"));
+  const destination = path.join(cwd, ...VALIDATION_SMOKE_RELATIVE_PATH.split("/"));
+  let content: Buffer;
+  try {
+    content = fs.readFileSync(source);
+  } catch {
+    return false;
+  }
+  try {
+    if (fs.existsSync(destination)) {
+      const existing = fs.readFileSync(destination);
+      if (Buffer.compare(existing, content) === 0) return true;
+      if (!existing.toString("utf-8").includes("// agentify:managed")) return false;
+    }
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.writeFileSync(destination, content, { mode: 0o755 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * When no repository validation command verifies, Agentify adds one: an
+ * Agentify-owned, dependency-free smoke validator installed under
+ * `.github/agentify/` that checks tracked JSON validity, JavaScript syntax,
+ * manifest/lockfile coherence, and committed-secret patterns. Returns the
+ * verified command, or null when the validator could not be installed or did
+ * not pass on the current tree.
+ */
+export function scaffoldValidationSmokeCommand(
   cwd: string,
   runner: InstallerProcessRunner,
-): InstallerCommand {
+): InstallerCommand | null {
+  if (!installValidationSmokeAsset(cwd)) return null;
   const result = runner.run({
-    program: "git",
-    args: ["diff", "--check"],
+    program: "node",
+    args: [VALIDATION_SMOKE_RELATIVE_PATH],
     cwd,
-    timeoutMs: 10_000,
+    timeoutMs: 60_000,
   });
   const output = `${result.stdout}\n${result.stderr}`;
+  if (result.status !== 0 || result.timedOut) return null;
   return {
-    command_id: commandId("test", "git-diff-check"),
+    command_id: commandId("test", "agentify-validation-smoke"),
     kind: "test",
-    argv: ["git", "diff", "--check"],
+    argv: ["node", VALIDATION_SMOKE_RELATIVE_PATH],
     cwd: ".",
-    timeout_ms: 10_000,
+    timeout_ms: 60_000,
     required: true,
-    assessment: result.status === 0 ? "verified" : "characterized",
+    assessment: "verified",
     exit_code: result.status,
     output_digest: crypto.createHash("sha256").update(output).digest("hex"),
-    detail: "deterministic git tree sanity check",
+    detail: "Agentify-installed deterministic validation smoke: tracked JSON validity, JavaScript syntax, manifest/lockfile coherence, and committed-secret scan",
   };
 }
 
@@ -222,16 +265,17 @@ export function refinePreflightWithAudit(input: {
     }
   }
 
-  // If still no verified command and git is clean, attach fallback
+  // If no repository validation command verifies, Agentify adds one itself:
+  // install the Agentify-owned validation smoke asset and verify it.
   const stillNoVerified = !commands.some(
     (c) => c.kind !== "install" && c.required && c.assessment === "verified",
   );
   if (stillNoVerified) {
-    const fallback = createFallbackValidationCommand(input.cwd, runner);
-    if (fallback.assessment === "verified") {
+    const scaffolded = scaffoldValidationSmokeCommand(input.cwd, runner);
+    if (scaffolded) {
       commands = [
         ...commands.filter((c) => c.assessment !== "failed" || !c.required),
-        fallback,
+        scaffolded,
       ];
     }
   }

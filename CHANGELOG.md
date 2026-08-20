@@ -53,8 +53,12 @@ All notable changes to Agentify are documented here.
 - Installer attestation of unsandboxed repository validation: running
   `agentify` records the screened command set, manifest, and lockfile hashes
   without a separate interactive approve/skip prompt. Missing required
-  validation can be refined from the audited validation surface or a
-  deterministic git-tree check.
+  validation can be refined from the audited validation surface; repositories
+  with no verifiable validation command at all receive an Agentify-owned
+  validation smoke (`.github/agentify/validation-smoke.mjs`: tracked-JSON
+  validity, JavaScript syntax, manifest/lockfile coherence, committed-secret
+  scan) that is installed, verified, and recorded in the task policy instead of
+  a hollow `git diff --check` floor.
 - When a local provider API key is already resolved, the installer copies it
   to the `PI_API_KEY` GitHub Actions secret through `gh secret set` stdin.
   `AGENT_PAT` still requires interactive consent.

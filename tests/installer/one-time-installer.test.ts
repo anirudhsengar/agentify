@@ -10,6 +10,7 @@ import {
   finalizeOneTimeInstallation,
   inspectRepositoryForInstallation,
   prepareOneTimeInstallationState,
+  refinePreflightWithAudit,
   repairInstalledRuntime,
   repositoryTaskPolicySchemaStatus,
   repositoryValidationApprovalCurrent,
@@ -408,6 +409,41 @@ async function testMissingAndUnsafeValidation(): Promise<void> {
   } finally {
     fs.rmSync(missing, { recursive: true, force: true });
     fs.rmSync(unsafe, { recursive: true, force: true });
+  }
+}
+
+async function testValidationSmokeScaffoldedWhenMissing(): Promise<void> {
+  const cwd = tempRepo("agentify-installer-validation-smoke-", { build: "tsc" });
+  try {
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "fixture");
+    const preflight = inspectRepositoryForInstallation({
+      cwd,
+      runner: fakeRunner(cwd, { head: git(cwd, "rev-parse", "HEAD") }),
+      runValidation: true,
+    });
+    assert.ok(preflight.blockers.some((entry) => entry.code === "missing_deterministic_validation"));
+
+    const refined = refinePreflightWithAudit({ cwd, preflight, map: null });
+    const smoke = refined.preflight.commands.find(
+      (command) => command.command_id === "test-agentify-validation-smoke",
+    );
+    assert.ok(smoke, "the validation smoke must be scaffolded when no repository command verifies");
+    assert.equal(smoke.assessment, "verified");
+    assert.equal(smoke.required, true);
+    assert.deepEqual(smoke.argv, ["node", ".github/agentify/validation-smoke.mjs"]);
+    assert.ok(
+      !refined.preflight.blockers.some((entry) => entry.code === "missing_deterministic_validation"),
+      "the scaffolded verified command must clear the missing-validation blocker",
+    );
+    const asset = path.join(cwd, ".github", "agentify", "validation-smoke.mjs");
+    assert.ok(fs.existsSync(asset), "validation smoke asset must be installed");
+    assert.match(fs.readFileSync(asset, "utf-8"), /^#!\/usr\/bin\/env node\r?\n\/\/ agentify:managed\r?\n/);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
   }
 }
 
@@ -811,6 +847,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "non-GitHub remote blocks analysis", fn: testNonGitHubRemoteBlocksAnalysis },
   { name: "unauthorized actor is analyzable only", fn: testUnauthorizedActorIsAnalyzableOnly },
   { name: "missing and unsafe validation", fn: testMissingAndUnsafeValidation },
+  { name: "validation smoke scaffolded when missing", fn: testValidationSmokeScaffoldedWhenMissing },
   { name: "dependency validation requires lockfile", fn: testDependencyValidationRequiresLockfile },
   { name: "GitHub configuration and secret stdin", fn: testGitHubConfigurationAndSecretStdin },
   { name: "initial installation and idempotent attach", fn: testInitialInstallationAndIdempotentAttach },

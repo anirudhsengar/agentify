@@ -269,6 +269,7 @@ function runInstallationCanaries(
   for (const file of [
     ".github/agentify/task-runtime.mjs",
     ".github/agentify/learning-runtime.mjs",
+    ".github/agentify/validation-smoke.mjs",
   ]) add(`runtime:${file}`, fs.existsSync(path.join(cwd, file)), `${file} is installed`);
 
   const configuration = readRepositoryTaskPolicyConfiguration(cwd);

@@ -28,6 +28,7 @@ const FOCUSED_RUNTIME_PATHS = [
   "AGENTS.md",
   "SETUP.md",
   ".github/agentify-task-policy.json",
+  ".github/agentify/validation-smoke.mjs",
   ".github/scripts/complete-accepted-task-merge.mjs",
   ".github/scripts/task-state-github.mjs",
   ".github/workflows/agentify-issue.yml",
