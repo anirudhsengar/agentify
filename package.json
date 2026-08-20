@@ -29,6 +29,7 @@
     "scaffold/AGENTS.md",
     "scaffold/SETUP.md",
     "scaffold/.github/agentify-task-policy.json",
+    "scaffold/.github/agentify/validation-smoke.mjs",
     "scaffold/.github/scripts/complete-accepted-task-merge.mjs",
     "scaffold/.github/scripts/publish-task-draft.mjs",
     "scaffold/.github/scripts/run-task-lifecycle.mjs",
