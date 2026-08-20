@@ -13,6 +13,7 @@ fail() { echo "ERROR: $*" >&2; failures=$((failures + 1)); }
 # trusted installer code, not stored as duplicate scaffold artifacts.
 expected_scaffold=$(cat <<'EOF'
 .github/agentify-task-policy.json
+.github/agentify/validation-smoke.mjs
 .github/scripts/complete-accepted-task-merge.mjs
 .github/scripts/publish-task-draft.mjs
 .github/scripts/run-task-lifecycle.mjs
