@@ -105,19 +105,14 @@ function main() {
     }
   }
 
-  const manifest = tracked.includes("package.json")
-    ? path.join(cwd, "package.json")
-    : null;
-  if (manifest && tracked.includes("package-lock.json")) {
+  if (tracked.includes("package-lock.json")) {
     try {
-      const pkg = JSON.parse(fs.readFileSync(manifest, "utf-8"));
       const lock = JSON.parse(fs.readFileSync(path.join(cwd, "package-lock.json"), "utf-8"));
-      const lockName = lock.packages?.[""]?.name ?? lock.name;
-      if (typeof pkg.name === "string" && typeof lockName === "string" && pkg.name !== lockName) {
-        fail(failures, "manifest", `package.json name "${pkg.name}" does not match package-lock.json name "${lockName}"`);
+      if (typeof lock.lockfileVersion !== "number" || (typeof lock.packages !== "object" && typeof lock.dependencies !== "object")) {
+        fail(failures, "manifest", "package-lock.json lacks lockfileVersion and a packages/dependencies map");
       }
     } catch (error) {
-      fail(failures, "manifest", `cannot compare manifest and lockfile: ${error.message}`);
+      fail(failures, "manifest", `cannot read package-lock.json: ${error.message}`);
     }
   }
 
