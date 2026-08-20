@@ -15,6 +15,7 @@ const executablePaths = [
   "bin/agentify.js",
   "dist/learning-runtime.mjs",
   "dist/task-runtime.mjs",
+  "scaffold/.github/agentify/validation-smoke.mjs",
   "scaffold/.github/scripts/complete-accepted-task-merge.mjs",
   "scaffold/.github/scripts/publish-task-draft.mjs",
   "scaffold/.github/scripts/run-task-lifecycle.mjs",
