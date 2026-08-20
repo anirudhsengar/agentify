@@ -95,6 +95,20 @@ function formatValidationErrors(errors: ReadonlyArray<unknown>, prefix: string):
     return `${prefix} with ${errors.length} error(s)${moreCount}:\n${formatted}`;
 }
 
+function describeTopLevelShape(map: unknown): string {
+    if (map === null || typeof map !== "object" || Array.isArray(map)) return "";
+    const keys = Object.keys(map as Record<string, unknown>);
+    const known = new Set(Object.keys(CodebaseMapSchema.properties));
+    const unexpected = keys.filter((key) => !known.has(key));
+    const missing = [...known].filter((key) =>
+        (CodebaseMapSchema.required as string[] | undefined)?.includes(key) && !keys.includes(key)
+    );
+    const parts: string[] = [];
+    if (unexpected.length > 0) parts.push(`unexpected top-level keys: ${unexpected.join(", ")}`);
+    if (missing.length > 0) parts.push(`missing required top-level keys: ${missing.join(", ")}`);
+    return parts.length > 0 ? ` Top-level shape: ${parts.join("; ")}.` : "";
+}
+
 export function validateMap(map: unknown): CompleteMapValidation {
     const errors = Value.Errors(CodebaseMapSchema, map);
     if (errors.length === 0) {
@@ -102,7 +116,7 @@ export function validateMap(map: unknown): CompleteMapValidation {
     }
     return {
         ok: false,
-        error: formatValidationErrors(errors, "Schema validation failed"),
+        error: formatValidationErrors(errors, "Schema validation failed") + describeTopLevelShape(map),
     };
 }
 

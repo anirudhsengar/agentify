@@ -1,6 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
+import { loadCanonicalMapAt } from "../audit/write-map-tool.ts";
+import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
+import { refinePreflightWithAudit } from "./agent-validation-discovery.ts";
 import {
   hasRecognizedManifestMarker,
   acceptMemoryCandidate,
@@ -32,7 +35,6 @@ import type {
   RepositoryValidationApproval,
 } from "./contracts.ts";
 import { configureGitHubInstallation } from "./github-configuration.ts";
-import { discoverRepositoryCommands } from "./command-discovery.ts";
 import { DEFAULT_INSTALLER_PROCESS_RUNNER } from "./process-runner.ts";
 import {
   buildRepositoryTaskPolicyConfiguration,
@@ -324,8 +326,16 @@ function withBlocker(
 export function finalizeOneTimeInstallation(
   input: FinalizeOneTimeInstallationInput,
 ): OneTimeInstallationReport {
-  const blockers = [...input.preflight.blockers];
-  let installedValidationCommands = input.preflight.commands;
+  const map = loadCanonicalMapAt(input.cwd, AUDIT_STATE_RELATIVE_DIR);
+  const { preflight: effectivePreflight, validationApproval: refinedApproval } = refinePreflightWithAudit({
+    cwd: input.cwd,
+    preflight: input.preflight,
+    map,
+    runner: input.runner,
+  });
+  const validationApproval = refinedApproval ?? input.validationApproval ?? undefined;
+  const blockers = [...effectivePreflight.blockers];
+  let installedValidationCommands = effectivePreflight.commands;
   if (!input.providerVerified || !input.provider || !input.model) {
     withBlocker(
       blockers,
@@ -336,7 +346,7 @@ export function finalizeOneTimeInstallation(
   }
   let specialistSync: RepositorySpecialistSyncResult = { status: "memory_absent" };
   try {
-    initializePersistentTeam(input.cwd, input.preflight);
+    initializePersistentTeam(input.cwd, effectivePreflight);
     specialistSync = synchronizeRepositorySpecialists(input.cwd);
   } catch (error) {
     withBlocker(
@@ -354,8 +364,8 @@ export function finalizeOneTimeInstallation(
       cwd: input.cwd,
       packageRoot: packageRoot(),
       taskPolicyConfiguration: buildRepositoryTaskPolicyConfiguration(
-        input.preflight,
-        input.validationApproval ?? null,
+        effectivePreflight,
+        validationApproval ?? null,
         input.cwd,
       ),
     });
@@ -379,24 +389,28 @@ export function finalizeOneTimeInstallation(
     );
   }
 
-  if (input.preflight.disposition === "ready") {
-    const installedValidation = discoverRepositoryCommands(
-      input.cwd,
-      input.runner ?? DEFAULT_INSTALLER_PROCESS_RUNNER,
-      true,
-    );
-    installedValidationCommands = installedValidation.commands;
-    if (installedValidation.blockers.some((blocker) => blocker.code === "validation_failed")) {
-      withBlocker(
-        blockers,
-        "validation_failed",
-        "At least one required repository validation command failed after Agentify installed its managed files.",
-        "Configure repository validation to accept or explicitly exclude Agentify-owned generated assets, then rerun the installer.",
-      );
+  if (effectivePreflight.disposition === "ready") {
+    const verified = effectivePreflight.commands.filter((c) => c.kind !== "install" && c.required);
+    for (const cmd of verified) {
+      const res = (input.runner ?? DEFAULT_INSTALLER_PROCESS_RUNNER).run({
+        program: cmd.argv[0]!,
+        args: cmd.argv.slice(1),
+        cwd: path.resolve(input.cwd, cmd.cwd),
+        timeoutMs: cmd.timeout_ms,
+      });
+      if (res.status !== 0 || res.timedOut) {
+        withBlocker(
+          blockers,
+          "validation_failed",
+          `Validation command failed after Agentify installed its managed files: ${cmd.argv.join(" ")}`,
+          "Configure repository validation to accept or explicitly exclude Agentify-owned generated assets, then rerun the installer.",
+        );
+      }
     }
+    installedValidationCommands = effectivePreflight.commands;
   }
 
-  const canary = runInstallationCanaries(input.cwd, input.preflight, specialistSync);
+  const canary = runInstallationCanaries(input.cwd, effectivePreflight, specialistSync);
   if (!canary.passed) {
     withBlocker(
       blockers,
@@ -406,11 +420,11 @@ export function finalizeOneTimeInstallation(
     );
   }
 
-  if (input.preflight.identity && blockers.length === 0 && canary.passed) {
+  if (effectivePreflight.identity && blockers.length === 0 && canary.passed) {
     try {
       configureGitHubInstallation({
         cwd: input.cwd,
-        repository: input.preflight.identity,
+        repository: effectivePreflight.identity,
         agentifyVersion: input.agentifyVersion,
         provider: input.provider,
         model: input.model,
@@ -429,11 +443,12 @@ export function finalizeOneTimeInstallation(
   }
 
   const synchronized = specialistSync.status === "synchronized" ? specialistSync : null;
-  const ready = input.preflight.disposition === "ready" && blockers.length === 0 && canary.passed;
+  const ready = effectivePreflight.disposition === "ready" && blockers.length === 0 && canary.passed;
   return {
-    disposition: ready ? "ready" : input.preflight.analysis_allowed ? "analyzable-only" : "blocked",
-    repository: input.preflight.identity,
+    disposition: ready ? "ready" : effectivePreflight.analysis_allowed ? "analyzable-only" : "blocked",
+    repository: effectivePreflight.identity,
     specialists_installed: synchronized?.portfolio.specialists.length ?? 0,
+    specialist_warnings: synchronized?.portfolio.warnings ?? [],
     procedures_installed: synchronized?.portfolio.procedures.length ?? 0,
     validation_commands_verified: installedValidationCommands.filter((command) => command.assessment === "verified").length,
     github_issue_intake_enabled: ready,
@@ -454,6 +469,7 @@ export function formatOneTimeInstallationReport(report: OneTimeInstallationRepor
     "Repository analyzed",
     "Persistent orchestrator installed",
     `${report.specialists_installed} specialists installed`,
+    ...report.specialist_warnings.map((warning) => `Specialist discovery: ${warning}`),
     `${report.procedures_installed} procedures installed`,
     `${report.validation_commands_verified} validation commands verified`,
     `GitHub issue intake ${report.github_issue_intake_enabled ? "enabled" : "disabled"}`,

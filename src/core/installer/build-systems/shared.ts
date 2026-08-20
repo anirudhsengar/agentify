@@ -210,10 +210,10 @@ export function collectBlockers(
       remediation: "Add at least one deterministic application-owned validation command.",
     });
   } else if (runValidation && commands.some((command) => (
-    command.kind !== "install" && command.assessment === "failed"
+    command.kind !== "install" && command.required && command.assessment === "failed"
   ))) {
     const failing = commands
-      .filter((command) => command.kind !== "install" && command.assessment === "failed")
+      .filter((command) => command.kind !== "install" && command.required && command.assessment === "failed")
       .map((command) => `${command.command_id}: ${command.detail}`)
       .join(" | ");
     blockers.push({

@@ -423,8 +423,8 @@ class Controller {
     }
     if (this.policyConfig.schema_version !== "2") {
       this.comment(
-        "Agentify refused to start implementation because the installed task policy predates explicit validation approval. "
-        + "Run `agentify` interactively and approve the displayed unsandboxed repository validation commands."
+        "Agentify refused to start implementation because the installed task policy predates installer attestation of unsandboxed validation. "
+        + "Rerun `agentify` in this repository so it can record attestation for the current screened validation commands."
       );
       this.output({ status: "blocked", reason: "validation_policy_stale" });
       return false;
@@ -442,8 +442,8 @@ class Controller {
     }
     if (!validationApprovalCurrent(this.root, this.policyConfig)) {
       this.comment(
-        "Agentify refused to start implementation because the approved package manifest, lockfile, or validation commands changed. "
-        + "Run `agentify` interactively to review and approve the current validation inputs."
+        "Agentify refused to start implementation because the attested package manifest, lockfile, or validation commands changed. "
+        + "Rerun `agentify` in this repository so it can record attestation for the current validation inputs."
       );
       this.output({ status: "blocked", reason: "validation_policy_stale" });
       return false;
@@ -1333,7 +1333,7 @@ class Controller {
 
   runValidation() {
     if (!validationApprovalCurrent(this.root, this.policyConfig)) {
-      fail("validation_policy_stale: approved package manifest, lockfile, or command set changed before validation");
+      fail("validation_policy_stale: attested package manifest, lockfile, or command set changed before validation");
     }
     const validationPlan = this.requireRuntime("build-validation-plan", {
       state: this.state,

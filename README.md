@@ -14,7 +14,7 @@
 
 Agentify is a Node.js CLI that installs a controlled multi-agent engineering workflow into an existing GitHub repository. You run the installer once; after that, authorized GitHub issues are the normal work interface.
 
-For each queued task, Agentify plans with a persistent orchestrator, a read-only planner that refines the implementation steps, and evidence-backed read-only specialists, gives exactly one builder bounded write access on an isolated branch to inspect, edit, and self-check before its terminal submission, runs maintainer-approved validation, and obtains a role-separated automated read-only review before opening an **unmerged draft pull request**. A path-restricted knowledge maintainer refreshes learning after an accepted merge. The human retains merge authority; deployment is never automatic.
+For each queued task, Agentify plans with a persistent orchestrator, a read-only planner that refines the implementation steps, and evidence-backed read-only specialists, gives exactly one builder bounded write access on an isolated branch to inspect, edit, and self-check before its terminal submission, runs installer-attested unsandboxed validation, and obtains a role-separated automated read-only review before opening an **unmerged draft pull request**. A path-restricted knowledge maintainer refreshes learning after an accepted merge. The human retains merge authority; deployment is never automatic.
 
 > [!NOTE]
 > Agentify is an early public project. Its current evidence comes from maintainer-controlled qualification, security tests, and exact-artifact tests. This repository does not claim independent production adoption.
@@ -118,22 +118,23 @@ agentify
 The installer:
 
 - verifies the repository root, GitHub identity, maintainer authority, and default-branch policy;
-- discovers the exact validation commands without running them;
-- displays those commands and requires explicit interactive approval before first execution;
+- discovers validation commands, screens them for obvious production credentials and mutation, and records installer attestation for unsandboxed execution;
 - audits the repository and creates persistent specialists, procedures, and knowledge;
+- refines missing validation from the audited validation surface when discovery did not verify a required command;
 - installs the issue and accepted-merge learning workflows;
 - writes a repository-bound task policy containing validation and lockfile hashes;
 - configures required labels and non-secret repository variables;
+- copies a resolved local provider API key to the `PI_API_KEY` Actions secret when one is already present;
 - runs deterministic installation canaries and enables issue intake only when all checks pass.
 
 The CLI is an installer and maintenance interface. Do not rerun it for ordinary tasks; use GitHub issues after installation.
 
 ### 3. Configure workflow credentials
 
-The installer can configure these GitHub Actions secrets with explicit consent:
+The installer can configure these GitHub Actions secrets:
 
-- **`PI_API_KEY`** — the model-provider credential used by the installed workflows.
-- **`AGENT_PAT`** — optional but recommended; used only by trusted workflow code to push the task branch and publish its draft pull request. A dedicated token allows the resulting pull request to trigger the repository's normal pull-request workflows.
+- **`PI_API_KEY`** — the model-provider credential used by the installed workflows. When a local provider key is already resolved from the environment or stored credentials, the installer copies it through `gh secret set` stdin. Otherwise it prompts interactively, or prints `gh secret set` guidance when no TTY is available.
+- **`AGENT_PAT`** — optional but recommended; used only by trusted workflow code to push the task branch and publish its draft pull request. A dedicated token allows the resulting pull request to trigger the repository's normal pull-request workflows. This secret is set only after interactive consent.
 
 A fine-grained `AGENT_PAT` needs access only to the target repository with:
 
@@ -211,7 +212,7 @@ Agentify preserves user-owned files. If a required path is already occupied by u
 ## Security and authority boundaries
 
 > [!WARNING]
-> Repository validation executes maintainer-approved, repository-owned code **without OS-level sandboxing or network isolation**. Agentify removes common credential variables, rejects visible deployment and publication commands, detects repository mutation, and binds approval to the manifest, commands, and lockfile—but these controls are guardrails, not process isolation.
+> Repository validation executes installer-attested, repository-owned code **without OS-level sandboxing or network isolation**. Agentify removes common credential variables, rejects visible deployment and publication commands, detects repository mutation, and binds attestation to the manifest, commands, and lockfile—but these controls are guardrails, not process isolation.
 
 | Boundary | Enforced behavior |
 | --- | --- |

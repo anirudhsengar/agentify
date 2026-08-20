@@ -292,3 +292,42 @@ export function assessCoverageClosure(
 
     return { closed, unresolved, reasons };
 }
+
+/**
+ * Repository-specialist discovery reads `expert_evidence.expert_domains` from
+ * the canonical map. The audit is not complete until that structure has been
+ * explicitly recorded: an honest empty `expert_domains` list is valid for a
+ * repository with no cohesive recurring domain, but an absent field means the
+ * model never considered specialists at all and discovery would silently
+ * produce an empty portfolio.
+ */
+export function specialistEvidenceRecorded(map: CodebaseMap): boolean {
+    return map.expert_evidence !== undefined;
+}
+
+export interface AuditCompletionResult {
+    coverage: CoverageClosureResult;
+    /** True once `expert_evidence` exists in the map, even when honestly empty. */
+    specialistEvidenceRecorded: boolean;
+    /** True only when every coverage dimension is closed AND specialist evidence is recorded. */
+    complete: boolean;
+}
+
+/**
+ * The full audit completion gate: all ten coverage dimensions closed plus an
+ * explicit specialist-evidence decision. The runtime and the installer attach
+ * path use this so a session can never end (or be skipped) before specialist
+ * discovery has its authoritative input.
+ */
+export function assessAuditCompletion(
+    map: CodebaseMap,
+    options?: CoverageClosureOptions,
+): AuditCompletionResult {
+    const coverage = assessCoverageClosure(map, options);
+    const recorded = specialistEvidenceRecorded(map);
+    return {
+        coverage,
+        specialistEvidenceRecorded: recorded,
+        complete: coverage.unresolved.length === 0 && recorded,
+    };
+}

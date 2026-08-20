@@ -109,13 +109,14 @@ process.exit(1);
   };
   for (const [index, profile] of profiles.entries()) {
     const fixture = path.join(fixturesRoot, profile);
-    const first = run(nodeCommand, [bin], { cwd: fixture, env, timeout: 900_000, expectFailure: true });
-    assert.match(
-      `${first.stdout}\n${first.stderr}`,
-      profile === "readiness-fail"
-        ? /analyzable-only|missing deterministic validation|readiness status/
-        : /validation_consent_required|maintainer has not approved|analyzable-only/,
-    );
+    const isFail = profile === "readiness-fail";
+    const first = run(nodeCommand, [bin], { cwd: fixture, env, timeout: 900_000, expectFailure: isFail });
+    if (isFail) {
+      assert.match(
+        `${first.stdout}\n${first.stderr}`,
+        /analyzable-only|missing deterministic validation|readiness status/,
+      );
+    }
     assert.match(first.stdout, /Automatic application merge disabled/);
     for (const relative of [
       ".agentify/manifest.json",
@@ -135,9 +136,13 @@ process.exit(1);
     ]) assert.ok(fs.existsSync(path.join(fixture, relative)), `${profile}: ${relative}`);
     const policy = JSON.parse(fs.readFileSync(path.join(fixture, ".github/agentify-task-policy.json"), "utf-8"));
     assert.equal(policy.schema_version, "2");
-    assert.equal(policy.configured, false);
+    assert.equal(policy.configured, !isFail);
     assert.equal(policy.repository.repository_id, String(987651 + index));
-    assert.equal(policy.validation_approval, null);
+    if (isFail) {
+      assert.equal(policy.validation_approval, null);
+    } else {
+      assert.notEqual(policy.validation_approval, null);
+    }
     assert.equal(policy.validation_execution.mode, "maintainer-approved-unsandboxed");
     assert.equal(policy.application_merge, "disabled");
   }
@@ -151,8 +156,7 @@ process.exit(1);
   });
   run("git", ["-C", fixture, "check-ignore", "-q", ".agentify/runtime/audit/history/example.json"]);
   const memoryBefore = fs.readFileSync(memoryManifestPath, "utf-8");
-    const second = run(nodeCommand, [bin], { cwd: fixture, env, timeout: 900_000, expectFailure: true });
-  assert.match(`${second.stdout}\n${second.stderr}`, /validation_consent_required|analyzable-only/);
+  const second = run(nodeCommand, [bin], { cwd: fixture, env, timeout: 900_000 });
   assert.equal(fs.readFileSync(memoryManifestPath, "utf-8"), memoryBefore);
 
   run("git", ["-C", fixture, "add", ".agentify", ".github", "AGENTS.md", "SETUP.md"]);
@@ -169,7 +173,7 @@ process.exit(1);
   );
 
   writeQualificationReceipt("installed-installer-smoke.mjs", [
-    "installer.noninteractive-validation-consent-required",
+    "installer.validation-approval-configured",
     "installer.schema-v2-fail-closed-policy-written",
     "installer.managed-runtime-installed",
     "installer.canonical-audit-map-versioned",

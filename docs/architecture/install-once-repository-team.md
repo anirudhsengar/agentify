@@ -54,20 +54,26 @@ The local installer performs these steps in order:
 3. verify maintainer permission and default-branch policy;
 4. discover validation commands without executing them and require a committed
    npm lockfile when validation has package dependencies;
-5. display the commands and require explicit maintainer approval of unsandboxed
-   repository validation before executing them;
+5. screen discovered commands for obvious production credentials and mutation,
+   then execute passing required validation without an OS sandbox or network
+   isolation; running `agentify` in the target repository is the attestation
+   that records maintainer-approved unsandboxed validation;
 6. initialize persistent identity and self-update policy;
 7. run a read-only structured repository audit;
-8. derive and persist specialists and procedures from repository evidence;
-9. install the issue and learning workflows plus their trusted runtimes;
-10. write a repository-bound task policy with the approved manifest, command,
+8. if discovery did not verify a required command, refine validation from the
+   audited validation surface (or a deterministic git-tree check) and re-verify;
+9. derive and persist specialists and procedures from repository evidence;
+10. install the issue and learning workflows plus their trusted runtimes;
+11. write a repository-bound task policy with the attested manifest, command,
     and lockfile hashes;
-11. run deterministic installation canaries;
-12. configure required GitHub labels, non-secret variables, and the repository
-    Actions permission needed to create unmerged draft pull requests, plus an
-    explicitly consented dedicated automation token when the maintainer wants
-    those pull requests to trigger ordinary repository workflows;
-13. enable issue intake only when every required check passes.
+12. run deterministic installation canaries;
+13. configure required GitHub labels, non-secret variables, and the repository
+    Actions permission needed to create unmerged draft pull requests; copy a
+    resolved local provider API key to the `PI_API_KEY` Actions secret when one
+    is already present, and set a dedicated automation token only after
+    interactive consent when the maintainer wants those pull requests to
+    trigger ordinary repository workflows;
+14. enable issue intake only when every required check passes.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.
@@ -80,9 +86,9 @@ approved validation. A dependency-bearing repository without `package-lock.json`
 or `npm-shrinkwrap.json` remains analyzable-only because a fresh GitHub checkout
 cannot reproduce the locally verified validation environment.
 
-Task-policy schema 2 records the maintainer attestation and hashes. Schema-1 or
-drifted policies remain readable but cannot enable issue intake until the local
-interactive installer records renewed approval.
+Task-policy schema 2 records the installer attestation and hashes. Schema-1 or
+drifted policies remain readable but cannot enable issue intake until `agentify`
+is rerun against the current manifest, command set, and lockfile.
 
 ## Issue execution contract
 

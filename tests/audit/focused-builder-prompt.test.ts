@@ -40,6 +40,17 @@ test("focused audit prompt requests only operational map evidence", () => {
   }
 });
 
+test("focused audit prompt gates completion on specialist evidence", () => {
+  const prompt = read("src/core/audit/prompts/builder.md");
+  assert.match(prompt, /expert_evidence\.expert_domains/);
+  assert.match(prompt, /completion requirement/i);
+  assert.match(prompt, /honest empty/i);
+  assert.ok(
+    !prompt.includes("is another specialist-evidence input"),
+    "feature_agents must not be presented as a specialist-discovery input",
+  );
+});
+
 test("package-internal explorer templates remain absent", () => {
   const templatePath = path.join(
     REPO_ROOT,

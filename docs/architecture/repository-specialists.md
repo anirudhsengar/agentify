@@ -13,6 +13,16 @@ tracked files, and validation commands. Speculative feature-agent names and
 suggested domain hints do not create specialists. Discovery is bounded so the
 portfolio remains small and reviewable.
 
+The audit cannot complete before it records an explicit specialist-evidence
+decision in `expert_evidence.expert_domains`. The completion gate keeps the
+session open — with bounded recovery passes — until the field exists, so a
+coverage-complete map can no longer skip specialist consideration silently. An
+honest empty domain list remains valid for repositories with no cohesive
+recurring domain, and rerunning the installer against a map that predates this
+gate triggers a bounded top-up audit rather than a blind re-attach. Discovery
+warnings explaining an empty or reduced portfolio are printed in the install
+report.
+
 Procedures are emitted only from tracked custom commands and the authoritative
 domain or repository validation surface. Free-form skill candidates and
 per-area template hints remain audit observations, not executable portfolio

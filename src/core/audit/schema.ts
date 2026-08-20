@@ -37,10 +37,13 @@ export { COVERAGE_DIMENSIONS } from "./coverage.ts";
 export {
   AGENTS_MD_MAX_LINES,
   MIN_PITFALLS_FOR_COVERED,
+  assessAuditCompletion,
   assessCoverageClosure,
   extractCoverageSummary,
+  specialistEvidenceRecorded,
 } from "./coverage.ts";
 export type {
+  AuditCompletionResult,
   CoverageClosureResult,
   CoverageDimension,
   CoverageSummary,

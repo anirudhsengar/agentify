@@ -6,6 +6,26 @@ All notable changes to Agentify are documented here.
 
 ### Added
 
+- Specialist-evidence completion gate: the repository audit no longer completes
+  when all ten coverage dimensions close — the session stays open (with bounded
+  recovery passes and explicit tool guidance) until `expert_evidence.expert_domains`
+  is explicitly recorded. An honest empty list remains valid for repositories
+  with no cohesive recurring domain, but it must be a recorded decision. This
+  closes the silent failure where the audit stopped at coverage closure before
+  the model ever considered specialists, producing "0 specialists installed"
+  with no explanation. Rerunning `agentify` against a repository whose map
+  predates the gate now runs a bounded top-up audit instead of blindly
+  re-attaching, and the install report prints specialist-discovery warnings
+  when discovery yields an empty or reduced portfolio.
+- Transport repairs for provider/model tool-call quirks observed in real
+  audits: evidence sections misplaced under `meta` are hoisted to the top level
+  (filling empty canonical fields instead of silently validating invisibly),
+  double-wrapped `map`/`delta` payloads are unwrapped, dimension deltas batched
+  as arrays are deep-merged, markdown-fenced JSON is unwrapped, over-escaped
+  string-literal payloads are decoded one layer, raw control characters inside
+  JSON string values are escaped, dangling commas before closing delimiters are
+  removed, and rejected payloads now carry a compact shape description so the
+  model (and the audit log) can see exactly what was received.
 - Evidence-backed audit coverage gate: every dimension marked `covered` must
   include citations to real repository paths (`evidence: [{ path, excerpt,
   kind }]`). The installer and `write_map`/`write_map_delta` tools verify that
@@ -28,11 +48,39 @@ All notable changes to Agentify are documented here.
   scripts (`build.sh`, `compile.sh`, `test.sh`, `lint.sh`, `get.sh`, `setup.sh`,
   etc.) instead of a package manifest. Install scripts are identified but not
   run as validation; build/test/lint/typecheck scripts are discovered, screened
-  for network/deployment/credential/destructive content, and proposed as
-  maintainer-approved validation commands.
+  for network/deployment/credential/destructive content, and recorded as
+  installer-attested validation commands.
+- Installer attestation of unsandboxed repository validation: running
+  `agentify` records the screened command set, manifest, and lockfile hashes
+  without a separate interactive approve/skip prompt. Missing required
+  validation can be refined from the audited validation surface or a
+  deterministic git-tree check.
+- When a local provider API key is already resolved, the installer copies it
+  to the `PI_API_KEY` GitHub Actions secret through `gh secret set` stdin.
+  `AGENT_PAT` still requires interactive consent.
 
 ### Fixed
 
+- Specialist discovery no longer lets model-reported evidence paths bypass the
+  tracked-file gate: expert `entry_points`, `test_paths`, key files, key types,
+  pattern references, and pitfall references are filtered to git-tracked files
+  at the supporting commit, so a directory or vendored path can no longer abort
+  portfolio persistence with "not a tracked regular blob".
+- Discovery now reports how many recorded domain candidates were considered
+  versus retained when some are filtered out, and the install report surfaces
+  that warning instead of silently installing a reduced portfolio.
+- The installer recognizes its own previously written
+  `.github/agentify-task-policy.json` by its self-describing format marker, so
+  a fail-closed placeholder left by an interrupted install no longer counts as
+  a user-owned workflow conflict on rerun.
+- Python build-system discovery no longer appends `.` to the mypy command when
+  the project configures mypy's file scope (`[tool.mypy] files`, `mypy.ini`, or
+  `setup.cfg`), which had overridden the project scope and type-checked
+  intentionally untyped trees such as `tests/`.
+- Align D8 security repair hints, builder prompt, and `write_map_delta` examples
+  with the schema: `bash_blocked_patterns` and `damage_control_rules` are arrays
+  of strings, not `{ pattern, source }` objects. D2 repair copy now uses
+  `module_graph.edges` `{ from, to, kind }`.
 - Audit prompt and `write_map_delta` tool now require both the dimension data
   and the matching coverage entry in every delta, and the tool result explicitly
   lists the per-dimension reason and the exact fields still needed. This fixes

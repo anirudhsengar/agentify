@@ -186,6 +186,10 @@ export function makeValidCodebaseMap(
     },
     coverage: coveredMatrix(),
     open_questions: [],
+    // The audit completion gate requires specialist evidence to be explicitly
+    // recorded; an honest empty list is valid for a repository with no cohesive
+    // recurring domain.
+    expert_evidence: { expert_domains: [] },
     exploration_log: [
       {
         ts: new Date().toISOString(),

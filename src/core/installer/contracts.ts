@@ -187,6 +187,8 @@ export interface OneTimeInstallationReport {
   disposition: InstallerDisposition;
   repository: RepositoryInstallationIdentity | null;
   specialists_installed: number;
+  /** Discovery warnings explaining an empty or reduced specialist portfolio. */
+  specialist_warnings: string[];
   procedures_installed: number;
   validation_commands_verified: number;
   github_issue_intake_enabled: boolean;

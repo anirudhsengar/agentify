@@ -122,7 +122,7 @@ export function assessTaskReadiness(input: TaskReadinessInput): TaskReadinessDec
     pushReason(
       reasons,
       "validation_policy_stale",
-      "The approved validation command, package manifest, or lockfile has changed.",
+      "The attested validation command, package manifest, or lockfile has changed.",
     );
   }
   if (!Number.isFinite(input.available_budget_usd) || input.available_budget_usd <= 0) {

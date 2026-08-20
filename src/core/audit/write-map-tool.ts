@@ -7,5 +7,5 @@ export {
     getReserveCount,
     resetReserveCounters,
 } from "./map-observability.ts";
-export { createWriteMapTools } from "./write-map-tools.ts";
+export { createWriteMapTools, COVERAGE_REPAIR_HINTS } from "./write-map-tools.ts";
 export type { MapTools } from "./write-map-tools.ts";

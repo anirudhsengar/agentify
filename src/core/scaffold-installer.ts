@@ -7,7 +7,10 @@ import {
 } from "./artifacts/managed-markers.ts";
 import type { ArtifactWrite } from "./types.ts";
 import type { RepositoryTaskPolicyConfiguration } from "./installer/contracts.ts";
+import { isAgentifyOwnedTaskPolicyFile } from "./installer/task-policy.ts";
 import { AGENTIFY_INSTALLED_CONTROL_PATHS } from "./artifacts/managed-installation-paths.ts";
+
+const TASK_POLICY_PORTABLE_PATH = ".github/agentify-task-policy.json";
 
 export interface InstallScaffoldRuntimeOptions {
   cwd: string;
@@ -117,7 +120,8 @@ export function installScaffoldRuntime(options: InstallScaffoldRuntimeOptions): 
       : undefined;
     writes.push(copyManaged(source, destination, {
       content: policyContent,
-      knownManaged: options.knownManagedPaths?.has(portableRelative) === true,
+      knownManaged: options.knownManagedPaths?.has(portableRelative) === true
+        || (portableRelative === TASK_POLICY_PORTABLE_PATH && isAgentifyOwnedTaskPolicyFile(destination)),
     }));
   }
   for (const runtime of bundledRuntimes) {

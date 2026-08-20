@@ -63,12 +63,12 @@ Repository validation uses fixed argv vectors without a shell at the controller
 boundary, but package managers may invoke their own shell or indirect programs.
 The installer scans visible root script text for obvious production credentials
 and deployment, publication, release, cloud, or infrastructure mutation. This
-is a guardrail, not proof that indirect code is safe. Before first execution, a
-maintainer must approve the displayed commands and attest that they do not use
-production services. The complete npm manifest, command set, and lockfile are
-hashed; drift disables issue intake until renewed approval. Common credential
-variables are removed from validation child environments, but validation is not
-an OS sandbox and its network is not isolated.
+is a guardrail, not proof that indirect code is safe. Running `agentify` in the
+target repository records installer attestation for unsandboxed validation of
+the screened command set. The complete npm manifest, command set, and lockfile
+are hashed; drift disables issue intake until `agentify` is rerun. Common
+credential variables are removed from validation child environments, but
+validation is not an OS sandbox and its network is not isolated.
 
 Audit explorers do not receive unrestricted shell, write, or edit tools. Builder
 shell access, when policy permits it, is guarded by command classification,
@@ -88,9 +88,11 @@ platform supports them. Secrets are not included in logs, model prompts, durable
 memory, manifests, or generated repository files. Durable values are scanned for
 common token, private-key, and credential forms before persistence.
 
-The installer may configure a GitHub Actions provider secret only after explicit
-interactive consent. The value is passed to `gh secret set` through stdin and is
-never placed in argv or output.
+The installer copies a resolved local provider API key to the `PI_API_KEY`
+GitHub Actions secret when one is already present, or prompts interactively
+when a TTY is available and no local key is resolved. `AGENT_PAT` is set only
+after interactive consent. Secret values are passed to `gh secret set` through
+stdin and are never placed in argv or output.
 
 ## GitHub workflow authority
 

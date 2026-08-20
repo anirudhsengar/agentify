@@ -117,7 +117,7 @@ async function testToolDefinitionContract(): Promise<void> {
   assert.equal(writeMapDeltaTool.label, "Write Codebase Map Delta");
   assert.equal(
     writeMapDeltaTool.description,
-    "Merge a partial delta into the canonical codebase map. Each call should close one dimension by including both the dimension data AND the matching coverage entry. Merging does not silently strip or invent arrays: the arrays and objects you provide overwrite the matching fields in the map. If a field is still empty after the merge, your delta did not include it. Use `shallow_overwrite` (default) for a clean top-level replacement, `deep_merge` to merge nested objects recursively, or `append` to concatenate arrays. When `dimension` is provided, the coverage entry is proposed as `covered`; Agentify downgrades it to `gap` only if the evidence or substance check fails. Every `covered` claim must include `evidence`: an array of `{ path, excerpt, kind }` citations to real repository paths. D1 example: `delta: { skeleton: { top_level_tree: ['README.md', 'get.sh', 'compile.sh'], entry_points: [{ path: 'get.sh', role: 'SDK acquisition script', language: 'bash', run_command: 'bash get.sh' }], first_5_files_for_fresh_agent: [{ path: 'README.md', why: 'project overview' }] }, coverage: { D1_topography: { status: 'covered', confidence: 'high', evidence_summary: 'Topography anchored to real root files.', evidence: [{ path: 'README.md', excerpt: 'Adoptium AQAvit test suite', kind: 'positive' }] } } }`. D3 example: `delta: { observed_type_contract: { kind: 'typescript_interface', path: 'src/types.ts', name: 'Observed', fields: ['id', 'name'] }, coverage: { D3_type_contract: { status: 'covered', ... } } }` or `delta: { type_contract_surface: { stable_types: [{ path: 'src/types.ts', name: 'BuildEnv', purpose: 'shared make vars' }] }, coverage: { D3_type_contract: { ... } } }`. D8 example: `delta: { security_surface: { paths: { zero_access: ['.env', '*.pem', 'secrets.*'] }, bash_blocked_patterns: [{ pattern: 'eval $(aws sts assume-role ...)', source: 'JenkinsfileBase' }] }, coverage: { D8_security: { ... } } }`.Keep the delta small but complete for the one dimension you are closing.",
+    "Merge a partial delta into the canonical codebase map. Each call should close one dimension by including both the dimension data AND the matching coverage entry. Merging does not silently strip or invent arrays: the arrays and objects you provide overwrite the matching fields in the map. If a field is still empty after the merge, your delta did not include it. Use `shallow_overwrite` (default) for a clean top-level replacement, `deep_merge` to merge nested objects recursively, or `append` to concatenate arrays. When `dimension` is provided, the coverage entry is proposed as `covered`; Agentify downgrades it to `gap` only if the evidence or substance check fails. Every `covered` claim must include `evidence`: an array of `{ path, excerpt, kind }` citations to real repository paths. D1 example: `delta: { skeleton: { top_level_tree: ['README.md', 'get.sh', 'compile.sh'], entry_points: [{ path: 'get.sh', role: 'SDK acquisition script', language: 'bash', run_command: 'bash get.sh' }], first_5_files_for_fresh_agent: [{ path: 'README.md', why: 'project overview' }] }, coverage: { D1_topography: { status: 'covered', confidence: 'high', evidence_summary: 'Topography anchored to real root files.', evidence: [{ path: 'README.md', excerpt: 'Adoptium AQAvit test suite', kind: 'positive' }] } } }`. D3 example: `delta: { observed_type_contract: { kind: 'typescript_interface', path: 'src/types.ts', name: 'Observed', fields: ['id', 'name'] }, coverage: { D3_type_contract: { status: 'covered', ... } } }` or `delta: { type_contract_surface: { stable_types: [{ path: 'src/types.ts', name: 'BuildEnv', purpose: 'shared make vars' }] }, coverage: { D3_type_contract: { ... } } }`. D8 example: `delta: { security_surface: { paths: { zero_access: ['.env', '*.pem', 'secrets.*'] }, bash_blocked_patterns: ['rm -rf /', 'eval $(aws sts assume-role ...)'] }, coverage: { D8_security: { ... } } }`. Keep the delta small but complete for the one dimension you are closing.",
   );
   assert.strictEqual(writeMapDeltaTool.parameters, WriteMapDeltaParamsSchema);
   assert.ok(CodebaseMapSchema);
@@ -810,6 +810,171 @@ async function testBootstrapMapRejectsRegressiveFullWrite(): Promise<void> {
   assert.equal(readJson(tools.canonicalMapPath(cwd)).coverage.D1_topography.status, "covered");
 }
 
+async function testRepairsDoubleWrappedAndBatchedTransports(): Promise<void> {
+  const cwd = tempDir("transport-wrap");
+  const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+
+  // A full map nested one level deep (`map.map`) is unwrapped and written.
+  const wrapped = await executeTool(
+    tools.writeMapTool,
+    { map: { map: cloneMap() } },
+    cwd,
+  );
+  assert.equal(isToolError(wrapped), false, resultText(wrapped));
+  assert.equal(readJson(tools.canonicalMapPath(cwd)).meta.project_type, "test-fixture");
+
+  // A delta nested as `delta.delta` is unwrapped.
+  const nestedDelta = await executeTool(
+    tools.writeMapDeltaTool,
+    { delta: { delta: { open_questions: ["unwrapped transport"] } } },
+    cwd,
+  );
+  assert.equal(isToolError(nestedDelta), false, resultText(nestedDelta));
+  assert.ok(readJson(tools.canonicalMapPath(cwd)).open_questions.includes("unwrapped transport"));
+
+  // Several dimension deltas batched as an array are deep-merged in order.
+  const batched = await executeTool(
+    tools.writeMapDeltaTool,
+    {
+      delta: [
+        { open_questions: ["batched-one"] },
+        { open_questions: ["batched-two"], pitfalls: [{
+          module: "src/index.ts",
+          what: "Batched delta pitfall.",
+          consequence: "None; transport repair test.",
+          line_ref: 7,
+        }] },
+      ],
+    },
+    cwd,
+  );
+  assert.equal(isToolError(batched), false, resultText(batched));
+  const mergedMap = readJson(tools.canonicalMapPath(cwd));
+  assert.ok(mergedMap.open_questions.includes("batched-two"));
+  assert.ok(mergedMap.pitfalls.some((pitfall) => pitfall.what === "Batched delta pitfall."));
+
+  // Non-object array entries still fail with the documented delta error, now
+  // with a compact description of what was actually received.
+  const invalid = await executeTool(
+    tools.writeMapDeltaTool,
+    { delta: ["not-an-object"] },
+    cwd,
+  );
+  assert.equal(isToolError(invalid), true);
+  assert.match(resultText(invalid), /requires `delta` to be a JSON object/);
+  assert.match(resultText(invalid), /Received: an array of 1 item\(s\)/);
+
+  const invalidString = await executeTool(
+    tools.writeMapDeltaTool,
+    { delta: "not json at all" },
+    cwd,
+  );
+  assert.equal(isToolError(invalidString), true);
+  assert.match(resultText(invalidString), /Received: a string \(15 chars\) starting with "not json at all"/);
+
+  // A markdown-fenced JSON delta is unwrapped before parsing.
+  const fenced = await executeTool(
+    tools.writeMapDeltaTool,
+    { delta: "```json\n{\"open_questions\": [\"fenced transport\"]}\n```" },
+    cwd,
+  );
+  assert.equal(isToolError(fenced), false, resultText(fenced));
+  assert.ok(readJson(tools.canonicalMapPath(cwd)).open_questions.includes("fenced transport"));
+
+  // A delta whose quotes were escaped one level too many (the payload arrived
+  // as the content of a JSON string literal) is decoded one layer and parsed.
+  const overEscaped = await executeTool(
+    tools.writeMapDeltaTool,
+    { delta: '{\\"open_questions\\": [\\"over-escaped transport\\"]}' },
+    cwd,
+  );
+  assert.equal(isToolError(overEscaped), false, resultText(overEscaped));
+  assert.ok(readJson(tools.canonicalMapPath(cwd)).open_questions.includes("over-escaped transport"));
+
+  // A delta string with a raw newline inside a string value is repaired by
+  // escaping control characters inside string literals only.
+  const rawNewline = await executeTool(
+    tools.writeMapDeltaTool,
+    { delta: "{\"open_questions\": [\"first line\nsecond line\"]}" },
+    cwd,
+  );
+  assert.equal(isToolError(rawNewline), false, resultText(rawNewline));
+  assert.ok(readJson(tools.canonicalMapPath(cwd)).open_questions.includes("first line\nsecond line"));
+
+  // A full map wrapped in a single-item array is unwrapped.
+  const arrayCwd = tempDir("transport-array-map");
+  const arrayTools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+  const arrayWrapped = await executeTool(
+    arrayTools.writeMapTool,
+    { map: [cloneMap()] },
+    arrayCwd,
+  );
+  assert.equal(isToolError(arrayWrapped), false, resultText(arrayWrapped));
+  assert.equal(readJson(arrayTools.canonicalMapPath(arrayCwd)).meta.project_type, "test-fixture");
+
+  // A delta with a dangling comma before a closing delimiter is repaired
+  // outside string literals only.
+  const trailingComma = await executeTool(
+    tools.writeMapDeltaTool,
+    { delta: '{"open_questions": ["trailing comma"],}' },
+    cwd,
+  );
+  assert.equal(isToolError(trailingComma), false, resultText(trailingComma));
+  assert.ok(readJson(tools.canonicalMapPath(cwd)).open_questions.includes("trailing comma"));
+}
+
+async function testHoistsMetaNestedEvidenceSections(): Promise<void> {
+  const cwd = tempDir("meta-nested-evidence");
+  const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+  const base = cloneMap();
+  delete base.expert_evidence;
+  const initial = await executeTool(tools.writeMapTool, { map: base }, cwd);
+  assert.equal(isToolError(initial), false);
+  assert.match(resultText(initial), /Specialist evidence is not recorded yet/);
+
+  const wellFormedDomain = {
+    domain: "billing",
+    rationale: "Recurring payment invariants.",
+    primary_paths: ["src/billing"],
+    entry_points: ["src/billing/index.ts"],
+    test_paths: ["tests/billing.test.ts"],
+    key_files: [{ path: "src/billing/index.ts", purpose: "Billing entry point.", line_range: [1, 120] }],
+    key_types: [{ name: "Invoice", path: "src/billing/types.ts:1", purpose: "Stable billing contract." }],
+    patterns: [{ name: "idempotency", description: "Writes must be idempotent.", example_ref: "src/billing/index.ts:42" }],
+    pitfalls: [{ risk: "Double charging on retry.", consequence: "Customers can be charged twice.", reference: "src/billing/index.ts:55" }],
+    conventions: ["Amounts are stored in cents."],
+    stability: "high",
+    recurrence: "high",
+    test_command: "npm test -- tests/billing.test.ts",
+    last_updated: "2026-08-20T00:00:00.000Z",
+  };
+  const hoisted = await executeTool(
+    tools.writeMapDeltaTool,
+    { delta: { meta: { expert_evidence: { expert_domains: [wellFormedDomain] } } } },
+    cwd,
+  );
+  assert.equal(isToolError(hoisted), false, resultText(hoisted));
+  const repaired = readJson(tools.canonicalMapPath(cwd));
+  assert.equal(repaired.expert_evidence?.expert_domains.length, 1);
+  assert.equal(repaired.expert_evidence?.expert_domains[0]?.domain, "billing");
+  assert.equal((repaired.meta as Record<string, unknown>).expert_evidence, undefined);
+  assert.equal(resultDetails(hoisted).specialist_evidence_recorded, true);
+  assert.ok(!resultText(hoisted).includes("Specialist evidence is not recorded yet"));
+
+  // A misplaced but malformed section is hoisted into the real schema gate,
+  // which rejects it with an actionable error instead of silently keeping it.
+  const malformed = await executeTool(
+    tools.writeMapDeltaTool,
+    { delta: { meta: { customization_evidence: { custom_tool_candidates: [{ wrong: true }] } } } },
+    cwd,
+  );
+  assert.equal(isToolError(malformed), true);
+  assert.match(resultText(malformed), /failed schema validation/i);
+  const afterMalformed = readJson(tools.canonicalMapPath(cwd));
+  assert.equal((afterMalformed.meta as Record<string, unknown>).customization_evidence, undefined);
+  assert.equal(afterMalformed.customization_evidence, undefined);
+}
+
 async function testPreventsPrototypePollutionInDottedKeyExpansion(): Promise<void> {
   const cwd = tempDir("proto-pollution");
   const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
@@ -843,6 +1008,8 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "history validation coverage and merge contract", fn: testHistoryValidationCoverageAndMergeContract },
   { name: "observability and explicit factory contract", fn: testObservabilityAndFactoryContract },
   { name: "bootstrap map rejects regressive full write", fn: testBootstrapMapRejectsRegressiveFullWrite },
+  { name: "double-wrapped and batched transports are repaired", fn: testRepairsDoubleWrappedAndBatchedTransports },
+  { name: "meta-nested evidence sections are hoisted", fn: testHoistsMetaNestedEvidenceSections },
   { name: "substance failures persist as gaps with repair guidance", fn: testSubstanceFailuresPersistAsGapsWithRepairGuidance },
   { name: "prevents prototype pollution in dotted key expansion", fn: testPreventsPrototypePollutionInDottedKeyExpansion },
 ];

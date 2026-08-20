@@ -141,6 +141,41 @@ test("repository-backed discovery excludes module specifiers that are not tracke
   assert.ok(!portfolio.evidence_paths.includes("fs-helper.js"));
 });
 
+test("expert evidence paths are filtered to tracked files", () => {
+  const map = makeSpecialistFixtureMap();
+  // The model claims a directory and an untracked path as domain evidence.
+  map.expert_evidence!.expert_domains[0]!.test_paths = ["tests/billing/"];
+  map.expert_evidence!.expert_domains[0]!.entry_points.push("scripts/disabled_tests/tests");
+  const tracked = [
+    "package.json",
+    "src/billing/index.ts",
+    "src/billing/types.ts",
+    "tests/billing.test.ts",
+  ];
+  const portfolio = discoverSpecialistPortfolio(map, COMMIT_A, tracked);
+  const billing = portfolio.specialists.find((specialist) => specialist.specialist_id === "specialist-billing");
+  assert.ok(billing, "specialist survives on its remaining tracked evidence");
+  assert.ok(billing.evidence_paths.length > 0);
+  assert.ok(billing.evidence_paths.every((candidate) => tracked.includes(candidate)));
+  assert.ok(!billing.evidence_paths.includes("scripts/disabled_tests/tests"));
+  assert.ok(!billing.evidence_paths.includes("tests/billing"));
+  assert.ok(portfolio.evidence_paths.every((candidate) => tracked.includes(candidate)));
+});
+
+test("expert domain with no tracked evidence is dropped", () => {
+  const map = makeSpecialistFixtureMap();
+  const portfolio = discoverSpecialistPortfolio(map, COMMIT_A, ["package.json"]);
+  assert.equal(
+    portfolio.specialists.some((specialist) => specialist.specialist_id === "specialist-billing"),
+    false,
+  );
+  assert.ok(
+    portfolio.procedures.every((procedure) =>
+      procedure.evidence_paths.every((candidate) => candidate === "package.json")
+    ),
+  );
+});
+
 test("structural fallback refuses a monorepo container root", () => {
   const portfolio = structuralPortfolioFixture("packages/api/src");
   assert.deepEqual(portfolio.specialists, []);

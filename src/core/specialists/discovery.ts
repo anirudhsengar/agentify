@@ -274,10 +274,14 @@ function rawFromExpertEvidence(
   knownPaths: ReadonlyArray<string>,
   contracts: ReadonlyArray<ContractReference>,
   globalCommands: ReadonlyArray<string>,
+  trackedEvidenceFiles?: ReadonlySet<string>,
 ): RawSpecialist[] {
   return (map.expert_evidence?.expert_domains ?? []).map((expert) => {
     const slug = specialistDomainSlug(expert.domain);
     const ownedPaths = normalizePaths(expert.primary_paths);
+    // Expert-reported paths are claims, not facts: persistence binds evidence
+    // to git blobs, so anything not tracked at the supporting commit (for
+    // example a directory the model listed as a file) must not reach evidence.
     const explicitPaths = normalizePaths([
       ...expert.entry_points,
       ...expert.test_paths,
@@ -285,7 +289,7 @@ function rawFromExpertEvidence(
       ...expert.key_types.map((type) => type.path),
       ...expert.patterns.map((pattern) => pattern.example_ref),
       ...expert.pitfalls.map((pitfall) => pitfall.reference),
-    ]);
+    ]).filter((candidate) => !trackedEvidenceFiles || trackedEvidenceFiles.has(candidate));
     const observedPaths = sortedUniqueStrings([
       ...explicitPaths,
       ...pathsForScopes(knownPaths, ownedPaths),
@@ -845,7 +849,7 @@ export function discoverSpecialistPortfolio(
   const contracts = contractReferences(map);
   const validationCommands = allValidationCommands(map);
   const rawCandidates = mergeOverlappingCandidates(
-    rawFromExpertEvidence(map, knownPaths, contracts, validationCommands),
+    rawFromExpertEvidence(map, knownPaths, contracts, validationCommands, trackedEvidenceFiles),
   );
   let candidates = rawCandidates;
   let specialists = buildSpecialistDefinitions(candidates, map, supportingCommit);
@@ -866,6 +870,11 @@ export function discoverSpecialistPortfolio(
   const warnings: string[] = [];
   if (specialists.length === 0) {
     warnings.push("No repository domain met the specialist evidence and validation threshold.");
+  } else if (candidates.length > specialists.length) {
+    warnings.push(
+      `Specialist discovery considered ${candidates.length} recorded domain candidate(s) and retained ${specialists.length}; ` +
+      "the remainder lacked tracked file evidence, validation commands, or substance.",
+    );
   }
   if (candidates.length > MAX_DISCOVERED_SPECIALISTS) {
     warnings.push(

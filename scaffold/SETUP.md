@@ -42,9 +42,11 @@ draft pull request. A human retains merge authority.
 
 ## Credentials
 
-`PI_API_KEY` is the only provider secret used by the workflows. Configure it
-through GitHub's secret UI or `gh secret set PI_API_KEY` with the value supplied
-through stdin. Never place it in a command argument or repository file.
+`PI_API_KEY` is the only provider secret used by the workflows. The installer
+copies a resolved local provider key through `gh secret set` stdin when one is
+already present; otherwise configure it through GitHub's secret UI or
+`gh secret set PI_API_KEY` with the value supplied through stdin. Never place it
+in a command argument or repository file.
 
 `AGENT_PAT` is an optional dedicated GitHub automation token used only to push
 the task branch and publish its draft pull request. It is recommended because

@@ -20,6 +20,7 @@ import {
 } from "../../src/core/installer/index.ts";
 import { makeSpecialistFixtureMap } from "../fixtures/specialist-map.ts";
 import { runAgentifyApp } from "../../src/core/agentify-app.ts";
+import { installScaffoldRuntime } from "../../src/core/scaffold-installer.ts";
 import { packageRoot as installedPackageRoot } from "../../src/core/pi-sdk-runtime.ts";
 import type {
   AgentRuntime,
@@ -700,6 +701,49 @@ async function testUserOwnedWorkflowConflictFailsClosed(): Promise<void> {
   }
 }
 
+async function testDriftedAgentifyPolicyRecognizedAsOwned(): Promise<void> {
+  const cwd = tempRepo("agentify-policy-drift-");
+  const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-policy-package-"));
+  try {
+    fs.mkdirSync(path.join(packageRoot, "scaffold", ".github"), { recursive: true });
+    fs.writeFileSync(path.join(packageRoot, "scaffold", ".github", "agentify-task-policy.json"), "{}\n");
+    fs.mkdirSync(path.join(packageRoot, "dist"), { recursive: true });
+    for (const name of ["task-runtime.mjs", "learning-runtime.mjs"]) {
+      fs.writeFileSync(path.join(packageRoot, "dist", name), "// agentify:managed\n");
+    }
+    const preflight = inspectRepositoryForInstallation({ cwd, runner: fakeRunner(cwd), runValidation: true });
+    const configuration = approvedConfiguration(cwd, preflight).configuration;
+    const policyPath = path.join(cwd, ".github", "agentify-task-policy.json");
+    fs.mkdirSync(path.dirname(policyPath), { recursive: true });
+
+    // A drifted but Agentify-written policy (for example a fail-closed
+    // placeholder left by an interrupted install) is overwritten, not
+    // preserved as a user conflict.
+    fs.writeFileSync(policyPath, `${JSON.stringify({
+      format: "agentify_task_policy_configuration",
+      schema_version: "2",
+      configured: false,
+      repository: null,
+    })}\n`);
+    const repaired = installScaffoldRuntime({ cwd, packageRoot, taskPolicyConfiguration: configuration });
+    const policyWrite = repaired.find((write) => write.path === policyPath);
+    assert.equal(policyWrite?.action, "written");
+    assert.ok(!repaired.some((write) => write.action === "alongside"), JSON.stringify(repaired));
+    const written = JSON.parse(fs.readFileSync(policyPath, "utf-8")) as { configured: boolean };
+    assert.equal(written.configured, true);
+
+    // A non-Agentify JSON document at the same path still fails closed.
+    fs.writeFileSync(policyPath, "{\"configured\":false}\n");
+    const conflicted = installScaffoldRuntime({ cwd, packageRoot, taskPolicyConfiguration: configuration });
+    const conflictWrite = conflicted.find((write) => write.path === policyPath);
+    assert.equal(conflictWrite?.action, "alongside");
+    assert.equal(fs.readFileSync(policyPath, "utf-8"), "{\"configured\":false}\n");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(packageRoot, { recursive: true, force: true });
+  }
+}
+
 async function testRecognizedRuntimeRepairPreservesUserWorkflow(): Promise<void> {
   const cwd = tempRepo("agentify-installer-repair-");
   const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-installer-package-"));
@@ -773,6 +817,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "bootstrap evidence preserves tracked path casing", fn: testBootstrapEvidencePreservesTrackedPathCasing },
   { name: "one-command initial audit installation", fn: testOneCommandInitialAuditInstallation },
   { name: "user-owned workflow conflict fails closed", fn: testUserOwnedWorkflowConflictFailsClosed },
+  { name: "drifted Agentify policy recognized as owned", fn: testDriftedAgentifyPolicyRecognizedAsOwned },
   { name: "recognized runtime repair preserves user workflow", fn: testRecognizedRuntimeRepairPreservesUserWorkflow },
 ];
 

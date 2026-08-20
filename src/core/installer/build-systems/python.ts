@@ -33,6 +33,21 @@ function pythonRunner(cwd: string): { prefix: string[]; install: string[] | null
   return { prefix: [], install: fileExists(cwd, "requirements.txt") ? ["pip", "install", "-r", "requirements.txt"] : null };
 }
 
+/**
+ * A project that configures mypy's `files` scope (pyproject `[tool.mypy]`, a
+ * mypy ini, or setup.cfg) has deliberately chosen what gets type-checked.
+ * Appending `.` on the command line would override that scope and pull in
+ * trees the project intentionally leaves unchecked (for example untyped
+ * tests), so the discovered command must run bare `mypy` there.
+ */
+function mypyHasConfiguredScope(cwd: string, pyprojectContent: string): boolean {
+  const section = /\[tool\.mypy\]([\s\S]*?)(?=\n\[|\s*$)/.exec(pyprojectContent);
+  if (section && /^\s*files\s*=/m.test(section[1] ?? "")) return true;
+  if (fileExists(cwd, "mypy.ini") || fileExists(cwd, ".mypy.ini")) return true;
+  const setupCfg = readText(cwd, "setup.cfg") ?? "";
+  return /\[mypy\][\s\S]*?^\s*files\s*=/m.test(setupCfg);
+}
+
 function pythonToolCommands(cwd: string, runner: ReturnType<typeof pythonRunner>): InstallerCommand[] {
   const content = readText(cwd, "pyproject.toml") ?? "";
   const commands: InstallerCommand[] = [];
@@ -56,11 +71,14 @@ function pythonToolCommands(cwd: string, runner: ReturnType<typeof pythonRunner>
     }));
   }
   if (hasMypy) {
+    const scoped = mypyHasConfiguredScope(cwd, content);
     commands.push(makeCommand({
       kind: "typecheck",
       label: "mypy",
-      argv: [...runner.prefix, "mypy", "."],
-      detail: "Python mypy typecheck discovered",
+      argv: scoped ? [...runner.prefix, "mypy"] : [...runner.prefix, "mypy", "."],
+      detail: scoped
+        ? "Python mypy typecheck discovered; the project's configured file scope is respected"
+        : "Python mypy typecheck discovered",
     }));
   }
   return commands;

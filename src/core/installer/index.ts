@@ -1,3 +1,4 @@
+export * from "./agent-validation-discovery.ts";
 export * from "./command-discovery.ts";
 export * from "./contracts.ts";
 export * from "./finalization.ts";

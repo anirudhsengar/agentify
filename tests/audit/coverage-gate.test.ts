@@ -6,8 +6,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
+  assessAuditCompletion,
   assessCoverageClosure,
   COVERAGE_DIMENSIONS,
+  specialistEvidenceRecorded,
 } from "../../src/core/audit/schema.ts";
 import { createWriteMapTools, loadCanonicalMapAt } from "../../src/core/audit/write-map-tool.ts";
 import { runAgentifyApp } from "../../src/core/agentify-app.ts";
@@ -434,6 +436,135 @@ async function testIntentionalCoverageClosureIsNotReportedAsAbort(): Promise<voi
   assert.ok(ui.infos.some((m) => m.includes("validated codebase map")));
 }
 
+// --- specialist evidence completion gate ------------------------------------
+
+function testSpecialistEvidenceRequiredForCompletion(): void {
+  const complete = makeValidCodebaseMap();
+  const completion = assessAuditCompletion(complete);
+  assert.equal(completion.complete, true, JSON.stringify(completion.coverage.reasons));
+  assert.equal(completion.specialistEvidenceRecorded, true);
+
+  const legacy = makeValidCodebaseMap();
+  delete legacy.expert_evidence;
+  const legacyCompletion = assessAuditCompletion(legacy);
+  assert.equal(legacyCompletion.coverage.unresolved.length, 0, "coverage alone still closes");
+  assert.equal(legacyCompletion.specialistEvidenceRecorded, false);
+  assert.equal(legacyCompletion.complete, false, "completion must require recorded specialist evidence");
+
+  const honestEmpty = makeValidCodebaseMap();
+  honestEmpty.expert_evidence = { expert_domains: [] };
+  assert.equal(specialistEvidenceRecorded(honestEmpty), true, "an honest empty list counts as recorded");
+}
+
+async function testWriteMapGuidesSpecialistEvidence(): Promise<void> {
+  const cwd = tempDir("write-map-specialist-guidance");
+  try {
+    fs.writeFileSync(path.join(cwd, "README.md"), "Test fixture evidence citation.");
+    const { writeMapTool } = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+
+    const withoutEvidence = makeValidCodebaseMap();
+    delete withoutEvidence.expert_evidence;
+    const first = await writeMapTool.execute(
+      "write-no-evidence",
+      { map: withoutEvidence } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    const firstText = first.content?.[0]?.type === "text"
+      ? (first.content[0] as { type: "text"; text: string }).text
+      : "";
+    const firstDetails = first.details as { specialist_evidence_recorded?: boolean } | undefined;
+    assert.match(firstText, /All 10 coverage dimensions closed/);
+    assert.match(firstText, /Specialist evidence is not recorded yet/);
+    assert.equal(firstDetails?.specialist_evidence_recorded, false);
+
+    const second = await writeMapTool.execute(
+      "write-with-evidence",
+      { map: makeValidCodebaseMap() } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    const secondText = second.content?.[0]?.type === "text"
+      ? (second.content[0] as { type: "text"; text: string }).text
+      : "";
+    const secondDetails = second.details as { specialist_evidence_recorded?: boolean } | undefined;
+    assert.equal(secondDetails?.specialist_evidence_recorded, true);
+    assert.ok(!secondText.includes("Specialist evidence is not recorded yet"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+class TopUpRuntime implements AgentRuntime {
+  auditCalls = 0;
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
+    this.auditCalls += 1;
+    assert.match(options.userPrompt, /expert_evidence/, "top-up audit prompt must request specialist evidence");
+    assert.equal(options.recoveryPromptIfToolNotCalled?.requiredToolName, "write_map_delta");
+    writeMap(options.cwd, options.spawnExplorerStateDir ?? ".agentify/runtime/audit", makeValidCodebaseMap());
+    return { turns: 1, costUsd: null, aborted: false };
+  }
+}
+
+class FailIfAuditRuntime implements AgentRuntime {
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
+    throw new Error("audit session must not run when the existing map is complete with specialist evidence");
+  }
+}
+
+class NoSpecialistEvidenceRuntime implements AgentRuntime {
+  calls = 0;
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
+    this.calls += 1;
+    const map = makeValidCodebaseMap();
+    delete map.expert_evidence;
+    writeMap(options.cwd, options.spawnExplorerStateDir ?? ".agentify/runtime/audit", map);
+    return { turns: 1, costUsd: null, aborted: false };
+  }
+}
+
+async function testAttachSkipsAuditOnlyWhenSpecialistEvidenceRecorded(): Promise<void> {
+  const attachedCwd = tempDir("gate-attach-complete");
+  try {
+    writeMap(attachedCwd, ".agentify/runtime/audit", makeValidCodebaseMap());
+    const attachedUi = await runWithRuntime(attachedCwd, new FailIfAuditRuntime());
+    assert.ok(attachedUi.infos.some((m) => m.includes("no model audit was rerun")));
+  } finally {
+    fs.rmSync(attachedCwd, { recursive: true, force: true });
+  }
+
+  const legacyCwd = tempDir("gate-attach-legacy");
+  try {
+    const legacyMap = makeValidCodebaseMap();
+    delete legacyMap.expert_evidence;
+    writeMap(legacyCwd, ".agentify/runtime/audit", legacyMap);
+    const topUpRuntime = new TopUpRuntime();
+    const legacyUi = await runWithRuntime(legacyCwd, topUpRuntime);
+    assert.equal(topUpRuntime.auditCalls, 1, "a legacy map without specialist evidence must rerun a bounded audit");
+    assert.ok(legacyUi.infos.some((m) => m.includes("predates specialist evidence")));
+    assert.ok(legacyUi.infos.some((m) => m.includes("validated codebase map")));
+  } finally {
+    fs.rmSync(legacyCwd, { recursive: true, force: true });
+  }
+}
+
+async function testAuditFailsWhenSpecialistEvidenceNeverRecorded(): Promise<void> {
+  const cwd = tempDir("gate-specialist-missing");
+  try {
+    const runtime = new NoSpecialistEvidenceRuntime();
+    await assert.rejects(runWithRuntime(cwd, runtime), /specialist evidence/i);
+    assert.ok(runtime.calls <= 3, `expected at most 1 initial + 2 recovery sessions, got ${runtime.calls}`);
+    assert.ok(runtime.calls >= 2, "recovery passes must retry the missing specialist evidence");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "closureAllCovered", fn: testClosureAllCovered },
   { name: "closureRejectsEmptyEvidence", fn: testClosureRejectsEmptyEvidence },
@@ -452,6 +583,10 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "gapMapMeansPartialNoExport", fn: testGapMapMeansPartialNoExport },
   { name: "fullyCoveredMeansSuccessAndPersistsMap", fn: testFullyCoveredMeansSuccessAndPersistsMap },
   { name: "intentionalCoverageClosureIsNotReportedAsAbort", fn: testIntentionalCoverageClosureIsNotReportedAsAbort },
+  { name: "specialistEvidenceRequiredForCompletion", fn: testSpecialistEvidenceRequiredForCompletion },
+  { name: "writeMapGuidesSpecialistEvidence", fn: testWriteMapGuidesSpecialistEvidence },
+  { name: "attachSkipsAuditOnlyWhenSpecialistEvidenceRecorded", fn: testAttachSkipsAuditOnlyWhenSpecialistEvidenceRecorded },
+  { name: "auditFailsWhenSpecialistEvidenceNeverRecorded", fn: testAuditFailsWhenSpecialistEvidenceNeverRecorded },
 ];
 
 let passed = 0;

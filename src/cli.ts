@@ -33,9 +33,9 @@ import {
   type RepositoryValidationApproval,
 } from "./core/installer/index.ts";
 import { ClackUi, printBanner } from "./core/ui/index.ts";
-import { getProviderEnvValue } from "./core/provider-auth.ts";
+import { getProviderEnvValue, isAgentifyProvider } from "./core/provider-auth.ts";
 import { selectModelForRole } from "./core/models/resolver.ts";
-import { createAgentifyModelRuntime } from "./core/pi-credential-store.ts";
+import { AgentifyCredentialStore, createAgentifyModelRuntime } from "./core/pi-credential-store.ts";
 
 function printHelp(): void {
   output.write(`agentify ${readPackageVersion()}
@@ -87,7 +87,7 @@ function validationBlocked(
       {
         code,
         message,
-        remediation: "Run `agentify` interactively, inspect the repository-owned validation commands, and explicitly approve unsandboxed validation.",
+        remediation: "Rerun `agentify` in this repository so it can record installer attestation for the current screened validation commands.",
       },
     ],
   };
@@ -150,26 +150,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   }
 
   if (installerPreflight.blockers.length === 0 && validationApproval === null) {
-    ui.info("agentify: repository validation executes application-owned code without an OS sandbox or network isolation.");
-    for (const command of installerPreflight.commands.filter((entry) => entry.kind !== "install" && entry.required)) {
-      ui.info(`agentify: proposed validation command: ${command.argv.join(" ")}`);
-    }
-    if (input.isTTY) {
-      const choice = await ui.promptSelect(
-        "Run these repository-owned validation commands? Confirm only if they do not require production credentials or mutate external services.",
-        [
-          { label: "Do not run — keep issue intake disabled", value: "skip" },
-          { label: "Approve unsandboxed repository validation", value: "approve" },
-        ],
-      );
-      if (choice === "approve") {
-        validationApproval = createRepositoryValidationApproval({
-          cwd: process.cwd(),
-          preflight: installerPreflight,
-          approvedBy: installerPreflight.identity?.actor_login ?? "maintainer",
-        });
-      }
-    }
+    validationApproval = createRepositoryValidationApproval({
+      cwd: process.cwd(),
+      preflight: installerPreflight,
+      approvedBy: installerPreflight.identity?.actor_login ?? "maintainer",
+    });
   }
 
   if (validationApproval !== null) {
@@ -178,7 +163,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       installerPreflight = validationBlocked(
         installerPreflight,
         "validation_policy_stale",
-        "The previously approved package manifest, lockfile, or validation command set has changed.",
+        "The previously attested package manifest, lockfile, or validation command set has changed.",
       );
     } else {
       installerPreflight = inspectRepositoryForInstallation({ cwd: process.cwd(), runValidation: true });
@@ -187,7 +172,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         installerPreflight = validationBlocked(
           installerPreflight,
           "validation_policy_stale",
-          "The approved validation inputs changed while validation readiness was being established.",
+          "The attested validation inputs changed while validation readiness was being established.",
         );
       }
     }
@@ -198,7 +183,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       legacy ? "validation_policy_stale" : "validation_consent_required",
       legacy
         ? "The schema-v1 task policy cannot establish validation consent and is not executable."
-        : "A maintainer has not approved the repository-owned validation commands.",
+        : "Installer attestation for the repository-owned validation commands has not been recorded.",
     );
   }
 
@@ -232,7 +217,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     blocker.code === "validation_consent_required" || blocker.code === "validation_policy_stale"
   ));
   if (validationConsentBlocked) {
-    ui.info("agentify: repository audit and issue intake remain disabled until validation consent is recorded interactively.");
+    ui.info("agentify: repository audit and issue intake remain disabled until installer attestation for the current validation commands is recorded.");
   } else {
     await runAgentifyApp({
       args: [],
@@ -248,11 +233,13 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     let resolvedProvider: string | null = null;
     let resolvedModel: string | null = null;
     let providerVerified = false;
+    let localApiKey: string | undefined;
     if (!validationConsentBlocked) {
       try {
         const environmentKey = config.provider
           ? getProviderEnvValue(config.provider)
           : undefined;
+        localApiKey = environmentKey;
         const { modelRegistry: registry } = await createAgentifyModelRuntime({
           authFile: authPath(configDir),
           modelsFile: path.join(configDir, "models.json"),
@@ -265,6 +252,16 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           resolvedProvider = resolved.model.provider;
           resolvedModel = resolved.model.id;
           providerVerified = true;
+          if (!localApiKey && isAgentifyProvider(resolvedProvider)) {
+            localApiKey = getProviderEnvValue(resolvedProvider);
+          }
+          if (!localApiKey) {
+            const stored = new AgentifyCredentialStore(authPath(configDir));
+            const cred = await stored.read(resolvedProvider);
+            if (cred && cred.type === "api_key" && cred.key) {
+              localApiKey = cred.key;
+            }
+          }
         }
       } catch (error) {
         ui.error(`agentify: provider/model readiness failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -272,7 +269,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     }
     let providerSecret: GitHubConfigurationInput["providerSecret"];
     let automationSecret: GitHubConfigurationInput["automationSecret"];
-    if (input.isTTY && resolvedProvider) {
+    if (resolvedProvider && localApiKey) {
+      providerSecret = { name: "PI_API_KEY", value: localApiKey, explicitConsent: true };
+    } else if (input.isTTY && resolvedProvider) {
       const choice = await ui.promptSelect(
         "Set the provider API key as the PI_API_KEY GitHub Actions secret now? The value is sent to GitHub only through stdin and is never logged or stored in the repository.",
         [

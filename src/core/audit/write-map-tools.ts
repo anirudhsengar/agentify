@@ -5,6 +5,7 @@ import {
     WriteMapParamsSchema,
     applyMapDefaults,
     COVERAGE_DIMENSIONS,
+    specialistEvidenceRecorded,
     type CodebaseMap,
 } from "./schema.ts";
 import {
@@ -74,18 +75,21 @@ const MAP_TOP_LEVEL_KEYS = new Set([
     "coverage",
     "open_questions",
     "exploration_log",
+    "customization_evidence",
+    "expert_evidence",
     "artifact_intents",
 ]);
 
 type CoverageDimensionName = (typeof COVERAGE_DIMENSIONS)[number];
 
-const COVERAGE_REPAIR_HINTS: Record<CoverageDimensionName, string> = {
+export const COVERAGE_REPAIR_HINTS: Record<CoverageDimensionName, string> = {
     D1_topography:
         "include skeleton.top_level_tree (array of root paths), skeleton.entry_points " +
         "(array of { path, role, language, run_command }), and " +
         "skeleton.first_5_files_for_fresh_agent (array of { path, why }) in the same delta",
     D2_module_boundaries:
-        "include module_graph.edges (array of { source, target, kind }) or module_graph.shared_abstractions",
+        "include module_graph.edges (array of { from, to, kind }) or module_graph.parallelizable_subtrees " +
+        "(array of string arrays) or module_graph.shared_abstractions (array of paths)",
     D3_type_contract:
         "use the top-level observed_type_contract parameter, or include " +
         "type_contract_surface.typescript_interfaces, pydantic_models, db_models, stable_types, or one_type_trace. " +
@@ -99,8 +103,8 @@ const COVERAGE_REPAIR_HINTS: Record<CoverageDimensionName, string> = {
     D7_operational:
         "include operational_surface.build.command, operational_surface.run.command, and operational_surface.git_workflow.main_branch",
     D8_security:
-        "include security_surface.paths.zero_access and at least one evidence-backed " +
-        "bash_blocked_patterns or damage_control_rules entry",
+        "include security_surface.paths.zero_access (array of strings) and at least one entry in " +
+        "security_surface.bash_blocked_patterns (array of strings) or security_surface.damage_control_rules (array of strings)",
     D9_process:
         "include meta.lifecycle.sdlc_model (string) and meta.lifecycle.issue_types (array of strings)",
     D10_documentation:
@@ -135,6 +139,32 @@ function formatCoverageRepairGuidance(
         return `${dimension}: ${reason} (${hint})`;
     });
     return ` Repair guidance: ${repairs.join("; ")}.`;
+}
+
+const SPECIALIST_EVIDENCE_GUIDANCE =
+    " Specialist evidence is not recorded yet. The audit cannot complete until you call " +
+    "write_map_delta with expert_evidence. Record one entry per cohesive, recurring repository " +
+    "domain, replacing every value with evidence you actually observed in this repository: " +
+    "`delta: { expert_evidence: { expert_domains: [{ domain: 'billing', rationale: 'Recurring " +
+    "payment invariants.', primary_paths: ['src/billing'], entry_points: ['src/billing/index.ts'], " +
+    "test_paths: ['tests/billing.test.ts'], key_files: [{ path: 'src/billing/index.ts', purpose: " +
+    "'Billing entry point.', line_range: [1, 120] }], key_types: [{ name: 'Invoice', path: " +
+    "'src/billing/types.ts:1', purpose: 'Stable billing contract.' }], patterns: [{ name: " +
+    "'idempotency', description: 'Billing writes must be idempotent.', example_ref: " +
+    "'src/billing/index.ts:42' }], pitfalls: [{ risk: 'Double charging on retry.', consequence: " +
+    "'Customers can be charged twice.', reference: 'src/billing/index.ts:55' }], conventions: " +
+    "['Amounts are stored in cents.'], stability: 'high', recurrence: 'high', test_command: " +
+    "'npm test -- tests/billing.test.ts', last_updated: '2026-01-01T00:00:00.000Z' }] } }`. " +
+    "An honest empty `expert_domains` list is valid only when no cohesive recurring domain " +
+    "exists; record that justification in open_questions in the same delta. Do not re-close " +
+    "coverage dimensions; they are already covered.";
+
+function formatSpecialistEvidenceGuidance(
+    closure: FormattedCoverageClosure,
+    map: CodebaseMap,
+): string {
+    if (closure.unresolved.length > 0 || specialistEvidenceRecorded(map)) return "";
+    return SPECIALIST_EVIDENCE_GUIDANCE;
 }
 
 function injectObservedTypeContract(
@@ -181,17 +211,130 @@ function isEmptyRecord(value: unknown): value is UnknownRecord {
     );
 }
 
+const MARKDOWN_FENCE = /^```(?:json|JSON)?\s*\r?\n([\s\S]*?)\r?\n```\s*$/;
+
+/**
+ * Some transports deliver the payload as the *content* of a JSON string
+ * literal (every quote escaped as \"), which is not itself parseable JSON.
+ * Decode one string-literal layer so the loop can parse the real payload.
+ */
+function decodeJsonStringLiteralContent(value: string): string | undefined {
+    try {
+        const decoded = JSON.parse(`"${value}"`) as unknown;
+        return typeof decoded === "string" && decoded !== value ? decoded : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Some models emit raw newlines or tabs inside JSON string values, which is
+ * not parseable JSON. Escape control characters that occur inside string
+ * literals only, leaving structural whitespace untouched.
+ */
+function escapeControlCharsInJsonStrings(value: string): string {
+    let inString = false;
+    let escaped = false;
+    let out = "";
+    for (const ch of value) {
+        if (escaped) {
+            out += ch;
+            escaped = false;
+            continue;
+        }
+        if (inString && ch === "\\") {
+            out += ch;
+            escaped = true;
+            continue;
+        }
+        if (ch === '"') {
+            inString = !inString;
+            out += ch;
+            continue;
+        }
+        if (inString && (ch === "\n" || ch === "\r" || ch === "\t")) {
+            out += ch === "\n" ? "\\n" : ch === "\r" ? "\\r" : "\\t";
+            continue;
+        }
+        out += ch;
+    }
+    return out;
+}
+
+/**
+ * Some models leave a dangling comma before a closing brace or bracket. Drop
+ * commas that are immediately followed (past whitespace) by a closing
+ * delimiter, outside string literals only.
+ */
+function removeTrailingCommasOutsideStrings(value: string): string {
+    let inString = false;
+    let escaped = false;
+    let out = "";
+    for (let index = 0; index < value.length; index += 1) {
+        const ch = value[index]!;
+        if (escaped) {
+            out += ch;
+            escaped = false;
+            continue;
+        }
+        if (inString && ch === "\\") {
+            out += ch;
+            escaped = true;
+            continue;
+        }
+        if (ch === '"') {
+            inString = !inString;
+            out += ch;
+            continue;
+        }
+        if (!inString && ch === ",") {
+            let lookahead = index + 1;
+            while (lookahead < value.length && /\s/.test(value[lookahead]!)) lookahead += 1;
+            if (lookahead < value.length && (value[lookahead] === "}" || value[lookahead] === "]")) {
+                continue;
+            }
+        }
+        out += ch;
+    }
+    return out;
+}
+
 function parseSerializedObject(value: unknown): unknown {
     let candidate = value;
     // OpenAI-compatible transports may stringify a tool argument twice. Keep
     // this deliberately bounded: only an object reached within two JSON layers
     // is accepted; all other values continue to strict TypeBox validation.
+    // Presentation-only breakage is repaired first: a markdown-fenced JSON
+    // block, quotes escaped one level too many, or raw control characters
+    // inside string values.
     for (let layer = 0; layer < 2 && typeof candidate === "string"; layer += 1) {
+        const text: string = candidate;
         try {
-            candidate = JSON.parse(candidate) as unknown;
+            candidate = JSON.parse(text) as unknown;
+            continue;
         } catch {
-            return value;
+            // fall through to the presentation repairs
         }
+        const trimmed = text.trim();
+        const controlEscaped = escapeControlCharsInJsonStrings(trimmed);
+        const attempts: Array<string | undefined> = [
+            MARKDOWN_FENCE.exec(trimmed)?.[1],
+            trimmed.includes('\\"') ? decodeJsonStringLiteralContent(trimmed) : undefined,
+            controlEscaped,
+            removeTrailingCommasOutsideStrings(controlEscaped),
+        ];
+        let parsed = false;
+        for (const attempt of attempts) {
+            if (attempt === undefined) continue;
+            try {
+                candidate = JSON.parse(attempt) as unknown;
+                parsed = true;
+                break;
+            } catch {
+                // try the next repair
+            }
+        }
+        if (!parsed) return value;
     }
     return candidate !== null && typeof candidate === "object" && !Array.isArray(candidate)
         ? candidate
@@ -205,6 +348,62 @@ function normalizeEmptyNullableObject(
     if (parent && isEmptyRecord(parent[key])) {
         parent[key] = null;
     }
+}
+
+const TRANSPORT_WRAPPER_KEYS = new Set(["map", "codebase_map", "delta"]);
+
+/**
+ * Some providers nest the payload one extra level (`map.map`, `map.delta`,
+ * `delta.delta`, `delta.map`). Unwrap only single-key wrappers, at most twice,
+ * so legitimately small partial maps are never reinterpreted.
+ */
+function unwrapNestedTransport(value: unknown): unknown {
+    let current = value;
+    for (let depth = 0; depth < 2; depth += 1) {
+        if (current === null || typeof current !== "object" || Array.isArray(current)) break;
+        const record = current as UnknownRecord;
+        const keys = Object.keys(record);
+        if (keys.length !== 1) break;
+        const only = keys[0]!;
+        if (!TRANSPORT_WRAPPER_KEYS.has(only)) break;
+        const nested = record[only];
+        if (nested === null || typeof nested !== "object") break;
+        current = nested;
+    }
+    return current;
+}
+
+/**
+ * Describe a rejected transport payload compactly so the model learns what it
+ * sent (and logs carry the shape of the quirk) without echoing full content.
+ */
+function describeReceivedTransport(value: unknown): string {
+    if (value === undefined || value === null) return "nothing (delta is missing)";
+    if (typeof value === "string") {
+        const start = value.slice(0, 120);
+        const end = value.length > 120 ? ` and ending with ${JSON.stringify(value.slice(-120))}` : "";
+        return `a string (${value.length} chars) starting with ${JSON.stringify(start)}${end}`;
+    }
+    if (Array.isArray(value)) return `an array of ${value.length} item(s)`;
+    return `a value of type ${typeof value}`;
+}
+
+/**
+ * Some providers batch several dimension deltas as an array. Merge them in
+ * order with deep-merge semantics so each entry contributes its keys instead
+ * of being rejected for not being a single object.
+ */
+function mergeBatchedDeltas(value: unknown): unknown {
+    if (!Array.isArray(value)) return value;
+    if (value.length === 0) return value;
+    if (!value.every((item) => item !== null && typeof item === "object" && !Array.isArray(item))) {
+        return value;
+    }
+    let merged: UnknownRecord = {};
+    for (const item of value) {
+        merged = applyMapDelta(merged, item as UnknownRecord, "deep_merge");
+    }
+    return merged;
 }
 
 function removePrematureEmptyArtifactIntents(map: UnknownRecord): void {
@@ -436,6 +635,45 @@ function repairD9Coverage(map: UnknownRecord): void {
     }
 }
 
+const EVIDENCE_SECTIONS_MISPLACED_UNDER_META = [
+    "customization_evidence",
+    "expert_evidence",
+    "artifact_intents",
+] as const;
+
+/**
+ * Some models nest top-level evidence sections under `meta`. Only the top level
+ * of the map schema is closed, so a misplaced copy would validate invisibly
+ * and specialist discovery would read an absent field. Hoist the misplaced
+ * section before validation so the real schema gate judges its content and the
+ * model receives an actionable error instead of silent acceptance.
+ */
+function hoistMisplacedEvidenceSections(map: UnknownRecord): void {
+    const meta = map.meta;
+    if (meta === null || typeof meta !== "object" || Array.isArray(meta)) return;
+    const metaRecord = meta as UnknownRecord;
+    for (const key of EVIDENCE_SECTIONS_MISPLACED_UNDER_META) {
+        const misplaced = metaRecord[key];
+        if (misplaced === undefined) continue;
+        const canonical = map[key];
+        if (canonical === undefined) {
+            map[key] = misplaced;
+        } else if (
+            canonical !== null && typeof canonical === "object" && !Array.isArray(canonical)
+            && misplaced !== null && typeof misplaced === "object" && !Array.isArray(misplaced)
+        ) {
+            const canonicalRecord = canonical as UnknownRecord;
+            for (const [subKey, subValue] of Object.entries(misplaced as UnknownRecord)) {
+                const existing = canonicalRecord[subKey];
+                if (existing === undefined || (Array.isArray(existing) && existing.length === 0)) {
+                    canonicalRecord[subKey] = subValue;
+                }
+            }
+        }
+        delete metaRecord[key];
+    }
+}
+
 function repairModuleGraphOrphans(map: UnknownRecord): void {
     const moduleGraph = map.module_graph;
     const graphRecord = moduleGraph !== null && typeof moduleGraph === "object" && !Array.isArray(moduleGraph)
@@ -515,6 +753,7 @@ function repairModuleGraphOrphans(map: UnknownRecord): void {
 
 function repairMapShape(map: UnknownRecord): void {
     expandDottedKeysInPlace(map);
+    hoistMisplacedEvidenceSections(map);
     repairModuleGraphOrphans(map);
     normalizeLifecycleCamelCase(map);
     normalizeIssueTypes(map);
@@ -566,7 +805,12 @@ function prepareMapArguments<T>(input: unknown): T {
     }
     if (Object.keys(inlineMap).length > 0) {
         prepared.map = inlineMap;
+        if (prepared.delta === undefined) {
+            prepared.delta = inlineMap;
+        }
     }
+    prepared.map = mergeBatchedDeltas(unwrapNestedTransport(prepared.map));
+    prepared.delta = mergeBatchedDeltas(unwrapNestedTransport(prepared.delta));
     const map = isEmptyRecord(prepared.map) ? undefined : prepared.map;
     const delta = isEmptyRecord(prepared.delta) ? undefined : prepared.delta;
     const candidate = map ?? delta;
@@ -801,7 +1045,8 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                 (downgradedDimensions.length > 0
                     ? ` Unsupported covered claims persisted as gap: ${downgradedDimensions.join(", ")}.`
                     : "") +
-                formatCoverageRepairGuidance(closure);
+                formatCoverageRepairGuidance(closure) +
+                formatSpecialistEvidenceGuidance(closure, validMap);
 
             return {
                 content: [{ type: "text", text: resultText }],
@@ -824,6 +1069,7 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                     },
                     downgraded_dimensions: downgradedDimensions,
                     gap_warning: closure.warnings,
+                    specialist_evidence_recorded: specialistEvidenceRecorded(validMap),
                 },
             };
         },
@@ -848,7 +1094,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             "citations to real repository paths. " +
             "D1 example: `delta: { skeleton: { top_level_tree: ['README.md', 'get.sh', 'compile.sh'], entry_points: [{ path: 'get.sh', role: 'SDK acquisition script', language: 'bash', run_command: 'bash get.sh' }], first_5_files_for_fresh_agent: [{ path: 'README.md', why: 'project overview' }] }, coverage: { D1_topography: { status: 'covered', confidence: 'high', evidence_summary: 'Topography anchored to real root files.', evidence: [{ path: 'README.md', excerpt: 'Adoptium AQAvit test suite', kind: 'positive' }] } } }`. " +
             "D3 example: `delta: { observed_type_contract: { kind: 'typescript_interface', path: 'src/types.ts', name: 'Observed', fields: ['id', 'name'] }, coverage: { D3_type_contract: { status: 'covered', ... } } }` or `delta: { type_contract_surface: { stable_types: [{ path: 'src/types.ts', name: 'BuildEnv', purpose: 'shared make vars' }] }, coverage: { D3_type_contract: { ... } } }`. " +
-            "D8 example: `delta: { security_surface: { paths: { zero_access: ['.env', '*.pem', 'secrets.*'] }, bash_blocked_patterns: [{ pattern: 'eval $(aws sts assume-role ...)', source: 'JenkinsfileBase' }] }, coverage: { D8_security: { ... } } }`." +
+            "D8 example: `delta: { security_surface: { paths: { zero_access: ['.env', '*.pem', 'secrets.*'] }, bash_blocked_patterns: ['rm -rf /', 'eval $(aws sts assume-role ...)'] }, coverage: { D8_security: { ... } } }`. " +
             "Keep the delta small but complete for the one dimension you are closing.",
         parameters: WriteMapDeltaParamsSchema,
         prepareArguments: prepareMapArguments,
@@ -878,7 +1124,8 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                         text:
                             "Error: write_map_delta requires `delta` to be a JSON object. " +
                             "Omit `delta` only to record a no-op exploration log. " +
-                            "To close a dimension, pass a small object such as `delta: { coverage: { D9_process: { status: 'covered', confidence: 'high', evidence_summary: 'No agentic layer observed.', evidence: [{ path: '.pi/', excerpt: 'No .pi/ directory present.', kind: 'absence' }] } } }`.",
+                            "To close a dimension, pass a small object such as `delta: { coverage: { D9_process: { status: 'covered', confidence: 'high', evidence_summary: 'No agentic layer observed.', evidence: [{ path: '.pi/', excerpt: 'No .pi/ directory present.', kind: 'absence' }] } } }`. " +
+                            `Received: ${describeReceivedTransport(prepared.delta)}.`,
                     }],
                     isError: true,
                     details: undefined as unknown as Record<string, unknown>,
@@ -1035,6 +1282,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                     ? ` Unsupported covered claims persisted as gap: ${downgradedDimensions.join(", ")}.`
                     : "") +
                 formatCoverageRepairGuidance(closure, params.dimension as CoverageDimensionName | null | undefined) +
+                formatSpecialistEvidenceGuidance(closure, validMap) +
                 (needsTopographyEvidence
                     ? " To close D1, retry with `delta: { skeleton: { top_level_tree: [\"src/\"], entry_points: [{ path: \"path/to/entry\", role: \"what it starts\", language: \"language\", run_command: \"documented command\" }], first_5_files_for_fresh_agent: [{ path: \"README.md\", why: \"starting context\" }] } }`."
                     : "") +
@@ -1061,6 +1309,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                     },
                     downgraded_dimensions: downgradedDimensions,
                     gap_warning: closure.warnings,
+                    specialist_evidence_recorded: specialistEvidenceRecorded(validMap),
                 },
             };
         },

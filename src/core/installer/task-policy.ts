@@ -18,6 +18,30 @@ import type {
 
 const TASK_POLICY_RELATIVE_PATH = ".github/agentify-task-policy.json";
 const SHA256 = /^[0-9a-f]{64}$/;
+export const TASK_POLICY_FORMAT = "agentify_task_policy_configuration";
+
+/**
+ * Ownership probe for the installed policy file. The namespaced JSON artifact
+ * carries a self-describing format marker, so Agentify can recognize its own
+ * earlier writes — including a fail-closed placeholder left by an interrupted
+ * install — even when the content has since drifted. Content drift is handled
+ * separately by validation-approval freshness checks; this answers only "did
+ * Agentify write this file", so the installer does not mistake its own
+ * previous output for a user-owned file.
+ */
+export function isAgentifyOwnedTaskPolicyFile(policyPath: string): boolean {
+  try {
+    if (!fs.existsSync(policyPath)) return false;
+    const value = JSON.parse(fs.readFileSync(policyPath, "utf8")) as Record<string, unknown> | null;
+    return value !== null
+      && typeof value === "object"
+      && !Array.isArray(value)
+      && value.format === TASK_POLICY_FORMAT
+      && typeof value.schema_version === "string";
+  } catch {
+    return false;
+  }
+}
 
 export const VALIDATION_EXECUTION: RepositoryValidationExecution = {
   mode: "maintainer-approved-unsandboxed",
@@ -144,7 +168,7 @@ export function readRepositoryTaskPolicyConfiguration(cwd: string): RepositoryTa
   if (!fs.existsSync(policyPath)) return null;
   try {
     const value = JSON.parse(fs.readFileSync(policyPath, "utf8")) as Partial<RepositoryTaskPolicyConfiguration>;
-    if (value.format !== "agentify_task_policy_configuration" || value.schema_version !== "2") return null;
+    if (value.format !== TASK_POLICY_FORMAT || value.schema_version !== "2") return null;
     return value as RepositoryTaskPolicyConfiguration;
   } catch {
     return null;
@@ -156,7 +180,7 @@ export function repositoryTaskPolicySchemaStatus(cwd: string): "absent" | "legac
   if (!fs.existsSync(policyPath)) return "absent";
   try {
     const value = JSON.parse(fs.readFileSync(policyPath, "utf8")) as { format?: unknown; schema_version?: unknown };
-    if (value.format !== "agentify_task_policy_configuration") return "invalid";
+    if (value.format !== TASK_POLICY_FORMAT) return "invalid";
     if (value.schema_version === "2") return "current";
     if (value.schema_version === "1") return "legacy";
     return "invalid";
@@ -183,7 +207,7 @@ export function buildRepositoryTaskPolicyConfiguration(
     && approvalCurrent;
   if (!configured) {
     return {
-      format: "agentify_task_policy_configuration",
+      format: TASK_POLICY_FORMAT,
       schema_version: "2",
       configured: false,
       repository: preflight.identity,
@@ -196,7 +220,7 @@ export function buildRepositoryTaskPolicyConfiguration(
       validation_execution: VALIDATION_EXECUTION,
       validation_approval: approvalCurrent ? validationApproval : null,
       policy: null,
-      instructions: "Agentify remains fail-closed until every installer readiness blocker is resolved, a maintainer explicitly approves unsandboxed repository validation, and validation passes.",
+      instructions: "Agentify remains fail-closed until every installer readiness blocker is resolved, installer attestation for unsandboxed repository validation is recorded, and validation passes.",
     };
   }
 
@@ -218,7 +242,7 @@ export function buildRepositoryTaskPolicyConfiguration(
     policy_digest: digestTaskValue({ ...draft, policy_digest: undefined }),
   });
   return {
-    format: "agentify_task_policy_configuration",
+    format: TASK_POLICY_FORMAT,
     schema_version: "2",
     configured: true,
     repository: preflight.identity,
@@ -231,6 +255,6 @@ export function buildRepositoryTaskPolicyConfiguration(
     validation_execution: VALIDATION_EXECUTION,
     validation_approval: validationApproval,
     policy,
-    instructions: "This repository-specific policy was generated from verified repository identity, tracked application paths, and passing validation commands, and explicit maintainer approval of unsandboxed repository validation.",
+    instructions: "This repository-specific policy was generated from verified repository identity, tracked application paths, passing validation commands, and installer attestation of unsandboxed repository validation.",
   };
 }

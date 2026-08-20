@@ -9,11 +9,16 @@ import { createGapDraftMap } from "../audit/map-draft.ts";
 import { DEFAULT_MAP_FILENAME, writeCanonicalMap } from "../audit/map-storage.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
 import { loadBuilderPrompt } from "../audit/prompt.ts";
-import { COVERAGE_DIMENSIONS, assessCoverageClosure } from "../audit/schema.ts";
+import {
+  COVERAGE_DIMENSIONS,
+  assessAuditCompletion,
+  assessCoverageClosure,
+  specialistEvidenceRecorded,
+} from "../audit/schema.ts";
 import {
   setThinkingLevel,
 } from "../audit/state.ts";
-import { createWriteMapTools, loadCanonicalMapAt } from "../audit/write-map-tool.ts";
+import { COVERAGE_REPAIR_HINTS, createWriteMapTools, loadCanonicalMapAt } from "../audit/write-map-tool.ts";
 import { readPackageVersion } from "../package-version.ts";
 import { packageRoot } from "../pi-sdk-runtime.ts";
 import { createReadOnlyExecutionPolicy } from "../security/execution-policy.ts";
@@ -33,7 +38,7 @@ const AUDIT_TOOL_ALLOWLIST = [
 // Reasonable audit guardrails. The output cap prevents providers from
 // truncating a large tool-call payload, and the wall-clock timeout stops a
 // runaway session before it racks up thousands of fruitless turns.
-const AUDIT_MAX_OUTPUT_TOKENS = 16_384;
+const AUDIT_MAX_OUTPUT_TOKENS = 65_536;
 const AUDIT_TIMEOUT_MS = 30 * 60 * 1000;
 
 type AssistantUsage = {
@@ -54,6 +59,7 @@ type WriteMapResult = {
       total?: number;
     };
     gap_warning?: string[] | null;
+    specialist_evidence_recorded?: boolean;
   };
   isError?: boolean;
 };
@@ -77,14 +83,14 @@ function auditActivityForTool(toolName: string): string {
     case "grep":
     case "find":
     case "ls":
-      return "Inspecting repository files and source patterns…";
+      return "Inspecting repository files and source patterns";
     case "write_map":
     case "write_map_delta":
-      return "Recording the validated codebase map and evidence…";
+      return "Recording the validated codebase map and evidence";
     case "spawn_explorer":
-      return "Launching a focused read-only explorer…";
+      return "Launching a focused read-only explorer";
     default:
-      return "Reviewing the repository evidence…";
+      return "Reviewing the repository evidence";
   }
 }
 
@@ -125,6 +131,7 @@ function mapResult(result: WriteMapResult | undefined): {
   gap: string[];
   total: number;
   gap_warning: string[] | null;
+  specialist_evidence_recorded: boolean;
 } | null {
   if (!result || result.isError || !result.details?.path) return null;
   return {
@@ -134,6 +141,7 @@ function mapResult(result: WriteMapResult | undefined): {
     gap: result.details.coverage_summary?.gap ?? [],
     total: result.details.coverage_summary?.total ?? COVERAGE_DIMENSIONS.length,
     gap_warning: result.details.gap_warning ?? null,
+    specialist_evidence_recorded: result.details.specialist_evidence_recorded ?? false,
   };
 }
 
@@ -142,12 +150,66 @@ function focusedAuditPrompt(): string {
     "Audit this existing repository for its persistent Agentify engineering team.",
     "Use only read-only repository tools and the structured write_map/write_map_delta tools.",
     "A gap-marked map is already present; after initial direct reads, call write_map_delta with concrete repository evidence.",
+    "Submit each dimension incrementally via write_map_delta (one or two dimensions per call) to keep tool payloads compact and complete.",
     "Close every supportable coverage dimension and leave unsupported claims as explicit gaps.",
+    "Before finishing, record expert_evidence.expert_domains through write_map_delta; an honest empty list is valid only when no cohesive recurring domain exists and must be justified in open_questions. The audit is not complete without it.",
     "The map is internal operational evidence for specialists and task planning.",
     "Do not write application files, AGENTS.md, harness configuration, skills, prompts, workflows, dependencies, or prose artifacts.",
     "Do not create a generic agent surface. Repository-specific specialists and procedures are materialized later from validated evidence.",
     "Do not return prose instead of the required structured tool call.",
   ].join(" ");
+}
+
+/**
+ * Used when rerunning against a repository whose map already closes every
+ * coverage dimension but predates the specialist-evidence gate. The audit
+ * resumes as a bounded top-up instead of a fresh full audit.
+ */
+function specialistEvidenceTopUpPrompt(): string {
+  return [
+    "The canonical codebase map already closes every coverage dimension, but expert_evidence.expert_domains was never recorded.",
+    "Read the existing map and the repository, then call write_map_delta with `delta: { expert_evidence: { expert_domains: [...] } }`.",
+    "Record one entry per cohesive, recurring repository domain: kebab-case domain, rationale, primary_paths, entry_points, test_paths, key_files, key_types, patterns, pitfalls, conventions, stability, recurrence, test_command, last_updated.",
+    "Ground every path, type, and command in repository evidence you actually read. Do not invent candidates.",
+    "An honest empty expert_domains list is valid only when no cohesive recurring domain exists; record that justification in open_questions in the same delta.",
+    "Do not modify or weaken the existing closed coverage dimensions. Do not return prose instead of the required structured tool call.",
+  ].join(" ");
+}
+
+function buildAuditRecoveryPrompt(
+  closure: { closed: string[]; unresolved: string[]; reasons: Record<string, string> },
+  options?: { specialistEvidenceMissing?: boolean },
+): string {
+  const lines: string[] = [
+    "The repository audit has recorded progress but still needs structured closure for the following remaining dimension(s):",
+    "",
+  ];
+  for (const dim of closure.unresolved) {
+    const reason = closure.reasons[dim] ?? "status is not covered";
+    const hint = COVERAGE_REPAIR_HINTS[dim as keyof typeof COVERAGE_REPAIR_HINTS] ?? "";
+    lines.push(`- **${dim}**: ${reason}`);
+    if (hint) {
+      lines.push(`  Required fields: ${hint}`);
+    }
+  }
+  if (options?.specialistEvidenceMissing) {
+    lines.push("- **specialist_evidence**: every coverage dimension is closed, but `expert_evidence.expert_domains` has not been recorded.");
+    lines.push("  Required fields: call `write_map_delta` with `delta: { expert_evidence: { expert_domains: [...] } }` — one entry per cohesive, recurring repository domain, grounded in real paths, key files, key types, patterns, pitfalls, stability, recurrence, and an observed test command. An honest empty list is valid only when no cohesive recurring domain exists; record that justification in `open_questions` in the same delta.");
+  }
+  lines.push("");
+  lines.push("Instructions:");
+  if (options?.specialistEvidenceMissing && closure.unresolved.length === 0) {
+    lines.push("1. The only remaining work is specialist evidence. Do NOT re-close coverage dimensions; they are already covered.");
+    lines.push("2. Inspect the repository's cohesive domains with `read`, `grep`, `find`, or `ls`, then call `write_map_delta` with `delta: { expert_evidence: { expert_domains: [{ domain: 'billing', rationale: 'Recurring payment invariants.', primary_paths: ['src/billing'], entry_points: ['src/billing/index.ts'], test_paths: ['tests/billing.test.ts'], key_files: [{ path: 'src/billing/index.ts', purpose: 'Billing entry point.', line_range: [1, 120] }], key_types: [{ name: 'Invoice', path: 'src/billing/types.ts:1', purpose: 'Stable billing contract.' }], patterns: [{ name: 'idempotency', description: 'Billing writes must be idempotent.', example_ref: 'src/billing/index.ts:42' }], pitfalls: [{ risk: 'Double charging on retry.', consequence: 'Customers can be charged twice.', reference: 'src/billing/index.ts:55' }], conventions: ['Amounts are stored in cents.'], stability: 'high', recurrence: 'high', test_command: 'npm test -- tests/billing.test.ts', last_updated: '2026-01-01T00:00:00.000Z' }] } }`, replacing every value with evidence you actually observed in THIS repository.");
+    lines.push("3. If no cohesive recurring domain exists, call `write_map_delta` with `delta: { expert_evidence: { expert_domains: [] }, open_questions: ['No specialist domain because ...'] }`.");
+    lines.push("4. Do not return prose or summaries. Submit the structured tool call.");
+  } else {
+    lines.push("1. Inspect the repository with `read`, `grep`, `find`, or `ls` to locate the required evidence for these remaining dimensions.");
+    lines.push("2. Call `write_map_delta` for each missing dimension. In each call, include the dimension data, `coverage: { [dimension]: { status: 'covered', confidence: 'high', evidence_summary: '...', evidence: [{ path: '...', excerpt: '...', kind: 'positive' }] } }`.");
+    lines.push("3. All `evidence.path` citations must point to real files existing in the repository.");
+    lines.push("4. Do not return prose or summaries. Submit tool calls with the required structured data.");
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -178,15 +240,19 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     tool_allowlist: AUDIT_TOOL_ALLOWLIST,
   });
 
-  const bootstrappedGapDraft = loadCanonicalMapAt(context.cwd, stateDir) === null;
+  const preExistingMap = loadCanonicalMapAt(context.cwd, stateDir);
+  const bootstrappedGapDraft = preExistingMap === null;
   if (bootstrappedGapDraft) {
     writeCanonicalMap(context.cwd, createGapDraftMap(), {
       stateDir,
       mapFilename: DEFAULT_MAP_FILENAME,
     });
   }
+  const specialistEvidenceTopUp = preExistingMap !== null
+    && assessCoverageClosure(preExistingMap, { cwd: context.cwd }).unresolved.length === 0
+    && !specialistEvidenceRecorded(preExistingMap);
 
-  const spinner: SpinnerHandle = startSpinner("starting focused repository audit…");
+  const spinner: SpinnerHandle = startSpinner("starting focused repository audit");
   const controller = new AbortController();
   const forwardAbort = (): void => controller.abort();
   if (context.signal?.aborted) forwardAbort();
@@ -203,7 +269,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       configDir: defaultConfigDir(),
       config: context.config,
       systemPrompt: promptContent,
-      userPrompt: focusedAuditPrompt(),
+      userPrompt: specialistEvidenceTopUp ? specialistEvidenceTopUpPrompt() : focusedAuditPrompt(),
       tools: [...AUDIT_TOOL_ALLOWLIST],
       executionPolicy: createReadOnlyExecutionPolicy({
         cwd: context.cwd,
@@ -219,12 +285,12 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       timeoutMs: AUDIT_TIMEOUT_MS,
       maxOutputTokens: AUDIT_MAX_OUTPUT_TOKENS,
       recoveryPromptIfToolNotCalled: {
-        requiredToolName: bootstrappedGapDraft ? "write_map_delta" : "write_map",
+        requiredToolName: bootstrappedGapDraft || specialistEvidenceTopUp ? "write_map_delta" : "write_map",
         maxAttempts: 2,
         userPrompt: "Read the current map and submit the strongest evidence already gathered through write_map_delta. Leave genuinely unsupported dimensions as gaps; do not return prose.",
         shouldRecover: () => {
           const map = loadCanonicalMapAt(context.cwd, stateDir);
-          return map !== null && assessCoverageClosure(map, { cwd: context.cwd }).unresolved.length > 0;
+          return map !== null && !assessAuditCompletion(map, { cwd: context.cwd }).complete;
         },
       },
       onEvent: (event) => {
@@ -239,7 +305,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
           observedTurns += 1;
           if (typeof usage?.cost?.total === "number") observedCost += usage.cost.total;
           const currentMap = loadCanonicalMapAt(context.cwd, stateDir);
-          if (currentMap && assessCoverageClosure(currentMap, { cwd: context.cwd }).unresolved.length === 0) {
+          if (currentMap && assessAuditCompletion(currentMap, { cwd: context.cwd }).complete) {
             controlledClosure = true;
             controller.abort();
           }
@@ -267,6 +333,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
                 written.covered.length === written.total
                 && written.gap.length === 0
                 && (written.gap_warning?.length ?? 0) === 0
+                && written.specialist_evidence_recorded
               ) {
                 controlledClosure = true;
                 controller.abort();
@@ -277,12 +344,118 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       },
     });
 
-    const map = loadCanonicalMapAt(context.cwd, stateDir);
-    const closure = map === null
+    let map = loadCanonicalMapAt(context.cwd, stateDir);
+    let closure = map === null
       ? { closed: [] as string[], unresolved: [...COVERAGE_DIMENSIONS], reasons: {} as Record<string, string> }
       : assessCoverageClosure(map, { cwd: context.cwd });
-    const intentionallyStopped = runtimeResult.aborted && controlledClosure;
-    const success = map !== null && closure.unresolved.length === 0 && (!runtimeResult.aborted || intentionallyStopped);
+
+    const maxRecoveryPasses = 2;
+    let recoveryPass = 0;
+    while (
+      map !== null
+      && (closure.unresolved.length > 0 || !specialistEvidenceRecorded(map))
+      && recoveryPass < maxRecoveryPasses
+      && !context.signal?.aborted
+      && !providerAuthFailure(runtimeResult.diagnostics)
+    ) {
+      recoveryPass += 1;
+      const specialistEvidenceMissing = !specialistEvidenceRecorded(map);
+      spinner.update(
+        closure.unresolved.length > 0
+          ? `recovering ${closure.unresolved.length} unresolved audit dimension(s) (pass ${recoveryPass}/${maxRecoveryPasses})`
+          : `recording specialist evidence (pass ${recoveryPass}/${maxRecoveryPasses})`,
+      );
+      const recoveryController = new AbortController();
+      const recoveryForwardAbort = (): void => recoveryController.abort();
+      if (context.signal?.aborted) recoveryForwardAbort();
+      else context.signal?.addEventListener("abort", recoveryForwardAbort, { once: true });
+      const recoveryPrompt = buildAuditRecoveryPrompt(closure, { specialistEvidenceMissing });
+      try {
+        await context.runtime.runSession({
+          cwd: context.cwd,
+          configDir: defaultConfigDir(),
+          config: context.config,
+          systemPrompt: promptContent,
+          userPrompt: recoveryPrompt,
+          tools: [...AUDIT_TOOL_ALLOWLIST],
+          executionPolicy: createReadOnlyExecutionPolicy({
+            cwd: context.cwd,
+            mode: "audit-readonly",
+            tools: ["read", "grep", "find", "ls"],
+            protectedPaths: [path.resolve(context.cwd)],
+          }),
+          customTools: [mapTools.writeMapTool, mapTools.writeMapDeltaTool],
+          spawnExplorerAgentDir: defaultConfigDir(),
+          spawnExplorerStateDir: stateDir,
+          signal: recoveryController.signal,
+          inactivityTimeoutMs: 5 * 60 * 1000,
+          timeoutMs: AUDIT_TIMEOUT_MS,
+          maxOutputTokens: AUDIT_MAX_OUTPUT_TOKENS,
+          onEvent: (event) => {
+            const eventType = (event as { type?: string }).type ?? "unknown";
+            log.sessionEvent({ pi_event_type: eventType, event });
+            if (eventType === "message_start" && (event as { message?: { role?: string } }).message?.role === "user") {
+              log.recordTurnStart();
+            } else if (eventType === "message_end") {
+              log.incrementTurns();
+              const usage = extractUsage(event);
+              log.recordTurnEnd(usage);
+              observedTurns += 1;
+              if (typeof usage?.cost?.total === "number") observedCost += usage.cost.total;
+              const currentMap = loadCanonicalMapAt(context.cwd, stateDir);
+              if (currentMap && assessAuditCompletion(currentMap, { cwd: context.cwd }).complete) {
+                controlledClosure = true;
+                recoveryController.abort();
+              }
+            } else if (eventType === "tool_execution_start") {
+              const toolName = (event as { toolName?: string; tool_name?: string }).toolName
+                ?? (event as { tool_name?: string }).tool_name
+                ?? "unknown";
+              spinner.update(auditActivityForTool(toolName));
+            } else if (eventType === "tool_execution_end") {
+              const toolEvent = event as { toolName?: string; result?: WriteMapResult };
+              if (toolEvent.toolName === "write_map" || toolEvent.toolName === "write_map_delta") {
+                const written = mapResult(toolEvent.result);
+                if (written) {
+                  log.mapWritten({
+                    path: written.path,
+                    size_bytes: written.size_bytes,
+                    coverage_summary: {
+                      covered: written.covered,
+                      gap: written.gap,
+                      total: written.total,
+                    },
+                    gap_warning: written.gap_warning,
+                  });
+                  if (
+                    written.covered.length === written.total
+                    && written.gap.length === 0
+                    && (written.gap_warning?.length ?? 0) === 0
+                    && written.specialist_evidence_recorded
+                  ) {
+                    controlledClosure = true;
+                    recoveryController.abort();
+                  }
+                }
+              }
+            }
+          },
+        });
+      } finally {
+        context.signal?.removeEventListener("abort", recoveryForwardAbort);
+      }
+
+      map = loadCanonicalMapAt(context.cwd, stateDir);
+      closure = map === null
+        ? { closed: [] as string[], unresolved: [...COVERAGE_DIMENSIONS], reasons: {} as Record<string, string> }
+        : assessCoverageClosure(map, { cwd: context.cwd });
+    }
+
+    const specialistRecorded = map !== null && specialistEvidenceRecorded(map);
+    const intentionallyStopped = (runtimeResult.aborted || controlledClosure)
+      && closure.unresolved.length === 0
+      && specialistRecorded;
+    const success = map !== null && closure.unresolved.length === 0 && specialistRecorded;
     const status = success ? "success" : runtimeResult.aborted ? "aborted" : "partial";
     log.sessionEnd({
       duration_ms: Date.now() - startedAt,
@@ -307,6 +480,12 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       const reasons = closure.unresolved
         .slice(0, 8)
         .map((dimension) => `${dimension}: ${closure.reasons[dimension] ?? "not closed"}`);
+      if (closure.unresolved.length === 0 && !specialistRecorded) {
+        reasons.push(
+          "specialist evidence: expert_evidence.expert_domains was not recorded; "
+          + "an honest empty list is valid but the field must be present",
+        );
+      }
       throw new Error(
         `repository audit did not reach structured closure (${closure.closed.length}/${COVERAGE_DIMENSIONS.length}); ${reasons.join("; ")}`,
       );

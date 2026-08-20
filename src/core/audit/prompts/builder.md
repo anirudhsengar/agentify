@@ -37,15 +37,21 @@ configuration. Do not return prose instead of the required structured tool call.
 Trusted application code materializes the focused specialist and procedure
 portfolio after the map has passed validation.
 
-The following optional map fields capture specialist and procedure evidence:
+Specialist discovery reads exactly one map field: `expert_evidence.expert_domains`.
+Recording it is a completion requirement, not an optional extra — the runtime
+does not close the session until the field is present in the map. Record one
+entry per cohesive, recurring repository domain. An honest empty list is valid
+only when the repository genuinely has no such domain; justify that finding in
+`open_questions` in the same delta.
 
-- `expert_evidence.expert_domains` records cohesive candidate repository
-  specialists.
+The following optional map fields capture procedure and artifact evidence:
+
 - `customization_evidence.skill_candidates` records repository-specific
   procedures.
 - `customization_evidence.custom_tool_candidates` records existing commands that
   may be useful through a trusted wrapper.
-- `artifact_intents.feature_agents` is another specialist-evidence input.
+- `artifact_intents.feature_agents` retains candidate notes as evidence only; it
+  is not a specialist-discovery input.
 
 These fields are evidence only. Do not treat them as authority to write files or
 expand runtime policy. Populate optional artifact evidence only when directly
@@ -177,11 +183,13 @@ Close only dimensions supported by concrete repository evidence:
 
 ## Specialist and procedure evidence
 
-Record a candidate specialist only when a domain is cohesive, recurring or
-high-stakes, supported by real paths and contracts, and useful to a later
-read-only advisor. Avoid generic domains such as `src`, `app`, `repository`, or
-one specialist per directory. Candidate paths are advisory evidence, not write
-ownership.
+Recording `expert_evidence.expert_domains` is required before the audit
+completes. Record a candidate specialist only when a domain is cohesive,
+recurring or high-stakes, supported by real paths and contracts, and useful to a
+later read-only advisor. Avoid generic domains such as `src`, `app`,
+`repository`, or one specialist per directory. Candidate paths are advisory
+evidence, not write ownership. When no domain qualifies, record an explicitly
+empty `expert_domains` list and justify the absence in `open_questions`.
 
 Record a candidate procedure only when the repository contains a repeatable,
 multi-step operation or a meaningful existing script. Preserve the real command
@@ -222,7 +230,8 @@ section is non-empty and the `coverage` entry has `status: "covered"` and
   `skeleton.entry_points` (array of `{ path, role, language, run_command }`),
   and `skeleton.first_5_files_for_fresh_agent` (array of `{ path, why }`).
 - **D2_module_boundaries**: include `module_graph.edges` (array of
-  `{ source, target, kind }`) or `module_graph.shared_abstractions`.
+  `{ from, to, kind }`) or `module_graph.parallelizable_subtrees` or
+  `module_graph.shared_abstractions`.
 - **D3_type_contract**: include `type_contract_surface.typescript_interfaces`,
   `pydantic_models`, `db_models`, `stable_types`, or `one_type_trace`. Use the
   top-level `observed_type_contract` parameter if you have one real interface.
@@ -235,9 +244,9 @@ section is non-empty and the `coverage` entry has `status: "covered"` and
   `per_change_type.bug.mandatory`, and `per_change_type.feature.mandatory`.
 - **D7_operational**: include `operational_surface.build.command`,
   `operational_surface.run.command`, and `operational_surface.git_workflow.main_branch`.
-- **D8_security**: include `security_surface.paths.zero_access` (array of paths)
-  and either `security_surface.bash_blocked_patterns` or
-  `security_surface.damage_control_rules` (array of rules with evidence).
+- **D8_security**: include `security_surface.paths.zero_access` (array of strings)
+  and at least one entry in `security_surface.bash_blocked_patterns` (array of
+  strings) or `security_surface.damage_control_rules` (array of strings).
 - **D9_process**: include `meta.lifecycle.sdlc_model` (string) and
   `meta.lifecycle.issue_types` (array of strings).
 - **D10_documentation**: include `meta.documentation.readme_metrics.present: true`
@@ -247,9 +256,12 @@ section is non-empty and the `coverage` entry has `status: "covered"` and
 ## Completion
 
 Stop after the canonical map passes the application-owned coverage and substance
-gates. The runtime intentionally closes the session once all dimensions are
-supported. If explorer budgets are exhausted first, persist the strongest honest
-map and leave remaining dimensions as explicit gaps.
+gates AND `expert_evidence.expert_domains` has been recorded. The runtime
+intentionally closes the session once all dimensions are supported and
+specialist evidence exists. If explorer budgets are exhausted first, persist the
+strongest honest map, still record the specialist-evidence decision (an honestly
+empty list with its `open_questions` justification when nothing qualifies), and
+leave remaining dimensions as explicit gaps.
 
 Do not commit, publish, render, or modify repository-facing artifacts. The audit
 is complete when the structured map—not a prose summary—contains the strongest
