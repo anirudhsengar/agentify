@@ -55,7 +55,7 @@ async function testScopedPackageIdentityIsStable(): Promise<void> {
   };
 
   assert.equal(packageJson.name, "@anirudhsengar/agentify");
-  assert.equal(packageJson.version, "1.0.0");
+  assert.equal(packageJson.version, "1.1.0");
   assert.deepEqual(packageJson.bin, { agentify: "./bin/agentify.js" });
   assert.deepEqual(packageJson.repository, {
     type: "git",

@@ -1,4 +1,4 @@
-agentify 1.0.0
+agentify 1.1.0
 
 Usage:
   agentify [options]

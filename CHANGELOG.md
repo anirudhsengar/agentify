@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-20
+
 ### Added
 
 - Specialist-evidence completion gate: the repository audit no longer completes
