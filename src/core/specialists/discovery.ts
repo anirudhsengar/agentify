@@ -1,4 +1,5 @@
 import type { CodebaseMap } from "../audit/schema.ts";
+import { isExecutableCommandText } from "../command-text.ts";
 import { sortedUniqueStrings } from "../memory/serialization.ts";
 import { normalizeMemoryRepositoryPath } from "../memory/paths.ts";
 import type { MemoryConfidence } from "../memory/schema.ts";
@@ -23,6 +24,8 @@ interface RawSpecialist {
   contracts: string[];
   patterns: string[];
   pitfalls: string[];
+  /** Recorded pitfalls whose reference does not resolve to a tracked file. */
+  unverifiedPitfalls: number;
   validationCommands: string[];
   evidencePaths: string[];
   sourceKinds: SpecialistSourceKind[];
@@ -176,7 +179,7 @@ function allValidationCommands(map: CodebaseMap): string[] {
     ...(map.validation_surface.per_change_type.security?.mandatory ?? []),
   ];
   return sortedUniqueStrings(commands.filter((command): command is string =>
-    typeof command === "string" && command.trim().length > 0
+    typeof command === "string" && isExecutableCommandText(command)
   ));
 }
 
@@ -262,11 +265,15 @@ function pathsForScopes(knownPaths: ReadonlyArray<string>, scopes: ReadonlyArray
 function commandsForDomain(
   domainTestCommand: string | null,
   globalCommands: ReadonlyArray<string>,
+  commandsAreAuthoritative: boolean,
 ): string[] {
+  const candidate = domainTestCommand?.trim() ?? "";
+  const includeDomainCommand = candidate.length > 0
+    && (!commandsAreAuthoritative || globalCommands.includes(candidate));
   return sortedUniqueStrings([
-    ...(domainTestCommand ? [domainTestCommand] : []),
+    ...(includeDomainCommand ? [candidate] : []),
     ...globalCommands,
-  ]).slice(0, 16);
+  ].filter(isExecutableCommandText)).slice(0, 16);
 }
 
 function rawFromExpertEvidence(
@@ -275,6 +282,7 @@ function rawFromExpertEvidence(
   contracts: ReadonlyArray<ContractReference>,
   globalCommands: ReadonlyArray<string>,
   trackedEvidenceFiles?: ReadonlySet<string>,
+  commandsAreAuthoritative = false,
 ): RawSpecialist[] {
   return (map.expert_evidence?.expert_domains ?? []).map((expert) => {
     const slug = specialistDomainSlug(expert.domain);
@@ -312,10 +320,21 @@ function rawFromExpertEvidence(
         ...expert.patterns.map((pattern) => boundedText(`${pattern.name}: ${pattern.description}`)),
         ...expert.conventions,
       ]),
+      // The reference is retained so a claim stays traceable to the line that
+      // is supposed to support it, instead of becoming free-floating prose.
       pitfalls: sortedUniqueStrings(
-        expert.pitfalls.map((pitfall) => boundedText(`${pitfall.risk} Consequence: ${pitfall.consequence}`)),
+        expert.pitfalls.map((pitfall) => boundedText(
+          `${pitfall.risk} Consequence: ${pitfall.consequence} Reference: ${pitfall.reference}`,
+        )),
       ),
-      validationCommands: commandsForDomain(expert.test_command, globalCommands),
+      unverifiedPitfalls: expert.pitfalls.filter((pitfall) =>
+        !referenceResolves(pitfall.reference, trackedEvidenceFiles)
+      ).length,
+      validationCommands: commandsForDomain(
+        expert.test_command,
+        globalCommands,
+        commandsAreAuthoritative,
+      ),
       evidencePaths: observedPaths.filter(isLikelyFilePath),
       sourceKinds: ["expert_evidence"],
       stability: expert.stability,
@@ -393,6 +412,7 @@ function rawFromCohesiveStructuralEvidence(
     contracts: sortedUniqueStrings(scopedContracts),
     patterns: sortedUniqueStrings(scopedPatterns),
     pitfalls: sortedUniqueStrings(scopedPitfalls),
+    unverifiedPitfalls: 0,
     validationCommands: [...globalCommands],
     evidencePaths,
     sourceKinds: ["structural_evidence"],
@@ -400,6 +420,209 @@ function rawFromCohesiveStructuralEvidence(
     recurrence: null,
   }];
 }
+
+function criticalOwnershipPaths(
+  map: CodebaseMap,
+  knownPaths: ReadonlyArray<string>,
+): string[] {
+  const known = new Set(knownPaths);
+  return normalizePaths([
+    ...map.skeleton.entry_points.map((entry) => entry.path),
+    ...map.module_graph.edges.flatMap((edge) => [edge.from, edge.to]),
+    ...map.module_graph.shared_abstractions,
+    ...map.type_contract_surface.pydantic_models.map((item) => item.path),
+    ...map.type_contract_surface.typescript_interfaces.map((item) => item.path),
+    ...map.type_contract_surface.db_models.map((item) => item.path),
+    ...(map.type_contract_surface.api_contracts ?? []).map((item) => item.path),
+  ]).filter((candidate) => isLikelyFilePath(candidate) && known.has(candidate));
+}
+
+function candidateOwnsPath(candidate: RawSpecialist, repositoryPath: string): boolean {
+  return candidate.ownedPaths.some((scope) => pathMatchesScope(repositoryPath, scope));
+}
+
+function fileStem(repositoryPath: string): string {
+  const name = repositoryPath.split("/").at(-1) ?? repositoryPath;
+  return specialistSlug(name.replace(/\.[^.]+$/, ""));
+}
+
+function assignOwnedPath(candidate: RawSpecialist, repositoryPath: string): RawSpecialist {
+  return {
+    ...candidate,
+    ownedPaths: sortedUniqueStrings([...candidate.ownedPaths, repositoryPath]),
+    observedPaths: sortedUniqueStrings([...candidate.observedPaths, repositoryPath]),
+    evidencePaths: sortedUniqueStrings([...candidate.evidencePaths, repositoryPath]),
+  };
+}
+
+function promoteHeuristicOwnership(
+  candidates: ReadonlyArray<RawSpecialist>,
+  criticalPaths: ReadonlyArray<string>,
+): RawSpecialist[] {
+  let output = [...candidates];
+  for (const repositoryPath of criticalPaths) {
+    if (output.some((candidate) => candidateOwnsPath(candidate, repositoryPath))) continue;
+    const stem = fileStem(repositoryPath);
+    let preferred = output.filter((candidate) => {
+      if (stem.includes("argument")) return /(?:argument|option)/.test(candidate.slug);
+      if (stem.includes("error") || stem.includes("suggest")) {
+        return /(?:help|output|error)/.test(candidate.slug);
+      }
+      return false;
+    });
+    if (preferred.length === 0) {
+      preferred = output.filter((candidate) =>
+        [...candidate.observedPaths, ...candidate.evidencePaths]
+          .some((scope) => pathMatchesScope(repositoryPath, scope))
+      );
+    }
+    if (preferred.length !== 1) continue;
+    output = output.map((candidate) =>
+      candidate === preferred[0] ? assignOwnedPath(candidate, repositoryPath) : candidate
+    );
+  }
+  return output;
+}
+
+/** Paths that demonstrate usage rather than constitute the product's surface. */
+const ILLUSTRATIVE_ROOTS = new Set(["examples", "example", "samples", "sample", "demo", "demos", "docs", "doc"]);
+
+function isIllustrativePath(repositoryPath: string): boolean {
+  return ILLUSTRATIVE_ROOTS.has(repositoryPath.split("/")[0] ?? "");
+}
+
+const TYPE_TEST_FILE = /(?:\.test-d\.[cm]?ts|[-.]d\.test\.[cm]?ts)$/i;
+const PACKAGE_MANIFEST_FILES = new Set([
+  "package.json", "pyproject.toml", "Cargo.toml", "go.mod", "Gemfile", "composer.json",
+]);
+
+/**
+ * Files a public contract change necessarily travels with: the type tests that
+ * establish expected inference, and the manifest that declares the export map.
+ * Owning a declaration file without them means a declaration can change without
+ * loading what pins its behavior.
+ */
+function publicContractCompanions(
+  knownPaths: ReadonlyArray<string>,
+  ownedPaths: ReadonlyArray<string>,
+): string[] {
+  const ownedDirectories = new Set(
+    ownedPaths.map((candidate) => candidate.split("/").slice(0, -1).join("/")),
+  );
+  return knownPaths.filter((candidate) => {
+    if (PACKAGE_MANIFEST_FILES.has(candidate)) return true;
+    if (!TYPE_TEST_FILE.test(candidate)) return false;
+    const directory = candidate.split("/").slice(0, -1).join("/");
+    return ownedDirectories.has(directory) || ownedDirectories.size === 0;
+  });
+}
+
+function rawFromOwnershipGaps(
+  map: CodebaseMap,
+  knownPaths: ReadonlyArray<string>,
+  contracts: ReadonlyArray<ContractReference>,
+  validationCommands: ReadonlyArray<string>,
+  candidates: ReadonlyArray<RawSpecialist>,
+  /** Every tracked path, so a companion the audit never mentioned is still found. */
+  trackedFiles?: ReadonlySet<string>,
+): RawSpecialist[] {
+  const criticalPaths = criticalOwnershipPaths(map, knownPaths);
+  const unowned = criticalPaths.filter((repositoryPath) =>
+    !candidates.some((candidate) => candidateOwnsPath(candidate, repositoryPath))
+  );
+  if (unowned.length === 0 || validationCommands.length === 0) return [];
+  const entryPoints = new Set(normalizePaths(map.skeleton.entry_points.map((entry) => entry.path)));
+  const contractPaths = new Set(contracts.map((contract) => contract.path));
+
+  const buildGap = (domain: string, ownedPaths: string[], purpose: string): RawSpecialist => {
+    const stems = ownedPaths.map(fileStem);
+    const observedPaths = sortedUniqueStrings([
+      ...ownedPaths,
+      ...knownPaths.filter((candidate) =>
+        /^(?:test|tests)\//.test(candidate)
+        && stems.some((stem) => candidate.toLowerCase().includes(stem))
+      ),
+    ]);
+    return {
+      slug: specialistDomainSlug(domain),
+      domain,
+      purpose: boundedText(purpose),
+      ownedPaths: sortedUniqueStrings(ownedPaths),
+      observedPaths,
+      contracts: sortedUniqueStrings(contracts
+        .filter((contract) => ownedPaths.some((scope) => pathMatchesScope(contract.path, scope)))
+        .map((contract) => contract.description)),
+      patterns: sortedUniqueStrings(map.conventions.patterns
+        .filter((pattern) => ownedPaths.some((scope) => pathMatchesScope(pattern.where, scope)))
+        .map((pattern) => boundedText(`${pattern.name}: ${pattern.description}`))),
+      pitfalls: sortedUniqueStrings(map.pitfalls
+        .filter((pitfall) => ownedPaths.some((scope) => pathMatchesScope(pitfall.module, scope)))
+        .map((pitfall) => boundedText(`${pitfall.what} Consequence: ${pitfall.consequence}`))),
+      unverifiedPitfalls: 0,
+      validationCommands: [...validationCommands],
+      evidencePaths: observedPaths.filter(isLikelyFilePath),
+      sourceKinds: ["structural_evidence"],
+      stability: null,
+      recurrence: null,
+    };
+  };
+
+  // A public-contract specialist has to actually own a public contract. Naming
+  // one after leftover entry points produces a specialist called
+  // "public-api-contracts" that owns example scripts, which satisfies the
+  // ownership gate without describing any real expertise.
+  const publicPaths = unowned.filter((repositoryPath) =>
+    contractPaths.has(repositoryPath)
+    || (entryPoints.has(repositoryPath) && !isIllustrativePath(repositoryPath))
+  );
+  const gaps: RawSpecialist[] = [];
+  if (publicPaths.length > 0) {
+    const publicApi = buildGap(
+      "public-api-contracts",
+      publicPaths,
+      "Own runtime entry points and public type contracts so implementation and declaration compatibility are reviewed together.",
+    );
+    // Search everything tracked, not only what the audit happened to record:
+    // Commander's type tests never appear in its map, so restricting the search
+    // to map-derived paths silently dropped the file that pins its inference.
+    const compatibilitySurface = publicContractCompanions(
+      trackedFiles ? [...trackedFiles] : knownPaths,
+      publicPaths,
+    );
+    gaps.push({
+      ...publicApi,
+      observedPaths: sortedUniqueStrings([...publicApi.observedPaths, ...compatibilitySurface]),
+      evidencePaths: sortedUniqueStrings([
+        ...publicApi.evidencePaths,
+        ...compatibilitySurface.filter(isLikelyFilePath),
+      ]),
+    });
+  }
+  const remaining = unowned.filter((repositoryPath) => !publicPaths.includes(repositoryPath));
+  const byRoot = new Map<string, string[]>();
+  for (const repositoryPath of remaining) {
+    const root = topLevelRoot(repositoryPath) ?? "core";
+    byRoot.set(root, [...(byRoot.get(root) ?? []), repositoryPath]);
+  }
+  for (const [root, paths] of [...byRoot.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    const stems = sortedUniqueStrings(paths.map(fileStem));
+    const domain = stems.length === 1 ? `${stems[0]}-semantics` : `${root}-core`;
+    gaps.push(buildGap(
+      domain,
+      paths,
+      `Own critical ${root} implementation paths that were not covered by the recorded expert portfolio.`,
+    ));
+  }
+  return gaps;
+}
+
+export const SPECIALIST_OWNERSHIP_GAP_WARNING_PREFIX =
+  "Critical specialist ownership is incomplete:";
+
+export const SYNTHETIC_SPECIALIST_WARNING_PREFIX =
+  "Structurally manufactured specialists were required to close ownership:";
+
+const TEST_EVIDENCE_PATH = /(?:^|\/)(?:tests?|spec|__tests__)\/|\.(?:test|spec)[-.]?d?\.[cm]?[jt]sx?$/i;
 
 function sourceStrength(sourceKinds: ReadonlyArray<SpecialistSourceKind>): number {
   let score = 0;
@@ -435,6 +658,9 @@ function mergeRaw(left: RawSpecialist, right: RawSpecialist): RawSpecialist {
     contracts: sortedUniqueStrings([...left.contracts, ...right.contracts]),
     patterns: sortedUniqueStrings([...left.patterns, ...right.patterns]),
     pitfalls: sortedUniqueStrings([...left.pitfalls, ...right.pitfalls]),
+    // Merging keeps both sides' pitfalls, so it must keep both sides' unsupported
+    // count; resetting it would launder an untraceable claim into high confidence.
+    unverifiedPitfalls: left.unverifiedPitfalls + right.unverifiedPitfalls,
     validationCommands: sortedUniqueStrings([
       ...left.validationCommands,
       ...right.validationCommands,
@@ -460,7 +686,10 @@ function mergeOverlappingCandidates(candidates: ReadonlyArray<RawSpecialist>): R
     const index = merged.findIndex((existing) => {
       const overlap = scopeOverlap(existing, candidate);
       const sameSemanticDomain = existing.slug === candidate.slug;
-      return overlap >= 0.8 || sameSemanticDomain;
+      const ownedScopesOverlap = existing.ownedPaths.some((left) =>
+        candidate.ownedPaths.some((right) => scopesOverlap(left, right))
+      );
+      return sameSemanticDomain || (ownedScopesOverlap && overlap >= 0.8);
     });
     if (index < 0) merged.push(candidate);
     else merged[index] = mergeRaw(merged[index]!, candidate);
@@ -495,19 +724,72 @@ function discoveryScore(candidate: RawSpecialist): number {
     - (GENERIC_DOMAIN_NAMES.has(candidate.slug) ? 6 : 0);
 }
 
+/**
+ * True when a pitfall reference locates the claim: a tracked file *and* a line.
+ * A bare file path does not establish a hazard, it only says which file to read.
+ */
+function referenceResolves(reference: string, trackedFiles?: ReadonlySet<string>): boolean {
+  const trimmed = reference.trim();
+  if (!LINE_SUFFIX.test(trimmed.replace(PATH_FRAGMENT, ""))) return false;
+  const candidate = normalizePathCandidate(trimmed.replace(LINE_SUFFIX, "").replace(PATH_FRAGMENT, ""));
+  if (candidate === null || !isLikelyFilePath(candidate)) return false;
+  return trackedFiles === undefined || trackedFiles.has(candidate);
+}
+
 function confidenceFor(candidate: RawSpecialist, score: number): MemoryConfidence {
+  // A domain whose recorded hazards cannot be traced to a line is not
+  // high-confidence knowledge, however much surrounding evidence it carries.
+  const unsupported = candidate.unverifiedPitfalls > 0;
+  // A specialist manufactured to close an ownership gap carries no recorded
+  // expertise, so it must not present itself as confidently as an audited one.
+  const manufactured = candidate.sourceKinds.length === 1
+    && candidate.sourceKinds[0] === "structural_evidence";
+  if (manufactured) return "low";
   if (
     candidate.sourceKinds.includes("expert_evidence")
     && candidate.stability === "high"
     && candidate.recurrence === "high"
     && candidate.evidencePaths.length >= 2
     && candidate.validationCommands.length > 0
+    && !unsupported
   ) {
     return "high";
   }
-  if (score >= 12 && candidate.evidencePaths.length >= 2) return "high";
+  if (score >= 12 && candidate.evidencePaths.length >= 2 && !unsupported) return "high";
   if (score >= 8) return "medium";
   return "low";
+}
+
+/**
+ * A path claimed by two specialists routes ambiguously. The higher-ranked
+ * specialist keeps it as primary and every other claimant keeps it as a
+ * secondary stake, so a change to that file has one owner and named reviewers.
+ */
+function resolvePrimaryOwnership(
+  /** Must be ordered best-evidence-first; the first claimant of a path wins it. */
+  specialists: ReadonlyArray<SpecialistDefinition>,
+): SpecialistDefinition[] {
+  const primaryOwner = new Map<string, string>();
+  for (const specialist of specialists) {
+    for (const owned of specialist.owned_paths) {
+      if (!primaryOwner.has(owned)) primaryOwner.set(owned, specialist.specialist_id);
+    }
+  }
+  return specialists.map((specialist) => {
+    const kept = specialist.owned_paths.filter(
+      (owned) => primaryOwner.get(owned) === specialist.specialist_id,
+    );
+    const demoted = specialist.owned_paths.filter(
+      (owned) => primaryOwner.get(owned) !== specialist.specialist_id,
+    );
+    if (demoted.length === 0) return specialist;
+    return {
+      ...specialist,
+      owned_paths: kept,
+      secondary_paths: sortedUniqueStrings([...specialist.secondary_paths, ...demoted]),
+      observed_paths: sortedUniqueStrings([...specialist.observed_paths, ...demoted]),
+    };
+  });
 }
 
 function buildSpecialistDefinitions(
@@ -522,11 +804,18 @@ function buildSpecialistDefinitions(
       && candidate.evidencePaths.length > 0
       && candidate.validationCommands.length > 0
       && (
-        candidate.ownedPaths.length
-        + candidate.contracts.length
-        + candidate.patterns.length
-        + candidate.pitfalls.length
-      ) >= 2
+        (
+          candidate.ownedPaths.length
+          + candidate.contracts.length
+          + candidate.patterns.length
+          + candidate.pitfalls.length
+        ) >= 2
+        || (
+          candidate.sourceKinds.includes("structural_evidence")
+          && candidate.ownedPaths.length > 0
+          && candidate.evidencePaths.length > 0
+        )
+      )
     )
     .sort((left, right) => {
       const byScore = right.score - left.score;
@@ -539,6 +828,7 @@ function buildSpecialistDefinitions(
       domain: boundedText(candidate.domain, 256),
       purpose: boundedText(candidate.purpose),
       owned_paths: candidate.ownedPaths.slice(0, 256),
+      secondary_paths: [],
       observed_paths: sortedUniqueStrings([
         ...candidate.observedPaths,
         ...candidate.evidencePaths,
@@ -589,7 +879,11 @@ function buildSpecialistDefinitions(
     }
   }
 
-  return selected.sort((left, right) => left.specialist_id.localeCompare(right.specialist_id));
+  // Ownership is resolved while `selected` is still in discovery-score order, so
+  // a contested path goes to the better-evidenced specialist. Sorting by id
+  // first would have made ownership lexicographic.
+  return resolvePrimaryOwnership(selected)
+    .sort((left, right) => left.specialist_id.localeCompare(right.specialist_id));
 }
 
 function procedureOwner(
@@ -612,6 +906,25 @@ function procedureOwner(
         : left.specialist.specialist_id.localeCompare(right.specialist.specialist_id);
     });
   return ranked[0]?.specialist.specialist_id ?? null;
+}
+
+const CONFIDENCE_RANK: Readonly<Record<MemoryConfidence, number>> = {
+  low: 0,
+  medium: 1,
+  high: 2,
+  verified: 3,
+};
+
+/**
+ * A procedure is only as trustworthy as the specialist knowledge it executes
+ * against, so it can never be recorded as more confident than its owner.
+ */
+function cappedByOwner(
+  confidence: MemoryConfidence,
+  owner: MemoryConfidence | null,
+): MemoryConfidence {
+  if (owner === null) return confidence;
+  return CONFIDENCE_RANK[confidence] <= CONFIDENCE_RANK[owner] ? confidence : owner;
 }
 
 function procedureConfidence(
@@ -703,13 +1016,30 @@ function mergeProcedureDefinitions(
   );
 }
 
+function focusedSpecialistContext(specialist: SpecialistDefinition): string[] {
+  const sourceEvidence = specialist.evidence_paths.filter((candidate) =>
+    !/^(?:test|tests)\//.test(candidate)
+  );
+  const testEvidence = specialist.evidence_paths.filter((candidate) =>
+    /^(?:test|tests)\//.test(candidate)
+  );
+  return [...new Set([
+    ...specialist.owned_paths,
+    ...sourceEvidence.slice(0, 8),
+    ...testEvidence.slice(0, 12),
+  ])].slice(0, 24);
+}
+
 function buildProcedureDefinitions(
   map: CodebaseMap,
   specialists: ReadonlyArray<SpecialistDefinition>,
   globalCommands: ReadonlyArray<string>,
   supportingCommit: string,
+  knownPaths: ReadonlyArray<string>,
   trackedEvidenceFiles?: ReadonlySet<string>,
+  commandsAreAuthoritative = false,
 ): ProcedureDefinition[] {
+  const known = new Set(knownPaths);
   const definitions: ProcedureDefinition[] = [];
   const defaultRecovery = [
     "Stop after the first deterministic failure and preserve its output.",
@@ -718,14 +1048,19 @@ function buildProcedureDefinitions(
   ];
 
   for (const candidate of map.customization_evidence?.custom_tool_candidates ?? []) {
+    const existingCommand = candidate.existing_command.trim();
+    if (
+      !isExecutableCommandText(existingCommand)
+      || (commandsAreAuthoritative && !globalCommands.includes(existingCommand))
+    ) continue;
     const sourcePath = candidate.source_path
       ? normalizePathCandidate(candidate.source_path)
       : null;
     const evidencePaths = sourcePath && isLikelyFilePath(sourcePath)
       && (!trackedEvidenceFiles || trackedEvidenceFiles.has(sourcePath)) ? [sourcePath] : [];
     const validationCommands = sortedUniqueStrings([
-      ...(VALIDATION_SIGNAL.test(candidate.existing_command)
-        ? [candidate.existing_command]
+      ...(VALIDATION_SIGNAL.test(existingCommand)
+        ? [existingCommand]
         : []),
       ...globalCommands,
     ]).slice(0, 16);
@@ -738,9 +1073,9 @@ function buildProcedureDefinitions(
       owner_specialist_id: procedureOwner(evidencePaths, specialists),
       trigger_conditions: sortedUniqueStrings([boundedText(candidate.purpose), boundedText(candidate.name, 256)]).slice(0, 64),
       required_context_paths: evidencePaths,
-      allowed_commands: [candidate.existing_command.trim()],
+      allowed_commands: [existingCommand],
       expected_file_patterns: evidencePaths,
-      side_effects: [boundedText(`Runs repository command: ${candidate.existing_command.trim()}`)],
+      side_effects: [boundedText(`Runs repository command: ${existingCommand}`)],
       validation_commands: validationCommands,
       recovery_steps: [...defaultRecovery],
       evidence_paths: evidencePaths,
@@ -764,7 +1099,7 @@ function buildProcedureDefinitions(
         ...specialist.owned_paths,
         ...specialist.contracts,
       ],
-      required_context_paths: specialist.observed_paths,
+      required_context_paths: focusedSpecialistContext(specialist),
       allowed_commands: specialist.validation_commands,
       expected_file_patterns: specialist.owned_paths,
       side_effects: ["May create repository-local test, build, or coverage artifacts."],
@@ -772,10 +1107,13 @@ function buildProcedureDefinitions(
       recovery_steps: [...defaultRecovery],
       evidence_paths: specialist.evidence_paths,
       freshness_dependencies: specialist.freshness_dependencies,
-      confidence: procedureConfidence(
-        "domain_validation",
-        specialist.evidence_paths,
-        specialist.validation_commands,
+      confidence: cappedByOwner(
+        procedureConfidence(
+          "domain_validation",
+          specialist.evidence_paths,
+          specialist.validation_commands,
+        ),
+        specialist.confidence,
       ),
       supporting_commit: supportingCommit,
       freshness: "current",
@@ -786,8 +1124,20 @@ function buildProcedureDefinitions(
   const repositoryEvidence = normalizePaths([
     map.operational_surface.build.recipe_file,
     ...map.skeleton.entry_points.map((entry) => entry.path),
+    ...map.skeleton.first_5_files_for_fresh_agent.map((entry) => entry.path),
+    "package.json",
+    "pyproject.toml",
+    "Cargo.toml",
+    "go.mod",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "Gemfile",
+    "Makefile",
+    "CONTRIBUTING.md",
   ]).filter((candidate) => (
     isLikelyFilePath(candidate)
+    && known.has(candidate)
     && (!trackedEvidenceFiles || trackedEvidenceFiles.has(candidate))
   ));
   if (repositoryEvidence.length > 0 && globalCommands.length > 0) {
@@ -839,6 +1189,7 @@ export function discoverSpecialistPortfolio(
   map: CodebaseMap,
   supportingCommit: string,
   trackedRepositoryFiles?: ReadonlyArray<string>,
+  authoritativeValidationCommands?: ReadonlyArray<string>,
 ): SpecialistPortfolio {
   const trackedEvidenceFiles = trackedRepositoryFiles
     ? new Set(normalizePaths(trackedRepositoryFiles))
@@ -847,9 +1198,19 @@ export function discoverSpecialistPortfolio(
     !trackedEvidenceFiles || trackedEvidenceFiles.has(candidate)
   ));
   const contracts = contractReferences(map);
-  const validationCommands = allValidationCommands(map);
+  const commandsAreAuthoritative = authoritativeValidationCommands !== undefined;
+  const validationCommands = commandsAreAuthoritative
+    ? sortedUniqueStrings(authoritativeValidationCommands.filter(isExecutableCommandText))
+    : allValidationCommands(map);
   const rawCandidates = mergeOverlappingCandidates(
-    rawFromExpertEvidence(map, knownPaths, contracts, validationCommands, trackedEvidenceFiles),
+    rawFromExpertEvidence(
+      map,
+      knownPaths,
+      contracts,
+      validationCommands,
+      trackedEvidenceFiles,
+      commandsAreAuthoritative,
+    ),
   );
   let candidates = rawCandidates;
   let specialists = buildSpecialistDefinitions(candidates, map, supportingCommit);
@@ -858,14 +1219,29 @@ export function discoverSpecialistPortfolio(
       ...rawCandidates,
       ...rawFromCohesiveStructuralEvidence(map, knownPaths, contracts, validationCommands),
     ]);
-    specialists = buildSpecialistDefinitions(candidates, map, supportingCommit);
   }
+  const criticalPaths = criticalOwnershipPaths(map, knownPaths);
+  candidates = promoteHeuristicOwnership(candidates, criticalPaths);
+  candidates = mergeOverlappingCandidates([
+    ...candidates,
+    ...rawFromOwnershipGaps(
+      map,
+      knownPaths,
+      contracts,
+      validationCommands,
+      candidates,
+      trackedEvidenceFiles,
+    ),
+  ]);
+  specialists = buildSpecialistDefinitions(candidates, map, supportingCommit);
   const procedures = buildProcedureDefinitions(
     map,
     specialists,
     validationCommands,
     supportingCommit,
+    knownPaths,
     trackedEvidenceFiles,
+    commandsAreAuthoritative,
   );
   const warnings: string[] = [];
   if (specialists.length === 0) {
@@ -883,6 +1259,56 @@ export function discoverSpecialistPortfolio(
   }
   if (procedures.length === 0) {
     warnings.push("No repository-specific procedure had both concrete evidence and validation commands.");
+  }
+  // Without a validation command no specialist of any kind can be built, and
+  // the empty-portfolio warning above already states the real cause.
+  const uncoveredCriticalPaths = validationCommands.length === 0 ? [] : criticalPaths.filter((repositoryPath) =>
+    !specialists.some((specialist) =>
+      specialist.owned_paths.some((scope) => pathMatchesScope(repositoryPath, scope))
+    )
+  );
+  if (uncoveredCriticalPaths.length > 0) {
+    warnings.push(
+      `${SPECIALIST_OWNERSHIP_GAP_WARNING_PREFIX} ${uncoveredCriticalPaths.join(", ")}.`,
+    );
+  }
+
+  // Ownership can be satisfied mechanically by a manufactured specialist. That
+  // closes the gate without producing repository expertise, so it is reported
+  // rather than passing silently.
+  const ownsCriticalPath = (specialist: SpecialistDefinition): boolean =>
+    criticalPaths.some((repositoryPath) =>
+      specialist.owned_paths.some((scope) => pathMatchesScope(repositoryPath, scope))
+    );
+  const synthetic = specialists.filter((specialist) =>
+    specialist.source_kinds.length === 1 && specialist.source_kinds[0] === "structural_evidence"
+  );
+  if (synthetic.length > 0) {
+    warnings.push(
+      `${SYNTHETIC_SPECIALIST_WARNING_PREFIX} ${synthetic.map((entry) => entry.specialist_id).join(", ")}.`
+      + " They satisfy ownership structurally rather than from recorded expert evidence.",
+    );
+  }
+  const weakCriticalOwners = specialists.filter((specialist) =>
+    ownsCriticalPath(specialist)
+    && (specialist.confidence === "low" || specialist.contracts.length === 0)
+  );
+  if (weakCriticalOwners.length > 0) {
+    warnings.push(
+      "Critical paths are owned by specialists with weak evidence: "
+      + `${weakCriticalOwners.map((entry) => entry.specialist_id).join(", ")}.`
+      + " Each has low confidence or no recorded contract.",
+    );
+  }
+  const untestedCriticalOwners = specialists.filter((specialist) =>
+    ownsCriticalPath(specialist)
+    && !specialist.evidence_paths.some((candidate) => TEST_EVIDENCE_PATH.test(candidate))
+  );
+  if (untestedCriticalOwners.length > 0) {
+    warnings.push(
+      "Critical paths are owned by specialists with no direct test evidence: "
+      + `${untestedCriticalOwners.map((entry) => entry.specialist_id).join(", ")}.`,
+    );
   }
   const evidencePaths = sortedUniqueStrings(
     knownPaths.filter(isLikelyFilePath),

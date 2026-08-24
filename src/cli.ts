@@ -2,7 +2,7 @@
 
 import { stdin as input, stdout as output, stderr as errOutput } from "node:process";
 import * as path from "node:path";
-import { packageRoot, PiSdkRuntime } from "./core/pi-sdk-runtime.ts";
+import { PiSdkRuntime } from "./core/pi-sdk-runtime.ts";
 import { readPackageVersion } from "./core/package-version.ts";
 import { runAgentifyApp } from "./core/agentify-app.ts";
 import {
@@ -22,7 +22,6 @@ import {
   formatOneTimeInstallationReport,
   inspectRepositoryForInstallation,
   prepareOneTimeInstallationState,
-  repairInstalledRuntime,
   createRepositoryValidationApproval,
   readRepositoryTaskPolicyConfiguration,
   repositoryTaskPolicySchemaStatus,
@@ -187,30 +186,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     );
   }
 
-  let repairedPaths: string[] = [];
-  const repair = repairInstalledRuntime({
-    cwd: process.cwd(),
-    packageRoot: packageRoot(),
-    agentifyVersion: readPackageVersion(),
-    preflight: installerPreflight,
-    validationApproval: validationApproval ?? undefined,
-  });
-  repairedPaths = repair.repaired_paths;
-  if (repair.conflicts.length > 0) {
-    installerPreflight = {
-      ...installerPreflight,
-      disposition: "analyzable-only",
-      blockers: [
-        ...installerPreflight.blockers,
-        {
-          code: "user_owned_workflow_conflict",
-          message: `User-owned files conflict with ${repair.conflicts.length} required Agentify runtime path(s).`,
-          remediation: "Review the preserved *.agentify.* files and explicitly resolve each workflow conflict.",
-        },
-      ],
-    };
-  }
-
   prepareOneTimeInstallationState(process.cwd(), installerPreflight);
 
   const validationConsentBlocked = installerPreflight.blockers.some((blocker) => (
@@ -308,7 +283,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       validationApproval: validationApproval ?? undefined,
       providerSecret,
       automationSecret,
-      repairedPaths,
     });
     for (const line of formatOneTimeInstallationReport(report)) {
       if (line.startsWith("Blocker")) ui.error(`agentify: ${line}`);

@@ -96,9 +96,12 @@ export function makeValidCodebaseMap(
       typescript_interfaces: [],
       db_models: [],
       idks: ["Config"],
-      stable_types: [],
+      stable_types: ["Config"],
       volatile_types: [],
-      one_type_trace: null,
+      one_type_trace: {
+        name: "Config",
+        flow: ["src/index.ts", "src/billing/types.ts", "src/billing/index.ts"],
+      },
     },
     conventions: {
       naming: {

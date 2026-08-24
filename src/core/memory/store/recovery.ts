@@ -37,6 +37,8 @@ import {
   validateEvidenceProvenance,
 } from "../provenance.ts";
 import {
+  type TeamMemoryActivation,
+  type TeamMemoryManifest,
   type AgentIdentity,
   AgentIdentitySchema,
   type AgentRole,
@@ -362,6 +364,41 @@ export function recoverTeamMemoryStoreInternal(
     repaired: sortedUniqueStrings(repaired),
     manifest: refreshed,
   };
+}
+
+/**
+ * Re-derive the manifest from what is on disk. The installation report is
+ * written after the last knowledge mutation, so its digest only enters the
+ * integrity root when the manifest is refreshed afterwards.
+ */
+export function refreshTeamMemoryManifest(
+  cwd: string,
+  options?: MemoryStoreOptions,
+): TeamMemoryManifest {
+  return acquireStoreLock(cwd, options, () => refreshManifestInternal(cwd, options));
+}
+
+/**
+ * Record whether the installation that produced this memory was promoted.
+ * Until it is, the trusted runtime treats the store as analysis, not as an
+ * authority to act on.
+ */
+export function recordTeamMemoryActivation(
+  cwd: string,
+  activation: TeamMemoryActivation,
+  options?: MemoryStoreOptions,
+): TeamMemoryManifest {
+  return acquireStoreLock(cwd, options, () => {
+    // Re-promoting an already-promoted installation must not churn the manifest
+    // and the integrity root it anchors for a fresh timestamp alone.
+    const current = readManifestIfPresent(cwd)?.activation ?? null;
+    const unchanged = current !== null
+      && current.state === activation.state
+      && current.disposition === activation.disposition;
+    return refreshManifestInternal(cwd, options, {
+      activation: unchanged ? current : activation,
+    });
+  });
 }
 
 export function recoverTeamMemoryStore(

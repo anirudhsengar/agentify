@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -19,6 +20,7 @@ function run(command, args, options = {}) {
     env: options.env ?? process.env,
     encoding: "utf-8",
     timeout: options.timeout ?? 600_000,
+    maxBuffer: 32 * 1024 * 1024,
   });
   if (result.error) throw result.error;
   if (options.expectFailure === true) {
@@ -60,7 +62,7 @@ try {
   const { tarballPath } = resolvedArtifact;
   run(nodeCommand, [npmCliPath, "init", "--yes"], { cwd: installRoot });
   run(nodeCommand, [npmCliPath, "install", "--ignore-scripts", "--no-audit", "--no-fund", tarballPath], { cwd: installRoot });
-  const profiles = ["small", "moderate", "monorepo", "attached", "readiness-fail"];
+  const profiles = ["small", "moderate", "monorepo", "attached", "no-validation"];
   for (const profile of profiles) {
     const fixture = path.join(fixturesRoot, profile);
     const repository = `qualification/${profile}`;
@@ -77,8 +79,8 @@ const key = args.join(" ");
 if (key === "--version" || key === "auth status") process.exit(0);
 const repoPrefix = "api repos/qualification/";
 const profile = key.startsWith(repoPrefix) ? key.slice(repoPrefix.length) : "";
-if (["small", "moderate", "monorepo", "attached", "readiness-fail"].includes(profile)) {
-  const id = { small: 987651, moderate: 987652, monorepo: 987653, attached: 987654, "readiness-fail": 987655 }[profile];
+if (["small", "moderate", "monorepo", "attached", "no-validation"].includes(profile)) {
+  const id = { small: 987651, moderate: 987652, monorepo: 987653, attached: 987654, "no-validation": 987655 }[profile];
   process.stdout.write(JSON.stringify({ id, full_name: "qualification/" + profile, default_branch: "main", permissions: { admin: true, push: true, pull: true } }));
   process.exit(0);
 }
@@ -109,7 +111,7 @@ process.exit(1);
   };
   for (const [index, profile] of profiles.entries()) {
     const fixture = path.join(fixturesRoot, profile);
-    const isScaffolded = profile === "readiness-fail";
+    const isScaffolded = profile === "no-validation";
     const first = run(nodeCommand, [bin], { cwd: fixture, env, timeout: 900_000 });
     if (isScaffolded) {
       // A repository with no verifiable validation of its own is not abandoned:
@@ -136,7 +138,55 @@ process.exit(1);
       ".github/agentify/task-runtime.mjs",
       ".github/agentify/learning-runtime.mjs",
       ".github/agentify/validation-smoke.mjs",
+      ".github/agentify/runtime-inventory.json",
+      ".agentify/installation-report.json",
     ]) assert.ok(fs.existsSync(path.join(fixture, relative)), `${profile}: ${relative}`);
+
+    // The installation must leave a durable, repository-specific record rather
+    // than generic product copy plus a disabled policy.
+    const report = JSON.parse(fs.readFileSync(path.join(fixture, ".agentify/installation-report.json"), "utf-8"));
+    assert.equal(report.schema_version, "1");
+    assert.equal(report.disposition, "ready", `${profile}: ${JSON.stringify(report.readiness_checks.blockers)}`);
+    assert.equal(report.agentify_enabled, true);
+    assert.equal(report.remediation_command, null);
+    assert.equal(report.repository.full_name, `qualification/${profile}`);
+    assert.equal(report.validation.approval, "current");
+    assert.ok(report.validation.executions.length > 0, `${profile}: no validation executions recorded`);
+    const phases = new Set(report.validation.executions.map((e) => e.phase));
+    assert.ok(phases.has("baseline"), `${profile}: no baseline execution recorded`);
+    assert.ok(phases.has("staged_final_tree"), `${profile}: no staged execution recorded`);
+    for (const execution of report.validation.executions.filter((e) => e.phase === "staged_final_tree")) {
+      assert.equal(execution.exit_code, 0, `${profile}: staged ${execution.command} did not pass`);
+      assert.equal(execution.assessment, "verified");
+      assert.equal(typeof execution.duration_ms, "number");
+    }
+    assert.equal(report.tool_provenance.agentify_version, packageJson.version);
+    assert.equal(typeof report.environment.node_version, "string");
+    assert.ok(report.environment.lockfile.sha256.length === 64, `${profile}: no lockfile digest`);
+    assert.ok(report.readiness_checks.canaries.every((check) => check.passed), `${profile}: a canary failed`);
+    assert.deepEqual(report.readiness_checks.blockers, []);
+    assert.ok(report.portfolio.specialists.length > 0, `${profile}: no specialist recorded`);
+
+    const inventory = JSON.parse(fs.readFileSync(path.join(fixture, ".github/agentify/runtime-inventory.json"), "utf-8"));
+    for (const entry of inventory.files) {
+      const runtime = path.join(fixture, ".github/agentify", entry.path);
+      assert.equal(fs.statSync(runtime).size, entry.bytes, `${profile}: ${entry.path} size`);
+      assert.equal(
+        crypto.createHash("sha256").update(fs.readFileSync(runtime)).digest("hex"),
+        entry.sha256,
+        `${profile}: ${entry.path} digest`,
+      );
+    }
+    assert.ok(inventory.bundled_dependencies.length > 0);
+    assert.ok(inventory.bundled_dependencies.every((entry) => typeof entry.license === "string" && entry.license));
+
+    const setup = fs.readFileSync(path.join(fixture, "SETUP.md"), "utf-8");
+    assert.doesNotMatch(setup, /src\/example\.ts/, `${profile}: SETUP.md must not keep the placeholder scope path`);
+    assert.match(setup, /Activation state: \*\*active\*\*/);
+    assert.match(setup, /default branch `main`/);
+    assert.match(setup, /installation-report\.json/);
+    const agents = fs.readFileSync(path.join(fixture, "AGENTS.md"), "utf-8");
+    assert.match(agents, new RegExp(`qualification/${profile}`));
     const policy = JSON.parse(fs.readFileSync(path.join(fixture, ".github/agentify-task-policy.json"), "utf-8"));
     assert.equal(policy.schema_version, "2");
     assert.equal(policy.configured, true);
@@ -148,7 +198,7 @@ process.exit(1);
       const commands = policy.policy.validation_commands.map((command) => command.argv.join(" "));
       assert.ok(
         commands.includes("node .github/agentify/validation-smoke.mjs"),
-        `readiness-fail policy must record the scaffolded validation smoke; got: ${commands.join(", ")}`,
+        `no-validation policy must record the scaffolded validation smoke; got: ${commands.join(", ")}`,
       );
     }
   }

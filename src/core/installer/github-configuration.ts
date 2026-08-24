@@ -42,9 +42,14 @@ function assertSuccess(label: string, result: InstallerProcessResult): void {
   }
 }
 
+type GitHubConfigurationContext = Pick<
+  GitHubConfigurationInput,
+  "cwd" | "repository" | "runner"
+>;
+
 function setVariable(
   runner: NonNullable<GitHubConfigurationInput["runner"]>,
-  input: GitHubConfigurationInput,
+  input: GitHubConfigurationContext,
   name: string,
   value: string,
 ): void {
@@ -55,6 +60,14 @@ function setVariable(
     timeoutMs: 30_000,
   });
   assertSuccess(`GitHub variable ${name}`, result);
+}
+
+export function setGitHubInstallationEnabled(
+  input: GitHubConfigurationContext,
+  enabled: boolean,
+): void {
+  const runner = input.runner ?? DEFAULT_INSTALLER_PROCESS_RUNNER;
+  setVariable(runner, input, "AGENTIFY_ENABLED", enabled ? "true" : "false");
 }
 
 function removeLegacyVariables(
@@ -132,6 +145,7 @@ export function configureGitHubInstallation(
   input: GitHubConfigurationInput,
 ): GitHubConfigurationResult {
   const runner = input.runner ?? DEFAULT_INSTALLER_PROCESS_RUNNER;
+  setGitHubInstallationEnabled(input, false);
   configureDraftPullRequestPermission(runner, input);
   removeLegacyVariables(runner, input);
   for (const label of REQUIRED_LABELS) {
@@ -193,9 +207,10 @@ export function configureGitHubInstallation(
     automationSecret = "AGENT_PAT";
   }
 
+  setGitHubInstallationEnabled(input, true);
   return {
     labels_configured: REQUIRED_LABELS.length,
-    variables_configured: [...variables.keys()],
+    variables_configured: ["AGENTIFY_ENABLED", ...variables.keys()],
     provider_secret_configured: providerSecret,
     automation_secret_configured: automationSecret,
   };

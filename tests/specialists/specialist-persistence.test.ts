@@ -78,7 +78,11 @@ test("materialization persists read-only specialists and retires removed experti
       actor: "knowledge-maintainer",
       observed_at: observedAt,
     });
-    assert.deepEqual(first.created_specialist_ids, ["specialist-billing"]);
+    assert.deepEqual(first.created_specialist_ids, [
+      "specialist-billing",
+      "specialist-lib-semantics",
+      "specialist-public-api-contracts",
+    ]);
     const specialist = listAgentIdentities(fixture.cwd)
       .find((identity) => identity.agent_id === "specialist-billing");
     assert.ok(specialist);
@@ -96,7 +100,11 @@ test("materialization persists read-only specialists and retires removed experti
     });
     assert.deepEqual(second.created_specialist_ids, []);
     assert.deepEqual(second.updated_specialist_ids, []);
-    assert.deepEqual(second.unchanged_specialist_ids, ["specialist-billing"]);
+    assert.deepEqual(second.unchanged_specialist_ids, [
+      "specialist-billing",
+      "specialist-lib-semantics",
+      "specialist-public-api-contracts",
+    ]);
     assert.deepEqual(
       second.specialist_memory.map((record) => record.memory_id),
       first.specialist_memory.map((record) => record.memory_id),
@@ -115,8 +123,21 @@ test("materialization persists read-only specialists and retires removed experti
       actor: "knowledge-maintainer",
       observed_at: observedAt,
     });
-    assert.deepEqual(reduced.retired_specialist_ids, ["specialist-billing"]);
-    assert.ok(reduced.stale_procedure_memory_ids.length >= 1);
+    assert.deepEqual(reduced.retired_specialist_ids, [
+      "specialist-billing",
+      "specialist-lib-semantics",
+      "specialist-public-api-contracts",
+    ]);
+    // The invariant is that removing domains leaves no orphaned current
+    // procedure, whether the record was stale-marked or superseded.
+    const activeProcedureIds = new Set(reducedPortfolio.procedures.map((entry) => entry.procedure_id));
+    const orphaned = listMemoryRecords(fixture.cwd, { kind: "procedure", freshness: "current" })
+      .map((record) => record.tags.find((tag) => tag.startsWith("procedure-") && tag !== "procedure"))
+      .filter((tag): tag is string => tag !== undefined)
+      .map((tag) => tag.slice("procedure-".length))
+      .filter((procedureId) => !activeProcedureIds.has(procedureId));
+    assert.deepEqual(orphaned, [], `orphaned current procedures: ${JSON.stringify(orphaned)}`);
+    assert.ok(reducedPortfolio.procedures.length < first.procedure_memory.length);
     assert.equal(
       listAgentIdentities(fixture.cwd)
         .find((identity) => identity.agent_id === "specialist-billing")?.status,

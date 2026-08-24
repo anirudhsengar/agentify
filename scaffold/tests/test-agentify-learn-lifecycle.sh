@@ -5,6 +5,7 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 workflow="$root/.github/workflows/agentify-learn.yml"
 
 grep -q 'pull_request_target:' "$workflow"
+grep -q "vars.AGENTIFY_ENABLED == 'true'" "$workflow"
 grep -q 'learning-runtime.mjs process' "$workflow"
 grep -q 'learning-runtime.mjs reconcile' "$workflow"
 grep -q 'learning-runtime.mjs adopt-proposal' "$workflow"

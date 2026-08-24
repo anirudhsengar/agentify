@@ -37,6 +37,47 @@ configuration. Do not return prose instead of the required structured tool call.
 Trusted application code materializes the focused specialist and procedure
 portfolio after the map has passed validation.
 
+The installer may create `.agentify/` operational state before this audit begins.
+Treat `.agentify/**` and `.github/agentify/**` as Agentify control-plane data,
+not as evidence about the target application. Exclude those paths from
+`skeleton.top_level_tree`, coverage citations, module boundaries, specialist
+inputs, documentation inventories, and security findings. Do not use generated
+Agentify files to justify claims about the repository that Agentify is auditing.
+
+A map whose coverage is fully closed is also checked for internal coherence and
+is rejected when it contradicts itself. Before closing coverage:
+
+- resolve `meta.project_type`, `meta.languages`, `meta.domain_hypothesis`, and
+  `skeleton.app_vs_agentic_layer.app_layer` — "unknown" is not acceptable once
+  entry points are recorded;
+- record real measurements in `conventions.file_size` and
+  `validation_surface.test_runtime_seconds_estimate`; zero contradicts having
+  observed the repository;
+- keep `meta.documentation` and `meta.lifecycle` consistent with what you
+  observed: a loop that is `present` needs a real `kind`, and
+  `changelog_present` must match the top-level tree;
+- put an executable command in every command field. `operational_surface.build.command`,
+  `operational_surface.run.command`, and each `skeleton.entry_points[].run_command`
+  must be a command a shell could run. Write an empty string when there is
+  genuinely none — never prose such as `(none — pure JS ESM library, no build step)`;
+- never place two modules in the same `module_graph.parallelizable_subtrees`
+  group when `module_graph.edges` records a dependency between them;
+- give every entry in `pitfalls` a real `line_ref`, and give every
+  `expert_evidence` pitfall a `reference` of the form `path:line`. A bare file
+  path does not locate a hazard, and a domain whose hazards cannot be located
+  is not recorded as high-confidence knowledge. A pitfall you cannot point
+  at a line for is a hypothesis, not a finding, and does not belong in the map;
+- give every `expert_evidence` domain a parsable ISO 8601 `last_updated` and
+  give each `key_files` entry a real 1-indexed `line_range`. Whole-file
+  evidence with a `[0, 0]` range is not traceable to the behavior it claims;
+- close every open question. `open_questions` must be empty once all ten
+  dimensions are covered; an outstanding question contradicts closed coverage;
+- write every `evidence_summary` as a finding about the repository, never as an
+  instruction to yourself. "Try with name field", "Record expert domains", and
+  "Set present=false on both loops" are scratchpad notes, not evidence;
+- quote real text. Every positive evidence excerpt must appear in the file it
+  cites; a real path attached to an invented quotation is not evidence.
+
 Specialist discovery reads exactly one map field: `expert_evidence.expert_domains`.
 Recording it is a completion requirement, not an optional extra — the runtime
 does not close the session until the field is present in the map. Record one

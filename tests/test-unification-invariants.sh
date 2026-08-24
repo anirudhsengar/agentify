@@ -18,6 +18,7 @@ expected_scaffold=$(cat <<'EOF'
 .github/scripts/publish-task-draft.mjs
 .github/scripts/run-task-lifecycle.mjs
 .github/scripts/task-state-github.mjs
+.github/scripts/verify-memory-manifest.mjs
 .github/workflows/agentify-issue.yml
 .github/workflows/agentify-learn.yml
 AGENTS.md
@@ -36,6 +37,7 @@ for required in \
   scaffold/.github/scripts/publish-task-draft.mjs \
   scaffold/.github/scripts/run-task-lifecycle.mjs \
   scaffold/.github/scripts/task-state-github.mjs \
+  scaffold/.github/scripts/verify-memory-manifest.mjs \
   scaffold/AGENTS.md \
   scaffold/SETUP.md; do
   [ -f "$required" ] || fail "focused scaffold file missing: $required"

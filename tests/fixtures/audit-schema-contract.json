@@ -1,12 +1,12 @@
 {
   "serialization": {
     "codebase_map": {
-      "sha256": "bb5753bce0a2d213fe76a6849043944f8b526d4f53a2cc5827592ff5c60a3a01",
-      "bytes": 49532
+      "sha256": "b847df8b4a673144abd1e055d724d0c6a6f371a638d52d8ec62c71127290f949",
+      "bytes": 50755
     },
     "partial_codebase_map": {
-      "sha256": "384e593782a26ca09b9a3fab71fc2c4966fc1fd70706dbfc5544866ec57b2ddc",
-      "bytes": 48963
+      "sha256": "3250169fd375632ee01285ca17d6bf0c24f6a102a58e2ac30281958ef884ec2f",
+      "bytes": 50186
     },
     "write_map_params": {
       "sha256": "31495d351ed9f3b38ca146bb3c16d48839b09dc196c846027d0f27ed1e51a3e6",

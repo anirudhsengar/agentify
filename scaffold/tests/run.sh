@@ -14,6 +14,7 @@ expected=$(cat <<'EOF'
 .github/scripts/publish-task-draft.mjs
 .github/scripts/run-task-lifecycle.mjs
 .github/scripts/task-state-github.mjs
+.github/scripts/verify-memory-manifest.mjs
 .github/workflows/agentify-issue.yml
 .github/workflows/agentify-learn.yml
 AGENTS.md

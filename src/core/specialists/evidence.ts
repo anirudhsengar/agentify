@@ -187,6 +187,7 @@ export function buildSpecialistEvidenceReference(
     source_type: input.sourceType,
     repository_path: repositoryPath,
     commit_sha: commit,
+    source_commit_time: readGitCommitTimestamp(cwd, commit),
     sha256,
     line_start: null,
     line_end: null,

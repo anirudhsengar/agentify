@@ -120,12 +120,17 @@ The installer:
 - verifies the repository root, GitHub identity, maintainer authority, and default-branch policy;
 - discovers validation commands, screens them for obvious production credentials and mutation, and records installer attestation for unsandboxed execution;
 - audits the repository and creates persistent specialists, procedures, and knowledge;
-- refines missing validation from the audited validation surface when discovery did not verify a required command;
-- installs the issue and accepted-merge learning workflows;
+- refines missing validation from the audited validation surface only when the repository does not declare a real validation command;
+- requires critical entry points, contracts, and core modules to have a primary specialist owner;
+- stages the issue and learning workflows transactionally, reruns the repository's complete final-tree validation, and restores the prior managed files on failure;
 - writes a repository-bound task policy containing validation and lockfile hashes;
 - configures required labels and non-secret repository variables;
 - copies a resolved local provider API key to the `PI_API_KEY` Actions secret when one is already present;
-- runs deterministic installation canaries and enables issue intake only when all checks pass.
+- generates repository-specific `AGENTS.md` and `SETUP.md` from the audited branch model, attested validation commands, and recorded conventions, and installs a runtime inventory recording both bundled runtimes' sizes, digests, dependencies, and licenses;
+- disables existing Agentify workflows before readiness checks, runs deterministic installation canaries, and sets `AGENTIFY_ENABLED=true` only after all local and GitHub checks pass. Exact `/agent ...` comments are authorized before checkout or dependency installation;
+- commits an installation report to `.agentify/installation-report.json` recording the disposition, failed readiness checks, validation results, consent state, resolved portfolio, and one remediation command. It survives a rollback, so a refused installation says exactly why.
+
+Repositories whose documented and verified contribution branch differs from the GitHub default branch remain analyzable-only until Agentify can separate its trusted runtime branch from the application base branch.
 
 The CLI is an installer and maintenance interface. Do not rerun it for ordinary tasks; use GitHub issues after installation.
 

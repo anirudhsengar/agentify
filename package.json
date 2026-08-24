@@ -34,6 +34,7 @@
     "scaffold/.github/scripts/publish-task-draft.mjs",
     "scaffold/.github/scripts/run-task-lifecycle.mjs",
     "scaffold/.github/scripts/task-state-github.mjs",
+    "scaffold/.github/scripts/verify-memory-manifest.mjs",
     "scaffold/.github/workflows/agentify-issue.yml",
     "scaffold/.github/workflows/agentify-learn.yml",
     "docs/README.md",

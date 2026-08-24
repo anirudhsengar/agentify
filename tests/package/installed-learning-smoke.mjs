@@ -20,6 +20,7 @@ function run(command, args, options = {}) {
     env: options.env ?? process.env,
     encoding: "utf-8",
     timeout: options.timeout ?? 600_000,
+    maxBuffer: 32 * 1024 * 1024,
   });
   if (result.error) throw result.error;
   if (options.expectFailure === true) {

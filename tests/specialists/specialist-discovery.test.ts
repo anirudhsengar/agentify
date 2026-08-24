@@ -8,6 +8,8 @@ import {
   validateSpecialistPortfolio,
 } from "../../src/core/specialists/index.ts";
 import { makeSpecialistFixtureMap } from "../fixtures/specialist-map.ts";
+import { SYNTHETIC_SPECIALIST_WARNING_PREFIX } from "../../src/core/specialists/discovery.ts";
+import { specialistPortfolioDigest } from "../../src/core/specialists/validation.ts";
 
 const COMMIT_A = "a".repeat(40);
 const COMMIT_B = "b".repeat(40);
@@ -59,7 +61,7 @@ test("discovery uses evidence-backed domains and ignores speculative artifact he
   assert.deepEqual(first, second);
   assert.deepEqual(
     first.specialists.map((specialist) => specialist.specialist_id),
-    ["specialist-billing"],
+    ["specialist-billing", "specialist-lib-semantics", "specialist-public-api-contracts"],
   );
   const billing = first.specialists[0]!;
   assert.deepEqual(billing.source_kinds, ["expert_evidence"]);
@@ -69,6 +71,12 @@ test("discovery uses evidence-backed domains and ignores speculative artifact he
   assert.equal(billing.evidence_paths.includes("src/billing"), false);
   assert.ok(billing.evidence_paths.includes("src/billing/index.ts"));
   assert.equal(first.specialists.some((specialist) => specialist.domain === "docs"), false);
+  const gapSpecialists = first.specialists.slice(1);
+  assert.ok(gapSpecialists.every((specialist) =>
+    specialist.source_kinds.length === 1 && specialist.source_kinds[0] === "structural_evidence"
+  ));
+  assert.ok(gapSpecialists.some((specialist) => specialist.owned_paths.includes("src/index.ts")));
+  assert.ok(gapSpecialists.some((specialist) => specialist.owned_paths.includes("src/lib.ts")));
   assert.equal(first.procedures.some((procedure) => procedure.procedure_id === "api-endpoint"), false);
   assert.equal(first.procedures.some((procedure) => procedure.procedure_id === "prime-db"), false);
   assert.ok(first.procedures.every((procedure) => procedure.evidence_paths.length > 0));
@@ -100,6 +108,126 @@ test("discovery derives one specialist from cohesive independent structural evid
     contracts: ["AddInput: left, right"],
   });
   assert.equal(routing.selected_specialists[0]?.specialist_id, "specialist-typed-arithmetic-library");
+});
+
+test("partial expert portfolios are completed with critical path ownership", () => {
+  const map = makeSpecialistFixtureMap();
+  map.skeleton.entry_points.push({
+    path: "index.js",
+    role: "public API",
+    language: "javascript",
+    run_command: "node index.js",
+  });
+  map.module_graph.edges.push(
+    { from: "lib/command.js", to: "lib/argument.js", kind: "import" },
+    { from: "lib/argument.js", to: "lib/error.js", kind: "import" },
+  );
+  map.type_contract_surface.typescript_interfaces.push({
+    path: "typings/index.d.ts",
+    name: "Command",
+    fields: ["parse", "option", "argument"],
+  });
+  map.expert_evidence!.expert_domains.push(
+    {
+      domain: "option-parsing",
+      rationale: "Option behavior is recurring and independently tested.",
+      primary_paths: ["lib/option.js"],
+      entry_points: ["lib/option.js"],
+      test_paths: ["tests/options.test.js"],
+      key_files: [{ path: "lib/option.js", purpose: "Option implementation.", line_range: [1, 120] }],
+      key_types: [],
+      patterns: [],
+      pitfalls: [],
+      conventions: [],
+      stability: "high",
+      recurrence: "high",
+      test_command: "npm test",
+      last_updated: "2026-08-01T00:00:00.000Z",
+    },
+    {
+      domain: "help-generation",
+      rationale: "Help output has a cohesive rendering surface.",
+      primary_paths: ["lib/help.js"],
+      entry_points: ["lib/help.js"],
+      test_paths: ["tests/help.test.js"],
+      key_files: [{ path: "lib/help.js", purpose: "Help implementation.", line_range: [1, 120] }],
+      key_types: [],
+      patterns: [],
+      pitfalls: [],
+      conventions: [],
+      stability: "high",
+      recurrence: "high",
+      test_command: "npm test",
+      last_updated: "2026-08-01T00:00:00.000Z",
+    },
+  );
+  const tracked = [
+    "package.json",
+    "index.js",
+    "lib/argument.js",
+    "lib/command.js",
+    "lib/error.js",
+    "lib/help.js",
+    "lib/option.js",
+    "src/billing/index.ts",
+    "src/billing/types.ts",
+    "tests/billing.test.ts",
+    "tests/help.test.js",
+    "tests/options.test.js",
+    "typings/index.d.ts",
+  ];
+  const portfolio = discoverSpecialistPortfolio(map, COMMIT_A, tracked);
+  assert.ok(portfolio.specialists.some((specialist) =>
+    specialist.specialist_id === "specialist-public-api-contracts"
+  ));
+  const option = portfolio.specialists.find((specialist) =>
+    specialist.specialist_id === "specialist-option-parsing"
+  );
+  const help = portfolio.specialists.find((specialist) =>
+    specialist.specialist_id === "specialist-help-generation"
+  );
+  assert.ok(option?.owned_paths.includes("lib/argument.js"));
+  assert.ok(help?.owned_paths.includes("lib/error.js"));
+  const critical = ["index.js", "lib/argument.js", "lib/command.js", "lib/error.js", "lib/help.js", "lib/option.js", "typings/index.d.ts"];
+  assert.ok(critical.every((repositoryPath) =>
+    portfolio.specialists.some((specialist) =>
+      specialist.owned_paths.some((scope) =>
+        repositoryPath === scope || repositoryPath.startsWith(`${scope}/`)
+      )
+    )
+  ), JSON.stringify(portfolio.warnings));
+});
+
+test("prose placeholders are never persisted as validation commands", () => {
+  const map = makeSpecialistFixtureMap();
+  map.operational_surface.build.command = "(none — pure JavaScript library, no build step)";
+  const portfolio = discoverSpecialistPortfolio(map, COMMIT_A);
+  for (const specialist of portfolio.specialists) {
+    assert.ok(!specialist.validation_commands.some((command) => command.startsWith("(none")));
+  }
+  for (const procedure of portfolio.procedures) {
+    assert.ok(!procedure.validation_commands.some((command) => command.startsWith("(none")));
+    assert.ok(!procedure.allowed_commands.some((command) => command.startsWith("(none")));
+  }
+});
+
+test("installer-attested commands replace unverified audit command claims", () => {
+  const map = makeSpecialistFixtureMap();
+  map.validation_surface.test_command = "npm run hallucinated";
+  map.expert_evidence!.expert_domains[0]!.test_command = "npm run focused-but-unverified";
+  const portfolio = discoverSpecialistPortfolio(
+    map,
+    COMMIT_A,
+    undefined,
+    ["npm run verified"],
+  );
+  assert.ok(portfolio.specialists.length > 0);
+  assert.ok(portfolio.specialists.every((specialist) =>
+    specialist.validation_commands.every((command) => command === "npm run verified")
+  ));
+  assert.ok(portfolio.procedures.every((procedure) =>
+    procedure.validation_commands.every((command) => command === "npm run verified")
+  ));
 });
 
 test("display annotations are removed from repository evidence paths", () => {
@@ -178,8 +306,16 @@ test("expert domain with no tracked evidence is dropped", () => {
 
 test("structural fallback refuses a monorepo container root", () => {
   const portfolio = structuralPortfolioFixture("packages/api/src");
-  assert.deepEqual(portfolio.specialists, []);
-  assert.ok(portfolio.warnings.includes("No repository domain met the specialist evidence and validation threshold."));
+  assert.equal(
+    portfolio.specialists.some((specialist) =>
+      specialist.owned_paths.some((scope) => scope === "packages/api/src" || scope === "packages")
+    ),
+    false,
+  );
+  assert.ok(portfolio.specialists.length > 0);
+  assert.ok(portfolio.specialists.every((specialist) =>
+    specialist.owned_paths.every((scope) => scope.includes("/") || scope.includes("."))
+  ));
 });
 
 test("a shallow optional domain hint is ignored in favor of structural evidence", () => {
@@ -326,3 +462,229 @@ test("portfolio validation rejects authority and digest tampering", () => {
   digestTampered.procedures[0]!.purpose = "Changed without recomputing the digest.";
   assert.throws(() => validateSpecialistPortfolio(digestTampered));
 });
+
+test("a path is claimed by exactly one primary owner", () => {
+  const portfolio = discoverSpecialistPortfolio(makeSpecialistFixtureMap(), COMMIT_A);
+  const primaryOwners = new Map<string, string[]>();
+  for (const specialist of portfolio.specialists) {
+    for (const owned of specialist.owned_paths) {
+      primaryOwners.set(owned, [...(primaryOwners.get(owned) ?? []), specialist.specialist_id]);
+    }
+  }
+  const contested = [...primaryOwners.entries()].filter(([, owners]) => owners.length > 1);
+  assert.deepEqual(contested, [], `ambiguous routing: ${JSON.stringify(contested)}`);
+
+  // A demoted claim is retained as a secondary stake, not discarded, so the
+  // other interested specialist is still a named reviewer for that file.
+  for (const specialist of portfolio.specialists) {
+    for (const secondary of specialist.secondary_paths) {
+      assert.equal(specialist.owned_paths.includes(secondary), false);
+      assert.ok(
+        specialist.observed_paths.includes(secondary),
+        `${specialist.specialist_id} lost visibility of ${secondary}`,
+      );
+      assert.ok(
+        portfolio.specialists.some((other) => other.owned_paths.includes(secondary)),
+        `${secondary} has a secondary stake but no primary owner`,
+      );
+    }
+  }
+});
+
+test("a manufactured specialist is reported rather than silently satisfying ownership", () => {
+  const map = makeSpecialistFixtureMap();
+  // Strip the recorded expertise so ownership can only be closed structurally.
+  map.expert_evidence = { expert_domains: [] };
+  const portfolio = discoverSpecialistPortfolio(map, COMMIT_A);
+
+  const synthetic = portfolio.specialists.filter((specialist) =>
+    specialist.source_kinds.length === 1 && specialist.source_kinds[0] === "structural_evidence"
+  );
+  assert.ok(synthetic.length > 0, "the fixture should require structural recovery");
+  assert.ok(
+    portfolio.warnings.some((warning) => warning.startsWith(SYNTHETIC_SPECIALIST_WARNING_PREFIX)),
+    `expected a synthetic-specialist warning; got ${JSON.stringify(portfolio.warnings)}`,
+  );
+  for (const specialist of synthetic) {
+    assert.ok(
+      portfolio.warnings.some((warning) => warning.includes(specialist.specialist_id)),
+      `${specialist.specialist_id} was not named in any warning`,
+    );
+  }
+});
+
+test("the public API specialist carries the surface a contract change travels with", () => {
+  const map = makeSpecialistFixtureMap();
+  map.expert_evidence = { expert_domains: [] };
+  const portfolio = discoverSpecialistPortfolio(
+    map,
+    COMMIT_A,
+    ["src/index.ts", "src/lib.ts", "package.json", "src/index.test-d.ts", "tests/lib.test.ts"],
+  );
+  const publicApi = portfolio.specialists.find((specialist) =>
+    specialist.specialist_id.includes("public-api-contracts")
+  );
+  if (publicApi) {
+    // A declaration cannot be changed without loading the manifest that exports
+    // it and the type tests that pin its inference. The type test is found from
+    // the tracked file list, because an audit need not have recorded it.
+    assert.ok(
+      publicApi.observed_paths.includes("package.json"),
+      `public API specialist must observe the package manifest; got ${JSON.stringify(publicApi.observed_paths)}`,
+    );
+    assert.ok(
+      publicApi.observed_paths.includes("src/index.test-d.ts"),
+      `public API specialist must observe its type tests; got ${JSON.stringify(publicApi.observed_paths)}`,
+    );
+  }
+});
+
+test("a secondary stake routes as a reviewer, ranked below the primary owner", () => {
+  const portfolio = portfolioFixture();
+  const owner = portfolio.specialists[0];
+  assert.ok(owner, "the fixture needs a specialist");
+  const contested = owner.owned_paths[0];
+  assert.ok(contested, "the primary owner needs an owned path");
+  const other = portfolio.specialists.find((candidate) =>
+    candidate.specialist_id !== owner.specialist_id
+    && !candidate.owned_paths.includes(contested)
+  );
+  assert.ok(other, "the fixture needs a second specialist that does not own the path");
+
+  // Model the resolved outcome: one primary owner, one named secondary stake.
+  const specialists = portfolio.specialists.map((specialist) =>
+    specialist.specialist_id === other.specialist_id
+      ? {
+        ...specialist,
+        secondary_paths: [contested],
+        observed_paths: [...new Set([...specialist.observed_paths, contested])]
+          .sort((left, right) => left.localeCompare(right)),
+      }
+      : specialist
+  );
+  const contended = {
+    ...portfolio,
+    specialists,
+    source_map_digest: specialistPortfolioDigest({
+      evidence_paths: portfolio.evidence_paths,
+      specialists,
+      procedures: portfolio.procedures,
+    }),
+  };
+  const routed = routeSpecialistPortfolio(contended, {
+    task_description: "Change the contested module",
+    candidate_paths: [contested],
+  });
+
+  const ownerSelection = routed.selected_specialists.find((s) => s.specialist_id === owner.specialist_id);
+  const reviewerSelection = routed.selected_specialists.find((s) => s.specialist_id === other.specialist_id);
+  assert.ok(ownerSelection, "the primary owner must be selected");
+  assert.ok(reviewerSelection, "the secondary stake must still be selected as a reviewer");
+  assert.ok(
+    ownerSelection.score > reviewerSelection.score,
+    `the primary owner must outrank the secondary stake (${ownerSelection.score} vs ${reviewerSelection.score})`,
+  );
+  assert.ok(
+    reviewerSelection.reasons.some((reason) => reason.kind === "secondary_path"),
+    `secondary responsibility must be its own routing reason; got ${JSON.stringify(reviewerSelection.reasons)}`,
+  );
+});
+
+test("example scripts do not become the public contract specialist", () => {
+  const map = makeSpecialistFixtureMap();
+  // Commander's audit recorded its example scripts as entry points. With
+  // index.js already owned, the leftovers were named "public-api-contracts"
+  // and the specialist owned demonstration code.
+  map.skeleton.entry_points.push(
+    { path: "examples/split.js", role: "example", language: "javascript", run_command: "node examples/split.js" },
+    { path: "examples/string-util.js", role: "example", language: "javascript", run_command: "node examples/string-util.js" },
+  );
+  const portfolio = discoverSpecialistPortfolio(
+    map,
+    COMMIT_A,
+    ["src/index.ts", "src/lib.ts", "examples/split.js", "examples/string-util.js", "package.json"],
+  );
+
+  const publicApi = portfolio.specialists.find((specialist) =>
+    specialist.specialist_id.includes("public-api-contracts")
+  );
+  if (publicApi) {
+    const illustrative = publicApi.owned_paths.filter((candidate) => candidate.startsWith("examples/"));
+    assert.deepEqual(
+      illustrative,
+      [],
+      `the public contract specialist must not own demonstration code; got ${JSON.stringify(publicApi.owned_paths)}`,
+    );
+  }
+});
+
+test("a pitfall that cannot be traced to a file caps specialist confidence", () => {
+  const supported = makeSpecialistFixtureMap();
+  const domain = supported.expert_evidence!.expert_domains[0]!;
+  assert.ok(domain.pitfalls.length > 0, "the fixture domain needs a pitfall");
+
+  const tracked = ["src/billing/index.ts", "src/billing/types.ts", "tests/billing.test.ts"];
+  const before = discoverSpecialistPortfolio(supported, COMMIT_A, tracked)
+    .specialists.find((entry) => entry.specialist_id.includes("billing"));
+  assert.ok(before);
+
+  // The same domain, with its hazard pointing at a file the repository does
+  // not track. The claim is now untraceable, so it cannot carry high confidence.
+  const unsupported = makeSpecialistFixtureMap();
+  unsupported.expert_evidence!.expert_domains[0]!.pitfalls = [{
+    risk: "Retries can double-charge.",
+    consequence: "Customers are billed twice.",
+    reference: "src/nowhere/invented.ts:42",
+  }];
+  const after = discoverSpecialistPortfolio(unsupported, COMMIT_A, tracked)
+    .specialists.find((entry) => entry.specialist_id.includes("billing"));
+  assert.ok(after);
+  assert.notEqual(after.confidence, "high", "an untraceable hazard must not be high confidence");
+
+  // The reference is retained so the claim stays checkable.
+  assert.ok(
+    after.pitfalls.some((pitfall) => pitfall.includes("src/nowhere/invented.ts:42")),
+    `pitfalls must record their reference; got ${JSON.stringify(after.pitfalls)}`,
+  );
+});
+
+test("a file-level pitfall reference does not locate a hazard", () => {
+  const tracked = ["src/billing/index.ts", "src/billing/types.ts", "tests/billing.test.ts"];
+  const build = (reference: string) => {
+    const map = makeSpecialistFixtureMap();
+    map.expert_evidence!.expert_domains[0]!.pitfalls = [{
+      risk: "Retries can double-charge.",
+      consequence: "Customers are billed twice.",
+      reference,
+    }];
+    return discoverSpecialistPortfolio(map, COMMIT_A, tracked)
+      .specialists.find((entry) => entry.specialist_id.includes("billing"));
+  };
+
+  // A bare path says which file to read; it does not establish the hazard.
+  const fileOnly = build("src/billing/index.ts");
+  assert.ok(fileOnly);
+  assert.notEqual(fileOnly.confidence, "high");
+
+  const located = build("src/billing/index.ts:55");
+  assert.ok(located);
+  assert.equal(located.confidence, "high");
+});
+
+test("a manufactured specialist is not recorded as confident knowledge", () => {
+  const map = makeSpecialistFixtureMap();
+  map.expert_evidence = { expert_domains: [] };
+  const portfolio = discoverSpecialistPortfolio(map, COMMIT_A);
+  const synthetic = portfolio.specialists.filter((specialist) =>
+    specialist.source_kinds.length === 1 && specialist.source_kinds[0] === "structural_evidence"
+  );
+  assert.ok(synthetic.length > 0);
+  for (const specialist of synthetic) {
+    assert.equal(
+      specialist.confidence,
+      "low",
+      `${specialist.specialist_id} closes an ownership gap and carries no recorded expertise`,
+    );
+  }
+});
+

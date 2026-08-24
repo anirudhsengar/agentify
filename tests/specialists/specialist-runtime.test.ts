@@ -73,7 +73,11 @@ test("runtime synchronization consumes the canonical map only after memory boots
     assert.equal(synchronized.status, "synchronized");
     if (synchronized.status !== "synchronized") return;
     assert.equal(synchronized.state_dir, ".agentify/runtime/audit");
-    assert.deepEqual(synchronized.materialized.created_specialist_ids, ["specialist-billing"]);
+    assert.deepEqual(synchronized.materialized.created_specialist_ids, [
+      "specialist-billing",
+      "specialist-lib-semantics",
+      "specialist-public-api-contracts",
+    ]);
     assert.ok(fs.existsSync(path.join(
       cwd,
       ".agentify/agents/specialists/specialist-billing.json",
@@ -84,7 +88,11 @@ test("runtime synchronization consumes the canonical map only after memory boots
     if (repeated.status !== "synchronized") return;
     assert.deepEqual(repeated.materialized.created_specialist_ids, []);
     assert.deepEqual(repeated.materialized.updated_specialist_ids, []);
-    assert.deepEqual(repeated.materialized.unchanged_specialist_ids, ["specialist-billing"]);
+    assert.deepEqual(repeated.materialized.unchanged_specialist_ids, [
+      "specialist-billing",
+      "specialist-lib-semantics",
+      "specialist-public-api-contracts",
+    ]);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

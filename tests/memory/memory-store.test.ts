@@ -20,6 +20,8 @@ import {
   readMemoryRecord,
   readTeamMemoryManifest,
   recoverTeamMemoryStore,
+  recordTeamMemoryActivation,
+  refreshTeamMemoryManifest,
   revalidateMemory,
   supersedeMemory,
   updateAgentIdentity,
@@ -810,3 +812,148 @@ test("symlinked memory roots fail closed", { skip: process.platform === "win32" 
     fs.rmSync(outside, { recursive: true, force: true });
   }
 });
+
+test("the canonical audit map is covered by the manifest root digest", () => {
+  const cwd = tempRepo("agentify-memory-canonical-map-");
+  try {
+    initialize(cwd);
+    const withoutMap = readTeamMemoryManifest(cwd);
+    assert.equal(withoutMap.canonical_map, undefined);
+
+    const mapPath = path.join(cwd, ".agentify/runtime/audit/codebase_map.json");
+    fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+    fs.writeFileSync(mapPath, `${JSON.stringify({ meta: { project_type: "library" } }, null, 2)}\n`);
+
+    createAgentIdentity({
+      cwd,
+      agentId: "canonical-map-domain",
+      role: "specialist",
+      displayName: "Canonical Map Specialist",
+      domain: "canonical-map",
+      memoryKinds: ["codebase"],
+      supportingCommit: COMMIT_A,
+      evidence: [evidence("canonical-map")],
+      actor: "knowledge-maintainer",
+      options: testMemoryOptions(),
+    });
+
+    const withMap = readTeamMemoryManifest(cwd);
+    assert.ok(withMap.canonical_map, "the refreshed manifest must record the canonical map");
+    assert.equal(withMap.canonical_map.path, ".agentify/runtime/audit/codebase_map.json");
+    assert.equal(
+      withMap.canonical_map.sha256,
+      crypto.createHash("sha256").update(fs.readFileSync(mapPath)).digest("hex"),
+    );
+    assert.notEqual(withMap.root_digest, withoutMap.root_digest);
+
+    // Editing the map without reissuing the manifest is now detectable: the
+    // recorded digest no longer describes the file the routing derives from.
+    fs.writeFileSync(mapPath, `${JSON.stringify({ meta: { project_type: "service" } }, null, 2)}\n`);
+    const tampered = readTeamMemoryManifest(cwd);
+    assert.notEqual(
+      tampered.canonical_map?.sha256,
+      crypto.createHash("sha256").update(fs.readFileSync(mapPath)).digest("hex"),
+    );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("an installation report written before memory exists does not block initialization", () => {
+  const cwd = tempRepo("agentify-memory-report-first-");
+  try {
+    fs.mkdirSync(path.join(cwd, ".agentify"), { recursive: true });
+    fs.writeFileSync(
+      path.join(cwd, ".agentify/installation-report.json"),
+      `${JSON.stringify({ schema_version: "1", disposition: "analyzable-only" }, null, 2)}\n`,
+    );
+
+    initialize(cwd);
+    assert.equal(readTeamMemoryManifest(cwd).format, "agentify_team_memory");
+    assert.ok(fs.existsSync(path.join(cwd, ".agentify/installation-report.json")));
+
+    // Genuinely foreign state is still refused.
+    const other = tempRepo("agentify-memory-user-state-");
+    try {
+      fs.mkdirSync(path.join(other, ".agentify"), { recursive: true });
+      fs.writeFileSync(path.join(other, ".agentify/notes.md"), "user owned\n");
+      assert.throws(() => initialize(other), (error) => hasCode(error, "unsafe_path"));
+    } finally {
+      fs.rmSync(other, { recursive: true, force: true });
+    }
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("the installation report is covered by the manifest root digest", () => {
+  const cwd = tempRepo("agentify-memory-report-digest-");
+  try {
+    initialize(cwd);
+    const before = readTeamMemoryManifest(cwd);
+    assert.equal(before.installation_report, undefined);
+
+    const reportPath = path.join(cwd, ".agentify/installation-report.json");
+    fs.writeFileSync(reportPath, `${JSON.stringify({ disposition: "ready" }, null, 2)}\n`);
+    const covered = refreshTeamMemoryManifest(cwd, testMemoryOptions());
+    assert.ok(covered.installation_report, "the report must enter the integrity record");
+    assert.equal(covered.installation_report.path, ".agentify/installation-report.json");
+    assert.notEqual(covered.root_digest, before.root_digest);
+
+    // Rewriting the report to claim a different disposition must invalidate the
+    // digest that vouches for it.
+    fs.writeFileSync(reportPath, `${JSON.stringify({ disposition: "analyzable-only" }, null, 2)}\n`);
+    const tampered = readTeamMemoryManifest(cwd);
+    assert.notEqual(
+      tampered.installation_report?.sha256,
+      crypto.createHash("sha256").update(fs.readFileSync(reportPath)).digest("hex"),
+    );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("activation state is recorded, digest-bound, and stable across reruns", () => {
+  const cwd = tempRepo("agentify-memory-activation-");
+  try {
+    initialize(cwd);
+    // A store exists before anything is promoted, because the analysis has to be
+    // built with active identities before the installation can be judged.
+    assert.equal(readTeamMemoryManifest(cwd).activation, undefined);
+
+    const analysis = recordTeamMemoryActivation(cwd, {
+      state: "analysis_only",
+      disposition: "analyzable-only",
+      promoted_at: null,
+    }, testMemoryOptions());
+    assert.equal(analysis.activation?.state, "analysis_only");
+    assert.equal(analysis.activation?.promoted_at, null);
+
+    const promoted = recordTeamMemoryActivation(cwd, {
+      state: "promoted",
+      disposition: "ready",
+      promoted_at: "2026-08-23T00:00:00.000Z",
+    }, testMemoryOptions());
+    assert.equal(promoted.activation?.state, "promoted");
+    assert.notEqual(promoted.root_digest, analysis.root_digest);
+
+    // Re-promoting must not churn the manifest for a fresh timestamp alone.
+    const again = recordTeamMemoryActivation(cwd, {
+      state: "promoted",
+      disposition: "ready",
+      promoted_at: "2026-09-01T00:00:00.000Z",
+    }, testMemoryOptions());
+    assert.equal(again.revision, promoted.revision);
+    assert.equal(again.activation?.promoted_at, "2026-08-23T00:00:00.000Z");
+
+    // A forged promotion claim must not verify against the recorded digest.
+    const manifestPath = path.join(cwd, ".agentify/manifest.json");
+    const forged = JSON.parse(fs.readFileSync(manifestPath, "utf-8")) as Record<string, unknown>;
+    forged.activation = { state: "promoted", disposition: "ready", promoted_at: "2026-01-01T00:00:00.000Z" };
+    fs.writeFileSync(manifestPath, `${JSON.stringify(forged, null, 2)}\n`);
+    assert.throws(() => readTeamMemoryManifest(cwd), (error) => hasCode(error, "corrupt_state"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+

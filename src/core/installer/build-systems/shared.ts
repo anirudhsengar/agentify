@@ -28,7 +28,7 @@ export const VALIDATION_SCRIPT_NAMES: Readonly<Record<
   build: ["build"],
   typecheck: ["typecheck", "type-check"],
   lint: ["lint"],
-  test: ["test", "test:all", "check"],
+  test: ["test-all", "test:all", "test", "check"],
   package: ["test:package", "pack", "package"],
 };
 

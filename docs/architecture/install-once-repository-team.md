@@ -60,24 +60,50 @@ The local installer performs these steps in order:
    that records maintainer-approved unsandboxed validation;
 6. initialize persistent identity and self-update policy;
 7. run a read-only structured repository audit;
-8. if discovery did not verify a required command, refine validation from the
-   audited validation surface and re-verify; when no repository command can be
-   verified at all, install the Agentify-owned validation smoke
+8. if the repository declares no validation command, refine validation from the
+   audited validation surface and re-verify; only when no repository command is
+   declared at all may the installer use the Agentify-owned validation smoke
    (`.github/agentify/validation-smoke.mjs`: tracked-JSON validity, JavaScript
    syntax, committed-secret scan) and record
    the verified smoke command in the task policy;
 9. derive and persist specialists and procedures from repository evidence;
-10. install the issue and learning workflows plus their trusted runtimes;
-11. write a repository-bound task policy with the attested manifest, command,
-    and lockfile hashes;
-12. run deterministic installation canaries;
-13. configure required GitHub labels, non-secret variables, and the repository
+10. require complete primary specialist ownership for critical entry points,
+    public contracts, and core modules;
+11. stage the issue and learning workflows plus their trusted runtimes inside a
+    rollback-capable activation transaction;
+12. write a repository-bound task policy with the attested manifest, command,
+    and lockfile hashes, then rerun the complete repository validation surface
+    against the final staged tree;
+13. run deterministic installation canaries;
+14. configure required GitHub labels, non-secret variables, and the repository
     Actions permission needed to create unmerged draft pull requests; copy a
     resolved local provider API key to the `PI_API_KEY` Actions secret when one
     is already present, and set a dedicated automation token only after
     interactive consent when the maintainer wants those pull requests to
     trigger ordinary repository workflows;
-14. enable issue intake only when every required check passes.
+15. set the repository activation variable only when every required check
+    passes; otherwise restore every pre-existing managed activation file and
+    force the activation variable back to false.
+
+Repository-specific `AGENTS.md` and `SETUP.md` are rendered from the audited
+branch model, attested validation commands, and recorded conventions, and are
+staged inside the same transaction. `.github/agentify/runtime-inventory.json`
+records both bundled runtimes' byte sizes and SHA-256 digests together with
+every bundled dependency and its license.
+
+`.agentify/installation-report.json` records the disposition, the exact failed
+readiness checks and canaries, validation results and consent state, the
+resolved specialist portfolio, and one remediation command. It is deliberately
+outside the activation snapshot, so a refused installation leaves the reason
+behind after the rollback instead of only a disabled policy.
+
+The team-memory manifest covers the canonical audit map in its `root_digest`,
+so the map that specialist routing and learning derive from cannot be replaced
+without invalidating the integrity record.
+
+A verified contribution branch that differs from the repository default branch
+is a readiness blocker. Agentify does not silently publish application changes
+against a release/default branch when repository policy targets another base.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.

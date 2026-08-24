@@ -78,6 +78,11 @@ export const EvidenceReferenceSchema = Type.Object({
     Type.Null(),
   ], { description: "Repository-relative evidence path when applicable." }),
   commit_sha: Type.String(GIT_COMMIT),
+  /**
+   * When the cited commit was authored. Distinct from `observed_at`: a source
+   * commit time is not evidence that anything looked at it.
+   */
+  source_commit_time: Type.Optional(Type.Union([MemoryTimestampSchema, Type.Null()])),
   sha256: Type.Union([Type.String(SHA256), Type.Null()]),
   line_start: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
   line_end: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
@@ -372,6 +377,24 @@ export const TeamMemoryManifestEntrySchema = Type.Object({
   bytes: Type.Integer({ minimum: 0, maximum: 262_144 }),
 }, { additionalProperties: false });
 
+export const TeamMemoryCanonicalMapSchema = Type.Object({
+  path: Type.String({ minLength: 1, maxLength: 512 }),
+  sha256: Type.String(SHA256),
+  bytes: Type.Integer({ minimum: 0 }),
+}, { additionalProperties: false });
+
+/**
+ * Whether the installation that produced this memory was ever promoted. An
+ * installation that refused to activate still has to build its analysis, which
+ * requires active identities, so the honest signal is recorded here rather than
+ * by mislabelling the identities the analysis was built with.
+ */
+export const TeamMemoryActivationSchema = Type.Object({
+  state: Type.Union([Type.Literal("promoted"), Type.Literal("analysis_only")]),
+  disposition: Type.String({ minLength: 1, maxLength: 64 }),
+  promoted_at: Type.Union([MemoryTimestampSchema, Type.Null()]),
+}, { additionalProperties: false });
+
 export const TeamMemoryManifestSchema = Type.Object({
   format: Type.Literal(TEAM_MEMORY_MANIFEST_TYPE),
   schema_version: Type.Literal("1"),
@@ -385,6 +408,9 @@ export const TeamMemoryManifestSchema = Type.Object({
     maxItems: TEAM_MEMORY_MAX_MANIFEST_ENTRIES,
   }),
   root_digest: Type.String(SHA256),
+  canonical_map: Type.Optional(Type.Union([TeamMemoryCanonicalMapSchema, Type.Null()])),
+  installation_report: Type.Optional(Type.Union([TeamMemoryCanonicalMapSchema, Type.Null()])),
+  activation: Type.Optional(TeamMemoryActivationSchema),
 }, { additionalProperties: false });
 
 export const TeamMemoryInitializationJournalSchema = Type.Object({
@@ -460,6 +486,8 @@ export type OrchestratorMemoryPayload = Static<typeof OrchestratorMemoryPayloadS
 export type PolicyMemoryPayload = Static<typeof PolicyMemoryPayloadSchema>;
 export type MemoryCandidate = Static<typeof MemoryCandidateSchema>;
 export type MemoryRecord = Static<typeof MemoryRecordSchema>;
+export type TeamMemoryActivation = Static<typeof TeamMemoryActivationSchema>;
+export type TeamMemoryCanonicalMap = Static<typeof TeamMemoryCanonicalMapSchema>;
 export type TeamMemoryManifestEntry = Static<typeof TeamMemoryManifestEntrySchema>;
 export type TeamMemoryManifest = Static<typeof TeamMemoryManifestSchema>;
 export type TeamMemoryInitializationJournal = Static<typeof TeamMemoryInitializationJournalSchema>;

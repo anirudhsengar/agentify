@@ -26,8 +26,8 @@ function git(...args: string[]): string {
   return result.stdout.trim();
 }
 
-const scripts = profile === "readiness-fail"
-  ? { build: "node --check src/index.ts" }
+const scripts = profile === "no-validation"
+  ? {}
   : {
       typecheck: "node --input-type=module --eval \"process.exit(0)\"",
       test: "node --input-type=module --eval \"process.exit(0)\"",
@@ -48,7 +48,7 @@ const layouts: Record<string, string[]> = {
   moderate: ["src/index.ts", "src/lib.ts", "src/billing/index.ts", "src/billing/types.ts", "src/orders/index.ts", "src/shared/id.ts", "tests/billing.test.ts", "tests/orders.test.ts", "scripts/prime-db.sh"],
   monorepo: ["packages/api/src/index.ts", "packages/api/tests/index.test.ts", "packages/web/src/index.ts", "packages/shared/src/index.ts", "tools/check.mjs"],
   attached: ["src/index.ts", "src/lib.ts", "src/billing/index.ts", "src/billing/types.ts", "tests/billing.test.ts", "scripts/prime-db.sh"],
-  "readiness-fail": ["src/index.ts", "src/lib.ts"],
+  "no-validation": ["src/index.ts", "src/lib.ts"],
 };
 const mapEvidencePaths = [
   "src/index.ts",

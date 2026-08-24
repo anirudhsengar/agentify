@@ -173,8 +173,23 @@ export function isTeamMemoryOperationalPath(relativePath: string): boolean {
     || normalized.startsWith(".agentify/state-transactions/");
 }
 
+/**
+ * The canonical audit map. It lives under the operational subtree because the
+ * runtime rewrites it, but it is the source specialist routing and later
+ * learning are derived from, so its digest is covered by the manifest.
+ */
+export const TEAM_MEMORY_CANONICAL_MAP_RELATIVE = ".agentify/runtime/audit/codebase_map.json";
+
+/** Agentify-owned installation record; never user state. */
+export const TEAM_MEMORY_INSTALLATION_REPORT_ENTRY = "installation-report.json";
+
+/** Repository-relative path of the committed installation report. */
+export const TEAM_MEMORY_INSTALLATION_REPORT_RELATIVE =
+  `.agentify/${TEAM_MEMORY_INSTALLATION_REPORT_ENTRY}`;
+
 export const TEAM_MEMORY_ROOT_ALLOWED_ENTRIES = new Set([
   ".gitignore",
+  TEAM_MEMORY_INSTALLATION_REPORT_ENTRY,
   "manifest.json",
   "agents",
   "knowledge",

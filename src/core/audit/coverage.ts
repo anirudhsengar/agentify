@@ -1,6 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CodebaseMap } from "./schema.ts";
+import {
+    EXECUTION_ALTERING_ENV,
+    NEVER_SOURCE_DIRECTORIES,
+    isBareGitRef,
+} from "./repository-facts.ts";
 
 export const COVERAGE_DIMENSIONS = [
     "D1_topography",
@@ -72,13 +77,58 @@ function hasMandatoryCommand(value: { mandatory: string[]; optional: string[] } 
     return Array.isArray(value?.mandatory) && value.mandatory.some(isNonEmptyString);
 }
 
-function assessDimensionSubstance(map: CodebaseMap, dimension: CoverageDimension): string | null {
+/** Files where a repository documents which branch contributions target. */
+const CONTRIBUTION_GUIDE_FILES = [
+    "CONTRIBUTING.md", "CONTRIBUTING.rst", "CONTRIBUTING.txt", "CONTRIBUTING",
+    ".github/CONTRIBUTING.md", "docs/CONTRIBUTING.md",
+] as const;
+
+const DOCUMENTED_PR_BASE =
+    /pull requests?[^.\n]{0,80}?\bagainst\b[^.\n]{0,40}?\b(?:the\s+)?`?([A-Za-z0-9._\/-]+)`?\s+branch/i;
+
+/**
+ * The branch a repository documents as its pull-request base, read from the
+ * repository itself. The contribution-branch guard depends on this being
+ * recorded, so it must not rest on the model happening to notice it.
+ */
+export function documentedContributionBranch(cwd: string): { branch: string; path: string } | null {
+    for (const relativePath of CONTRIBUTION_GUIDE_FILES) {
+        const absolute = path.join(cwd, ...relativePath.split("/"));
+        let content: string;
+        try {
+            const stat = fs.lstatSync(absolute);
+            if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 512 * 1024) continue;
+            content = fs.readFileSync(absolute, "utf-8");
+        } catch {
+            continue;
+        }
+        const match = DOCUMENTED_PR_BASE.exec(content);
+        const branch = match?.[1]?.trim();
+        if (branch && isBareGitRef(branch)) return { branch, path: relativePath };
+    }
+    return null;
+}
+
+function assessDimensionSubstance(
+    map: CodebaseMap,
+    dimension: CoverageDimension,
+    cwd?: string,
+): string | null {
     switch (dimension) {
         case "D1_topography":
             if (!hasItems(map.skeleton.top_level_tree)) return "covered but top_level_tree is empty";
             if (!hasItems(map.skeleton.entry_points)) return "covered but no entry point was recorded";
             if (!hasItems(map.skeleton.first_5_files_for_fresh_agent)) {
                 return "covered but no first files were recorded for a fresh agent";
+            }
+            {
+                // Dependency and cache trees are local workspace state, not source.
+                const workspaceOnly = map.skeleton.top_level_tree.filter((entry) =>
+                    NEVER_SOURCE_DIRECTORIES.has(entry.replaceAll("\\", "/").replace(/\/+$/, ""))
+                );
+                if (workspaceOnly.length > 0) {
+                    return `covered but topography lists local workspace state rather than repository source: ${workspaceOnly.join(", ")}`;
+                }
             }
             return null;
         case "D2_module_boundaries":
@@ -102,6 +152,16 @@ function assessDimensionSubstance(map: CodebaseMap, dimension: CoverageDimension
                 && map.type_contract_surface.one_type_trace === null
             ) {
                 return "covered but no type or contract evidence was recorded";
+            }
+            // The trace is what makes a *high-confidence* type claim credible.
+            // Without it the dimension can still close, at a confidence that
+            // honestly reflects the evidence.
+            if (
+                map.coverage.D3_type_contract.confidence === "high"
+                && map.type_contract_surface.one_type_trace === null
+            ) {
+                return "covered at high confidence but no end-to-end one_type_trace was recorded; "
+                    + "record type_contract_surface.one_type_trace or lower the confidence";
             }
             return null;
         case "D4_conventions":
@@ -151,6 +211,55 @@ function assessDimensionSubstance(map: CodebaseMap, dimension: CoverageDimension
             if (!isNonEmptyString(map.operational_surface.git_workflow.main_branch)) {
                 return "covered but git workflow evidence is incomplete";
             }
+            {
+                // A command the repository forbids cannot also be its build
+                // contract. Commander's audit recorded `npm publish` as both.
+                const build = map.operational_surface.build.command.trim();
+                const blockedMatch = (map.security_surface.bash_blocked_patterns ?? [])
+                    .find((pattern) => pattern.trim().length > 0 && build.includes(pattern.trim()));
+                if (build.length > 0 && blockedMatch !== undefined) {
+                    return `covered but the declared build command is blocked by security policy: ${build} matches ${blockedMatch}`;
+                }
+            }
+            {
+                // A documented pull-request base has to appear in the recorded
+                // branch policy, or the contribution-branch guard silently has
+                // nothing to compare the default branch against.
+                const documented = cwd ? documentedContributionBranch(cwd) : null;
+                if (documented !== null) {
+                    const recorded = [
+                        map.operational_surface.git_workflow.main_branch.trim(),
+                        ...(map.operational_surface.git_workflow.contribution_branches ?? [])
+                            .map((branch) => branch.name.trim()),
+                    ];
+                    if (!recorded.includes(documented.branch)) {
+                        return `covered but ${documented.path} documents pull requests against `
+                            + `${documented.branch}, which the recorded branch policy omits`;
+                    }
+                }
+            }
+            {
+                const workflow = map.operational_surface.git_workflow;
+                if (!isBareGitRef(workflow.main_branch)) {
+                    return `covered but git_workflow.main_branch is not a bare git ref name: ${workflow.main_branch.trim()}`;
+                }
+                const prose = (workflow.contribution_branches ?? [])
+                    .filter((branch) => !isBareGitRef(branch.name))
+                    .map((branch) => branch.name.trim());
+                if (prose.length > 0) {
+                    return `covered but contribution branch names are not bare git refs: ${prose.join(", ")}`;
+                }
+                const uncited = (workflow.contribution_branches ?? []).filter(({ evidence }) =>
+                    !Number.isInteger(evidence.line_start)
+                    || !Number.isInteger(evidence.line_end)
+                    || evidence.line_start < 1
+                    || evidence.line_end < evidence.line_start
+                );
+                if (uncited.length > 0) {
+                    return "covered but a contribution branch cites no usable evidence line range: "
+                        + uncited.map((branch) => branch.name).join(", ");
+                }
+            }
             return null;
         case "D8_security":
             if (!hasItems(map.security_surface.paths.zero_access)) {
@@ -159,8 +268,30 @@ function assessDimensionSubstance(map: CodebaseMap, dimension: CoverageDimension
             if (!hasItems(map.security_surface.bash_blocked_patterns) && !hasItems(map.security_surface.damage_control_rules)) {
                 return "covered but security damage-control evidence is empty";
             }
+            {
+                const unsafe = (map.security_surface.env_allowlist ?? [])
+                    .filter((name) => EXECUTION_ALTERING_ENV.has(name.trim().toUpperCase()));
+                if (unsafe.length > 0) {
+                    return `covered but env_allowlist permits execution-altering variables: ${unsafe.join(", ")}`;
+                }
+            }
+            if (
+                map.coverage.D8_security.confidence === "high"
+                && Object.values(map.security_surface.security_checklist).every((entry) => !hasItems(entry))
+            ) {
+                return "covered at high confidence but every security_checklist collection is empty; "
+                    + "record security_surface.security_checklist or lower the confidence";
+            }
             return null;
         case "D9_process":
+            // A narrative that describes a review or documentation loop
+            // contradicts a structured field saying there is none.
+            if (
+                !map.meta.lifecycle.review_loop.present
+                && /\breview\b/i.test(map.meta.lifecycle.sdlc_model ?? "")
+            ) {
+                return "covered but lifecycle.review_loop.present is false while sdlc_model describes a review process";
+            }
             if (!isNonEmptyString(map.meta.lifecycle.sdlc_model)) {
                 return "covered but process lifecycle model is empty";
             }
@@ -208,6 +339,18 @@ function evidencePathUnderRoot(cwd: string, citationPath: string): { absolute: s
     return { absolute: resolved, underRoot };
 }
 
+/** Excerpts shorter than this are labels rather than quotations. */
+const MIN_VERIFIABLE_EXCERPT = 12;
+const MAX_EXCERPT_SEARCH_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Normalize for comparison. Case and whitespace are not what makes an excerpt
+ * evidence; coming from the cited file is.
+ */
+function collapseWhitespace(value: string): string {
+    return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 function verifyCitationTarget(cwd: string, citation: EvidenceCitationLike): string | null {
     const { absolute, underRoot } = evidencePathUnderRoot(cwd, citation.path);
     if (!underRoot) {
@@ -224,6 +367,24 @@ function verifyCitationTarget(cwd: string, citation: EvidenceCitationLike): stri
     }
     if (citation.kind === "absence" && exists) {
         return `covered but absence evidence path exists: ${citation.path}`;
+    }
+    // A citation whose excerpt is not in the file it names is not evidence.
+    // Checking only that the path exists lets any real path support any claim.
+    if (citation.kind === "positive" && exists) {
+        const excerpt = collapseWhitespace(citation.excerpt);
+        if (excerpt.length >= MIN_VERIFIABLE_EXCERPT) {
+            let content: string;
+            try {
+                const stat = fs.lstatSync(absolute);
+                if (!stat.isFile() || stat.size > MAX_EXCERPT_SEARCH_BYTES) return null;
+                content = fs.readFileSync(absolute, "utf-8");
+            } catch {
+                return null;
+            }
+            if (!collapseWhitespace(content).includes(excerpt)) {
+                return `covered but the evidence excerpt does not appear in ${citation.path}: "${citation.excerpt.slice(0, 80)}"`;
+            }
+        }
     }
     return null;
 }
@@ -281,7 +442,7 @@ export function assessCoverageClosure(
             reasons[dimension] = evidenceFailure;
             continue;
         }
-        const substanceFailure = assessDimensionSubstance(map, dimension);
+        const substanceFailure = assessDimensionSubstance(map, dimension, options?.cwd);
         if (substanceFailure !== null) {
             unresolved.push(dimension);
             reasons[dimension] = substanceFailure;

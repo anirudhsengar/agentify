@@ -1,4 +1,9 @@
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { loadCanonicalMapAt } from "../audit/write-map-tool.ts";
+import type { CodebaseMap } from "../audit/schema.ts";
+import { listAgentIdentities } from "../memory/index.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
 import { buildLearningContext } from "../learning/context.ts";
 import type { LearningContextResult } from "../learning/contracts.ts";
@@ -162,12 +167,119 @@ function securityControls(protectedPaths: ReadonlyArray<string>) {
 export function loadCurrentSpecialistPortfolio(cwd: string) {
   const map = loadCanonicalMapAt(cwd, AUDIT_STATE_RELATIVE_DIR);
   if (map === null) throw new Error("canonical codebase map is unavailable for specialist routing");
-  const supportingCommit = readGitHeadCommit(cwd);
+  // Only the installed task policy establishes which commands were verified.
+  // Without this the runtime would take commands straight from free-form audit
+  // fields, so an audited `build.command` the repository never declared could
+  // reach specialist definitions, procedures, and model context.
+  const attested = attestedValidationCommands(cwd);
+  if (attested.length === 0) {
+    throw new Error(
+      "no attested validation command is available for specialist routing; "
+      + "the repository task policy must be configured before planning",
+    );
+  }
+  // The map describes the commit that was audited, not whatever HEAD is now.
+  // Stamping the current head onto a portfolio derived from an older map makes
+  // a stale portfolio look current to every downstream freshness check.
+  const auditedCommit = installedAuditCommit(cwd);
+  if (auditedCommit === null) {
+    throw new Error(
+      "no installed specialist records establish which commit the repository knowledge was audited at; "
+      + "rerun the installer before planning",
+    );
+  }
+  const head = readGitHeadCommit(cwd);
+  if (auditedCommit !== head) {
+    const affected = changedPathsAffectingAudit(cwd, auditedCommit, head, map);
+    if (affected.length > 0) {
+      throw new Error(
+        `specialist knowledge was audited at ${auditedCommit} and ${affected.length} path(s) it covers `
+        + `changed since (${affected.slice(0, 5).join(", ")}); rerun the repository audit before planning`,
+      );
+    }
+  }
   return discoverSpecialistPortfolio(
     map,
-    supportingCommit,
-    listTrackedFilesAtCommit(cwd, supportingCommit),
+    auditedCommit,
+    listTrackedFilesAtCommit(cwd, auditedCommit),
+    attested,
   );
+}
+
+/** The commit the installed specialist records were derived from. */
+function installedAuditCommit(cwd: string): string | null {
+  try {
+    const commits = new Set(
+      listAgentIdentities(cwd)
+        .filter((identity) => identity.role === "specialist" && identity.status === "active")
+        .map((identity) => identity.supporting_commit),
+    );
+    return commits.size === 1 ? [...commits][0]! : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Paths that changed since the audit and that the recorded knowledge covers.
+ * A change outside the audited surface does not invalidate the portfolio; a
+ * change inside it does, and a newly added file is treated as invalidating
+ * because no audit has ever seen it.
+ */
+function changedPathsAffectingAudit(
+  cwd: string,
+  auditedCommit: string,
+  head: string,
+  map: CodebaseMap,
+): string[] {
+  const diff = spawnSync(
+    "git",
+    ["-C", cwd, "diff", "--name-only", "--no-renames", `${auditedCommit}..${head}`],
+    { encoding: "utf-8", windowsHide: true },
+  );
+  // An unresolvable range means the audit's base is gone; treat it as stale.
+  if (diff.status !== 0) return ["<audited commit is unreachable>"];
+  const changed = diff.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (changed.length === 0) return [];
+  const audited = new Set(listTrackedFilesAtCommit(cwd, auditedCommit));
+  const covered = new Set([
+    ...map.skeleton.entry_points.map((entry) => entry.path),
+    ...map.module_graph.edges.flatMap((edge) => [edge.from, edge.to]),
+    ...map.module_graph.shared_abstractions,
+  ]);
+  return changed.filter((candidate) =>
+    !audited.has(candidate)
+    || covered.has(candidate)
+    || [...covered].some((scope) => candidate.startsWith(`${scope}/`))
+  );
+}
+
+/** Validation commands the installer attested in the repository task policy. */
+function attestedValidationCommands(cwd: string): string[] {
+  const policyPath = path.join(cwd, ".github", "agentify-task-policy.json");
+  if (!fs.existsSync(policyPath)) return [];
+  try {
+    const configuration = JSON.parse(fs.readFileSync(policyPath, "utf8")) as {
+      configured?: unknown;
+      policy?: { validation_commands?: unknown } | null;
+    };
+    if (configuration.configured !== true) return [];
+    const entries = configuration.policy?.validation_commands;
+    if (!Array.isArray(entries)) return [];
+    const commands = entries.flatMap((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+      const argv = (entry as { argv?: unknown }).argv;
+      if (
+        !Array.isArray(argv)
+        || argv.length === 0
+        || !argv.every((argument) => typeof argument === "string" && argument.trim().length > 0)
+      ) return [];
+      return [argv.join(" ")];
+    });
+    return [...new Set(commands)].sort((left, right) => left.localeCompare(right));
+  } catch {
+    return [];
+  }
 }
 
 

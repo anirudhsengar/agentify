@@ -13,6 +13,7 @@ import {
   type MemoryRecord,
 } from "../schema.ts";
 import {
+  TEAM_MEMORY_INSTALLATION_REPORT_ENTRY,
   agentIdentityRelativePath,
   candidateDecisionRelativePath,
   identityHistoryRelativePath,
@@ -149,6 +150,7 @@ export function visibleStateExistsWithoutManifest(cwd: string): boolean {
       if (
         entry.name !== "runtime"
         && entry.name !== "state-transactions"
+        && entry.name !== TEAM_MEMORY_INSTALLATION_REPORT_ENTRY
       ) return true;
     }
   } catch (error) {

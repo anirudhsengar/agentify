@@ -141,6 +141,14 @@ function scoreSpecialist(
       addReason(reasons, { kind: "owned_path", signal: candidatePath, weight: 12 });
       continue;
     }
+    if (specialist.secondary_paths.some((scope) => pathMatchesScope(candidatePath, scope))) {
+      // Below the primary owner, above incidental observation: this specialist
+      // has a real stake in the file and should review, not own, the change.
+      // One path contributes one reason, so a secondary stake cannot outscore
+      // the owner by also matching as an observation.
+      addReason(reasons, { kind: "secondary_path", signal: candidatePath, weight: 9 });
+      continue;
+    }
     if (specialist.observed_paths.some((scope) => pathMatchesScope(candidatePath, scope))) {
       addReason(reasons, { kind: "observed_path", signal: candidatePath, weight: 7 });
     }

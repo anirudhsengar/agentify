@@ -84,11 +84,27 @@ function identityMatches(
     && [...expectedEvidence].every((id) => identity.evidence.some((entry) => entry.evidence_id === id));
 }
 
+/** The time a previous run recorded for this exact evidence, when it exists. */
+function priorObservationFor(
+  priorObservations: ReadonlyMap<string, string>,
+  supportingCommit: string,
+  sourceType: string,
+  repositoryPath: string,
+): string | null {
+  const evidenceId = `evidence-${digestCanonical({
+    commit: supportingCommit,
+    repositoryPath,
+    sourceType,
+  }).slice(0, 24)}`;
+  return priorObservations.get(evidenceId) ?? null;
+}
+
 function evidenceForPaths(
   input: MaterializeSpecialistPortfolioInput,
   paths: ReadonlyArray<string>,
   observedAt: string,
   cache: Map<string, EvidenceReference>,
+  priorObservations: ReadonlyMap<string, string>,
 ): EvidenceReference[] {
   const sourceType = input.source_type ?? "validated_bootstrap";
   const normalizedPaths = sortedUniqueStrings(paths).slice(0, 32);
@@ -107,7 +123,12 @@ function evidenceForPaths(
       supportingCommit: input.portfolio.supporting_commit,
       repositoryPath,
       sourceType,
-      observedAt,
+      observedAt: priorObservationFor(
+        priorObservations,
+        input.portfolio.supporting_commit,
+        sourceType,
+        repositoryPath,
+      ) ?? observedAt,
       actor: input.evidence_actor ?? null,
     });
     cache.set(cacheKey, reference);
@@ -414,14 +435,34 @@ export function materializeSpecialistPortfolio(
   input: MaterializeSpecialistPortfolioInput,
 ): MaterializedPortfolioResult {
   validateSpecialistPortfolio(input.portfolio);
+  // `observed_at` still mirrors the supporting commit's author time. Recording a
+  // genuine observation time makes every rerun rewrite each record, because the
+  // store has no content-addressed identity to compare against, so separating
+  // the two is blocked on normalizing memory storage. `source_commit_time` is
+  // recorded separately so the commit time is at least no longer the only
+  // timestamp on the record.
   const observedAt = input.observed_at
     ?? readGitCommitTimestamp(input.cwd, input.portfolio.supporting_commit);
+  // An evidence ID must resolve to exactly one definition across the whole
+  // store, so prior observation times are gathered from every record that can
+  // already cite them, not only from identities.
+  const priorObservations = new Map<string, string>();
+  const rememberEvidence = (evidence: ReadonlyArray<EvidenceReference>): void => {
+    for (const entry of evidence) {
+      if (!priorObservations.has(entry.evidence_id)) {
+        priorObservations.set(entry.evidence_id, entry.observed_at);
+      }
+    }
+  };
+  for (const identity of listAgentIdentities(input.cwd)) rememberEvidence(identity.evidence);
+  for (const record of listMemoryRecords(input.cwd)) rememberEvidence(record.evidence);
   const evidenceCache = new Map<string, EvidenceReference>();
   const portfolioEvidence = evidenceForPaths(
     input,
     input.portfolio.evidence_paths,
     observedAt,
     evidenceCache,
+    priorObservations,
   );
   const created: string[] = [];
   const updated: string[] = [];
@@ -435,6 +476,7 @@ export function materializeSpecialistPortfolio(
       definition.evidence_paths,
       observedAt,
       evidenceCache,
+      priorObservations,
     );
     const identityResult = syncSpecialistIdentity(input, definition, evidence);
     if (identityResult === "created") created.push(definition.specialist_id);
@@ -451,6 +493,7 @@ export function materializeSpecialistPortfolio(
       definition.evidence_paths,
       observedAt,
       evidenceCache,
+      priorObservations,
     );
     procedureMemory.push(
       materializeProcedureMemory(input, definition, evidence, observedAt),

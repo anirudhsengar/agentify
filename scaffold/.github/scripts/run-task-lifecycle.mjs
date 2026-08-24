@@ -7,6 +7,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { verifyMemoryManifest } from "./verify-memory-manifest.mjs";
 
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
 const MAX_EVENT_BYTES = 4 * 1024 * 1024;
@@ -448,8 +449,26 @@ class Controller {
       this.output({ status: "blocked", reason: "validation_policy_stale" });
       return false;
     }
-    if (this.policyConfig.repository_id !== undefined && String(this.policyConfig.repository_id) !== this.repositoryId) {
+    const policyRepository = this.policyConfig.repository;
+    if (
+      !policyRepository
+      || String(policyRepository.repository_id ?? "") !== this.repositoryId
+      || String(policyRepository.full_name ?? "") !== this.repository
+      || String(policyRepository.default_branch ?? "") !== this.defaultBranch()
+    ) {
       fail("Agentify task policy belongs to a different repository identity");
+    }
+    // Memory produced by an installation that never activated is analysis, not
+    // an authority to act on, and the manifest's own claim of promotion proves
+    // nothing on its own. Everything it asserts is recomputed from disk here.
+    const memoryFailure = verifyMemoryManifest(this.root, this.repository);
+    if (memoryFailure !== null) {
+      this.comment(
+        `Agentify refused to start implementation because ${memoryFailure}. `
+        + "No branch, model call, or application mutation was created."
+      );
+      this.output({ status: "blocked", reason: "memory_not_verified" });
+      return false;
     }
     this.requireRuntime("validate-policy", this.policyConfig.policy);
     this.policy = this.policyConfig.policy;

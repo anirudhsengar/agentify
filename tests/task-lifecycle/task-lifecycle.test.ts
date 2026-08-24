@@ -63,6 +63,9 @@ import {
 import type { SpecialistPortfolio } from "../../src/core/specialists/contracts.ts";
 import { specialistPortfolioDigest } from "../../src/core/specialists/validation.ts";
 import { makeSpecialistFixtureMap } from "../fixtures/specialist-map.ts";
+import { initializeTeamMemoryStore } from "../../src/core/memory/index.ts";
+import { buildSpecialistEvidenceReference } from "../../src/core/specialists/evidence.ts";
+import { synchronizeRepositorySpecialists } from "../../src/core/specialists/runtime.ts";
 
 const BASE = "a".repeat(40);
 const NEXT = "b".repeat(40);
@@ -145,6 +148,7 @@ function portfolio(): SpecialistPortfolio {
       domain: "task lifecycle",
       purpose: "Protect task state and publication contracts",
       owned_paths: ["src/core/task-lifecycle"],
+      secondary_paths: [],
       observed_paths: ["scaffold/.github"],
       contracts: ["durable state"],
       patterns: ["optimistic revision"],
@@ -494,6 +498,24 @@ test("deterministic plan cites specialist and procedure and binds a digest", () 
   assert.equal(recorded.state.prior_state_digest, recorded.intermediate_states?.[0]?.current_digest);
 });
 
+/** Install the specialist records that establish the audited commit. */
+function initializeMemoryAt(cwd: string, commit: string): void {
+  initializeTeamMemoryStore({
+    cwd,
+    repositoryId: "fixture/routing",
+    supportingCommit: commit,
+    evidence: [buildSpecialistEvidenceReference({
+      cwd,
+      supportingCommit: commit,
+      repositoryPath: "src/billing/index.ts",
+      sourceType: "validated_bootstrap",
+      observedAt: "2026-08-23T00:00:00.000Z",
+      actor: "maintainer",
+    })],
+    actor: "agentify-installer",
+  });
+}
+
 test("focused installed audit state is the canonical specialist-routing source", () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-focused-task-routing-"));
   const git = (...args: string[]): string => {
@@ -509,12 +531,54 @@ test("focused installed audit state is the canonical specialist-routing source",
     git("config", "user.email", "agentify@example.invalid");
     git("add", ".");
     git("commit", "-qm", "fixture");
+    initializeMemoryAt(cwd, git("rev-parse", "HEAD"));
     const mapPath = path.join(cwd, ".agentify", "runtime", "audit", "codebase_map.json");
     fs.mkdirSync(path.dirname(mapPath), { recursive: true });
     fs.writeFileSync(mapPath, `${JSON.stringify(makeSpecialistFixtureMap(), null, 2)}\n`);
+
+    // Routing authority comes from the installed policy, never from free-form
+    // audit fields, so planning refuses to run without one.
+    assert.throws(
+      () => loadCurrentSpecialistPortfolio(cwd),
+      /no attested validation command is available/,
+    );
+
+    const policyPath = path.join(cwd, ".github", "agentify-task-policy.json");
+    fs.mkdirSync(path.dirname(policyPath), { recursive: true });
+    fs.writeFileSync(policyPath, `${JSON.stringify({
+      configured: true,
+      policy: { validation_commands: [{ argv: ["npm", "test"] }] },
+    }, null, 2)}\n`);
+
+    const auditedHead = git("rev-parse", "HEAD");
+
+    // Without installed specialist records nothing establishes which commit the
+    // knowledge was audited at, so planning refuses rather than assuming HEAD.
+    assert.throws(
+      () => loadCurrentSpecialistPortfolio(cwd),
+      /no installed specialist records establish which commit/,
+    );
+    synchronizeRepositorySpecialists(cwd, ["npm test"]);
+
     const loaded = loadCurrentSpecialistPortfolio(cwd);
-    assert.equal(loaded.supporting_commit, git("rev-parse", "HEAD"));
+    assert.equal(loaded.supporting_commit, auditedHead);
     assert.ok(loaded.specialists.length > 0);
+    // The audit's build command is not attested, so it must not reach a
+    // specialist's executable surface.
+    for (const specialist of loaded.specialists) {
+      assert.deepEqual(specialist.validation_commands, ["npm test"]);
+    }
+
+    // Changing a file the audited map covers must invalidate the knowledge
+    // rather than being laundered into a portfolio stamped with the new head.
+    fs.writeFileSync(path.join(cwd, "src", "billing", "index.ts"), "export const billing = false;\n");
+    git("add", ".");
+    git("commit", "-qm", "change an audited module");
+    assert.notEqual(git("rev-parse", "HEAD"), auditedHead);
+    assert.throws(
+      () => loadCurrentSpecialistPortfolio(cwd),
+      /rerun the repository audit before planning/,
+    );
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

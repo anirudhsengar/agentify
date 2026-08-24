@@ -90,6 +90,19 @@ function assertSpecialist(
     allowEmpty: true,
     maximumItems: 256,
   });
+  assertNormalizedStrings(definition.secondary_paths, `specialist ${definition.specialist_id} secondary paths`, {
+    paths: true,
+    allowEmpty: true,
+    maximumItems: 256,
+  });
+  const contested = definition.secondary_paths.filter((candidate) =>
+    definition.owned_paths.includes(candidate)
+  );
+  if (contested.length > 0) {
+    fail(
+      `specialist ${definition.specialist_id} claims ${contested.join(", ")} as both primary and secondary`,
+    );
+  }
   assertNormalizedStrings(definition.observed_paths, `specialist ${definition.specialist_id} observed paths`, {
     paths: true,
     maximumItems: 512,

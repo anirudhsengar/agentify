@@ -3,11 +3,15 @@ import * as path from "node:path";
 import {
   TEAM_MEMORY_MAX_MANIFEST_ENTRIES,
   TeamMemoryManifestSchema,
+  type TeamMemoryActivation,
+  type TeamMemoryCanonicalMap,
   type TeamMemoryManifest,
   type TeamMemoryManifestEntry,
 } from "../schema.ts";
 import {
+  TEAM_MEMORY_CANONICAL_MAP_RELATIVE,
   TEAM_MEMORY_IGNORE_RELATIVE,
+  TEAM_MEMORY_INSTALLATION_REPORT_RELATIVE,
   TEAM_MEMORY_MANIFEST_RELATIVE,
   isTeamMemoryVisiblePath,
   normalizeMemoryRepositoryPath,
@@ -283,7 +287,11 @@ export function assertVisibleWriteCapacity(
       ...currentManifest,
       revision: currentManifest.revision + 1,
       entries,
-      root_digest: manifestRootDigest(entries),
+      root_digest: manifestRootDigest(
+        entries,
+        currentManifest.canonical_map,
+        currentManifest.installation_report,
+      ),
     };
     assertEntitySize(
       projectedManifest,
@@ -293,10 +301,54 @@ export function assertVisibleWriteCapacity(
   }
 }
 
-export function manifestRootDigest(entries: ReadonlyArray<TeamMemoryManifestEntry>): string {
-  return sha256Hex(entries.map((entry) =>
+/**
+ * Digest of the durable memory surface. The canonical audit map participates
+ * when it is recorded, so specialist routing and learning cannot be re-pointed
+ * at a different map without invalidating the manifest. Manifests written
+ * before the map was covered omit it and hash exactly as they did.
+ */
+export function manifestRootDigest(
+  entries: ReadonlyArray<TeamMemoryManifestEntry>,
+  canonicalMap?: TeamMemoryCanonicalMap | null,
+  installationReport?: TeamMemoryCanonicalMap | null,
+  activation?: TeamMemoryActivation | null,
+): string {
+  const surface = entries.map((entry) =>
     `${entry.path}\0${entry.kind}\0${entry.sha256}\0${entry.bytes}`
-  ).join("\n"));
+  ).join("\n");
+  const attached = (label: string, record: TeamMemoryCanonicalMap | null | undefined): string =>
+    record ? `\n\0${label}\0${record.path}\0${record.sha256}\0${record.bytes}` : "";
+  return sha256Hex(
+    surface
+    + attached("canonical_map", canonicalMap)
+    + attached("installation_report", installationReport)
+    + (activation
+      ? `\n\0activation\0${activation.state}\0${activation.disposition}\0${activation.promoted_at ?? ""}`
+      : ""),
+  );
+}
+
+/** Integrity record for the committed installation report, or null when absent. */
+export function installationReportIntegrity(cwd: string): TeamMemoryCanonicalMap | null {
+  return fileIntegrity(cwd, TEAM_MEMORY_INSTALLATION_REPORT_RELATIVE);
+}
+
+/** Integrity record for the canonical audit map, or null when it is absent. */
+export function canonicalMapIntegrity(cwd: string): TeamMemoryCanonicalMap | null {
+  return fileIntegrity(cwd, TEAM_MEMORY_CANONICAL_MAP_RELATIVE);
+}
+
+function fileIntegrity(cwd: string, relativePath: string): TeamMemoryCanonicalMap | null {
+  const absolute = path.join(repositoryRoot(cwd), ...relativePath.split("/"));
+  let content: Buffer;
+  try {
+    const stat = fs.lstatSync(absolute);
+    if (!stat.isFile() || stat.isSymbolicLink()) return null;
+    content = fs.readFileSync(absolute);
+  } catch {
+    return null;
+  }
+  return { path: relativePath, sha256: sha256Hex(content), bytes: content.byteLength };
 }
 
 export function validateManifestSemantics(manifest: TeamMemoryManifest): TeamMemoryManifest {
@@ -315,7 +367,14 @@ export function validateManifestSemantics(manifest: TeamMemoryManifest): TeamMem
   if (new Set(manifest.entries.map((entry) => entry.path)).size !== manifest.entries.length) {
     throw new TeamMemoryError("corrupt_state", "team memory manifest contains duplicate paths");
   }
-  if (manifest.root_digest !== manifestRootDigest(manifest.entries)) {
+  if (
+    manifest.root_digest !== manifestRootDigest(
+      manifest.entries,
+      manifest.canonical_map,
+      manifest.installation_report,
+      manifest.activation,
+    )
+  ) {
     throw new TeamMemoryError("corrupt_state", "team memory manifest root digest does not match its entries");
   }
   return manifest;
@@ -347,14 +406,20 @@ export function readManifestIfPresent(cwd: string): TeamMemoryManifest | null {
 
 export function writeManifest(
   cwd: string,
-  input: Omit<TeamMemoryManifest, "entries" | "root_digest">,
+  input: Omit<TeamMemoryManifest, "entries" | "root_digest" | "canonical_map" | "installation_report">,
   options?: MemoryStoreOptions,
 ): TeamMemoryManifest {
+  const activation = input.activation ?? null;
   const entries = scanVisibleEntries(cwd);
+  const canonicalMap = canonicalMapIntegrity(cwd);
+  const report = installationReportIntegrity(cwd);
   const manifest: TeamMemoryManifest = {
     ...input,
     entries,
-    root_digest: manifestRootDigest(entries),
+    root_digest: manifestRootDigest(entries, canonicalMap, report, activation),
+    ...(canonicalMap ? { canonical_map: canonicalMap } : {}),
+    ...(report ? { installation_report: report } : {}),
+    ...(activation ? { activation } : {}),
   };
   validateSchema<TeamMemoryManifest>(TeamMemoryManifestSchema, manifest, "team memory manifest");
   writeJsonAtomic(cwd, TEAM_MEMORY_MANIFEST_RELATIVE, manifest, options, MAX_MANIFEST_BYTES);
@@ -364,13 +429,20 @@ export function writeManifest(
 export function refreshManifestInternal(
   cwd: string,
   options?: MemoryStoreOptions,
+  override?: { activation?: TeamMemoryActivation | null },
 ): TeamMemoryManifest {
   const current = readTeamMemoryManifest(cwd);
   const entries = scanVisibleEntries(cwd);
-  const rootDigest = manifestRootDigest(entries);
+  const canonicalMap = canonicalMapIntegrity(cwd);
+  const report = installationReportIntegrity(cwd);
+  const activation = override?.activation ?? current.activation ?? null;
+  const rootDigest = manifestRootDigest(entries, canonicalMap, report, activation);
   if (
     current.root_digest === rootDigest
     && canonicalJson(current.entries) === canonicalJson(entries)
+    && canonicalJson(current.canonical_map ?? null) === canonicalJson(canonicalMap)
+    && canonicalJson(current.installation_report ?? null) === canonicalJson(report)
+    && canonicalJson(current.activation ?? null) === canonicalJson(activation)
   ) {
     return current;
   }
@@ -380,6 +452,9 @@ export function refreshManifestInternal(
     updated_at: nowIso(options),
     entries,
     root_digest: rootDigest,
+    ...(canonicalMap ? { canonical_map: canonicalMap } : {}),
+    ...(report ? { installation_report: report } : {}),
+    ...(activation ? { activation } : {}),
   };
   validateSchema<TeamMemoryManifest>(TeamMemoryManifestSchema, next, "team memory manifest");
   writeJsonAtomic(cwd, TEAM_MEMORY_MANIFEST_RELATIVE, next, options, MAX_MANIFEST_BYTES);

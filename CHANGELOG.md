@@ -4,6 +4,84 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Rollback-capable, fail-closed local staging for installed workflows, policy,
+  scripts, and runtimes. Agentify reruns the repository validation surface
+  against the final staged tree and restores the prior managed files on any
+  validation, canary, conflict, or GitHub-configuration failure.
+
+  This is not a complete transaction, and is deliberately not described as one.
+  Persistent memory is written before staging opens; GitHub configuration has no
+  compensating rollback and is forced to disabled rather than restored to its
+  previous state; an existing installation's prior enablement is not captured;
+  the rollback journal lives in an OS temporary directory, so a hard process
+  kill never reaches the restore path; and an overwritten Actions secret cannot
+  be recovered because GitHub does not disclose the previous value.
+- Complete specialist ownership gate for critical entry points, public
+  contracts, shared abstractions, and core module-graph paths, with structural
+  gap specialists when an expert portfolio is only partial.
+- Semantic audit coherence checks. A map with all ten coverage dimensions closed
+  is rejected when it contradicts itself: unknown project type, language,
+  domain hypothesis, or application layer beside recorded entry points; zero
+  file-size or test-runtime metrics; inconsistent documentation and lifecycle
+  flags; prose in a command field; a module marked parallelizable with its own
+  dependency; a pitfall with no line reference; expert evidence with an
+  unparsable timestamp or an unusable line range; generated-path contamination;
+  and stale bootstrap questions.
+- Committed installation report at `.agentify/installation-report.json`
+  recording the disposition, failed readiness checks, canaries, validation
+  results and consent state, the resolved portfolio, and one remediation
+  command. It is written outside the activation snapshot, so a refused
+  installation leaves it behind after the rollback.
+- Repository-specific `AGENTS.md` and `SETUP.md` generated from repository
+  evidence: the real branch model, the attested validation commands, recorded
+  conventions, the activation state, and an unprotected-default-branch
+  trust-root warning.
+- Deterministic installed-runtime inventory at
+  `.github/agentify/runtime-inventory.json` with the exact byte sizes and
+  SHA-256 digests of both bundled runtimes plus every bundled dependency and
+  its license, enforced against a per-file and total build-size budget, with
+  syntax and whitespace minification for the two repository-vendored bundles.
+- Manifest integrity now covers the canonical audit map, so specialist routing
+  and learning cannot be re-pointed at a different map without invalidating
+  `root_digest`.
+
+### Fixed
+
+- The two repository-vendored runtimes carry a generated-artifact banner
+  (`/* eslint-disable */`, `// @ts-nocheck`) so ordinary whole-repository
+  scanners accept them. A bundled dependency graph cannot satisfy an arbitrary
+  repository's lint rules, and the alternative was asking the repository to
+  weaken or edit its own validation configuration.
+
+- Node repositories now prefer `test-all` or `test:all` over narrower `test`
+  scripts when both exist.
+- Installed workflows are disabled through `AGENTIFY_ENABLED=false` before
+  readiness checks and remain disabled until configuration succeeds, accept only
+  exact control comments, and authorize the actor before checkout or dependency
+  installation.
+- Runtime repository binding now validates the nested policy repository ID,
+  full name, and default branch instead of consulting a nonexistent top-level
+  field.
+- Repositories with a verified contribution branch different from the default
+  branch remain analyzable-only instead of publishing against the wrong base.
+- Prose placeholders such as `(none — no build step)` are no longer persisted
+  as executable specialist or procedure commands, and the executable-command
+  predicate is shared by audit validation, specialist discovery, and installer
+  discovery instead of being duplicated.
+- A failed repository validation command can no longer be replaced by the
+  Agentify smoke validator. The gate reads the build manifest, so a declared
+  command that fails blocks the smoke while an audit hypothesis naming a
+  command the repository never defines does not.
+- A refused installation forces `AGENTIFY_ENABLED=false` after the rollback, so
+  workflows are never left enabled without the files they run.
+- Specialist ownership gaps are no longer reported for repositories with no
+  validation command, where no specialist of any kind can be built.
+- The unreachable standalone runtime-repair entry point is replaced by
+  `recognizedManagedInstallationPaths`, which staging uses to restage prior
+  Agentify output in place instead of preserving it as a user-owned conflict.
+
 ## [1.1.0] - 2026-08-20
 
 ### Added

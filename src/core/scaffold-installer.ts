@@ -1,3 +1,4 @@
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { alongsidePathFor } from "./apply-policy.ts";
@@ -17,6 +18,7 @@ export interface InstallScaffoldRuntimeOptions {
   packageRoot: string;
   taskPolicyConfiguration?: RepositoryTaskPolicyConfiguration;
   knownManagedPaths?: ReadonlySet<string>;
+  renderedDocuments?: Readonly<Record<string, string>>;
 }
 
 function listFiles(root: string): string[] {
@@ -100,6 +102,12 @@ export function installScaffoldRuntime(options: InstallScaffoldRuntimeOptions): 
       label: "task lifecycle",
     },
   ];
+  const inventorySource = path.join(options.packageRoot, "dist", "runtime-inventory.json");
+  if (!fs.existsSync(inventorySource)) {
+    throw new Error(
+      "Agentify runtime inventory is missing from dist; run the package build before installing the GitHub runtime",
+    );
+  }
   for (const runtime of bundledRuntimes) {
     if (!fs.existsSync(runtime.source)) {
       throw new Error(
@@ -118,8 +126,9 @@ export function installScaffoldRuntime(options: InstallScaffoldRuntimeOptions): 
       && options.taskPolicyConfiguration
       ? `${JSON.stringify(options.taskPolicyConfiguration, null, 2)}\n`
       : undefined;
+    const renderedContent = options.renderedDocuments?.[portableRelative] ?? policyContent;
     writes.push(copyManaged(source, destination, {
-      content: policyContent,
+      content: renderedContent,
       knownManaged: options.knownManagedPaths?.has(portableRelative) === true
         || (portableRelative === TASK_POLICY_PORTABLE_PATH && isAgentifyOwnedTaskPolicyFile(destination)),
     }));
@@ -130,5 +139,26 @@ export function installScaffoldRuntime(options: InstallScaffoldRuntimeOptions): 
       knownManaged: options.knownManagedPaths?.has(relative) === true,
     }));
   }
+
+  // Installation prepends a managed marker to each runtime, so the inventory is
+  // rebuilt from the installed bytes. It must describe the files that are
+  // actually in the repository, not the files in dist.
+  const provenance = JSON.parse(fs.readFileSync(inventorySource, "utf-8")) as Record<string, unknown>;
+  const inventoryPath = path.join(options.cwd, ".github", "agentify", "runtime-inventory.json");
+  const inventory = {
+    ...provenance,
+    files: bundledRuntimes.map((runtime) => {
+      const content = fs.readFileSync(runtime.destination);
+      return {
+        path: path.basename(runtime.destination),
+        bytes: content.byteLength,
+        sha256: crypto.createHash("sha256").update(content).digest("hex"),
+      };
+    }),
+  };
+  writes.push(copyManaged(inventorySource, inventoryPath, {
+    content: `${JSON.stringify(inventory, null, 2)}\n`,
+    knownManaged: options.knownManagedPaths?.has(".github/agentify/runtime-inventory.json") === true,
+  }));
   return writes;
 }

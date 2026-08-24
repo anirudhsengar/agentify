@@ -16,14 +16,15 @@ concurrency:
   group: agentify-learning-${{ github.repository }}
   cancel-in-progress: false
 
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-
 jobs:
   learn:
-    if: github.event_name != 'pull_request_target' || github.event.pull_request.merged == true
+    if: >-
+      vars.AGENTIFY_ENABLED == 'true' &&
+      (github.event_name != 'pull_request_target' || github.event.pull_request.merged == true)
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

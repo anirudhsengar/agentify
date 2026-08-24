@@ -8,6 +8,7 @@ import {
 import {
   TEAM_MEMORY_INITIALIZATION_JOURNAL_RELATIVE,
   TEAM_MEMORY_MANIFEST_RELATIVE,
+  TEAM_MEMORY_INSTALLATION_REPORT_ENTRY,
   TEAM_MEMORY_ROOT_ALLOWED_ENTRIES,
   teamMemoryInitializationJournalPath,
   teamMemoryRoot,
@@ -180,10 +181,14 @@ export function assertInitializationOwnershipAvailable(cwd: string): void {
   if (hasRecognizedManifestMarker(cwd) || readInitializationJournalIfPresent(cwd) !== null) {
     return;
   }
-  if (entries.length > 0) {
+  // A refused installation writes its report before memory exists. That record
+  // is Agentify-owned, so it must not read as user-owned state on the rerun the
+  // report itself asks for.
+  const unrecognized = entries.filter((entry) => entry.name !== TEAM_MEMORY_INSTALLATION_REPORT_ENTRY);
+  if (unrecognized.length > 0) {
     throw new TeamMemoryError(
       "unsafe_path",
-      `.agentify contains user-owned or unrecognized state (${entries.map((entry) => entry.name).sort().join(", ")}); no memory files were changed`,
+      `.agentify contains user-owned or unrecognized state (${unrecognized.map((entry) => entry.name).sort().join(", ")}); no memory files were changed`,
     );
   }
 }

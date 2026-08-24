@@ -40,7 +40,14 @@ export interface SpecialistDefinition {
   display_name: string;
   domain: string;
   purpose: string;
+  /** Paths this specialist is the single primary owner of. Routing targets these. */
   owned_paths: string[];
+  /**
+   * Paths this specialist has a real stake in but does not primarily own. A
+   * cross-cutting file has exactly one primary owner and any number of
+   * secondary reviewers, so routing stays deterministic.
+   */
+  secondary_paths: string[];
   observed_paths: string[];
   contracts: string[];
   patterns: string[];
@@ -107,6 +114,7 @@ export interface SpecialistRoutingRequest {
 
 export type RoutingReasonKind =
   | "owned_path"
+  | "secondary_path"
   | "observed_path"
   | "contract"
   | "task_signal"

@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { loadCanonicalMapAt } from "../audit/write-map-tool.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
 import {
@@ -19,6 +21,33 @@ export type RepositorySpecialistSyncResult =
       materialized: MaterializedPortfolioResult;
     };
 
+function installedValidationCommands(cwd: string): string[] | undefined {
+  const policyPath = path.join(cwd, ".github", "agentify-task-policy.json");
+  if (!fs.existsSync(policyPath)) return undefined;
+  try {
+    const configuration = JSON.parse(fs.readFileSync(policyPath, "utf8")) as {
+      configured?: unknown;
+      policy?: { validation_commands?: unknown } | null;
+    };
+    if (configuration.configured !== true) return [];
+    const entries = configuration.policy?.validation_commands;
+    if (!Array.isArray(entries)) return [];
+    const commands = entries.flatMap((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+      const argv = (entry as { argv?: unknown }).argv;
+      if (
+        !Array.isArray(argv)
+        || argv.length === 0
+        || !argv.every((argument) => typeof argument === "string" && argument.trim().length > 0)
+      ) return [];
+      return [argv.join(" ")];
+    });
+    return [...new Set(commands)].sort((left, right) => left.localeCompare(right));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Synchronize deterministic specialist and procedure expertise when the
  * vendor-neutral team-memory store has already been established by the trusted
@@ -26,6 +55,7 @@ export type RepositorySpecialistSyncResult =
  */
 export function synchronizeRepositorySpecialists(
   cwd: string,
+  authoritativeValidationCommands?: ReadonlyArray<string>,
 ): RepositorySpecialistSyncResult {
   if (!hasRecognizedManifestMarker(cwd)) return { status: "memory_absent" };
 
@@ -38,6 +68,7 @@ export function synchronizeRepositorySpecialists(
     map,
     supportingCommit,
     listTrackedFilesAtCommit(cwd, supportingCommit),
+    authoritativeValidationCommands ?? installedValidationCommands(cwd),
   );
   const materialized = materializeSpecialistPortfolio({
     cwd,

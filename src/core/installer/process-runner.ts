@@ -70,7 +70,7 @@ function resolveInvocation(request: InstallerProcessRequest): {
 
 function sanitizedEnvironment(
   input: NodeJS.ProcessEnv | undefined,
-  preserveGitHubAuthentication: boolean,
+  agentifyToolInvocation: boolean,
 ): NodeJS.ProcessEnv {
   const source = input ?? process.env;
   const output: NodeJS.ProcessEnv = {};
@@ -78,18 +78,26 @@ function sanitizedEnvironment(
     if (value === undefined) continue;
     if (
       /^(?:GITHUB_TOKEN|GH_TOKEN)$/i.test(name)
-      && preserveGitHubAuthentication
+      && agentifyToolInvocation
     ) {
       output[name] = value;
       continue;
     }
-    if (!preserveGitHubAuthentication && PROVIDER_ENV_KEY_SET.has(name)) continue;
+    if (!agentifyToolInvocation && PROVIDER_ENV_KEY_SET.has(name)) continue;
     if (/^(?:GITHUB_TOKEN|GH_TOKEN|.*(?:SECRET|TOKEN|PASSWORD|API_KEY|ACCESS_KEY|PRIVATE_KEY))$/i.test(name)) continue;
     output[name] = value;
   }
+  // CI is what the repository's own automation sets, so validation observes the
+  // same behavior a maintainer would see upstream.
   output.CI = "1";
-  output.NO_COLOR = "1";
-  if (!preserveGitHubAuthentication) {
+  if (agentifyToolInvocation) {
+    // Only Agentify's own tool output is forced monochrome, because Agentify
+    // parses it. NO_COLOR is a behavioral contract, not formatting: forcing it
+    // on repository validation makes a repository that implements NO_COLOR fail
+    // its own colour tests, so Agentify would be breaking the very validation
+    // it is trying to verify.
+    output.NO_COLOR = "1";
+  } else {
     delete output.GITHUB_TOKEN;
     delete output.GH_TOKEN;
   }

@@ -36,7 +36,7 @@ test("specialist synchronization occurs during trusted finalization after the au
   assert.ok(recoveryIndex >= 0);
   assert.ok(runIndex > recoveryIndex);
   assert.ok(finalizeIndex > runIndex);
-  assert.ok(finalization.indexOf("synchronizeRepositorySpecialists(input.cwd)") > finalization.indexOf("initializePersistentTeam"));
+  assert.ok(finalization.indexOf("synchronizeRepositorySpecialists(") > finalization.indexOf("initializePersistentTeam"));
 });
 
 test("specialist architecture and installed-package coverage stay indexed", () => {

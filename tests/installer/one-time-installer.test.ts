@@ -11,7 +11,7 @@ import {
   inspectRepositoryForInstallation,
   prepareOneTimeInstallationState,
   refinePreflightWithAudit,
-  repairInstalledRuntime,
+  recognizedManagedInstallationPaths,
   repositoryTaskPolicySchemaStatus,
   repositoryValidationApprovalCurrent,
   type InstallerProcessRequest,
@@ -80,7 +80,9 @@ function tempRepo(prefix: string, scripts: Record<string, string> = {
   fs.writeFileSync(path.join(cwd, "tests", "index.test.ts"), "// test\n");
   fs.writeFileSync(path.join(cwd, "package.json"), `${JSON.stringify({ scripts }, null, 2)}\n`);
   fs.writeFileSync(path.join(cwd, "package-lock.json"), "{}\n");
-  fs.writeFileSync(path.join(cwd, "README.md"), "# Test fixture\n");
+  // The evidence gate verifies quotations against the file, so the fixture
+  // README must contain the excerpt the fixture map cites.
+  fs.writeFileSync(path.join(cwd, "README.md"), "# Test fixture\n\nTest fixture evidence citation.\n");
   return cwd;
 }
 
@@ -92,6 +94,17 @@ function failed(stderr: string, status = 1): InstallerProcessResult {
   return { status, stdout: "", stderr, timedOut: false, errorMessage: null };
 }
 
+function writeFixtureDist(packageRoot: string): void {
+  fs.mkdirSync(path.join(packageRoot, "dist"), { recursive: true });
+  for (const name of ["task-runtime.mjs", "learning-runtime.mjs"]) {
+    fs.writeFileSync(path.join(packageRoot, "dist", name), "// agentify:managed\n");
+  }
+  fs.writeFileSync(
+    path.join(packageRoot, "dist", "runtime-inventory.json"),
+    `${JSON.stringify({ schema_version: "1", files: [] }, null, 2)}\n`,
+  );
+}
+
 function git(cwd: string, ...args: string[]): string {
   const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf-8" });
   assert.equal(result.status, 0, result.stderr);
@@ -101,6 +114,8 @@ function git(cwd: string, ...args: string[]): string {
 interface FakeRunnerOptions {
   origin?: string;
   head?: string | null;
+  contributionBranches?: ReadonlyArray<string>;
+  branchLookup?: "error";
   permission?: Record<string, boolean>;
   protection?: "protected" | "unprotected" | "unknown";
   validationStatus?: number;
@@ -133,6 +148,14 @@ function fakeRunner(cwd: string, options: FakeRunnerOptions = {}): InstallerProc
         }));
       }
       if (key === "gh api user") return ok(JSON.stringify({ login: "maintainer" }));
+      if (key.startsWith("gh api repos/owner/repo/branches/") && !key.endsWith("/protection")) {
+        if (options.branchLookup === "error") return failed("HTTP 500: Internal Server Error");
+        const encoded = key.slice("gh api repos/owner/repo/branches/".length);
+        const branch = decodeURIComponent(encoded);
+        return options.contributionBranches?.includes(branch)
+          ? ok(JSON.stringify({ name: branch }))
+          : failed("HTTP 404: Not Found");
+      }
       if (key === "gh api repos/owner/repo/actions/permissions/workflow") {
         return ok(JSON.stringify({ default_workflow_permissions: "read", can_approve_pull_request_reviews: false }));
       }
@@ -196,13 +219,37 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
     });
     assert.equal(report.disposition, "analyzable-only");
     assert.ok(report.blockers.some((entry) => (
-      entry.code === "validation_failed" && /after Agentify installed/.test(entry.message)
-    )));
+      entry.code === "validation_failed" && /against the tree Agentify staged/.test(entry.message)
+    )), `expected a staged validation failure; got ${JSON.stringify(report.blockers, null, 2)}`);
     assert.equal(report.github_issue_intake_enabled, false);
+    // A refused installation must not leave memory that claims to be promoted.
+    const memory = JSON.parse(
+      fs.readFileSync(path.join(cwd, ".agentify/manifest.json"), "utf-8"),
+    ) as { activation?: { state: string; disposition: string; promoted_at: string | null } };
+    assert.equal(memory.activation?.state, "analysis_only");
+    assert.equal(memory.activation?.disposition, "analyzable-only");
+    assert.equal(memory.activation?.promoted_at, null);
     assert.equal(
       requests.some((request) => request.program === "gh" && request.args[0] === "label"),
       false,
     );
+    const enabledWrites = requests
+      .filter((request) => request.args.join(" ").startsWith("variable set AGENTIFY_ENABLED --body "))
+      .map((request) => request.args[4]);
+    // Disabled before the readiness checks and again after the rollback, so a
+    // refused installation never leaves workflows enabled without their files.
+    assert.ok(enabledWrites.length >= 1);
+    assert.deepEqual([...new Set(enabledWrites)], ["false"]);
+    for (const relative of [
+      "AGENTS.md",
+      "SETUP.md",
+      ".github/agentify/task-runtime.mjs",
+      ".github/agentify/learning-runtime.mjs",
+      ".github/workflows/agentify-issue.yml",
+      ".github/workflows/agentify-learn.yml",
+    ]) {
+      assert.equal(fs.existsSync(path.join(cwd, relative)), false, `${relative} must be rolled back`);
+    }
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -447,6 +494,182 @@ async function testValidationSmokeScaffoldedWhenMissing(): Promise<void> {
   }
 }
 
+async function testFailedRepositoryValidationIsNotReplacedBySmoke(): Promise<void> {
+  const cwd = tempRepo("agentify-installer-no-smoke-mask-", { test: "node --test" });
+  try {
+    const preflight = inspectRepositoryForInstallation({
+      cwd,
+      runner: fakeRunner(cwd, { validationStatus: 1 }),
+      runValidation: true,
+    });
+    assert.ok(preflight.blockers.some((entry) => entry.code === "validation_failed"));
+    const refined = refinePreflightWithAudit({ cwd, preflight, map: null });
+    assert.ok(refined.preflight.blockers.some((entry) => entry.code === "validation_failed"));
+    assert.equal(
+      refined.preflight.commands.some((command) => command.command_id === "test-agentify-validation-smoke"),
+      false,
+    );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testCompleteNodeValidationScriptIsPreferred(): Promise<void> {
+  const cwd = tempRepo("agentify-installer-test-all-", {
+    test: "node --test",
+    "test-all": "node --test && npm run check",
+    check: "eslint .",
+  });
+  try {
+    const preflight = inspectRepositoryForInstallation({
+      cwd,
+      runner: fakeRunner(cwd),
+      runValidation: false,
+    });
+    assert.deepEqual(
+      preflight.commands.find((command) => command.kind === "test")?.argv,
+      ["npm", "run", "test-all"],
+    );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testVerifiedContributionBranchMismatchBlocksActivation(): Promise<void> {
+  const blocked = (
+    label: string,
+    configure: (map: ReturnType<typeof makeSpecialistFixtureMap>) => void,
+    options: FakeRunnerOptions,
+  ): void => {
+    const cwd = tempRepo(`agentify-installer-branch-${label}-`);
+    try {
+      const runner = fakeRunner(cwd, options);
+      const preflight = inspectRepositoryForInstallation({ cwd, runner, runValidation: true });
+      const map = makeSpecialistFixtureMap();
+      configure(map);
+      const refined = refinePreflightWithAudit({ cwd, preflight, map, runner });
+      assert.equal(refined.preflight.disposition, "analyzable-only", label);
+      assert.ok(
+        refined.preflight.blockers.some((entry) => entry.code === "unsupported_contribution_branch"),
+        `${label}: expected an unsupported_contribution_branch blocker`,
+      );
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  };
+
+  blocked("main-branch", (map) => {
+    map.operational_surface.git_workflow.main_branch = "develop";
+  }, { contributionBranches: ["develop"] });
+
+  // The structured policy is authoritative even when main_branch is the default.
+  blocked("structured", (map) => {
+    map.operational_surface.git_workflow.contribution_branches = [{
+      name: "develop",
+      purpose: "pull_request_base",
+      evidence: { path: "CONTRIBUTING.md", line_start: 15, line_end: 15 },
+    }];
+  }, { contributionBranches: ["develop"] });
+
+  // Failing to verify must fail closed: publishing against the wrong base is
+  // worse than refusing to activate.
+  blocked("unverifiable", (map) => {
+    map.operational_surface.git_workflow.main_branch = "develop";
+  }, { branchLookup: "error" });
+
+  // A documented branch the repository does not have is a stale or wrong-repository
+  // policy, not permission to publish against the default branch instead.
+  blocked("absent", (map) => {
+    map.operational_surface.git_workflow.main_branch = "develop";
+  }, { contributionBranches: [] });
+
+  // The documented base matching the default branch is the only passing case.
+  const cwd = tempRepo("agentify-installer-branch-match-");
+  try {
+    const runner = fakeRunner(cwd, { contributionBranches: ["main"] });
+    const preflight = inspectRepositoryForInstallation({ cwd, runner, runValidation: true });
+    const map = makeSpecialistFixtureMap();
+    map.operational_surface.git_workflow.main_branch = "main";
+    const refined = refinePreflightWithAudit({ cwd, preflight, map, runner });
+    assert.equal(
+      refined.preflight.blockers.some((entry) => entry.code === "unsupported_contribution_branch"),
+      false,
+      "a contribution branch equal to the default branch must not block",
+    );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testControllerReadsOnlyFieldsTheInstallerEmits(): Promise<void> {
+  const cwd = tempRepo("agentify-installer-policy-binding-");
+  try {
+    const preflight = inspectRepositoryForInstallation({ cwd, runner: fakeRunner(cwd), runValidation: true });
+    const { configuration } = approvedConfiguration(cwd, preflight);
+    assert.equal(configuration.configured, true);
+
+    const controller = fs.readFileSync(
+      path.join(installedPackageRoot(), "scaffold", ".github", "scripts", "run-task-lifecycle.mjs"),
+      "utf-8",
+    );
+
+    // Every policy field the trusted controller reads without a fallback must
+    // exist in the artifact the installer actually writes. A read of a field
+    // the installer never emits is a check that silently never runs.
+    const required = new Set<string>();
+    for (const match of controller.matchAll(/policyConfig\??\.([A-Za-z_][A-Za-z0-9_]*)([^\n]*)/g)) {
+      const field = match[1]!;
+      const rest = match[2] ?? "";
+      if (/^\s*(?:\?\?|\|\|)/.test(rest)) continue;
+      required.add(field);
+    }
+    assert.ok(required.has("repository"), "the controller must bind the repository identity");
+    const record = configuration as unknown as Record<string, unknown>;
+    const missing = [...required].filter((field) => !(field in record)).sort();
+    assert.deepEqual(missing, [], `controller reads policy fields the installer never emits: ${missing.join(", ")}`);
+
+    // The nested identity comparison must resolve against the emitted shape.
+    const identity = record.repository as Record<string, unknown> | null;
+    assert.ok(identity);
+    for (const field of ["repository_id", "full_name", "default_branch"]) {
+      assert.equal(typeof identity[field], "string", `repository.${field} must be emitted as a string`);
+      assert.ok(String(identity[field]).length > 0, `repository.${field} must not be empty`);
+    }
+    assert.equal("repository_id" in record, false, "identity must not be read from a nonexistent top-level field");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testRepositoryValidationEnvironmentIsNotForcedMonochrome(): Promise<void> {
+  const baseEnvironment = { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" };
+  const probe = "console.log(`NO_COLOR=${process.env.NO_COLOR ?? \"unset\"} CI=${process.env.CI ?? \"unset\"}`)";
+
+  // NO_COLOR is a behavioral contract, not formatting. Forcing it on repository
+  // validation makes a repository that implements NO_COLOR fail its own colour
+  // tests, so Agentify would break the validation it is trying to verify.
+  const validation = DEFAULT_INSTALLER_PROCESS_RUNNER.run({
+    program: process.execPath,
+    args: ["-e", probe],
+    cwd: process.cwd(),
+    timeoutMs: 30_000,
+    env: baseEnvironment,
+  });
+  assert.equal(validation.status, 0, validation.stderr);
+  assert.match(validation.stdout, /NO_COLOR=unset/);
+  assert.match(validation.stdout, /CI=1/);
+
+  // An explicit NO_COLOR in the maintainer's own environment still passes through.
+  const inherited = DEFAULT_INSTALLER_PROCESS_RUNNER.run({
+    program: process.execPath,
+    args: ["-e", probe],
+    cwd: process.cwd(),
+    timeoutMs: 30_000,
+    env: { ...baseEnvironment, NO_COLOR: "1" },
+  });
+  assert.match(inherited.stdout, /NO_COLOR=1/);
+}
+
 async function testDependencyValidationRequiresLockfile(): Promise<void> {
   const cwd = tempRepo("agentify-installer-missing-lock-");
   try {
@@ -497,6 +720,7 @@ async function testGitHubConfigurationAndSecretStdin(): Promise<void> {
     });
     assert.ok(result.labels_configured >= 10);
     assert.ok(result.variables_configured.includes("AGENTIFY_REPOSITORY_ID"));
+    assert.ok(result.variables_configured.includes("AGENTIFY_ENABLED"));
     assert.ok(!result.variables_configured.includes("PI_VERSION"));
     assert.ok(!result.variables_configured.includes("AGENT_BOT_LOGIN"));
     assert.equal(result.provider_secret_configured, "PI_API_KEY");
@@ -512,6 +736,11 @@ async function testGitHubConfigurationAndSecretStdin(): Promise<void> {
       !request.args.includes("never-on-command-line")
       && !request.args.includes("also-never-on-command-line")
     )));
+    const enabledWrites = requests.filter((request) =>
+      request.args.join(" ").startsWith("variable set AGENTIFY_ENABLED --body ")
+    );
+    assert.deepEqual(enabledWrites.map((request) => request.args[4]), ["false", "true"]);
+    assert.ok(requests.indexOf(enabledWrites[1]!) > requests.indexOf(secrets.at(-1)!));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -576,7 +805,18 @@ async function testInitialInstallationAndIdempotentAttach(): Promise<void> {
       runner,
     });
     assert.equal(first.disposition, "ready");
-    assert.equal(first.specialists_installed, 1);
+    const promotedMemory = JSON.parse(
+      fs.readFileSync(path.join(cwd, ".agentify/manifest.json"), "utf-8"),
+    ) as { activation?: { state: string; promoted_at: string | null } };
+    assert.equal(promotedMemory.activation?.state, "promoted");
+    assert.equal(typeof promotedMemory.activation?.promoted_at, "string");
+    assert.ok(first.specialists_installed >= 1);
+    assert.equal(
+      first.specialist_warnings.some((warning) =>
+        warning.startsWith("Critical specialist ownership is incomplete:")
+      ),
+      false,
+    );
     assert.ok(first.procedures_installed > 0);
     assert.ok(fs.existsSync(path.join(cwd, ".agentify/manifest.json")));
     for (const relative of [
@@ -598,7 +838,15 @@ async function testInitialInstallationAndIdempotentAttach(): Promise<void> {
       runner,
     });
     assert.equal(second.disposition, "ready");
-    assert.equal(fs.readFileSync(path.join(cwd, ".agentify/manifest.json"), "utf-8"), manifestBefore);
+    const manifestAfter = fs.readFileSync(path.join(cwd, ".agentify/manifest.json"), "utf-8");
+    if (manifestAfter !== manifestBefore) {
+      const a = JSON.parse(manifestBefore) as Record<string, unknown>;
+      const b = JSON.parse(manifestAfter) as Record<string, unknown>;
+      const differing = [...new Set([...Object.keys(a), ...Object.keys(b)])]
+        .filter((key) => JSON.stringify(a[key]) !== JSON.stringify(b[key]))
+        .map((key) => `${key}: ${JSON.stringify(a[key])} -> ${JSON.stringify(b[key])}`);
+      assert.fail(`manifest changed on idempotent rerun:\n${differing.join("\n").slice(0, 1200)}`);
+    }
     const unsupportedProvider = finalizeOneTimeInstallation({
       cwd,
       preflight,
@@ -743,10 +991,7 @@ async function testDriftedAgentifyPolicyRecognizedAsOwned(): Promise<void> {
   try {
     fs.mkdirSync(path.join(packageRoot, "scaffold", ".github"), { recursive: true });
     fs.writeFileSync(path.join(packageRoot, "scaffold", ".github", "agentify-task-policy.json"), "{}\n");
-    fs.mkdirSync(path.join(packageRoot, "dist"), { recursive: true });
-    for (const name of ["task-runtime.mjs", "learning-runtime.mjs"]) {
-      fs.writeFileSync(path.join(packageRoot, "dist", name), "// agentify:managed\n");
-    }
+    writeFixtureDist(packageRoot);
     const preflight = inspectRepositoryForInstallation({ cwd, runner: fakeRunner(cwd), runValidation: true });
     const configuration = approvedConfiguration(cwd, preflight).configuration;
     const policyPath = path.join(cwd, ".github", "agentify-task-policy.json");
@@ -806,11 +1051,7 @@ async function testRecognizedRuntimeRepairPreservesUserWorkflow(): Promise<void>
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.writeFileSync(destination, content);
     }
-    for (const name of ["task-runtime.mjs", "learning-runtime.mjs"]) {
-      const destination = path.join(packageRoot, "dist", name);
-      fs.mkdirSync(path.dirname(destination), { recursive: true });
-      fs.writeFileSync(destination, "// agentify:managed\n");
-    }
+    writeFixtureDist(packageRoot);
     prepareOneTimeInstallationState(cwd, preflight);
     const policyPath = path.join(cwd, ".github", "agentify-task-policy.json");
     fs.mkdirSync(path.dirname(policyPath), { recursive: true });
@@ -819,14 +1060,20 @@ async function testRecognizedRuntimeRepairPreservesUserWorkflow(): Promise<void>
     fs.mkdirSync(path.dirname(userWorkflow), { recursive: true });
     fs.writeFileSync(userWorkflow, "name: user-owned\n");
 
-    const repair = repairInstalledRuntime({
+    const knownManagedPaths = recognizedManagedInstallationPaths(cwd);
+    assert.equal(knownManagedPaths.has(".github/agentify-task-policy.json"), true);
+    assert.equal(knownManagedPaths.has(".github/workflows/agentify-issue.yml"), false);
+    const repaired = installScaffoldRuntime({
       cwd,
       packageRoot,
-      agentifyVersion: "1.0.0",
-      preflight,
-      validationApproval: approvedConfiguration(cwd, preflight).approval,
+      taskPolicyConfiguration: buildRepositoryTaskPolicyConfiguration(
+        preflight,
+        approvedConfiguration(cwd, preflight).approval,
+        cwd,
+      ),
+      knownManagedPaths,
     });
-    assert.equal(repair.status, "conflict");
+    assert.ok(repaired.some((write) => write.action === "alongside"));
     assert.equal(fs.readFileSync(userWorkflow, "utf-8"), "name: user-owned\n");
     assert.ok(fs.existsSync(path.join(cwd, ".github/workflows/agentify-issue.agentify.yml")));
     const policy = JSON.parse(fs.readFileSync(policyPath, "utf-8")) as { configured: boolean };
@@ -848,6 +1095,11 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "unauthorized actor is analyzable only", fn: testUnauthorizedActorIsAnalyzableOnly },
   { name: "missing and unsafe validation", fn: testMissingAndUnsafeValidation },
   { name: "validation smoke scaffolded when missing", fn: testValidationSmokeScaffoldedWhenMissing },
+  { name: "failed repository validation is not replaced by smoke", fn: testFailedRepositoryValidationIsNotReplacedBySmoke },
+  { name: "complete Node validation script is preferred", fn: testCompleteNodeValidationScriptIsPreferred },
+  { name: "verified contribution branch mismatch blocks activation", fn: testVerifiedContributionBranchMismatchBlocksActivation },
+  { name: "controller reads only policy fields the installer emits", fn: testControllerReadsOnlyFieldsTheInstallerEmits },
+  { name: "repository validation environment is not forced monochrome", fn: testRepositoryValidationEnvironmentIsNotForcedMonochrome },
   { name: "dependency validation requires lockfile", fn: testDependencyValidationRequiresLockfile },
   { name: "GitHub configuration and secret stdin", fn: testGitHubConfigurationAndSecretStdin },
   { name: "initial installation and idempotent attach", fn: testInitialInstallationAndIdempotentAttach },
@@ -855,7 +1107,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "one-command initial audit installation", fn: testOneCommandInitialAuditInstallation },
   { name: "user-owned workflow conflict fails closed", fn: testUserOwnedWorkflowConflictFailsClosed },
   { name: "drifted Agentify policy recognized as owned", fn: testDriftedAgentifyPolicyRecognizedAsOwned },
-  { name: "recognized runtime repair preserves user workflow", fn: testRecognizedRuntimeRepairPreservesUserWorkflow },
+  { name: "recognized managed paths preserve a user workflow", fn: testRecognizedRuntimeRepairPreservesUserWorkflow },
 ];
 
 let passed = 0;

@@ -84,7 +84,8 @@ type CoverageDimensionName = (typeof COVERAGE_DIMENSIONS)[number];
 
 export const COVERAGE_REPAIR_HINTS: Record<CoverageDimensionName, string> = {
     D1_topography:
-        "include skeleton.top_level_tree (array of root paths), skeleton.entry_points " +
+        "include skeleton.top_level_tree (array of root paths, excluding dependency and cache " +
+        "directories such as node_modules, .venv, and __pycache__), skeleton.entry_points " +
         "(array of { path, role, language, run_command }), and " +
         "skeleton.first_5_files_for_fresh_agent (array of { path, why }) in the same delta",
     D2_module_boundaries:
@@ -92,7 +93,8 @@ export const COVERAGE_REPAIR_HINTS: Record<CoverageDimensionName, string> = {
         "(array of string arrays) or module_graph.shared_abstractions (array of paths)",
     D3_type_contract:
         "use the top-level observed_type_contract parameter, or include " +
-        "type_contract_surface.typescript_interfaces, pydantic_models, db_models, stable_types, or one_type_trace. " +
+        "type_contract_surface.typescript_interfaces, pydantic_models, db_models, or stable_types, " +
+        "and always include type_contract_surface.one_type_trace tracing one real type end to end. " +
         "One real type is sufficient in a small repository",
     D4_conventions:
         "include conventions.naming.files, conventions.naming.functions, and conventions.logging.pattern",
@@ -101,12 +103,23 @@ export const COVERAGE_REPAIR_HINTS: Record<CoverageDimensionName, string> = {
     D6_validation:
         "include validation_surface.test_command and per_change_type.chore/bug/feature.mandatory arrays",
     D7_operational:
-        "include operational_surface.build.command, operational_surface.run.command, and operational_surface.git_workflow.main_branch",
+        "include operational_surface.build.command, operational_surface.run.command, and " +
+        "operational_surface.git_workflow.main_branch as a bare git ref name. When CONTRIBUTING documents " +
+        "which branch pull requests target, that branch must appear in main_branch or in " +
+        "contribution_branches with purpose 'pull_request_base'. The build command must " +
+        "be a command the repository actually declares and must not match any security_surface.bash_blocked_patterns entry. " +
+        "When the repository " +
+        "documents which branch contributions target, also record " +
+        "operational_surface.git_workflow.contribution_branches with purpose 'pull_request_base'",
     D8_security:
-        "include security_surface.paths.zero_access (array of strings) and at least one entry in " +
-        "security_surface.bash_blocked_patterns (array of strings) or security_surface.damage_control_rules (array of strings)",
+        "exclude execution-altering variables such as NODE_OPTIONS, LD_PRELOAD, and PYTHONPATH from " +
+        "security_surface.env_allowlist, and include security_surface.paths.zero_access (array of strings), at least one entry in " +
+        "security_surface.bash_blocked_patterns (array of strings) or security_surface.damage_control_rules (array of strings), " +
+        "and at least one entry in security_surface.security_checklist (tools, commands, paths, env, blocks, or logs)",
     D9_process:
-        "include meta.lifecycle.sdlc_model (string) and meta.lifecycle.issue_types (array of strings)",
+        "include meta.lifecycle.sdlc_model (string) and meta.lifecycle.issue_types (array of strings). " +
+        "Keep meta.lifecycle.review_loop and documentation_loop consistent with sdlc_model: do not describe " +
+        "a review process in the narrative while recording review_loop.present = false",
     D10_documentation:
         "include meta.documentation.readme_metrics with present=true and section_count>0, or has_ai_docs/has_app_docs/has_specs true",
 };

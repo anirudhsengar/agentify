@@ -49,6 +49,10 @@ test("task lifecycle owns the writable application runtime without duplicating l
 test("generated workflow is trusted-default-branch, issue-only, serialized, and draft-only", () => {
   const workflow = read("scaffold/.github/workflows/agentify-issue.yml");
   const controller = read("scaffold/.github/scripts/run-task-lifecycle.mjs");
+  assert.match(controller, /import \{ verifyMemoryManifest \} from "\.\/verify-memory-manifest\.mjs"/);
+  assert.match(controller, /verifyMemoryManifest\(this\.root, this\.repository\)/);
+  // The controller must not re-implement the check by reading fields directly.
+  assert.doesNotMatch(controller, /activation\.state !== "promoted"/);
   const publisher = read("scaffold/.github/scripts/publish-task-draft.mjs");
   assert.match(workflow, /issues:\s*\n\s*types: \[labeled\]/);
   assert.match(workflow, /issue_comment:\s*\n\s*types: \[created\]/);
@@ -58,7 +62,11 @@ test("generated workflow is trusted-default-branch, issue-only, serialized, and 
   assert.match(workflow, /npm install --global npm@11\.19\.0 --ignore-scripts --no-audit --no-fund/);
   assert.match(workflow, /hashFiles\('package-lock\.json', 'npm-shrinkwrap\.json'\)/);
   assert.match(workflow, /npm ci --ignore-scripts --no-audit --no-fund/);
-  assert.match(workflow, /github\.event\.sender\.type == 'User'/);
+  assert.doesNotMatch(workflow, /github\.event\.sender\.type == 'User'/);
+  assert.match(workflow, /vars\.AGENTIFY_ENABLED == 'true'/);
+  assert.match(workflow, /github\.event\.comment\.body == '\/agent approve'/);
+  assert.match(workflow, /needs: authorize/);
+  assert.match(workflow, /collaborators\/\$\{ACTOR\}\/permission/);
   assert.match(workflow, /GITHUB_TOKEN:\s*\$\{\{ github\.token \}\}/);
   assert.match(workflow, /AGENTIFY_PR_TOKEN:\s*\$\{\{ secrets\.AGENT_PAT \}\}/);
   assert.match(workflow, /agentify-issue-\$\{\{ github\.repository_id \}\}-\$\{\{ github\.event\.issue\.number \}\}/);

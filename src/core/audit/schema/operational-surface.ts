@@ -33,8 +33,44 @@ const CiCdSchema = Type.Object({
     artifacts: Type.Array(Type.String()),
 });
 
+const ContributionBranchSchema = Type.Object({
+    name: Type.String({
+        description:
+            "Bare git ref name only, for example 'develop'. Never prose, never a " +
+            "name with an explanation appended. Explanations belong in `note`.",
+    }),
+    purpose: StringEnum([
+        "pull_request_base",
+        "release",
+        "maintenance",
+        "development",
+    ] as const, {
+        description:
+            "pull_request_base is the branch contributions are opened against. " +
+            "Record it whenever the repository documents one.",
+    }),
+    evidence: Type.Object({
+        path: Type.String({ description: "Repository file documenting this branch." }),
+        line_start: Type.Number({ description: "1-indexed inclusive." }),
+        line_end: Type.Number({ description: "1-indexed inclusive." }),
+    }),
+    note: Type.Optional(Type.String({
+        description: "Free-form clarification. Never put prose in `name`.",
+    })),
+});
+
 const GitWorkflowSchema = Type.Object({
-    main_branch: Type.String(),
+    main_branch: Type.String({
+        description:
+            "Bare git ref name of the repository's primary integration branch. " +
+            "A bare ref name only: no spaces, no parenthetical explanation.",
+    }),
+    contribution_branches: Type.Optional(Type.Array(ContributionBranchSchema, {
+        description:
+            "Structured branch policy. Record one entry with purpose " +
+            "'pull_request_base' when the repository documents which branch " +
+            "contributions target.",
+    })),
     branch_naming: Type.String(),
     worktree_pattern: Type.String(),
     cleanup: Type.String(),

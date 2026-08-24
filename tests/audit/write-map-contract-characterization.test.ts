@@ -25,7 +25,15 @@ const MAX_INLINE_MAP_BYTES = 100_000;
 
 function tempDir(name: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `agentify-write-map-${name}-`));
-  fs.writeFileSync(path.join(dir, "README.md"), "Test fixture evidence citation.");
+  // The evidence gate verifies that a cited excerpt appears in the file it
+  // names, so the fixture README has to contain every excerpt this suite cites.
+  fs.writeFileSync(path.join(dir, "README.md"), [
+    "Test fixture evidence citation.",
+    "Fixture evidence for D1_topography.",
+    "Fixture evidence for D3_type_contract.",
+    "Fixture evidence for D8_security.",
+    "",
+  ].join("\n"));
   return dir;
 }
 
@@ -687,7 +695,11 @@ async function testSubstanceFailuresPersistAsGapsWithRepairGuidance(): Promise<v
         name: "AddInput",
         fields: ["left", "right"],
       },
-      delta: {},
+      delta: {
+        type_contract_surface: {
+          one_type_trace: { name: "AddInput", flow: ["src/types.ts", "src/index.ts"] },
+        },
+      },
     },
     cwd,
   );
@@ -728,6 +740,7 @@ async function testSubstanceFailuresPersistAsGapsWithRepairGuidance(): Promise<v
       delta: {
         security_surface: {
           damage_control_rules: ["Never read or commit .env files or credentials."],
+          security_checklist: { blocks: ["Reading .env or credential files is blocked."] },
         },
       },
     },
@@ -826,19 +839,22 @@ async function testRepairsDoubleWrappedAndBatchedTransports(): Promise<void> {
   // A delta nested as `delta.delta` is unwrapped.
   const nestedDelta = await executeTool(
     tools.writeMapDeltaTool,
-    { delta: { delta: { open_questions: ["unwrapped transport"] } } },
+    { delta: { delta: { meta: { domain_hypothesis: "unwrapped transport" } } } },
     cwd,
   );
   assert.equal(isToolError(nestedDelta), false, resultText(nestedDelta));
-  assert.ok(readJson(tools.canonicalMapPath(cwd)).open_questions.includes("unwrapped transport"));
+  assert.equal(
+    readJson(tools.canonicalMapPath(cwd)).meta.domain_hypothesis,
+    "unwrapped transport",
+  );
 
   // Several dimension deltas batched as an array are deep-merged in order.
   const batched = await executeTool(
     tools.writeMapDeltaTool,
     {
       delta: [
-        { open_questions: ["batched-one"] },
-        { open_questions: ["batched-two"], pitfalls: [{
+        { meta: { domain_hypothesis: "batched-one" } },
+        { meta: { domain_hypothesis: "batched-two" }, pitfalls: [{
           module: "src/index.ts",
           what: "Batched delta pitfall.",
           consequence: "None; transport repair test.",
@@ -850,7 +866,7 @@ async function testRepairsDoubleWrappedAndBatchedTransports(): Promise<void> {
   );
   assert.equal(isToolError(batched), false, resultText(batched));
   const mergedMap = readJson(tools.canonicalMapPath(cwd));
-  assert.ok(mergedMap.open_questions.includes("batched-two"));
+  assert.equal(mergedMap.meta.domain_hypothesis, "batched-two");
   assert.ok(mergedMap.pitfalls.some((pitfall) => pitfall.what === "Batched delta pitfall."));
 
   // Non-object array entries still fail with the documented delta error, now
@@ -875,31 +891,31 @@ async function testRepairsDoubleWrappedAndBatchedTransports(): Promise<void> {
   // A markdown-fenced JSON delta is unwrapped before parsing.
   const fenced = await executeTool(
     tools.writeMapDeltaTool,
-    { delta: "```json\n{\"open_questions\": [\"fenced transport\"]}\n```" },
+    { delta: "```json\n{\"meta\": {\"domain_hypothesis\": \"fenced transport\"}}\n```" },
     cwd,
   );
   assert.equal(isToolError(fenced), false, resultText(fenced));
-  assert.ok(readJson(tools.canonicalMapPath(cwd)).open_questions.includes("fenced transport"));
+  assert.equal(readJson(tools.canonicalMapPath(cwd)).meta.domain_hypothesis, "fenced transport");
 
   // A delta whose quotes were escaped one level too many (the payload arrived
   // as the content of a JSON string literal) is decoded one layer and parsed.
   const overEscaped = await executeTool(
     tools.writeMapDeltaTool,
-    { delta: '{\\"open_questions\\": [\\"over-escaped transport\\"]}' },
+    { delta: '{\\"meta\\": {\\"domain_hypothesis\\": \\"over-escaped transport\\"}}' },
     cwd,
   );
   assert.equal(isToolError(overEscaped), false, resultText(overEscaped));
-  assert.ok(readJson(tools.canonicalMapPath(cwd)).open_questions.includes("over-escaped transport"));
+  assert.equal(readJson(tools.canonicalMapPath(cwd)).meta.domain_hypothesis, "over-escaped transport");
 
   // A delta string with a raw newline inside a string value is repaired by
   // escaping control characters inside string literals only.
   const rawNewline = await executeTool(
     tools.writeMapDeltaTool,
-    { delta: "{\"open_questions\": [\"first line\nsecond line\"]}" },
+    { delta: "{\"meta\": {\"domain_hypothesis\": \"first line\nsecond line\"}}" },
     cwd,
   );
   assert.equal(isToolError(rawNewline), false, resultText(rawNewline));
-  assert.ok(readJson(tools.canonicalMapPath(cwd)).open_questions.includes("first line\nsecond line"));
+  assert.equal(readJson(tools.canonicalMapPath(cwd)).meta.domain_hypothesis, "first line\nsecond line");
 
   // A full map wrapped in a single-item array is unwrapped.
   const arrayCwd = tempDir("transport-array-map");
@@ -916,11 +932,11 @@ async function testRepairsDoubleWrappedAndBatchedTransports(): Promise<void> {
   // outside string literals only.
   const trailingComma = await executeTool(
     tools.writeMapDeltaTool,
-    { delta: '{"open_questions": ["trailing comma"],}' },
+    { delta: '{"meta": {"domain_hypothesis": "trailing comma"},}' },
     cwd,
   );
   assert.equal(isToolError(trailingComma), false, resultText(trailingComma));
-  assert.ok(readJson(tools.canonicalMapPath(cwd)).open_questions.includes("trailing comma"));
+  assert.equal(readJson(tools.canonicalMapPath(cwd)).meta.domain_hypothesis, "trailing comma");
 }
 
 async function testHoistsMetaNestedEvidenceSections(): Promise<void> {
