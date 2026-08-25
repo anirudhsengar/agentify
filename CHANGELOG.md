@@ -46,6 +46,14 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- A stored OAuth subscription credential now counts as usable authentication
+  for a plain `agentify` run. The first-run gate (`hasStoredAuth`) only
+  recognized API-key entries — OAuth credentials persist as
+  `{ type: "oauth", access, refresh, expires }` with no `key` field — so
+  after a successful `agentify login` (ChatGPT or Claude subscription) the
+  next run fell back into full provider setup and asked for an API key the
+  user had already replaced with a subscription sign-in. An expired access
+  token still counts: the runtime refreshes it.
 - OAuth login and token refresh work from the installed package again. Pi
   loads each OAuth flow implementation through a bundler-opaque dynamic
   import, which survived esbuild bundling and crashed at runtime (`Cannot

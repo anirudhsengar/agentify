@@ -7,6 +7,7 @@ import {
   loadAgentifyConfig,
   pickTierPreset,
 } from "../src/core/agentify-config.ts";
+import { AGENTIFY_PROVIDERS } from "../src/core/provider-auth.ts";
 import type { AgentifyUi } from "../src/core/types.ts";
 
 class TestUi implements AgentifyUi {
@@ -59,6 +60,40 @@ try {
   assert.deepEqual(loadAgentifyConfig(configDir), config);
 } finally {
   fs.rmSync(configDir, { recursive: true, force: true });
+}
+
+// A stored OAuth subscription credential counts as usable auth: after
+// `agentify login` (ChatGPT/Claude subscription) and `agentify models`, a
+// plain `agentify` run must not fall into provider setup or ask for an API
+// key. Any prompt here makes TestUi throw. Provider environment variables
+// are cleared so the ambient shell cannot outrank the stored credential.
+const providerEnvNames = new Set(
+  AGENTIFY_PROVIDERS.flatMap((definition) => definition.env),
+);
+const savedEnv = new Map<string, string | undefined>();
+for (const name of providerEnvNames) {
+  savedEnv.set(name, process.env[name]);
+  delete process.env[name];
+}
+const oauthDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-oauth-first-run-"));
+try {
+  fs.writeFileSync(path.join(oauthDir, "auth.json"), `${JSON.stringify({
+    "openai-codex": { type: "oauth", access: "access-token", refresh: "refresh-token", expires: 0 },
+  }, null, 2)}\n`);
+  const ui = new TestUi([], []);
+  const withProvider = await ensureAgentifyConfig(oauthDir, ui);
+  assert.equal(withProvider.provider, "openai-codex");
+
+  fs.rmSync(path.join(oauthDir, "config.json"), { force: true });
+  const withoutProvider = await ensureAgentifyConfig(oauthDir, ui);
+  assert.equal(withoutProvider.provider, "openai-codex");
+  assert.deepEqual(loadAgentifyConfig(oauthDir), withoutProvider);
+} finally {
+  fs.rmSync(oauthDir, { recursive: true, force: true });
+  for (const [name, value] of savedEnv) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
 }
 
 console.log("first-run picker tests passed");

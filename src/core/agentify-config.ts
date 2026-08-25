@@ -224,7 +224,13 @@ function readAuthObject(filePath: string): Record<string, unknown> {
 
 function hasStoredAuth(configDir: string, provider: AgentifyProvider): boolean {
   const entry = readAuthObject(authPath(configDir))[provider];
-  return isRecord(entry) && "key" in entry;
+  if (!isRecord(entry)) return false;
+  // OAuth subscription sign-ins persist as { type: "oauth", access, refresh, expires } —
+  // no `key` field. An expired access token still counts: the runtime refreshes it.
+  if (entry.type === "oauth") {
+    return typeof entry.access === "string" && typeof entry.refresh === "string";
+  }
+  return "key" in entry;
 }
 
 function hasAnyUsableAuth(configDir: string, config: AgentifyConfig): boolean {
