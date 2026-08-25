@@ -36,6 +36,7 @@ const LINE_SUFFIX = /:(?:L)?\d+(?:-(?:L)?\d+)?$/i;
 const DISPLAY_ANNOTATION_SUFFIX = /\s+\([^/\r\n]+\)$/;
 const GLOB_SIGNAL = /[*?\[\]{}]/;
 const URL_SIGNAL = /^[a-z][a-z0-9+.-]*:\/\//i;
+const AGENTIFY_GENERATED_PATH = /^(?:\.agentify(?:\/|$)|\.github\/agentify(?:\/|$))/;
 const WELL_KNOWN_FILE_NAMES = new Set([
   "dockerfile", "gemfile", "justfile", "license", "makefile", "procfile",
   "rakefile", "readme",
@@ -101,6 +102,16 @@ function isLikelyFilePath(value: string): boolean {
   return name.includes(".")
     || WELL_KNOWN_FILE_NAMES.has(name)
     || /^(?:bin|scripts|tools)\//.test(value);
+}
+
+function isVerifiedFilePath(
+  value: string,
+  trackedEvidenceFiles: ReadonlySet<string> | undefined,
+): boolean {
+  if (AGENTIFY_GENERATED_PATH.test(value)) return false;
+  return trackedEvidenceFiles !== undefined
+    ? trackedEvidenceFiles.has(value)
+    : isLikelyFilePath(value);
 }
 
 function pathScopeBase(value: string): string {
@@ -245,15 +256,11 @@ function verifyTouchpoints(
   const seen = new Set<string>();
   for (const touchpoint of concern.touchpoints) {
     const path = normalizePathCandidate(touchpoint.path);
-    if (path === null || !isLikelyFilePath(path)) {
-      dropped.push(touchpoint.path);
+    if (path === null || !isVerifiedFilePath(path, trackedEvidenceFiles)) {
+      dropped.push(path ?? touchpoint.path);
       continue;
     }
-    if (trackedEvidenceFiles && !trackedEvidenceFiles.has(path)) {
-      dropped.push(path);
-      continue;
-    }
-    const key = `${path} ${touchpoint.symbol ?? ""}`;
+    const key = `${path}\u0000${touchpoint.symbol ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
     kept.push({
@@ -340,10 +347,21 @@ function buildSpecialistDefinitions(
       continue;
     }
     const verifiedPaths = new Set(kept.map((touchpoint) => touchpoint.path));
+    const flows = verifyFlows(concern, verifiedPaths);
+    if (
+      sourceKind === "concern_evidence"
+      && !kept.some((touchpoint) => touchpoint.centrality === "core")
+    ) {
+      rejected.push({
+        concern: concern.concern,
+        reason: "no core touchpoint is a tracked file",
+      });
+      continue;
+    }
     verified.push({
       concern,
       touchpoints: kept,
-      flows: verifyFlows(concern, verifiedPaths),
+      flows,
       droppedPaths: dropped,
     });
   }
@@ -555,8 +573,9 @@ function buildProcedureDefinitions(
     const sourcePath = candidate.source_path
       ? normalizePathCandidate(candidate.source_path)
       : null;
-    const evidencePaths = sourcePath && isLikelyFilePath(sourcePath)
-      && (!trackedEvidenceFiles || trackedEvidenceFiles.has(sourcePath)) ? [sourcePath] : [];
+    const evidencePaths = sourcePath && isVerifiedFilePath(sourcePath, trackedEvidenceFiles)
+      ? [sourcePath]
+      : [];
     const validationCommands = sortedUniqueStrings([
       ...(VALIDATION_SIGNAL.test(candidate.existing_command)
         ? [candidate.existing_command]
@@ -619,10 +638,7 @@ function buildProcedureDefinitions(
   const repositoryEvidence = normalizePaths([
     map.operational_surface.build.recipe_file,
     ...map.skeleton.entry_points.map((entry) => entry.path),
-  ]).filter((candidate) => (
-    isLikelyFilePath(candidate)
-    && (!trackedEvidenceFiles || trackedEvidenceFiles.has(candidate))
-  ));
+  ]).filter((candidate) => isVerifiedFilePath(candidate, trackedEvidenceFiles));
   if (repositoryEvidence.length > 0 && globalCommands.length > 0) {
     definitions.push({
       procedure_id: "validate-repository-change",

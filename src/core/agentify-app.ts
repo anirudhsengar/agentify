@@ -1,9 +1,14 @@
 import { defaultConfigDir, ensureAgentifyConfig, runFullProviderSetup } from "./agentify-config.ts";
+import { DEFAULT_MAP_FILENAME, writeCanonicalMap } from "./audit/map-storage.ts";
 import { runRepositoryAudit, ProviderAuthFailedError, type FocusedAuditResult } from "./runs/repository-audit-run.ts";
 import { probeProviderReachable } from "./runs/provider-probe.ts";
 import { NoAuthForProviderError } from "./models/resolver.ts";
 import { loadCanonicalMapAt } from "./audit/write-map-tool.ts";
-import { assessAuditCompletion } from "./audit/schema.ts";
+import {
+  assessAuditCompletion,
+  assessSpecialistEvidence,
+  reconcileSpecialistEvidence,
+} from "./audit/schema.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "./audit/paths.ts";
 import type {
   AgentifyConfig,
@@ -97,8 +102,19 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<Fo
     ?? await ensureAgentifyConfig(defaultConfigDir(), options.ui);
   const existingMap = loadCanonicalMapAt(options.cwd, AUDIT_STATE_RELATIVE_DIR);
   if (existingMap !== null) {
-    const completion = assessAuditCompletion(existingMap);
+    const completion = assessAuditCompletion(existingMap, { cwd: options.cwd });
     if (completion.complete) {
+      const specialistAssessment = assessSpecialistEvidence(existingMap, { cwd: options.cwd });
+      const reconciled = reconcileSpecialistEvidence(existingMap, specialistAssessment);
+      if (reconciled !== existingMap) {
+        writeCanonicalMap(options.cwd, reconciled, {
+          stateDir: AUDIT_STATE_RELATIVE_DIR,
+          mapFilename: DEFAULT_MAP_FILENAME,
+        });
+        options.ui.info(
+          `agentify: retained ${specialistAssessment.accepted_concerns.length} tracked specialist concern(s) and recorded ${specialistAssessment.rejected_concerns.length} ungrounded candidate(s) as rejected`,
+        );
+      }
       options.ui.status("agentify: attached to the existing persistent repository team");
       options.ui.info("agentify: verified the existing structured codebase map; no model audit was rerun");
       return {
