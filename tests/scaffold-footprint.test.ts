@@ -31,8 +31,13 @@ test("installed GitHub runtime is a compact pinned shim, not bundled dependency 
     const loader = fs.readFileSync(path.join(runtimeDir, "runtime-loader.mjs"), "utf8");
     assert.match(loader, new RegExp(`PACKAGE_VERSION = ["']${packageJson.version.replaceAll(".", "\\.")}["']`));
     assert.doesNotMatch(loader, /__AGENTIFY_RUNTIME_VERSION__/);
-    assert.ok(totalLines < 220, `installed runtime must stay compact; got ${totalLines} lines`);
-    assert.ok(totalBytes < 16_000, `installed runtime must stay compact; got ${totalBytes} bytes`);
+    assert.match(loader, /O_NOFOLLOW/);
+    assert.match(loader, /fs\.fstatSync\(descriptor\)/);
+    assert.match(loader, /flag: "wx"/);
+    assert.match(loader, /agentify-runtime-exec-/);
+    assert.doesNotMatch(loader, /fs\.existsSync/);
+    assert.ok(totalLines < 260, `installed runtime must stay compact; got ${totalLines} lines`);
+    assert.ok(totalBytes < 20_000, `installed runtime must stay compact; got ${totalBytes} bytes`);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
