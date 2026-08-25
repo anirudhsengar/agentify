@@ -9,10 +9,13 @@ cd "$repo_root"
 failures=0
 fail() { echo "ERROR: $*" >&2; failures=$((failures + 1)); }
 
-# Installation is deliberately small and exact. Runtime bundles are copied by
-# trusted installer code, not stored as duplicate scaffold artifacts.
+# Installation is deliberately small and exact. The packaged runtime remains in
+# dist/; target repositories receive only compact, exact-version launchers.
 expected_scaffold=$(cat <<'EOF'
 .github/agentify-task-policy.json
+.github/agentify/learning-runtime.mjs
+.github/agentify/runtime-loader.mjs
+.github/agentify/task-runtime.mjs
 .github/agentify/validation-smoke.mjs
 .github/scripts/complete-accepted-task-merge.mjs
 .github/scripts/publish-task-draft.mjs
@@ -32,6 +35,10 @@ for required in \
   scaffold/.github/workflows/agentify-issue.yml \
   scaffold/.github/workflows/agentify-learn.yml \
   scaffold/.github/agentify-task-policy.json \
+  scaffold/.github/agentify/runtime-loader.mjs \
+  scaffold/.github/agentify/task-runtime.mjs \
+  scaffold/.github/agentify/learning-runtime.mjs \
+  scaffold/.github/agentify/validation-smoke.mjs \
   scaffold/.github/scripts/complete-accepted-task-merge.mjs \
   scaffold/.github/scripts/publish-task-draft.mjs \
   scaffold/.github/scripts/run-task-lifecycle.mjs \
