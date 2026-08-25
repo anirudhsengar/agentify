@@ -49,10 +49,12 @@ export type {
 export {
   assessAuditCompletion,
   assessSpecialistEvidence,
+  reconcileSpecialistEvidence,
   specialistEvidenceRecorded,
 } from "./specialist-completion.ts";
 export type {
   AuditCompletionResult,
+  RejectedSpecialistConcern,
   SpecialistEvidenceAssessment,
 } from "./specialist-completion.ts";
 export { applyMapDefaults } from "./map-defaults.ts";
