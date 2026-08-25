@@ -1042,6 +1042,162 @@ async function testHoistsMetaLifecycleConcernsToCanonicalConcernEvidence(): Prom
   assert.ok(!resultText(result).includes("Concern evidence is not recorded yet"));
 }
 
+function makeValidConcern(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    concern: "test SDK and tooling provisioning",
+    one_line: "Bootstraps a test workspace with a JDK binary and TKG.",
+    covers: "SDK download, testenv.properties round-trip, TKG compile.",
+    excludes: "What runs after provisioning.",
+    flows: [{
+      name: "provision workspace",
+      description: "SDK acquisition through harness build.",
+      steps: [
+        { path: "get.sh", what_happens: "Downloads the JDK binary." },
+        { path: "compile.sh", what_happens: "Builds the TKG harness." },
+      ],
+    }],
+    touchpoints: [{
+      path: "get.sh",
+      symbol: "getBinaryOpenjdk",
+      role: "Single entry point for SDK download.",
+      line_range: [1, 970],
+      centrality: "core",
+    }],
+    invariants: [],
+    pitfalls: [],
+    entry_questions: ["Does this change SDK acquisition?"],
+    validation: [],
+    spans_subtrees: ["get.sh", "scripts"],
+    stability: "high",
+    recurrence: "high",
+    confidence: "high",
+    last_updated: "2026-08-24T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+/**
+ * The aqa-tests failure mode: the builder traced real concerns, then every
+ * write_map_delta attempt to record them failed with an opaque "Internal
+ * error: sanitized audit evidence does not satisfy CodebaseMapSchema" — no
+ * field, no reason. After many blind retries the model gave up and recorded
+ * an empty concerns list copied from the guidance example, and specialist
+ * discovery produced zero specialists. These tests pin the repair contract:
+ * precise field-level errors, no silent drops, and no synthesized empty
+ * `concerns` — an omitted array is never a recorded decision.
+ */
+async function testConcernEvidenceWriteRepairContract(): Promise<void> {
+  // 1. A new concern_evidence section missing the required `not_concerns`
+  //    sibling key fails with the exact missing field named — an omitted
+  //    array is never silently synthesized into a recorded empty decision.
+  const missingSiblingCwd = tempDir("concern-missing-sibling");
+  const missingSiblingTools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+  const bootstrapBase = cloneMap();
+  delete bootstrapBase.concern_evidence;
+  delete bootstrapBase.expert_evidence;
+  bootstrapBase.exploration_log.unshift({
+    ts: new Date().toISOString(),
+    action: "draft_bootstrap",
+    target: ".",
+    observation: "Initial gap-marked audit map.",
+  });
+  await executeTool(missingSiblingTools.writeMapTool, { map: bootstrapBase }, missingSiblingCwd);
+  const missingSiblingResult = await executeTool(
+    missingSiblingTools.writeMapDeltaTool,
+    { delta: { concern_evidence: { concerns: [makeValidConcern()] } } },
+    missingSiblingCwd,
+  );
+  assert.equal(isToolError(missingSiblingResult), true);
+  assert.match(resultText(missingSiblingResult), /not_concerns/);
+  assert.doesNotMatch(resultText(missingSiblingResult), /^Error: Internal error/);
+  assert.equal(
+    readJson(missingSiblingTools.canonicalMapPath(missingSiblingCwd)).concern_evidence,
+    undefined,
+  );
+
+  // 1b. Adding the named key repairs the write in one retry.
+  const repairedResult = await executeTool(
+    missingSiblingTools.writeMapDeltaTool,
+    {
+      delta: {
+        concern_evidence: {
+          concerns: [makeValidConcern()],
+          not_concerns: [{ candidate: "utils", why_rejected: "A directory, not a specialty." }],
+        },
+      },
+    },
+    missingSiblingCwd,
+  );
+  assert.equal(isToolError(repairedResult), false, resultText(repairedResult));
+  const repairedMap = readJson(missingSiblingTools.canonicalMapPath(missingSiblingCwd));
+  assert.equal(repairedMap.concern_evidence?.concerns.length, 1);
+  assert.equal(repairedMap.concern_evidence?.not_concerns.length, 1);
+  assert.equal(resultDetails(repairedResult).specialist_evidence_recorded, true);
+
+  // 2. When every submitted concern fails item validation, the write fails
+  //    with the per-item reasons instead of persisting an empty list.
+  const allDroppedCwd = tempDir("concern-all-dropped");
+  const allDroppedTools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+  await executeTool(allDroppedTools.writeMapTool, { map: bootstrapBase }, allDroppedCwd);
+  const allDroppedResult = await executeTool(
+    allDroppedTools.writeMapDeltaTool,
+    {
+      delta: {
+        concern_evidence: {
+          concerns: [makeValidConcern({ stability: "very-high" })],
+          not_concerns: [],
+        },
+      },
+    },
+    allDroppedCwd,
+  );
+  assert.equal(isToolError(allDroppedResult), true);
+  assert.match(resultText(allDroppedResult), /failed schema validation/);
+  assert.match(resultText(allDroppedResult), /stability/);
+  assert.doesNotMatch(resultText(allDroppedResult), /^Error: Internal error/);
+  assert.equal(readJson(allDroppedTools.canonicalMapPath(allDroppedCwd)).concern_evidence, undefined);
+
+  // 3. A partial drop persists the valid concerns and names the dropped one.
+  const partialCwd = tempDir("concern-partial-drop");
+  const partialTools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+  await executeTool(partialTools.writeMapTool, { map: bootstrapBase }, partialCwd);
+  const partialResult = await executeTool(
+    partialTools.writeMapDeltaTool,
+    {
+      delta: {
+        concern_evidence: {
+          concerns: [
+            makeValidConcern(),
+            makeValidConcern({ concern: "playlist inventory", stability: "very-high" }),
+          ],
+          not_concerns: [],
+        },
+      },
+    },
+    partialCwd,
+  );
+  assert.equal(isToolError(partialResult), false, resultText(partialResult));
+  const partialMap = readJson(partialTools.canonicalMapPath(partialCwd));
+  assert.equal(partialMap.concern_evidence?.concerns.length, 1);
+  assert.match(resultText(partialResult), /dropped 1 invalid entr\(ies\)/);
+  assert.match(resultText(partialResult), /concern_evidence\.concerns\[1\].*stability/);
+
+  // 4. A structurally wrong section (concerns as a keyed object) fails with
+  //    the exact field path, never the opaque sanitize message alone.
+  const mistypedCwd = tempDir("concern-mistyped");
+  const mistypedTools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+  await executeTool(mistypedTools.writeMapTool, { map: bootstrapBase }, mistypedCwd);
+  const mistypedResult = await executeTool(
+    mistypedTools.writeMapDeltaTool,
+    { delta: { concern_evidence: { concerns: { a: makeValidConcern() }, not_concerns: [] } } },
+    mistypedCwd,
+  );
+  assert.equal(isToolError(mistypedResult), true);
+  assert.match(resultText(mistypedResult), /concern_evidence/);
+  assert.match(resultText(mistypedResult), /must be array|expected array|array/i);
+  assert.equal(readJson(mistypedTools.canonicalMapPath(mistypedCwd)).concern_evidence, undefined);
+}
+
 async function testPreventsPrototypePollutionInDottedKeyExpansion(): Promise<void> {
   const cwd = tempDir("proto-pollution");
   const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
@@ -1078,6 +1234,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "double-wrapped and batched transports are repaired", fn: testRepairsDoubleWrappedAndBatchedTransports },
   { name: "meta-nested evidence sections are hoisted", fn: testHoistsMetaNestedEvidenceSections },
   { name: "meta-lifecycle concerns are hoisted to canonical concern_evidence", fn: testHoistsMetaLifecycleConcernsToCanonicalConcernEvidence },
+  { name: "concern evidence write failures are actionable", fn: testConcernEvidenceWriteRepairContract },
   { name: "substance failures persist as gaps with repair guidance", fn: testSubstanceFailuresPersistAsGapsWithRepairGuidance },
   { name: "prevents prototype pollution in dotted key expansion", fn: testPreventsPrototypePollutionInDottedKeyExpansion },
 ];

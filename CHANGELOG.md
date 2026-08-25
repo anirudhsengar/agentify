@@ -44,6 +44,26 @@ All notable changes to Agentify are documented here.
   third-party packages moved to `devDependencies`; release verification audits
   the full dependency tree.
 
+### Fixed
+
+- Concern-evidence writes no longer fail blind. When a `write_map_delta`
+  carrying `concern_evidence` failed schema validation and the sanitizer
+  recovery also failed, the tool threw "Internal error: sanitized audit
+  evidence does not satisfy CodebaseMapSchema" with no field detail; the
+  builder retried blind until it gave up and recorded an empty placeholder
+  concern list, and specialist discovery produced zero specialists on a
+  repository full of traced concerns. The sanitize recovery now surfaces the
+  primary field-level validation errors, reports every array item it drops
+  with the exact field and reason, and fails the write outright — with
+  per-item drop reasons — when every submitted concern was dropped. An
+  omitted `concerns` array is never synthesized into a recorded empty
+  decision: the write fails with the missing field named, the completion
+  gate stays open, and an audit whose concern evidence never lands ends in a
+  loud "did not reach structured closure" error instead of a silent empty
+  portfolio.
+- The bounded top-up audit prompt described the retired `expert_evidence`
+  field shape; it now names the actual `ConcernSchema` fields.
+
 ## [1.1.0] - 2026-08-20
 
 ### Added

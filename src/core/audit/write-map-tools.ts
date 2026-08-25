@@ -13,7 +13,11 @@ import {
     type FormattedCoverageClosure,
 } from "./map-coverage.ts";
 import { applyMapDelta, type MapMergeStrategy } from "./map-delta.ts";
-import { mergeEvidenceIntoGapDraft, mergeEvidenceIntoMap } from "./map-draft.ts";
+import {
+  mergeEvidenceIntoGapDraft,
+  mergeEvidenceIntoMap,
+  type SanitizeDiagnostics,
+} from "./map-draft.ts";
 import {
     loadMapFromFile,
     MAX_INLINE_MAP_BYTES,
@@ -173,6 +177,19 @@ const SPECIALIST_EVIDENCE_GUIDANCE =
     "distinct specialties; record that justification in open_questions and in `not_concerns` " +
     "in the same delta. Do not re-close coverage dimensions; they are already covered.";
 
+/**
+ * Render sanitize diagnostics for the tool result. A write that "succeeds"
+ * while silently dropping the model's concern evidence is the aqa-tests
+ * failure mode: the audit completes, discovery reads an empty list, and
+ * nobody can say why. Every drop is named here.
+ */
+function formatSanitizeDiagnostics(diagnostics: SanitizeDiagnostics): string {
+    if (diagnostics.dropped.length === 0) return "";
+    return (
+        ` Sanitizer dropped ${diagnostics.dropped.length} invalid entr(ies) — ` +
+        `re-submit them with the named fields fixed: ${diagnostics.dropped.join("; ")}.`
+    );
+}
 
 function formatSpecialistEvidenceGuidance(
     _closure: FormattedCoverageClosure,
@@ -1067,10 +1084,38 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
 
             const { map: withDefaults, injectedDefaults } = applyMapDefaults(mapInput);
             let validation = validateMap(withDefaults);
+            let sanitizeNotes = "";
             if (!validation.ok && mapInput !== null && typeof mapInput === "object" && !Array.isArray(mapInput)) {
-                const merged = mergeEvidenceIntoGapDraft(mapInput as Record<string, unknown>);
-                validation = validateMap(merged);
-                if (validation.ok) sourcePath = `${sourcePath}:draft-merged`;
+                // Same contract as the delta path: sanitize recovery must
+                // surface what it changed and must never replace the detailed
+                // validation error with an opaque throw.
+                const primaryError = validation.error;
+                const diagnostics: SanitizeDiagnostics = { dropped: [] };
+                try {
+                    const merged = mergeEvidenceIntoGapDraft(
+                        mapInput as Record<string, unknown>,
+                        diagnostics,
+                    );
+                    validation = validateMap(merged);
+                    if (validation.ok) {
+                        sourcePath = `${sourcePath}:draft-merged`;
+                        sanitizeNotes = formatSanitizeDiagnostics(diagnostics);
+                    }
+                } catch (sanitizeError) {
+                    const sanitizeMessage = sanitizeError instanceof Error
+                        ? sanitizeError.message
+                        : String(sanitizeError);
+                    return {
+                        content: [{
+                            type: "text",
+                            text:
+                                `Error: ${primaryError} ` +
+                                `Sanitized recovery also failed: ${sanitizeMessage}`,
+                        }],
+                        isError: true,
+                        details: undefined as unknown as Record<string, unknown>,
+                    };
+                }
             }
             if (!validation.ok) {
                 return {
@@ -1129,6 +1174,7 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
             const resultText =
                 `Wrote codebase map to ${writeResult.path} (${writeResult.size_bytes} bytes). ` +
                 `Source: ${sourcePath}.${injectedLine} ${closure.line}` +
+                sanitizeNotes +
                 (downgradedDimensions.length > 0
                     ? ` Unsupported covered claims persisted as gap: ${downgradedDimensions.join(", ")}.`
                     : "") +
@@ -1308,10 +1354,37 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 ({ map: withDefaults } = applyMapDefaults(merged));
                 mergedValidation = validateMap(withDefaults);
             }
+            let sanitizeNotes = "";
             if (!mergedValidation.ok && isBootstrapDraft(existing)) {
-                const sanitized = mergeEvidenceIntoMap(merged, existing);
-                ({ map: withDefaults } = applyMapDefaults(sanitized));
-                mergedValidation = validateMap(withDefaults);
+                // The sanitize fallback must never swallow the primary
+                // validation error: its own failure is opaque by comparison,
+                // and the model repairs against field-level detail.
+                const primaryError = mergedValidation.error;
+                const diagnostics: SanitizeDiagnostics = { dropped: [] };
+                try {
+                    const sanitized = mergeEvidenceIntoMap(merged, existing, diagnostics);
+                    ({ map: withDefaults } = applyMapDefaults(sanitized));
+                    mergedValidation = validateMap(withDefaults);
+                    sanitizeNotes = formatSanitizeDiagnostics(diagnostics);
+                } catch (sanitizeError) {
+                    const sanitizeMessage = sanitizeError instanceof Error
+                        ? sanitizeError.message
+                        : String(sanitizeError);
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text:
+                                    `Error: merged map failed schema validation. ` +
+                                    `Correct the reported delta fields and retry. ` +
+                                    `${primaryError} ` +
+                                    `Sanitized recovery also failed: ${sanitizeMessage}`,
+                            },
+                        ],
+                        isError: true,
+                        details: undefined as unknown as Record<string, unknown>,
+                    };
+                }
             }
             if (!mergedValidation.ok) {
                 return {
@@ -1365,6 +1438,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 `Strategy: ${appliedStrategy}. Dimension: ${params.dimension ?? "(none)"}. ` +
                 `Gap-filler count for ${params.dimension ?? "n/a"}: ${params.dimension ? getReserveCount(params.dimension) : 0} (soft ceiling: ${GAP_FILLER_SOFT_CEILING}). ` +
                 `${closure.line}` +
+                sanitizeNotes +
                 (downgradedDimensions.length > 0
                     ? ` Unsupported covered claims persisted as gap: ${downgradedDimensions.join(", ")}.`
                     : "") +

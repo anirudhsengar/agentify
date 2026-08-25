@@ -504,7 +504,8 @@ class TopUpRuntime implements AgentRuntime {
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
     this.auditCalls += 1;
-    assert.match(options.userPrompt, /expert_evidence/, "top-up audit prompt must request specialist evidence");
+    assert.match(options.userPrompt, /concern_evidence/, "top-up audit prompt must request concern evidence");
+    assert.match(options.userPrompt, /concern_scout/, "top-up audit prompt must dispatch concern discovery");
     assert.equal(options.recoveryPromptIfToolNotCalled?.requiredToolName, "write_map_delta");
     writeMap(options.cwd, options.spawnExplorerStateDir ?? ".agentify/runtime/audit", makeValidCodebaseMap());
     return { turns: 1, costUsd: null, aborted: false };

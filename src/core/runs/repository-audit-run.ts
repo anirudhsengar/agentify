@@ -167,11 +167,11 @@ function focusedAuditPrompt(): string {
  */
 function specialistEvidenceTopUpPrompt(): string {
   return [
-    "The canonical codebase map already closes every coverage dimension, but expert_evidence.expert_domains was never recorded.",
-    "Read the existing map and the repository, then call write_map_delta with `delta: { expert_evidence: { expert_domains: [...] } }`.",
-    "Record one entry per cohesive, recurring repository domain: kebab-case domain, rationale, primary_paths, entry_points, test_paths, key_files, key_types, patterns, pitfalls, conventions, stability, recurrence, test_command, last_updated.",
+    "The canonical codebase map already closes every coverage dimension, but concern_evidence.concerns was never recorded.",
+    "Run concern_scout, trace each candidate with concern_tracer, then call write_map_delta with `delta: { concern_evidence: { concerns: [...], not_concerns: [...] } }`.",
+    "Record one entry per concern a maintainer would recognize as its own body of knowledge: concern, one_line, covers, excludes, flows (each with at least two observed steps), touchpoints (path, symbol, role, line_range, centrality), invariants, pitfalls, entry_questions, validation, spans_subtrees, stability, recurrence, confidence, last_updated.",
     "Ground every path, type, and command in repository evidence you actually read. Do not invent candidates.",
-    "An honest empty expert_domains list is valid only when no cohesive recurring domain exists; record that justification in open_questions in the same delta.",
+    "An honest empty concerns list is valid only when the repository is too small to have distinct specialties; record that justification in open_questions in the same delta.",
     "Do not modify or weaken the existing closed coverage dimensions. Do not return prose instead of the required structured tool call.",
   ].join(" ");
 }
