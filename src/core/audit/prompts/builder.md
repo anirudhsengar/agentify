@@ -105,7 +105,8 @@ would specialize in to work on it well.
    report before dispatching the next.
 3. Record the traced concerns through `write_map_delta` as
    `concern_evidence.concerns`, and the scout's rejections as
-   `concern_evidence.not_concerns`.
+   `concern_evidence.not_concerns`. Concern evidence closes no coverage
+   dimension: omit the `dimension` parameter on this write.
 
 A concern is a body of knowledge, not a folder. Authentication is not
 `src/auth/` — it is the login route, the credential check, the session store,

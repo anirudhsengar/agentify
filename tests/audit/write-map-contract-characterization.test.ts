@@ -1198,6 +1198,73 @@ async function testConcernEvidenceWriteRepairContract(): Promise<void> {
   assert.equal(readJson(mistypedTools.canonicalMapPath(mistypedCwd)).concern_evidence, undefined);
 }
 
+/**
+ * The commander.js failure mode: the recovery prompt names the missing gate
+ * "specialist_evidence", and the model passed that label as the write_map_delta
+ * `dimension`. The enum rejected the write, the traced concern payload never
+ * landed, and the audit died at the deadline. The aliases must validate at the
+ * parameter schema and must close no coverage dimension.
+ */
+async function testSpecialistEvidenceDimensionAlias(): Promise<void> {
+  for (const alias of ["specialist_evidence", "concern_evidence"]) {
+    assert.equal(
+      Value.Check(WriteMapDeltaParamsSchema, { dimension: alias, delta: { concern_evidence: {} } }),
+      true,
+      `dimension=${alias} must validate`,
+    );
+
+    const cwd = tempDir(`specialist-evidence-alias-${alias}`);
+    const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+    const base = cloneMap();
+    delete base.concern_evidence;
+    delete base.expert_evidence;
+    for (const dimensionName of COVERAGE_DIMENSIONS) {
+      base.coverage[dimensionName] = {
+        status: "gap",
+        confidence: "low",
+        evidence_summary: "Outstanding.",
+        evidence: [{ path: "README.md", excerpt: "Test fixture evidence citation.", kind: "positive" }],
+      };
+    }
+    base.exploration_log.unshift({
+      ts: new Date().toISOString(),
+      action: "draft_bootstrap",
+      target: ".",
+      observation: "Initial gap-marked audit map.",
+    });
+    await executeTool(tools.writeMapTool, { map: base }, cwd);
+    const coverageBefore = readJson(tools.canonicalMapPath(cwd)).coverage;
+    const result = await executeTool(
+      tools.writeMapDeltaTool,
+      {
+        dimension: alias,
+        delta: {
+          concern_evidence: {
+            concerns: [makeValidConcern()],
+            not_concerns: [{ candidate: "utils", why_rejected: "A directory, not a specialty." }],
+          },
+        },
+      },
+      cwd,
+    );
+    assert.equal(isToolError(result), false, resultText(result));
+    const map = readJson(tools.canonicalMapPath(cwd));
+    assert.equal(map.concern_evidence?.concerns.length, 1, `dimension=${alias} must merge concerns`);
+    assert.deepEqual(
+      map.coverage,
+      coverageBefore,
+      `dimension=${alias} must not touch any coverage entry`,
+    );
+    assert.equal(resultDetails(result).dimension, null);
+  }
+
+  // A typo outside the alias list stays rejected by the parameter schema.
+  assert.equal(
+    Value.Check(WriteMapDeltaParamsSchema, { dimension: "specialist-evidence", delta: {} }),
+    false,
+  );
+}
+
 async function testPreventsPrototypePollutionInDottedKeyExpansion(): Promise<void> {
   const cwd = tempDir("proto-pollution");
   const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
@@ -1235,6 +1302,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "meta-nested evidence sections are hoisted", fn: testHoistsMetaNestedEvidenceSections },
   { name: "meta-lifecycle concerns are hoisted to canonical concern_evidence", fn: testHoistsMetaLifecycleConcernsToCanonicalConcernEvidence },
   { name: "concern evidence write failures are actionable", fn: testConcernEvidenceWriteRepairContract },
+  { name: "specialist_evidence dimension alias merges concern evidence", fn: testSpecialistEvidenceDimensionAlias },
   { name: "substance failures persist as gaps with repair guidance", fn: testSubstanceFailuresPersistAsGapsWithRepairGuidance },
   { name: "prevents prototype pollution in dotted key expansion", fn: testPreventsPrototypePollutionInDottedKeyExpansion },
 ];

@@ -35,6 +35,7 @@ export {
   DimensionStatusSchema,
 } from "./primitives.ts";
 export {
+  NON_CLOSING_DELTA_DIMENSIONS,
   WriteMapDeltaParamsSchema,
   WriteMapParamsSchema,
 } from "./write-map-params.ts";

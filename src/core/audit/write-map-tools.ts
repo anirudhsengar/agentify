@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import {
+    NON_CLOSING_DELTA_DIMENSIONS,
     WriteMapDeltaParamsSchema,
     WriteMapParamsSchema,
     applyMapDefaults,
@@ -148,7 +149,8 @@ function formatCoverageRepairGuidance(
 
 const SPECIALIST_EVIDENCE_GUIDANCE =
     " Concern evidence is not recorded yet. The audit cannot complete until you call " +
-    "write_map_delta with concern_evidence. A concern is a specialty a maintainer would " +
+    "write_map_delta with concern_evidence in the delta and NO `dimension` parameter " +
+    "(concern evidence closes no coverage dimension). A concern is a specialty a maintainer would " +
     "recognize as its own body of knowledge \u2014 not a directory. Concerns are expected to " +
     "span many directories and to share files with one another. Replace every value below " +
     "with evidence you actually observed in this repository: " +
@@ -1265,7 +1267,17 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 };
             }
 
-            if (params.observed_type_contract && params.dimension !== "D3_type_contract") {
+            // Prompts name the concern-evidence gate "specialist evidence"; a
+            // model may copy that label into `dimension`. Treat the aliases as
+            // an omitted dimension so the concern payload is merged instead of
+            // being rejected for closing no real coverage dimension.
+            const dimension: CoverageDimensionName | undefined =
+                params.dimension !== undefined
+                && (NON_CLOSING_DELTA_DIMENSIONS as readonly string[]).includes(params.dimension)
+                    ? undefined
+                    : params.dimension as CoverageDimensionName | undefined;
+
+            if (params.observed_type_contract && dimension !== "D3_type_contract") {
                 return {
                     content: [{
                         type: "text",
@@ -1284,8 +1296,8 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 : prepared.delta as UnknownRecord;
 
             let reserveWarning: string | undefined;
-            if (params.dimension) {
-                reserveWarning = consumeReserve(params.dimension).reason;
+            if (dimension) {
+                reserveWarning = consumeReserve(dimension).reason;
             }
 
             const strategy = (params.merge_strategy ?? "shallow_overwrite") as MapMergeStrategy;
@@ -1296,8 +1308,8 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                     mergeStrategy,
                 );
 
-                if (params.dimension) {
-                    const dim = params.dimension;
+                if (dimension) {
+                    const dim = dimension;
                     const confidence = params.confidence ?? "medium";
                     const evidenceSummary =
                         params.evidence_summary ??
@@ -1333,7 +1345,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 log.push({
                     ts: new Date().toISOString(),
                     action: "gap_filler_delta",
-                    target: params.dimension ?? "(no-dim)",
+                    target: dimension ?? "(no-dim)",
                     observation: `merged delta from write_map_delta (strategy=${mergeStrategy})`,
                 });
                 merged.exploration_log = log;
@@ -1404,7 +1416,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
 
             const validMap = mergedValidation.value;
             const needsTopographyEvidence =
-                params.dimension === "D1_topography"
+                dimension === "D1_topography"
                 && (
                     validMap.skeleton.top_level_tree.length === 0
                     || validMap.skeleton.entry_points.length === 0
@@ -1435,14 +1447,14 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
 
             const resultText =
                 `Merged delta into codebase map at ${writeResult.path} (${writeResult.size_bytes} bytes). ` +
-                `Strategy: ${appliedStrategy}. Dimension: ${params.dimension ?? "(none)"}. ` +
-                `Gap-filler count for ${params.dimension ?? "n/a"}: ${params.dimension ? getReserveCount(params.dimension) : 0} (soft ceiling: ${GAP_FILLER_SOFT_CEILING}). ` +
+                `Strategy: ${appliedStrategy}. Dimension: ${dimension ?? "(none)"}. ` +
+                `Gap-filler count for ${dimension ?? "n/a"}: ${dimension ? getReserveCount(dimension) : 0} (soft ceiling: ${GAP_FILLER_SOFT_CEILING}). ` +
                 `${closure.line}` +
                 sanitizeNotes +
                 (downgradedDimensions.length > 0
                     ? ` Unsupported covered claims persisted as gap: ${downgradedDimensions.join(", ")}.`
                     : "") +
-                formatCoverageRepairGuidance(closure, params.dimension as CoverageDimensionName | null | undefined) +
+                formatCoverageRepairGuidance(closure, dimension) +
                 formatSpecialistEvidenceGuidance(closure, validMap) +
                 (needsTopographyEvidence
                     ? " To close D1, retry with `delta: { skeleton: { top_level_tree: [\"src/\"], entry_points: [{ path: \"path/to/entry\", role: \"what it starts\", language: \"language\", run_command: \"documented command\" }], first_5_files_for_fresh_agent: [{ path: \"README.md\", why: \"starting context\" }] } }`."
@@ -1454,9 +1466,9 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 details: {
                     path: writeResult.path,
                     size_bytes: writeResult.size_bytes,
-                    dimension: params.dimension ?? null,
+                    dimension: dimension ?? null,
                     merge_strategy: appliedStrategy,
-                    gap_filler_count: params.dimension ? getReserveCount(params.dimension) : 0,
+                    gap_filler_count: dimension ? getReserveCount(dimension) : 0,
                     gap_filler_soft_ceiling: GAP_FILLER_SOFT_CEILING,
                     coverage_summary: {
                         covered: closure.closed,

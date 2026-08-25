@@ -194,7 +194,7 @@ function buildAuditRecoveryPrompt(
   }
   if (options?.specialistEvidenceMissing) {
     lines.push("- **specialist_evidence**: every coverage dimension is closed, but `concern_evidence.concerns` has not been recorded.");
-    lines.push("  Required fields: call `write_map_delta` with `delta: { concern_evidence: { concerns: [...], not_concerns: [...] } }` — one entry per concern a maintainer would recognize as its own body of knowledge, each traced end to end through tracked files with per-touchpoint roles, flows, invariants, pitfalls, entry questions, stability, recurrence, and confidence. A concern is never a directory and two concerns may share files. An honest empty list is valid only when the repository is too small to have distinct specialties; record that justification in `open_questions` and `not_concerns`.");
+    lines.push("  Required fields: call `write_map_delta` with `delta: { concern_evidence: { concerns: [...], not_concerns: [...] } }` and OMIT the `dimension` parameter — 'specialist_evidence' is the name of the missing gate, not a value for `dimension`; concern evidence closes no coverage dimension. Record one entry per concern a maintainer would recognize as its own body of knowledge, each traced end to end through tracked files with per-touchpoint roles, flows, invariants, pitfalls, entry questions, stability, recurrence, and confidence. A concern is never a directory and two concerns may share files. An honest empty list is valid only when the repository is too small to have distinct specialties; record that justification in `open_questions` and `not_concerns`.");
   }
   lines.push("");
   lines.push("Instructions:");

@@ -60,10 +60,21 @@ export const WriteMapParamsSchema = Type.Object({
 
 export type WriteMapParams = Static<typeof WriteMapParamsSchema>;
 
+/**
+ * Aliases a model may pass for a delta that records concern evidence. Audit
+ * prompts name the missing gate "specialist evidence", and models observed in
+ * the wild copy that label into `dimension`; rejecting the write there strands
+ * the entire audit because the concern payload never lands. The aliases close
+ * no coverage dimension and normalize to an omitted `dimension`.
+ */
+export const NON_CLOSING_DELTA_DIMENSIONS = ["specialist_evidence", "concern_evidence"] as const;
+
 export const WriteMapDeltaParamsSchema = Type.Object({
   dimension: Type.Optional(
-    StringEnum(COVERAGE_DIMENSIONS, {
-      description: "The dimension this delta closes. If provided, the corresponding coverage entry is set to `covered` with the delta's `confidence` and `evidence_summary`.",
+    StringEnum([...COVERAGE_DIMENSIONS, ...NON_CLOSING_DELTA_DIMENSIONS], {
+      description:
+        "The coverage dimension this delta closes. If provided, the corresponding coverage entry is set to `covered` with the delta's `confidence` and `evidence_summary`. " +
+        "For a concern-evidence delta, omit `dimension` entirely (or pass `specialist_evidence`): concern evidence closes no coverage dimension.",
     }),
   ),
   confidence: Type.Optional(

@@ -58,6 +58,14 @@ All notable changes to Agentify are documented here.
   regression test reproduces the single-file bundle failure through the real
   ModelRuntime graph (with and without registration, and with and without
   the single-copy plugin) and pins the entry-point and build wiring.
+- `write_map_delta` accepts `dimension: "specialist_evidence"` (and
+  `"concern_evidence"`) as an alias for an omitted dimension. Audit prompts
+  name the concern-evidence gate "specialist evidence", and builders copied
+  that label into `dimension`; the enum rejected the write and the traced
+  concern payload never landed, so the audit died at the deadline with
+  `concern_evidence.concerns was not recorded`. The alias closes no coverage
+  dimension, and the write guidance and recovery prompt now state explicitly
+  that concern-evidence deltas omit `dimension`.
 
 - Concern-evidence writes no longer fail blind. When a `write_map_delta`
   carrying `concern_evidence` failed schema validation and the sanitizer

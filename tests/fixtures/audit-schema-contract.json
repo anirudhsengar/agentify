@@ -13,8 +13,8 @@
       "bytes": 1533
     },
     "write_map_delta_params": {
-      "sha256": "0f96f25d8e1b0c2ef0aae96af616c6483bba92a7625cfb2155956a462fbf7b24",
-      "bytes": 3516
+      "sha256": "49e572b90f4e8f72f6fe58b7271a0a9fad5ab2555c2a2d28472f55fb8685308e",
+      "bytes": 3702
     }
   },
   "required": {
@@ -139,6 +139,20 @@
     "coverage_status": [
       "covered",
       "gap"
+    ],
+    "write_map_delta_dimension": [
+      "D1_topography",
+      "D2_module_boundaries",
+      "D3_type_contract",
+      "D4_conventions",
+      "D5_pitfalls",
+      "D6_validation",
+      "D7_operational",
+      "D8_security",
+      "D9_process",
+      "D10_documentation",
+      "specialist_evidence",
+      "concern_evidence"
     ]
   },
   "defaults": {

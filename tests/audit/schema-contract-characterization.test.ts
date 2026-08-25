@@ -99,7 +99,7 @@ function testSerializedSchemaContract(): void {
   assert.deepEqual(Object.keys(writeProps), FIXTURE.properties.write_map_params);
   assert.deepEqual(Object.keys(deltaProps), FIXTURE.properties.write_map_delta_params);
 
-  assert.deepEqual(deltaProps.dimension?.enum, FIXTURE.enums.coverage_dimensions);
+  assert.deepEqual(deltaProps.dimension?.enum, FIXTURE.enums.write_map_delta_dimension);
   assert.deepEqual(writeProps.mode?.enum, FIXTURE.enums.write_mode);
   assert.deepEqual(deltaProps.merge_strategy?.enum, FIXTURE.enums.merge_strategy);
   assert.deepEqual(deltaProps.confidence?.enum, FIXTURE.enums.delta_confidence);

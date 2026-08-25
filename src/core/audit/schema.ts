@@ -19,6 +19,7 @@ export {
   PartialCodebaseMapSchema,
   PromptTemplateIntentSchema,
   ScaffoldRuntimeIntentSchema,
+  NON_CLOSING_DELTA_DIMENSIONS,
   WriteMapDeltaParamsSchema,
   WriteMapParamsSchema,
 } from "./schema/index.ts";
