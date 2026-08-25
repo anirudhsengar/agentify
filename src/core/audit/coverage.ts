@@ -94,7 +94,8 @@ function assessDimensionSubstance(map: CodebaseMap, dimension: CoverageDimension
             return null;
         case "D3_type_contract":
             if (
-                !hasItems(map.type_contract_surface.typescript_interfaces)
+                !hasItems(map.type_contract_surface.type_definitions)
+                && !hasItems(map.type_contract_surface.typescript_interfaces)
                 && !hasItems(map.type_contract_surface.pydantic_models)
                 && !hasItems(map.type_contract_surface.db_models)
                 && !hasItems(map.type_contract_surface.idks)
@@ -294,20 +295,24 @@ export function assessCoverageClosure(
 }
 
 /**
- * Repository-specialist discovery reads `expert_evidence.expert_domains` from
- * the canonical map. The audit is not complete until that structure has been
- * explicitly recorded: an honest empty `expert_domains` list is valid for a
- * repository with no cohesive recurring domain, but an absent field means the
- * model never considered specialists at all and discovery would silently
+ * Repository-specialist discovery reads `concern_evidence.concerns` from the
+ * canonical map. The audit is not complete until that structure has been
+ * explicitly recorded: an honest empty `concerns` list is valid for a
+ * repository too small to have distinct specialties, but an absent field means
+ * the model never looked for concerns at all and discovery would silently
  * produce an empty portfolio.
+ *
+ * `expert_evidence` is the superseded directory-shaped predecessor. It still
+ * satisfies the gate so maps written before the concern contract can be
+ * attached and migrated rather than re-audited from scratch.
  */
 export function specialistEvidenceRecorded(map: CodebaseMap): boolean {
-    return map.expert_evidence !== undefined;
+    return map.concern_evidence !== undefined || map.expert_evidence !== undefined;
 }
 
 export interface AuditCompletionResult {
     coverage: CoverageClosureResult;
-    /** True once `expert_evidence` exists in the map, even when honestly empty. */
+    /** True once `concern_evidence` (or legacy `expert_evidence`) exists, even when honestly empty. */
     specialistEvidenceRecorded: boolean;
     /** True only when every coverage dimension is closed AND specialist evidence is recorded. */
     complete: boolean;

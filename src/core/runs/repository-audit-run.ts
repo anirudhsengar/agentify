@@ -152,7 +152,7 @@ function focusedAuditPrompt(): string {
     "A gap-marked map is already present; after initial direct reads, call write_map_delta with concrete repository evidence.",
     "Submit each dimension incrementally via write_map_delta (one or two dimensions per call) to keep tool payloads compact and complete.",
     "Close every supportable coverage dimension and leave unsupported claims as explicit gaps.",
-    "Before finishing, record expert_evidence.expert_domains through write_map_delta; an honest empty list is valid only when no cohesive recurring domain exists and must be justified in open_questions. The audit is not complete without it.",
+    "Before finishing, run concern_scout once and one concern_tracer per candidate, then record concern_evidence.concerns through write_map_delta; an honest empty list is valid only when the repository is too small to have distinct specialties and must be justified in open_questions and not_concerns. The audit is not complete without it.",
     "The map is internal operational evidence for specialists and task planning.",
     "Do not write application files, AGENTS.md, harness configuration, skills, prompts, workflows, dependencies, or prose artifacts.",
     "Do not create a generic agent surface. Repository-specific specialists and procedures are materialized later from validated evidence.",
@@ -193,15 +193,15 @@ function buildAuditRecoveryPrompt(
     }
   }
   if (options?.specialistEvidenceMissing) {
-    lines.push("- **specialist_evidence**: every coverage dimension is closed, but `expert_evidence.expert_domains` has not been recorded.");
-    lines.push("  Required fields: call `write_map_delta` with `delta: { expert_evidence: { expert_domains: [...] } }` — one entry per cohesive, recurring repository domain, grounded in real paths, key files, key types, patterns, pitfalls, stability, recurrence, and an observed test command. An honest empty list is valid only when no cohesive recurring domain exists; record that justification in `open_questions` in the same delta.");
+    lines.push("- **specialist_evidence**: every coverage dimension is closed, but `concern_evidence.concerns` has not been recorded.");
+    lines.push("  Required fields: call `write_map_delta` with `delta: { concern_evidence: { concerns: [...], not_concerns: [...] } }` — one entry per concern a maintainer would recognize as its own body of knowledge, each traced end to end through tracked files with per-touchpoint roles, flows, invariants, pitfalls, entry questions, stability, recurrence, and confidence. A concern is never a directory and two concerns may share files. An honest empty list is valid only when the repository is too small to have distinct specialties; record that justification in `open_questions` and `not_concerns`.");
   }
   lines.push("");
   lines.push("Instructions:");
   if (options?.specialistEvidenceMissing && closure.unresolved.length === 0) {
     lines.push("1. The only remaining work is specialist evidence. Do NOT re-close coverage dimensions; they are already covered.");
-    lines.push("2. Inspect the repository's cohesive domains with `read`, `grep`, `find`, or `ls`, then call `write_map_delta` with `delta: { expert_evidence: { expert_domains: [{ domain: 'billing', rationale: 'Recurring payment invariants.', primary_paths: ['src/billing'], entry_points: ['src/billing/index.ts'], test_paths: ['tests/billing.test.ts'], key_files: [{ path: 'src/billing/index.ts', purpose: 'Billing entry point.', line_range: [1, 120] }], key_types: [{ name: 'Invoice', path: 'src/billing/types.ts:1', purpose: 'Stable billing contract.' }], patterns: [{ name: 'idempotency', description: 'Billing writes must be idempotent.', example_ref: 'src/billing/index.ts:42' }], pitfalls: [{ risk: 'Double charging on retry.', consequence: 'Customers can be charged twice.', reference: 'src/billing/index.ts:55' }], conventions: ['Amounts are stored in cents.'], stability: 'high', recurrence: 'high', test_command: 'npm test -- tests/billing.test.ts', last_updated: '2026-01-01T00:00:00.000Z' }] } }`, replacing every value with evidence you actually observed in THIS repository.");
-    lines.push("3. If no cohesive recurring domain exists, call `write_map_delta` with `delta: { expert_evidence: { expert_domains: [] }, open_questions: ['No specialist domain because ...'] }`.");
+    lines.push("2. Run `spawn_explorer` with `mode: 'concern_scout'` against the repository root, then one `mode: 'concern_tracer'` per candidate with the concern name and seed paths as `focus`. Merge each report, then call `write_map_delta` with `delta: { concern_evidence: { concerns: [{ concern: 'authentication', one_line: 'Owns how a caller proves identity and how that proof is checked.', covers: 'Login, session issue and renewal, and every enforcement point.', excludes: 'Authorization, which decides what an identified caller may do.', flows: [{ name: 'user login', description: 'Credential submission through session establishment.', steps: [{ path: 'src/routes/login.ts', what_happens: 'Accepts the credential payload.' }, { path: 'src/auth/verify.ts', what_happens: 'Compares the hash and issues a session.' }] }], touchpoints: [{ path: 'src/auth/verify.ts', symbol: 'verifyCredential', role: 'The only credential comparison in the codebase.', line_range: [12, 61], centrality: 'core' }], invariants: [{ rule: 'Credentials are never logged.', why: 'Log shipping would export secrets.', reference: 'src/auth/verify.ts' }], pitfalls: [{ risk: 'Session renewal skips re-validation.', consequence: 'A revoked account keeps access until expiry.', reference: 'src/auth/session.ts' }], entry_questions: ['Does this change alter who is considered authenticated?'], validation: ['npm test -- tests/auth'], spans_subtrees: ['src', 'tests'], stability: 'high', recurrence: 'high', confidence: 'high', last_updated: '2026-01-01T00:00:00.000Z' }], not_concerns: [{ candidate: 'utils', why_rejected: 'A directory, not a specialty.' }] } }`, replacing every value with evidence you actually observed in THIS repository.");
+    lines.push("3. If the repository is too small to have distinct specialties, call `write_map_delta` with `delta: { concern_evidence: { concerns: [], not_concerns: [{ candidate: '...', why_rejected: '...' }] }, open_questions: ['No specialist concern because ...'] }`.");
     lines.push("4. Do not return prose or summaries. Submit the structured tool call.");
   } else {
     lines.push("1. Inspect the repository with `read`, `grep`, `find`, or `ls` to locate the required evidence for these remaining dimensions.");
@@ -482,7 +482,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         .map((dimension) => `${dimension}: ${closure.reasons[dimension] ?? "not closed"}`);
       if (closure.unresolved.length === 0 && !specialistRecorded) {
         reasons.push(
-          "specialist evidence: expert_evidence.expert_domains was not recorded; "
+          "specialist evidence: concern_evidence.concerns was not recorded; "
           + "an honest empty list is valid but the field must be present",
         );
       }

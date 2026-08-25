@@ -37,12 +37,13 @@ configuration. Do not return prose instead of the required structured tool call.
 Trusted application code materializes the focused specialist and procedure
 portfolio after the map has passed validation.
 
-Specialist discovery reads exactly one map field: `expert_evidence.expert_domains`.
+Specialist discovery reads exactly one map field: `concern_evidence.concerns`.
 Recording it is a completion requirement, not an optional extra — the runtime
 does not close the session until the field is present in the map. Record one
-entry per cohesive, recurring repository domain. An honest empty list is valid
-only when the repository genuinely has no such domain; justify that finding in
-`open_questions` in the same delta.
+entry per concern a maintainer would recognize as its own body of knowledge. An
+honest empty list is valid only when the repository is too small to have
+distinct specialties; justify that finding in `open_questions` in the same
+delta.
 
 The following optional map fields capture procedure and artifact evidence:
 
@@ -91,11 +92,41 @@ cannot be justified by a generic feature summary:
 Persist supported findings incrementally through `write_map_delta`. A custom
 feature report supplements cross-cutting evidence; it is not a substitute for it.
 
+### Concern discovery
+
+This is the part of the audit the whole installation exists for. Everything
+above establishes how the repository is built; this establishes what a person
+would specialize in to work on it well.
+
+1. Run `concern_scout` against the repository root exactly once. It returns
+   candidate concerns with seed paths, plus the candidates it rejected.
+2. For each candidate worth keeping, run `concern_tracer` with the concern name
+   and its seed paths as the focus. One tracer per concern. Read and merge each
+   report before dispatching the next.
+3. Record the traced concerns through `write_map_delta` as
+   `concern_evidence.concerns`, and the scout's rejections as
+   `concern_evidence.not_concerns`.
+
+A concern is a body of knowledge, not a folder. Authentication is not
+`src/auth/` — it is the login route, the credential check, the session store,
+the middleware guarding every other route, and the tests that cover them. Two
+concerns touching the same file is the normal case and never a reason to merge
+them: record the file under both, with the role it plays in each.
+
+Do not name a concern after a directory, do not emit one concern per directory,
+and do not reduce a repository to a single concern covering everything. If the
+repository genuinely has one specialty, say so in `not_concerns`.
+
+Every touchpoint path must be a file tracked in git. Code that is fetched,
+generated, or vendored at build time is not part of this repository: describe
+how the tracked code invokes it and cite the tracked files instead.
+
 ### Bounded feature exploration
 
-Start with one high-value feature explorer. Read and merge
-its report before dispatching the next one. Continue only while another cohesive
-repository domain would materially improve specialist or procedure evidence.
+If concern tracing left a gap that another angle would close, dispatch one
+high-value feature explorer. Read and merge its report before dispatching the
+next one. Continue only while another exploration would materially improve
+concern or procedure evidence.
 
 Every explorer uses the configured explorer model slot. The trusted runtime
 permits at most 16 explorers per
@@ -183,13 +214,14 @@ Close only dimensions supported by concrete repository evidence:
 
 ## Specialist and procedure evidence
 
-Recording `expert_evidence.expert_domains` is required before the audit
-completes. Record a candidate specialist only when a domain is cohesive,
-recurring or high-stakes, supported by real paths and contracts, and useful to a
-later read-only advisor. Avoid generic domains such as `src`, `app`,
-`repository`, or one specialist per directory. Candidate paths are advisory
-evidence, not write ownership. When no domain qualifies, record an explicitly
-empty `expert_domains` list and justify the absence in `open_questions`.
+Recording `concern_evidence.concerns` is required before the audit completes.
+Record a concern when it is a real specialty — recurring or high-stakes,
+traceable end to end through observed code, and useful to a later read-only
+advisor who must answer questions about it without re-exploring. Name it in the
+repository's own words; there is no fixed vocabulary of valid concerns, and
+`src`, `app`, or `repository` are never concerns. Touchpoints are evidence of
+reach, not write ownership. When nothing qualifies, record an explicitly empty
+`concerns` list and justify the absence in `open_questions` and `not_concerns`.
 
 Record a candidate procedure only when the repository contains a repeatable,
 multi-step operation or a meaningful existing script. Preserve the real command
@@ -232,8 +264,9 @@ section is non-empty and the `coverage` entry has `status: "covered"` and
 - **D2_module_boundaries**: include `module_graph.edges` (array of
   `{ from, to, kind }`) or `module_graph.parallelizable_subtrees` or
   `module_graph.shared_abstractions`.
-- **D3_type_contract**: include `type_contract_surface.typescript_interfaces`,
-  `pydantic_models`, `db_models`, `stable_types`, or `one_type_trace`. Use the
+- **D3_type_contract**: include `type_contract_surface.type_definitions`
+  (any language: interface, struct, class, record, schema, message, target),
+  `db_models`, `stable_types`, or `one_type_trace`. Use the
   top-level `observed_type_contract` parameter if you have one real interface.
 - **D4_conventions**: include `conventions.naming.files`,
   `conventions.naming.functions`, and `conventions.logging.pattern`.
@@ -256,7 +289,7 @@ section is non-empty and the `coverage` entry has `status: "covered"` and
 ## Completion
 
 Stop after the canonical map passes the application-owned coverage and substance
-gates AND `expert_evidence.expert_domains` has been recorded. The runtime
+gates AND `concern_evidence.concerns` has been recorded. The runtime
 intentionally closes the session once all dimensions are supported and
 specialist evidence exists. If explorer budgets are exhausted first, persist the
 strongest honest map, still record the specialist-evidence decision (an honestly

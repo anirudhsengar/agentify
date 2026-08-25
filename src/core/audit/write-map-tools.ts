@@ -77,6 +77,7 @@ const MAP_TOP_LEVEL_KEYS = new Set([
     "exploration_log",
     "customization_evidence",
     "expert_evidence",
+    "concern_evidence",
     "artifact_intents",
 ]);
 
@@ -92,7 +93,7 @@ export const COVERAGE_REPAIR_HINTS: Record<CoverageDimensionName, string> = {
         "(array of string arrays) or module_graph.shared_abstractions (array of paths)",
     D3_type_contract:
         "use the top-level observed_type_contract parameter, or include " +
-        "type_contract_surface.typescript_interfaces, pydantic_models, db_models, stable_types, or one_type_trace. " +
+        "type_contract_surface.type_definitions (any language, as { path, name, kind, language, fields }), db_models, stable_types, or one_type_trace. " +
         "One real type is sufficient in a small repository",
     D4_conventions:
         "include conventions.naming.files, conventions.naming.functions, and conventions.logging.pattern",
@@ -142,28 +143,49 @@ function formatCoverageRepairGuidance(
 }
 
 const SPECIALIST_EVIDENCE_GUIDANCE =
-    " Specialist evidence is not recorded yet. The audit cannot complete until you call " +
-    "write_map_delta with expert_evidence. Record one entry per cohesive, recurring repository " +
-    "domain, replacing every value with evidence you actually observed in this repository: " +
-    "`delta: { expert_evidence: { expert_domains: [{ domain: 'billing', rationale: 'Recurring " +
-    "payment invariants.', primary_paths: ['src/billing'], entry_points: ['src/billing/index.ts'], " +
-    "test_paths: ['tests/billing.test.ts'], key_files: [{ path: 'src/billing/index.ts', purpose: " +
-    "'Billing entry point.', line_range: [1, 120] }], key_types: [{ name: 'Invoice', path: " +
-    "'src/billing/types.ts:1', purpose: 'Stable billing contract.' }], patterns: [{ name: " +
-    "'idempotency', description: 'Billing writes must be idempotent.', example_ref: " +
-    "'src/billing/index.ts:42' }], pitfalls: [{ risk: 'Double charging on retry.', consequence: " +
-    "'Customers can be charged twice.', reference: 'src/billing/index.ts:55' }], conventions: " +
-    "['Amounts are stored in cents.'], stability: 'high', recurrence: 'high', test_command: " +
-    "'npm test -- tests/billing.test.ts', last_updated: '2026-01-01T00:00:00.000Z' }] } }`. " +
-    "An honest empty `expert_domains` list is valid only when no cohesive recurring domain " +
-    "exists; record that justification in open_questions in the same delta. Do not re-close " +
-    "coverage dimensions; they are already covered.";
+    " Concern evidence is not recorded yet. The audit cannot complete until you call " +
+    "write_map_delta with concern_evidence. A concern is a specialty a maintainer would " +
+    "recognize as its own body of knowledge \u2014 not a directory. Concerns are expected to " +
+    "span many directories and to share files with one another. Replace every value below " +
+    "with evidence you actually observed in this repository: " +
+    "`delta: { concern_evidence: { concerns: [{ concern: 'authentication', one_line: " +
+    "'Owns how a caller proves identity and how that proof is checked on every request.', " +
+    "covers: 'Login, session issue and renewal, credential storage, and every enforcement " +
+    "point.', excludes: 'Authorization rules, which decide what an identified caller may do.', " +
+    "flows: [{ name: 'user login', description: 'Credential submission through session " +
+    "establishment.', steps: [{ path: 'src/routes/login.ts', what_happens: 'Accepts the " +
+    "credential payload.' }, { path: 'src/auth/verify.ts', what_happens: 'Compares the hash " +
+    "and issues a session.' }] }], touchpoints: [{ path: 'src/auth/verify.ts', symbol: " +
+    "'verifyCredential', role: 'The single credential comparison in the codebase.', " +
+    "line_range: [12, 61], centrality: 'core' }], invariants: [{ rule: 'Credentials are " +
+    "never logged.', why: 'Log shipping would export secrets.', reference: " +
+    "'src/auth/verify.ts' }], pitfalls: [{ risk: 'Session renewal skips re-validation.', " +
+    "consequence: 'A revoked account keeps access until expiry.', reference: " +
+    "'src/auth/session.ts' }], entry_questions: ['Does this change alter who is considered " +
+    "authenticated?'], validation: ['npm test -- tests/auth'], spans_subtrees: ['src'], " +
+    "stability: 'high', recurrence: 'high', confidence: 'high', last_updated: " +
+    "'2026-01-01T00:00:00.000Z' }], not_concerns: [{ candidate: 'utils', why_rejected: " +
+    "'A directory, not a specialty; its files belong to the concerns that use them.' }] } }`. " +
+    "Name concerns in this repository's own words; there is no fixed list of valid concerns. " +
+    "Do not merge two concerns because they share files, and do not split one concern into " +
+    "per-directory pieces. Every touchpoint path must be a file tracked in git. " +
+    "An honest empty `concerns` list is valid only for a repository too small to have " +
+    "distinct specialties; record that justification in open_questions and in `not_concerns` " +
+    "in the same delta. Do not re-close coverage dimensions; they are already covered.";
+
 
 function formatSpecialistEvidenceGuidance(
-    closure: FormattedCoverageClosure,
+    _closure: FormattedCoverageClosure,
     map: CodebaseMap,
 ): string {
-    if (closure.unresolved.length > 0 || specialistEvidenceRecorded(map)) return "";
+    // Specialist evidence must be recorded before the audit closes, regardless
+    // of whether other dimensions are still outstanding. A model in late-stage
+    // recovery can spend its remaining budget re-trying a dimension the gate
+    // rejects for substance reasons, never reaching the closure check that
+    // would otherwise surface the missing concern_evidence. Surface the prompt
+    // every time the field is absent so the model addresses concerns alongside
+    // dimension repairs, not as an afterthought after every dimension is green.
+    if (specialistEvidenceRecorded(map)) return "";
     return SPECIALIST_EVIDENCE_GUIDANCE;
 }
 
@@ -638,6 +660,7 @@ function repairD9Coverage(map: UnknownRecord): void {
 const EVIDENCE_SECTIONS_MISPLACED_UNDER_META = [
     "customization_evidence",
     "expert_evidence",
+    "concern_evidence",
     "artifact_intents",
 ] as const;
 
@@ -648,10 +671,25 @@ const EVIDENCE_SECTIONS_MISPLACED_UNDER_META = [
  * section before validation so the real schema gate judges its content and the
  * model receives an actionable error instead of silent acceptance.
  */
+/**
+ * Move misplaced concerns from anywhere we have observed a model put them to
+ * the single canonical top-level location `concern_evidence`.
+ *
+ * Concretely, when an audit cannot find concerns itself it sometimes reasons
+ * about them under `meta.lifecycle`, and in that meta context mistakes the
+ * placeholder section for the canonical one — writing the actual array as
+ * `meta.lifecycle.concerns` and the wrapper as
+ * `meta.lifecycle.concern_evidence`. Hoisting a single nested level is not
+ * enough: the real array may live two levels down. Walk every plausible
+ * location once and merge into the canonical slot, rather than trusting any
+ * particular key path.
+ */
 function hoistMisplacedEvidenceSections(map: UnknownRecord): void {
     const meta = map.meta;
     if (meta === null || typeof meta !== "object" || Array.isArray(meta)) return;
     const metaRecord = meta as UnknownRecord;
+
+    // Existing direct-nest hoisting for the documented misplacement paths.
     for (const key of EVIDENCE_SECTIONS_MISPLACED_UNDER_META) {
         const misplaced = metaRecord[key];
         if (misplaced === undefined) continue;
@@ -672,6 +710,55 @@ function hoistMisplacedEvidenceSections(map: UnknownRecord): void {
         }
         delete metaRecord[key];
     }
+
+    // The lifecycle sub-object is a frequent substitute the model reaches for
+    // when its context describes concerns there rather than at the top level.
+    const lifecycle = metaRecord["lifecycle"];
+    if (lifecycle === null || typeof lifecycle !== "object" || Array.isArray(lifecycle)) return;
+    const lifecycleRecord = lifecycle as UnknownRecord;
+    const legacyConcerns = lifecycleRecord["concerns"];
+    const legacyWrapper = lifecycleRecord["concern_evidence"];
+    const canonicalConcernEvidence = map["concern_evidence"];
+    const canonicalIsObject = canonicalConcernEvidence !== null
+        && typeof canonicalConcernEvidence === "object"
+        && !Array.isArray(canonicalConcernEvidence);
+    const wrapperIsObject = legacyWrapper !== null
+        && typeof legacyWrapper === "object"
+        && !Array.isArray(legacyWrapper);
+    const concernsFromWrapper = wrapperIsObject
+        ? (legacyWrapper as UnknownRecord)["concerns"]
+        : undefined;
+
+    // Merge every misplaced concerns source in one go. The model often puts
+    // the array both at the bare path (`meta.lifecycle.concerns`) and inside
+    // a wrapper it constructed itself (`meta.lifecycle.concern_evidence`).
+    // Either can be empty; the lifted record must contain the union and an
+    // empty `not_concerns` so the concern-evidence schema accepts it.
+    const sources = [legacyConcerns, concernsFromWrapper].filter(
+        (candidate): candidate is unknown[] => Array.isArray(candidate) && candidate.length > 0,
+    );
+    if (sources.length > 0) {
+        const mergedConcerns: unknown[] = [];
+        for (const source of sources) {
+            for (const entry of source) {
+                if (!mergedConcerns.includes(entry)) mergedConcerns.push(entry);
+            }
+        }
+        if (canonicalConcernEvidence === undefined) {
+            map["concern_evidence"] = { concerns: mergedConcerns, not_concerns: [] };
+        } else if (canonicalIsObject) {
+            const canonicalRecord = canonicalConcernEvidence as UnknownRecord;
+            const existing = canonicalRecord["concerns"];
+            if (!Array.isArray(existing) || existing.length === 0) {
+                canonicalRecord["concerns"] = mergedConcerns;
+            }
+            if (canonicalRecord["not_concerns"] === undefined) {
+                canonicalRecord["not_concerns"] = [];
+            }
+        }
+    }
+    delete lifecycleRecord["concerns"];
+    delete lifecycleRecord["concern_evidence"];
 }
 
 function repairModuleGraphOrphans(map: UnknownRecord): void {

@@ -91,6 +91,154 @@ export function makeSpecialistFixtureMap() {
         },
       ],
     },
+    concern_evidence: {
+      concerns: [
+        {
+          concern: "authentication",
+          one_line: "Owns how a caller proves identity and how that proof is checked.",
+          covers: "Login, session issue and renewal, and every enforcement point.",
+          excludes: "Authorization, which decides what an identified caller may do.",
+          flows: [
+            {
+              name: "user login",
+              description: "Credential submission through session establishment.",
+              steps: [
+                { path: "src/routes/login.ts", what_happens: "Accepts the credential payload." },
+                { path: "src/auth/verify.ts", what_happens: "Compares the hash and issues a session." },
+                { path: "src/middleware/session.ts", what_happens: "Stores the session for later requests." },
+              ],
+            },
+          ],
+          touchpoints: [
+            {
+              path: "src/auth/verify.ts",
+              symbol: "verifyCredential",
+              role: "The only credential comparison in the codebase.",
+              line_range: [12, 61] as [number, number],
+              centrality: "core" as const,
+            },
+            {
+              path: "src/routes/login.ts",
+              symbol: null,
+              role: "Entry point for credential submission.",
+              line_range: null,
+              centrality: "core" as const,
+            },
+            {
+              path: "src/middleware/session.ts",
+              symbol: "requireSession",
+              role: "Rejects unauthenticated requests before any handler runs.",
+              line_range: null,
+              centrality: "core" as const,
+            },
+            {
+              path: "tests/auth.test.ts",
+              symbol: null,
+              role: "Covers credential comparison and session expiry.",
+              line_range: null,
+              centrality: "supporting" as const,
+            },
+          ],
+          invariants: [
+            {
+              rule: "Credentials are never written to logs.",
+              why: "Log shipping would export secrets off-host.",
+              reference: "src/auth/verify.ts",
+            },
+          ],
+          pitfalls: [
+            {
+              risk: "Session renewal skips re-validation.",
+              consequence: "A revoked account keeps access until expiry.",
+              reference: "src/middleware/session.ts",
+            },
+          ],
+          entry_questions: ["Does this change alter who is considered authenticated?"],
+          validation: ["npm test -- tests/auth.test.ts"],
+          spans_subtrees: ["src", "tests"],
+          stability: "high" as const,
+          recurrence: "high" as const,
+          confidence: "high" as const,
+          last_updated: "2026-07-05T00:00:00.000Z",
+        },
+        {
+          concern: "billing",
+          one_line: "Owns charging a customer exactly once.",
+          covers: "Invoice construction, charge submission, and retry behaviour.",
+          excludes: "Who is allowed to be charged, which authentication owns.",
+          flows: [
+            {
+              name: "charge a cart",
+              description: "Invoice construction through settled charge.",
+              steps: [
+                { path: "src/billing/index.ts", what_happens: "Builds the invoice from the cart." },
+                { path: "src/billing/charge.ts", what_happens: "Submits the charge with an idempotency key." },
+              ],
+            },
+          ],
+          touchpoints: [
+            {
+              path: "src/billing/index.ts",
+              symbol: "buildInvoice",
+              role: "Converts a cart into an invoice in cents.",
+              line_range: [1, 120] as [number, number],
+              centrality: "core" as const,
+            },
+            {
+              path: "src/billing/charge.ts",
+              symbol: null,
+              role: "The single charge submission path.",
+              line_range: null,
+              centrality: "core" as const,
+            },
+            {
+              // Deliberately shared with authentication: the same file serves
+              // two concerns for different reasons, which must produce a
+              // related-specialist link rather than a merge.
+              path: "src/middleware/session.ts",
+              symbol: "currentCustomer",
+              role: "Supplies the customer identity a charge is attributed to.",
+              line_range: null,
+              centrality: "supporting" as const,
+            },
+            {
+              path: "tests/billing.test.ts",
+              symbol: null,
+              role: "Covers double-charge protection on retry.",
+              line_range: null,
+              centrality: "supporting" as const,
+            },
+          ],
+          invariants: [
+            {
+              rule: "Amounts are stored in cents.",
+              why: "Float arithmetic drifts across currency conversion.",
+              reference: "src/billing/index.ts",
+            },
+          ],
+          pitfalls: [
+            {
+              risk: "Double charging on retry.",
+              consequence: "Customers can be charged twice.",
+              reference: "src/billing/charge.ts",
+            },
+          ],
+          entry_questions: ["Is this write idempotent under retry?"],
+          validation: ["npm test -- tests/billing.test.ts"],
+          spans_subtrees: ["src", "tests"],
+          stability: "high" as const,
+          recurrence: "high" as const,
+          confidence: "high" as const,
+          last_updated: "2026-07-05T00:00:00.000Z",
+        },
+      ],
+      not_concerns: [
+        {
+          candidate: "utils",
+          why_rejected: "A directory, not a specialty; its files belong to the concerns that use them.",
+        },
+      ],
+    },
     customization_evidence: {
       custom_tool_candidates: [
         {
@@ -118,5 +266,26 @@ export function makeSpecialistFixtureMap() {
       source_feature_agent: ".pi/agents/payments.md",
     },
   ];
+  return map;
+}
+
+/** Every tracked path the concern fixture cites, for evidence verification. */
+export const SPECIALIST_FIXTURE_TRACKED_FILES = [
+  "src/auth/verify.ts",
+  "src/billing/charge.ts",
+  "src/billing/index.ts",
+  "src/middleware/session.ts",
+  "src/routes/login.ts",
+  "tests/auth.test.ts",
+  "tests/billing.test.ts",
+];
+
+/**
+ * A map carrying only the superseded `expert_evidence` shape, for exercising
+ * the migration path an installation predating the concern contract takes.
+ */
+export function makeLegacySpecialistFixtureMap() {
+  const map = makeSpecialistFixtureMap();
+  delete (map as { concern_evidence?: unknown }).concern_evidence;
   return map;
 }

@@ -930,7 +930,7 @@ async function testHoistsMetaNestedEvidenceSections(): Promise<void> {
   delete base.expert_evidence;
   const initial = await executeTool(tools.writeMapTool, { map: base }, cwd);
   assert.equal(isToolError(initial), false);
-  assert.match(resultText(initial), /Specialist evidence is not recorded yet/);
+  assert.match(resultText(initial), /Concern evidence is not recorded yet/);
 
   const wellFormedDomain = {
     domain: "billing",
@@ -959,7 +959,7 @@ async function testHoistsMetaNestedEvidenceSections(): Promise<void> {
   assert.equal(repaired.expert_evidence?.expert_domains[0]?.domain, "billing");
   assert.equal((repaired.meta as Record<string, unknown>).expert_evidence, undefined);
   assert.equal(resultDetails(hoisted).specialist_evidence_recorded, true);
-  assert.ok(!resultText(hoisted).includes("Specialist evidence is not recorded yet"));
+  assert.ok(!resultText(hoisted).includes("Concern evidence is not recorded yet"));
 
   // A misplaced but malformed section is hoisted into the real schema gate,
   // which rejects it with an actionable error instead of silently keeping it.
@@ -973,6 +973,73 @@ async function testHoistsMetaNestedEvidenceSections(): Promise<void> {
   const afterMalformed = readJson(tools.canonicalMapPath(cwd));
   assert.equal((afterMalformed.meta as Record<string, unknown>).customization_evidence, undefined);
   assert.equal(afterMalformed.customization_evidence, undefined);
+}
+
+async function testHoistsMetaLifecycleConcernsToCanonicalConcernEvidence(): Promise<void> {
+  const cwd = tempDir("meta-lifecycle-concerns");
+  const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+  const base = cloneMap();
+  delete base.expert_evidence;
+  delete base.concern_evidence;
+  await executeTool(tools.writeMapTool, { map: base }, cwd);
+
+  // The aqa-tests failure: the model wrote a real, traced concerns array
+  // under `meta.lifecycle.concerns`, with the wrapper as a sibling under
+  // `meta.lifecycle.concern_evidence`. Neither layer matches the documented
+  // misplacement path; the hoist must look one level deeper to recover the
+  // concerns and the audit must close.
+  const sample = {
+    concern: "test SDK and tooling provisioning",
+    one_line: "Bootstraps a test workspace with a JDK binary and TKG.",
+    covers: "SDK download, testenv.properties round-trip, TKG compile.",
+    excludes: "What runs after provisioning.",
+    flows: [],
+    touchpoints: [
+      {
+        path: "get.sh",
+        symbol: "getBinaryOpenjdk",
+        role: "Single entry point for SDK download.",
+        line_range: [1, 970],
+        centrality: "core",
+      },
+    ],
+    invariants: [],
+    pitfalls: [],
+    entry_questions: ["Does this change SDK acquisition?"],
+    validation: [],
+    spans_subtrees: ["get.sh", "scripts/testenv", "testenv"],
+    stability: "high",
+    recurrence: "high",
+    confidence: "high",
+    last_updated: "2026-08-24T00:00:00.000Z",
+  };
+  const misplacement = {
+    meta: {
+      lifecycle: {
+        concerns: [sample],
+        concern_evidence: {
+          concerns: [{ ...sample, concern: "playlist-driven JVM test inventory" }],
+        },
+      },
+    },
+  };
+  const result = await executeTool(tools.writeMapDeltaTool, { delta: misplacement }, cwd);
+  assert.equal(isToolError(result), false, resultText(result));
+
+  const repaired = readJson(tools.canonicalMapPath(cwd));
+  assert.ok(repaired.concern_evidence, "concern_evidence was not hoisted");
+  const names = (repaired.concern_evidence?.concerns ?? []).map((concern: { concern: string }) => concern.concern);
+  // Order is not part of the contract — both misplaced sources are merged.
+  assert.deepEqual(names.sort(), [
+    "playlist-driven JVM test inventory",
+    "test SDK and tooling provisioning",
+  ].sort());
+  const metaRecord = repaired.meta as Record<string, unknown>;
+  const lifecycleRecord = metaRecord.lifecycle as Record<string, unknown>;
+  assert.equal(lifecycleRecord.concerns, undefined);
+  assert.equal(lifecycleRecord.concern_evidence, undefined);
+  assert.equal(resultDetails(result).specialist_evidence_recorded, true);
+  assert.ok(!resultText(result).includes("Concern evidence is not recorded yet"));
 }
 
 async function testPreventsPrototypePollutionInDottedKeyExpansion(): Promise<void> {
@@ -1010,6 +1077,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "bootstrap map rejects regressive full write", fn: testBootstrapMapRejectsRegressiveFullWrite },
   { name: "double-wrapped and batched transports are repaired", fn: testRepairsDoubleWrappedAndBatchedTransports },
   { name: "meta-nested evidence sections are hoisted", fn: testHoistsMetaNestedEvidenceSections },
+  { name: "meta-lifecycle concerns are hoisted to canonical concern_evidence", fn: testHoistsMetaLifecycleConcernsToCanonicalConcernEvidence },
   { name: "substance failures persist as gaps with repair guidance", fn: testSubstanceFailuresPersistAsGapsWithRepairGuidance },
   { name: "prevents prototype pollution in dotted key expansion", fn: testPreventsPrototypePollutionInDottedKeyExpansion },
 ];

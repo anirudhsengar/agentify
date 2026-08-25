@@ -150,18 +150,16 @@ function normalizePayload(candidate: MemoryCandidateDraft): MemoryCandidateDraft
     case "specialist":
       return {
         ...candidate.payload,
-        domain: candidate.payload.domain.trim(),
-        owned_paths: sortedUniqueStrings(
-          candidate.payload.owned_paths,
-          (value) => normalizeMemoryRepositoryPath(value, "specialist owned path"),
+        concern: candidate.payload.concern.trim(),
+        context_paths: sortedUniqueStrings(
+          candidate.payload.context_paths,
+          (value) => normalizeMemoryRepositoryPath(value, "specialist context path"),
         ),
-        observed_paths: sortedUniqueStrings(
-          candidate.payload.observed_paths,
-          (value) => normalizeMemoryRepositoryPath(value, "specialist observed path"),
-        ),
-        contracts: sortedUniqueStrings(candidate.payload.contracts),
-        patterns: sortedUniqueStrings(candidate.payload.patterns),
-        pitfalls: sortedUniqueStrings(candidate.payload.pitfalls),
+        // Touchpoints, flows, invariants, and pitfalls stay in the order
+        // discovery produced. They are structured records whose sequence is
+        // meaningful — a flow's steps are a route, not a set — so the
+        // string-set normalization applied to flat lists would corrupt them.
+        entry_questions: sortedUniqueStrings(candidate.payload.entry_questions),
         related_specialists: sortedUniqueStrings(candidate.payload.related_specialists),
         validation_commands: sortedUniqueStrings(candidate.payload.validation_commands),
       };
@@ -289,8 +287,7 @@ export function recordPaths(record: MemoryRecord): string[] {
       for (const value of record.payload.required_context_paths) paths.add(value);
       break;
     case "specialist":
-      for (const value of record.payload.owned_paths) paths.add(value);
-      for (const value of record.payload.observed_paths) paths.add(value);
+      for (const value of record.payload.context_paths) paths.add(value);
       break;
     case "policy":
       for (const value of record.payload.protected_paths) paths.add(value);

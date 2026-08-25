@@ -101,7 +101,7 @@ function mergeSummaryCandidate(
             pathMatchesScope(changedPath, dependency)
           )
         ))
-        .flatMap((specialist) => specialist.contracts));
+        .flatMap((specialist) => specialist.invariants.map((invariant) => invariant.rule)));
   const semantic = {
     accepted_commit: event.accepted_commit,
     paths,

@@ -77,11 +77,11 @@ edges: # top-level only; "from -> to" with kind
 parallelizable_subtrees: # clusters that don't depend on each other
  - [<path>, <path>, ...]
  - [<path>, <path>, ...]
-domain_hypothesis: # best guess of the natural domain split
+structural_hypothesis: # how the code is arranged, not who specializes in it
  - name: <e.g., "frontend">
- owns: [<path>]
+ contains: [<path>]
  - name: <e.g., "backend">
- owns: [<path>]
+ contains: [<path>]
 ```
 
 If `FOCUS` was provided (non-empty), prepend this line:
@@ -113,6 +113,9 @@ focus_acknowledged: <echo of FOCUS>
 - **Top-level only**: don't enumerate every edge. Pick the 10-20
  most important ones. The main agent merges them into a higher-level
  picture.
-- **`domain_hypothesis`** is the natural split for *agents*: what
- boundaries would a fresh team draw? It informs the specialty
- generation, not the codebase structure.
+- **`structural_hypothesis` is not a specialty split.** It records how the
+ code is arranged so the parent can orient. Which specialties this
+ repository has is decided by `concern_scout` and `concern_tracer`,
+ which work semantically and routinely find concerns that run through
+ every one of these subtrees at once. Do not name specialists here,
+ and do not imply that a subtree is owned by one.

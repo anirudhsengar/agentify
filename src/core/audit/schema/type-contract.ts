@@ -27,9 +27,41 @@ const OneTypeTraceSchema = Type.Object({
     }),
 });
 
+// A repository's data contracts, in whatever form its languages express them.
+//
+// `pydantic_models` and `typescript_interfaces` named two languages in the
+// canonical schema of a language-agnostic tool, so a Java, Go, Rust, or
+// make-driven repository had nowhere to record its contracts and arrived at
+// specialist discovery with an empty type surface. `type_definitions` replaces
+// them; the two named fields remain optional so maps written before this
+// change still validate.
+const GenericTypeDefSchema = Type.Object({
+    path: Type.String(),
+    name: Type.String(),
+    kind: Type.String({
+        description:
+            "What this repository calls the construct — interface, struct, class, " +
+            "record, model, schema, enum, protocol, message, target. Free-form: " +
+            "use the language's own word rather than a normalized one.",
+    }),
+    language: Type.String({
+        description: "The language or format the definition is written in.",
+    }),
+    fields: Type.Array(Type.String()),
+});
+
 export const TypeContractSurfaceSchema = Type.Object({
-    pydantic_models: Type.Array(TypeDefSchema),
-    typescript_interfaces: Type.Array(TypeDefSchema),
+    type_definitions: Type.Optional(Type.Array(GenericTypeDefSchema, {
+        description:
+            "Observed data contracts in any language. Prefer this over the " +
+            "language-named fields below, which exist only for compatibility.",
+    })),
+    pydantic_models: Type.Array(TypeDefSchema, {
+        description: "Superseded by type_definitions. Record [] in new maps.",
+    }),
+    typescript_interfaces: Type.Array(TypeDefSchema, {
+        description: "Superseded by type_definitions. Record [] in new maps.",
+    }),
     api_contracts: Type.Optional(Type.Array(OpenApiSchema)),
     db_models: Type.Array(DbModelSchema),
     idks: Type.Array(Type.String(), {

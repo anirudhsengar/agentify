@@ -101,8 +101,26 @@ async function testPromptKeepsExplorerDispatchBounded(): Promise<void> {
   const raw = readRawBuilderPrompt();
   assert.match(
     raw,
-    /Start with one high-value feature explorer\. Read and merge\nits report before dispatching the next one/,
+    /dispatch one\nhigh-value feature explorer\. Read and merge its report before dispatching the\nnext one/,
     "builder prompt must gather and use evidence before dispatching more explorers",
+  );
+  // Concern discovery is the audit's reason for existing, so the prompt must
+  // dispatch the scout once and one tracer per candidate rather than leaving
+  // specialties to whatever the structural explorers happened to notice.
+  assert.match(
+    raw,
+    /Run `concern_scout` against the repository root exactly once/,
+    "builder prompt must dispatch the concern scout",
+  );
+  assert.match(
+    raw,
+    /run `concern_tracer` with the concern name/,
+    "builder prompt must trace each candidate concern",
+  );
+  assert.match(
+    raw,
+    /A concern is a body of knowledge, not a folder/,
+    "builder prompt must state that concerns are not directories",
   );
   const budget = raw.match(
     /at most 16 explorers per\n+audit, two active at once, and ([a-z]+) minutes per explorer/,

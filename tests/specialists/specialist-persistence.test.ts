@@ -35,8 +35,13 @@ function createRepository(): { cwd: string; commit: string } {
     "package.json",
     "src/index.ts",
     "src/lib.ts",
+    "src/auth/verify.ts",
+    "src/routes/login.ts",
+    "src/middleware/session.ts",
     "src/billing/index.ts",
+    "src/billing/charge.ts",
     "src/billing/types.ts",
+    "tests/auth.test.ts",
     "tests/billing.test.ts",
     "scripts/prime-db.sh",
   ]) {
@@ -78,7 +83,10 @@ test("materialization persists read-only specialists and retires removed experti
       actor: "knowledge-maintainer",
       observed_at: observedAt,
     });
-    assert.deepEqual(first.created_specialist_ids, ["specialist-billing"]);
+    assert.deepEqual(
+      first.created_specialist_ids,
+      ["specialist-authentication", "specialist-billing"],
+    );
     const specialist = listAgentIdentities(fixture.cwd)
       .find((identity) => identity.agent_id === "specialist-billing");
     assert.ok(specialist);
@@ -96,13 +104,17 @@ test("materialization persists read-only specialists and retires removed experti
     });
     assert.deepEqual(second.created_specialist_ids, []);
     assert.deepEqual(second.updated_specialist_ids, []);
-    assert.deepEqual(second.unchanged_specialist_ids, ["specialist-billing"]);
+    assert.deepEqual(
+      second.unchanged_specialist_ids,
+      ["specialist-authentication", "specialist-billing"],
+    );
     assert.deepEqual(
       second.specialist_memory.map((record) => record.memory_id),
       first.specialist_memory.map((record) => record.memory_id),
     );
 
     const reducedMap = makeSpecialistFixtureMap();
+    reducedMap.concern_evidence = { concerns: [], not_concerns: [] };
     reducedMap.expert_evidence = { expert_domains: [] };
     reducedMap.artifact_intents!.feature_agents = [];
     reducedMap.customization_evidence = { custom_tool_candidates: [], skill_candidates: [] };
@@ -115,7 +127,10 @@ test("materialization persists read-only specialists and retires removed experti
       actor: "knowledge-maintainer",
       observed_at: observedAt,
     });
-    assert.deepEqual(reduced.retired_specialist_ids, ["specialist-billing"]);
+    assert.deepEqual(
+      reduced.retired_specialist_ids,
+      ["specialist-authentication", "specialist-billing"],
+    );
     assert.ok(reduced.stale_procedure_memory_ids.length >= 1);
     assert.equal(
       listAgentIdentities(fixture.cwd)

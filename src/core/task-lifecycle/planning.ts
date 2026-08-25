@@ -85,10 +85,12 @@ function consultationFor(
     task_id: taskId,
     specialist_id: specialist.specialist_id,
     expected_base_commit: expectedBaseCommit,
-    paths: normalizeTaskPaths([...specialist.owned_paths, ...specialist.observed_paths]),
-    contracts: sortedTaskStrings(specialist.contracts),
-    patterns: sortedTaskStrings(specialist.patterns),
-    pitfalls: sortedTaskStrings(specialist.pitfalls),
+    paths: normalizeTaskPaths(specialist.context_paths),
+    contracts: sortedTaskStrings(specialist.invariants.map((invariant) => invariant.rule)),
+    patterns: sortedTaskStrings(specialist.flows.map((flow) => `${flow.name}: ${flow.description}`)),
+    pitfalls: sortedTaskStrings(specialist.pitfalls.map((pitfall) =>
+      `${pitfall.risk} Consequence: ${pitfall.consequence}`
+    )),
     procedures: selectedProcedures.map((procedure) => procedure.procedure_id).sort(),
     validation: sortedTaskStrings([
       ...specialist.validation_commands,
@@ -96,7 +98,7 @@ function consultationFor(
     ]),
     risks: specialist.pitfalls.slice(0, 32).map((pitfall, index) => ({
       finding_id: `${specialist.specialist_id}-risk-${index + 1}`,
-      statement: redactTaskText(pitfall, 4_000),
+      statement: redactTaskText(`${pitfall.risk} Consequence: ${pitfall.consequence}`, 4_000),
       evidence_paths: normalizeTaskPaths(specialist.evidence_paths.slice(0, 32)),
       severity: "warning" as const,
     })),
@@ -229,8 +231,7 @@ export function buildSpecialistConsultationRequest(input: {
     selected_procedures: selectedProcedures,
     bounded_context_paths: normalizeTaskPaths([
       ...input.plan.in_scope_paths,
-      ...specialist.owned_paths,
-      ...specialist.observed_paths,
+      ...specialist.context_paths,
       ...selectedProcedures.flatMap((procedure) => procedure.required_context_paths),
     ]).slice(0, 128),
     task_summary: input.plan.task_summary,

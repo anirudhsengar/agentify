@@ -5,26 +5,57 @@ read-only. They improve planning and review without creating additional writers.
 
 ## Discovery
 
-Specialists are derived from the canonical structured audit map at
-`.agentify/runtime/audit/codebase_map.json`. Candidate domains are scored from
-explicit expert evidence or, when that evidence is absent, one cohesive
-structural fallback backed by module boundaries, contracts, risk signals,
-tracked files, and validation commands. Speculative feature-agent names and
-suggested domain hints do not create specialists. Discovery is bounded so the
-portfolio remains small and reviewable.
+A specialist owns one **concern**: a specialty a maintainer would recognize as
+their own body of knowledge. Authentication, checkout, schema migration, test
+selection — whatever the repository actually has. A concern is not a directory.
+It runs through the codebase, and concerns routinely share files: authentication
+and checkout both touch the request middleware, for entirely different reasons.
+Two concerns overlapping is evidence that both are real, never a signal to merge
+them.
 
-The audit cannot complete before it records an explicit specialist-evidence
-decision in `expert_evidence.expert_domains`. The completion gate keeps the
-session open — with bounded recovery passes — until the field exists, so a
-coverage-complete map can no longer skip specialist consideration silently. An
-honest empty domain list remains valid for repositories with no cohesive
-recurring domain, and rerunning the installer against a map that predates this
-gate triggers a bounded top-up audit rather than a blind re-attach. Discovery
-warnings explaining an empty or reduced portfolio are printed in the install
-report.
+The audit finds concerns in a dedicated stage. `concern_scout` sweeps the whole
+repository once and proposes candidates with seed paths, recording the
+candidates it rejected and why. One `concern_tracer` then follows each candidate
+end to end, returning its flows, its touchpoints with a per-file role, its
+invariants, its pitfalls, and the questions a task must answer before touching
+it. Both explorers receive the repository's untracked roots up front, so an
+audit never spends its budget on code that is fetched, generated, or vendored at
+build time and could not be bound to evidence anyway.
+
+The audit cannot complete before it records that result in
+`concern_evidence.concerns`. An honest empty list stays valid for a repository
+too small to have distinct specialties, and must be justified in
+`open_questions` and `not_concerns`.
+
+Specialist discovery does not re-decide any of this. The model reads the
+repository and names its concerns; trusted code verifies that what it named
+resolves to real bytes tracked at the supporting commit. Touchpoints that are
+not tracked files are dropped, a flow reduced below two steps stops being a
+trace and is discarded, and a concern with nothing left is rejected with a
+warning naming the concern and the reason. Maps written against the superseded
+`expert_evidence.expert_domains` shape still install, migrated with capped
+confidence and a warning that a re-audit would produce a better specialist.
+
+Every specialist definition includes:
+
+- a stable specialist ID and concern name;
+- what it covers and what it deliberately excludes;
+- traced flows through the concern, entry point to effect;
+- touchpoints with a symbol, a role, and a centrality;
+- invariants, pitfalls, and entry questions;
+- procedures and validation commands;
+- related specialists, derived from shared touchpoints;
+- freshness dependencies, supporting commit, and evidence digest.
+
+There are no owned paths. `context_paths` is a derived read scope for bounding
+one consultation session, not a territory claim, and several specialists
+matching the same file is the expected outcome.
+
+Evidence references bind repository-relative paths to real-byte hashes at a
+specific commit. Missing, unsafe, or unverifiable evidence is rejected.
 
 Procedures are emitted only from tracked custom commands and the authoritative
-domain or repository validation surface. Free-form skill candidates and
+concern or repository validation surface. Free-form skill candidates and
 per-area template hints remain audit observations, not executable portfolio
 inputs.
 
@@ -32,19 +63,6 @@ The canonical map is committed with the installation while audit history stays
 ignored. This preserves one routing source across the local installer, issue
 workflows, and accepted-merge learning without making transient model sessions
 authoritative state.
-
-Every specialist definition includes:
-
-- a stable specialist ID and domain;
-- owned and evidence paths;
-- relevant symbols and contracts;
-- procedures and validation commands;
-- routing terms and risk signals;
-- freshness dependencies;
-- supporting commit and evidence digest.
-
-Evidence references bind repository-relative paths to real-byte hashes at a
-specific commit. Missing, unsafe, or unverifiable evidence is rejected.
 
 ## Persistence
 
@@ -59,10 +77,19 @@ authority.
 
 ## Routing
 
-Task planning routes issues using requested paths, acceptance criteria, risk
-terms, contracts, procedures, and specialist ownership. Selected specialists
-contribute compact evidence and instructions to the orchestrator. The builder and
-reviewer receive only the specialist context relevant to their bounded task.
+Routing follows meaning. A task is matched to a specialist because it is about
+that specialist's concern; the files it happens to touch corroborate the match
+rather than deciding it. Naming the concern is the strongest signal, a core
+touchpoint the next, and a merely known path weaker still. Risk raises the
+weight of whatever concerns the repository recorded — it never contributes a
+fixed vocabulary of its own, so a repository whose real stakes are platform
+exclusion rules is served as well as one whose stakes are payments.
+
+Each selected specialist runs with a system prompt generated from its own
+record: its concern, its scope boundary, its core code, its traced flows, its
+invariants, and its entry questions. It is the authentication specialist, not a
+general advisor holding a file list. The builder and reviewer receive only the
+specialist context relevant to their bounded task.
 
 ## Refresh
 

@@ -29,6 +29,8 @@
 //   - pitfalls      — git-log-driven risk discovery
 //   - validation    — test/lint/typecheck commands + per-change-type
 //   - gap_filler    — close an uncovered D1-D10 dimension (fallback mode)
+//   - concern_scout — sweep the repository for its actual specialties
+//   - concern_tracer— trace one named concern end to end
 //   - custom        — system prompt composed by the parent;
 //                     one per topic/specialization, bounded by the audit
 //                     dispatch budget.
@@ -37,6 +39,7 @@
 // dispatch is bounded by total/concurrent/time
 // budgets so a bad audit cannot spawn unbounded work.
 
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -75,7 +78,8 @@ const DEFAULT_MAX_CONCURRENT_SPAWNS = 2;
 export const DEFAULT_SUBAGENT_TIMEOUT_MS = 3 * 60 * 1000;
 const DEFAULT_MAX_TOTAL_COST_USD = 5;
 
-// The 9 dimension-shaped modes plus a 10th custom mode that takes an
+// The 9 dimension-shaped modes, the two concern modes that find and trace what
+// this repository's specialties actually are, plus a custom mode that takes an
 // inline system prompt composed by the builder.
 const ExplorerMode = StringEnum(
     [
@@ -88,6 +92,8 @@ const ExplorerMode = StringEnum(
         "pitfalls",
         "validation",
         "gap_filler",
+        "concern_scout",
+        "concern_tracer",
         "custom",
     ] as const,
     { default: "topography" },
@@ -103,6 +109,8 @@ const MODE_TO_FILE: Record<string, string> = {
     pitfalls: "pitfalls.md",
     validation: "validation.md",
     gap_filler: "gap_filler.md",
+    concern_scout: "concern_scout.md",
+    concern_tracer: "concern_tracer.md",
 };
 
 /** Per-mode step caps. */
@@ -116,6 +124,13 @@ const MODE_STEP_DEFAULTS: Record<string, { reads: number; bash: number; steps: n
     pitfalls: { reads: 5, bash: 0, steps: 10 },
     validation: { reads: 10, bash: 0, steps: 15 },
     gap_filler: { reads: 8, bash: 0, steps: 12 },
+    // Concern discovery is the widest and deepest exploration in the audit: the
+    // scout sweeps the whole repository for specialties, and each tracer must
+    // follow one concern end to end through every subtree it reaches. A
+    // shallow trace produces a specialist that gives shallow answers, so these
+    // modes get the largest read budgets.
+    concern_scout: { reads: 20, bash: 0, steps: 28 },
+    concern_tracer: { reads: 25, bash: 0, steps: 34 },
     // The builder specifies custom exploration limits per call.
     custom: { reads: 8, bash: 0, steps: 12 },
 };
@@ -218,6 +233,60 @@ function makeBudgetError(text: string, budget: Record<string, number>, stateDir:
     };
 }
 
+/**
+ * Top-level entries present on disk but absent from the git tree at HEAD.
+ *
+ * Specialist evidence is bound to git blobs at the supporting commit, so a
+ * concern traced through fetched, generated, or vendored code can never
+ * survive materialization: every touchpoint is dropped and the portfolio comes
+ * back empty with no explanation. Rather than let an explorer spend its whole
+ * budget somewhere the evidence rules will silently reject, tell it up front
+ * which roots are not part of the repository.
+ *
+ * Best-effort by design. A repository without git, or a git invocation that
+ * fails, yields no constraint rather than a blocked audit.
+ */
+function untrackedTopLevelRoots(cwd: string): string[] {
+    const result = spawnSync("git", ["-C", cwd, "ls-tree", "--name-only", "-z", "HEAD"], {
+        encoding: "utf-8",
+        maxBuffer: 4 * 1024 * 1024,
+        windowsHide: true,
+    });
+    if (result.status !== 0 || typeof result.stdout !== "string") return [];
+    const tracked = new Set(result.stdout.split("\0").filter(Boolean));
+    if (tracked.size === 0) return [];
+    let entries: fs.Dirent[];
+    try {
+        entries = fs.readdirSync(cwd, { withFileTypes: true });
+    } catch {
+        return [];
+    }
+    return entries
+        .filter((entry) => entry.name !== ".git" && !tracked.has(entry.name))
+        .map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name))
+        .sort((left, right) => left.localeCompare(right));
+}
+
+const UNTRACKED_NOTE_PLACEHOLDER = /<untrackedPathsNote>/g;
+
+function untrackedPathsNote(cwd: string): string {
+    const roots = untrackedTopLevelRoots(cwd);
+    if (roots.length === 0) {
+        return "## Untracked paths\n\n"
+            + "Every top-level entry in this repository is tracked in git. Cite any path "
+            + "you actually observed.";
+    }
+    return "## Untracked paths\n\n"
+        + "These top-level entries exist on disk but are **not tracked in git**. They are "
+        + "fetched, generated, or vendored — they are not part of this repository, and a "
+        + "specialist cannot be grounded in them:\n\n"
+        + roots.map((root) => `- \`${root}\``).join("\n")
+        + "\n\nDo not cite any path under them. If the repository's real work happens "
+        + "through one of these — a vendored harness, a fetched toolchain — describe how "
+        + "the *tracked* code invokes and configures it, and make those tracked files your "
+        + "touchpoints instead.";
+}
+
 function resolveExplorerPromptPath(mode: string): string {
     const file = MODE_TO_FILE[mode];
     if (!file) {
@@ -228,11 +297,12 @@ function resolveExplorerPromptPath(mode: string): string {
     return path.join(EXPLORERS_DIR, file);
 }
 
-function readSubagentPrompt(mode: string, stateDir: string): string {
+function readSubagentPrompt(mode: string, stateDir: string, cwd: string): string {
     const promptPath = resolveExplorerPromptPath(mode);
     return fs
         .readFileSync(promptPath, "utf-8")
-        .replace(/<stateDir>/g, stateDir);
+        .replace(/<stateDir>/g, stateDir)
+        .replace(UNTRACKED_NOTE_PLACEHOLDER, () => untrackedPathsNote(cwd));
 }
 
 /**
@@ -248,15 +318,21 @@ function resolveSubagentPrompt(
     mode: string,
     inlinePrompt: string | undefined,
     stateDir: string,
+    cwd: string,
 ): { prompt: string; source: "inline" | "fixed" } {
     if (mode === "custom") {
         if (inlinePrompt) {
-            return { prompt: inlinePrompt.replace(/<stateDir>/g, stateDir), source: "inline" };
+            return {
+                prompt: inlinePrompt
+                    .replace(/<stateDir>/g, stateDir)
+                    .replace(UNTRACKED_NOTE_PLACEHOLDER, () => untrackedPathsNote(cwd)),
+                source: "inline",
+            };
         }
         throw new Error("custom mode requires a self-contained system_prompt based on repository evidence.");
     }
     // Fixed mode: load from disk.
-    return { prompt: readSubagentPrompt(mode, stateDir), source: "fixed" };
+    return { prompt: readSubagentPrompt(mode, stateDir, cwd), source: "fixed" };
 }
 
 function extractFinalAssistantText(
@@ -487,6 +563,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 mode,
                 params.system_prompt,
                 stateDir,
+                ctx.cwd,
             );
             subagentSystemPrompt = resolved.prompt;
             promptSource = resolved.source;

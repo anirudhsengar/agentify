@@ -120,7 +120,7 @@ export function listMemoryRecordsInternal(cwd: string, query: MemoryQuery = {}):
     .filter((record) => query.evidenceId === undefined
       || record.evidence.some((entry) => entry.evidence_id === query.evidenceId))
     .filter((record) => query.domain === undefined
-      || (record.kind === "specialist" && record.payload.domain === query.domain))
+      || (record.kind === "specialist" && record.payload.concern === query.domain))
     .filter((record) => query.taskId === undefined
       || (record.kind === "episode" && record.payload.task_id === query.taskId)
       || (record.kind === "orchestrator" && record.payload.routing_key === query.taskId))

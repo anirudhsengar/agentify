@@ -1,6 +1,7 @@
 import { Type, type Static } from "typebox";
 import { COVERAGE_DIMENSIONS } from "../coverage.ts";
 import { ArtifactIntentsSchema } from "./artifact-intents.ts";
+import { ConcernEvidenceSchema } from "./concerns.ts";
 import { ConventionsSchema } from "./conventions.ts";
 import {
   CoverageMatrixSchema,
@@ -51,6 +52,7 @@ export const CodebaseMapSchema = Type.Object({
   }))),
   customization_evidence: Type.Optional(CustomizationEvidenceSchema),
   expert_evidence: Type.Optional(ExpertEvidenceSchema),
+  concern_evidence: Type.Optional(ConcernEvidenceSchema),
   artifact_intents: Type.Optional(ArtifactIntentsSchema),
 }, { additionalProperties: false });
 
@@ -88,6 +90,7 @@ export const PartialCodebaseMapSchema = Type.Object({
   exploration_log: Type.Optional(ExplorationLogSchema),
   customization_evidence: Type.Optional(CustomizationEvidenceSchema),
   expert_evidence: Type.Optional(ExpertEvidenceSchema),
+  concern_evidence: Type.Optional(ConcernEvidenceSchema),
   artifact_intents: Type.Optional(ArtifactIntentsSchema),
 }, { additionalProperties: false });
 

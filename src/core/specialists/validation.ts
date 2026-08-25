@@ -73,8 +73,10 @@ function assertSpecialist(
     fail(`specialist ID must start with specialist-: ${definition.specialist_id}`);
   }
   assertNonEmpty(definition.display_name, `specialist ${definition.specialist_id} display name`, 256);
-  assertNonEmpty(definition.domain, `specialist ${definition.specialist_id} domain`, 256);
-  assertNonEmpty(definition.purpose, `specialist ${definition.specialist_id} purpose`);
+  assertNonEmpty(definition.concern, `specialist ${definition.specialist_id} concern`, 256);
+  assertNonEmpty(definition.one_line, `specialist ${definition.specialist_id} one-line scope`, 512);
+  assertNonEmpty(definition.covers, `specialist ${definition.specialist_id} covers statement`);
+  assertNonEmpty(definition.excludes, `specialist ${definition.specialist_id} excludes statement`);
   assertCommit(definition.supporting_commit, `specialist ${definition.specialist_id} supporting commit`);
   if (definition.supporting_commit !== portfolioCommit) {
     fail(`specialist ${definition.specialist_id} supporting commit differs from its portfolio`);
@@ -82,34 +84,71 @@ function assertSpecialist(
   if (definition.freshness !== "current") {
     fail(`newly discovered specialist ${definition.specialist_id} must be current`);
   }
-  if (!Number.isSafeInteger(definition.discovery_score) || definition.discovery_score < 0) {
-    fail(`specialist ${definition.specialist_id} has an invalid discovery score`);
+  if (definition.touchpoints.length === 0) {
+    fail(`specialist ${definition.specialist_id} has no verified touchpoint`);
   }
-  assertNormalizedStrings(definition.owned_paths, `specialist ${definition.specialist_id} owned paths`, {
-    paths: true,
+  if (definition.touchpoints.length > 512) {
+    fail(`specialist ${definition.specialist_id} exceeds the touchpoint bound`);
+  }
+  const touchpointKeys = new Set<string>();
+  for (const touchpoint of definition.touchpoints) {
+    assertNormalizedStrings([touchpoint.path], `specialist ${definition.specialist_id} touchpoint path`, {
+      paths: true,
+      maximumItems: 1,
+    });
+    assertNonEmpty(touchpoint.role, `specialist ${definition.specialist_id} touchpoint role`, 1_024);
+    if (touchpoint.line_range !== null) {
+      const [start, end] = touchpoint.line_range;
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start) {
+        fail(`specialist ${definition.specialist_id} has an invalid touchpoint line range for ${touchpoint.path}`);
+      }
+    }
+    const key = `${touchpoint.path} ${touchpoint.symbol ?? ""}`;
+    if (touchpointKeys.has(key)) {
+      fail(`specialist ${definition.specialist_id} repeats touchpoint ${key.trim()}`);
+    }
+    touchpointKeys.add(key);
+  }
+  // A flow with fewer than two steps is not a trace. Discovery drops those, so
+  // one reaching validation means a caller built a definition by hand.
+  for (const flow of definition.flows) {
+    assertNonEmpty(flow.name, `specialist ${definition.specialist_id} flow name`, 256);
+    if (flow.steps.length < 2) {
+      fail(`specialist ${definition.specialist_id} flow "${flow.name}" is not an end-to-end trace`);
+    }
+    for (const step of flow.steps) {
+      assertNormalizedStrings([step.path], `specialist ${definition.specialist_id} flow step path`, {
+        paths: true,
+        maximumItems: 1,
+      });
+      assertNonEmpty(step.what_happens, `specialist ${definition.specialist_id} flow step`, 1_024);
+    }
+  }
+  for (const invariant of definition.invariants) {
+    assertNonEmpty(invariant.rule, `specialist ${definition.specialist_id} invariant rule`, 1_024);
+    assertNonEmpty(invariant.why, `specialist ${definition.specialist_id} invariant rationale`, 1_024);
+  }
+  for (const pitfall of definition.pitfalls) {
+    assertNonEmpty(pitfall.risk, `specialist ${definition.specialist_id} pitfall risk`, 1_024);
+    assertNonEmpty(pitfall.consequence, `specialist ${definition.specialist_id} pitfall consequence`, 1_024);
+  }
+  assertNormalizedStrings(definition.entry_questions, `specialist ${definition.specialist_id} entry questions`, {
     allowEmpty: true,
-    maximumItems: 256,
+    maximumItems: 32,
   });
-  assertNormalizedStrings(definition.observed_paths, `specialist ${definition.specialist_id} observed paths`, {
+  assertNormalizedStrings(definition.context_paths, `specialist ${definition.specialist_id} context paths`, {
     paths: true,
     maximumItems: 512,
   });
-  assertNormalizedStrings(definition.contracts, `specialist ${definition.specialist_id} contracts`, {
-    allowEmpty: true,
-    maximumItems: 128,
-  });
-  assertNormalizedStrings(definition.patterns, `specialist ${definition.specialist_id} patterns`, {
-    allowEmpty: true,
-    maximumItems: 128,
-  });
-  assertNormalizedStrings(definition.pitfalls, `specialist ${definition.specialist_id} pitfalls`, {
+  assertNormalizedStrings(definition.spans_subtrees, `specialist ${definition.specialist_id} spanned subtrees`, {
+    paths: true,
     allowEmpty: true,
     maximumItems: 128,
   });
   assertNormalizedStrings(
     definition.related_specialists,
     `specialist ${definition.specialist_id} related specialists`,
-    { allowEmpty: true, maximumItems: 64 },
+    { allowEmpty: true, maximumItems: 32 },
   );
   assertNormalizedStrings(
     definition.validation_commands,
@@ -118,7 +157,7 @@ function assertSpecialist(
   );
   assertNormalizedStrings(definition.evidence_paths, `specialist ${definition.specialist_id} evidence paths`, {
     paths: true,
-    maximumItems: 128,
+    maximumItems: 256,
   });
   assertNormalizedStrings(
     definition.freshness_dependencies,
@@ -222,9 +261,13 @@ export function validateSpecialistPortfolio(
   if (portfolio.procedures.length > MAX_DISCOVERED_PROCEDURES) {
     fail(`specialist portfolio exceeds ${MAX_DISCOVERED_PROCEDURES} procedures`);
   }
+  // A portfolio with no specialists has no evidence to cite, and saying so is
+  // more useful than failing validation: the warnings carry the reason each
+  // concern was rejected, and that report is what a caller needs to act on.
   assertNormalizedStrings(portfolio.evidence_paths, "specialist portfolio evidence paths", {
     paths: true,
-    maximumItems: 128,
+    allowEmpty: portfolio.specialists.length === 0,
+    maximumItems: 256,
   });
   assertNormalizedStrings(portfolio.warnings, "specialist portfolio warnings", {
     allowEmpty: true,

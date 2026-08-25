@@ -44,9 +44,13 @@ test("specialist architecture and installed-package coverage stay indexed", () =
   const architecture = read("docs/architecture/repository-specialists.md");
   const packageJson = JSON.parse(read("package.json")) as { scripts?: Record<string, string> };
   assert.ok(docs.includes("architecture/repository-specialists.md"));
-  assert.match(architecture, /portfolio remains small/i);
   assert.match(architecture, /read-only/i);
   assert.match(architecture, /procedures/i);
+  // The concern model is what the specialist design is for; the doc must keep
+  // stating it, because the drift it replaced was directory-shaped ownership.
+  assert.match(architecture, /A concern is not a directory/i);
+  assert.match(architecture, /never a signal to merge/i);
+  assert.match(architecture, /There are no owned paths/i);
   assert.match(packageJson.scripts?.["test:package"] ?? "", /exact-artifact-qualification\.mjs/);
   assert.match(read("tests/package/exact-artifact-qualification.mjs"), /installed-installer-smoke\.mjs/);
   assert.match(packageJson.scripts?.["test:specialists"] ?? "", /specialist-discovery\.test\.ts/);

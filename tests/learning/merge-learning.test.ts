@@ -51,8 +51,13 @@ function createFixture(): {
   write(cwd, "package.json", `${JSON.stringify({ scripts: { test: "node --test" } }, null, 2)}\n`);
   write(cwd, "src/index.ts", "export * from './billing/index.js';\n");
   write(cwd, "src/lib.ts", "export const shared = true;\n");
+  write(cwd, "src/auth/verify.ts", "export const verifyCredential = () => true;\n");
+  write(cwd, "src/routes/login.ts", "export const login = () => null;\n");
+  write(cwd, "src/middleware/session.ts", "export const requireSession = () => null;\n");
   write(cwd, "src/billing/index.ts", "export const invoiceTotal = 100;\n");
+  write(cwd, "src/billing/charge.ts", "export const charge = () => null;\n");
   write(cwd, "src/billing/types.ts", "export interface Invoice { total: number }\n");
+  write(cwd, "tests/auth.test.ts", "// auth tests\n");
   write(cwd, "tests/billing.test.ts", "// billing tests\n");
   write(cwd, "scripts/prime-db.sh", "#!/usr/bin/env bash\nexit 0\n");
   const map = makeSpecialistFixtureMap();

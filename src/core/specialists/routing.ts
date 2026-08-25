@@ -88,11 +88,14 @@ function addReason(reasons: RoutingReason[], reason: RoutingReason): void {
 
 function textSignals(specialist: SpecialistDefinition): string[] {
   return tokens([
-    specialist.domain,
-    specialist.purpose,
-    ...specialist.contracts,
-    ...specialist.patterns,
-    ...specialist.pitfalls,
+    specialist.concern,
+    specialist.one_line,
+    specialist.covers,
+    ...specialist.flows.map((flow) => `${flow.name} ${flow.description}`),
+    ...specialist.touchpoints.map((touchpoint) => touchpoint.role),
+    ...specialist.invariants.map((invariant) => invariant.rule),
+    ...specialist.pitfalls.map((pitfall) => pitfall.risk),
+    ...specialist.entry_questions,
   ].join(" "));
 }
 
@@ -115,53 +118,87 @@ function contractMatches(
   return sortedUniqueStrings(matches);
 }
 
-function riskSignals(
-  specialist: SpecialistDefinition,
+/**
+ * Concern-name overlap between the task and a specialist.
+ *
+ * Deliberately not a fixed vocabulary of "risky" words. A previous version
+ * carried a hardcoded list — auth, payment, migration, secret — which decided
+ * in advance which concerns a repository was allowed to consider important,
+ * and scored a repository whose real risks were platform exclusion rules or
+ * playlist selection at zero. Risk raises the weight of whatever concerns this
+ * repository actually recorded; it never supplies its own.
+ */
+function elevatedConcernWeight(
   risk: Required<SpecialistRoutingRequest>["risk_category"],
-): string[] {
-  if (risk === "low") return [];
-  const specialistTokens = new Set(textSignals(specialist));
-  const vocabulary = risk === "critical" || risk === "high"
-    ? [
-        "auth", "authorization", "credential", "database", "deploy", "migration",
-        "payment", "permission", "production", "release", "secret", "security",
-      ]
-    : ["database", "migration", "permission", "release", "security"];
-  return vocabulary.filter((token) => specialistTokens.has(token));
+): number {
+  switch (risk) {
+    case "critical": return 6;
+    case "high": return 4;
+    case "medium": return 2;
+    default: return 0;
+  }
 }
 
+/**
+ * Score one specialist against a task.
+ *
+ * Meaning leads. A specialist is selected because the task is about its
+ * concern; the files a task happens to touch are corroboration, not the
+ * decision. The previous weighting was the other way around — path ownership
+ * at 12 against a semantic match at 2 — which meant a task squarely about
+ * authentication could not reach the selection floor unless it also named
+ * files inside an "auth" directory. For a concern that runs through the whole
+ * codebase, that is exactly backwards.
+ */
 function scoreSpecialist(
   specialist: SpecialistDefinition,
   request: Required<SpecialistRoutingRequest>,
 ): SpecialistRoutingSelection | null {
   const reasons: RoutingReason[] = [];
-  const paths = sortedUniqueStrings([...request.candidate_paths, ...request.changed_files]);
-  for (const candidatePath of paths) {
-    if (specialist.owned_paths.some((scope) => pathMatchesScope(candidatePath, scope))) {
-      addReason(reasons, { kind: "owned_path", signal: candidatePath, weight: 12 });
-      continue;
-    }
-    if (specialist.observed_paths.some((scope) => pathMatchesScope(candidatePath, scope))) {
-      addReason(reasons, { kind: "observed_path", signal: candidatePath, weight: 7 });
-    }
-  }
-
-  for (const contract of contractMatches(request.contracts, specialist.contracts)) {
-    addReason(reasons, { kind: "contract", signal: contract, weight: 9 });
-  }
 
   const taskTokens = new Set(tokens(request.task_description));
+  const concernTokens = tokens(specialist.concern);
+  const namesTheConcern = concernTokens.length > 0
+    && concernTokens.every((token) => taskTokens.has(token));
+  if (namesTheConcern) {
+    addReason(reasons, { kind: "concern_match", signal: specialist.concern, weight: 12 });
+  }
   for (const signal of textSignals(specialist)) {
     if (taskTokens.has(signal)) {
-      addReason(reasons, { kind: "task_signal", signal, weight: 2 });
+      addReason(reasons, { kind: "task_signal", signal, weight: 3 });
     }
   }
 
-  for (const signal of riskSignals(specialist, request.risk_category)) {
+  const paths = sortedUniqueStrings([...request.candidate_paths, ...request.changed_files]);
+  for (const candidatePath of paths) {
+    const touchpoint = specialist.touchpoints.find((entry) =>
+      pathMatchesScope(candidatePath, entry.path)
+    );
+    if (touchpoint) {
+      // A core touchpoint means changing this file changes the concern's
+      // behavior, which is a stronger signal than merely being known to it.
+      addReason(reasons, {
+        kind: "touchpoint",
+        signal: candidatePath,
+        weight: touchpoint.centrality === "core" ? 8 : 5,
+      });
+      continue;
+    }
+    if (specialist.context_paths.some((scope) => pathMatchesScope(candidatePath, scope))) {
+      addReason(reasons, { kind: "context_path", signal: candidatePath, weight: 3 });
+    }
+  }
+
+  for (const contract of contractMatches(request.contracts, specialist.invariants.map((invariant) => invariant.rule))) {
+    addReason(reasons, { kind: "contract", signal: contract, weight: 6 });
+  }
+
+  const riskWeight = elevatedConcernWeight(request.risk_category);
+  if (riskWeight > 0 && reasons.length > 0) {
     addReason(reasons, {
       kind: "risk_signal",
-      signal: `${request.risk_category}:${signal}`,
-      weight: request.risk_category === "critical" ? 6 : 4,
+      signal: `${request.risk_category}:${specialist.concern}`,
+      weight: riskWeight,
     });
   }
 
@@ -268,11 +305,15 @@ function unmatchedSignals(
   const matchedTokens = new Set<string>();
   for (const selection of [...specialists, ...procedures]) {
     for (const reason of selection.reasons) {
-      if (reason.kind === "owned_path" || reason.kind === "observed_path" || reason.kind === "procedure_context") {
+      if (reason.kind === "touchpoint" || reason.kind === "context_path" || reason.kind === "procedure_context") {
         matchedPaths.add(reason.signal);
       } else if (reason.kind === "contract") {
         matchedContracts.add(reason.signal);
-      } else if (reason.kind === "task_signal" || reason.kind === "procedure_trigger") {
+      } else if (
+        reason.kind === "task_signal"
+        || reason.kind === "concern_match"
+        || reason.kind === "procedure_trigger"
+      ) {
         matchedTokens.add(reason.signal);
       }
     }

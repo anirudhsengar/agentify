@@ -4,6 +4,23 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Specialist discovery is now concern-based. The audit runs a `concern_scout`
+  explorer once to propose the repository's specialties, then a
+  `concern_tracer` per candidate to trace it end to end, and records the
+  result as `concern_evidence`: concerns with traced flows, per-file
+  touchpoint roles, invariants, pitfalls, entry questions, validation
+  commands, and the rejected `not_concerns`. A concern is a body of
+  knowledge, not a directory — concerns are expected to span subtrees and to
+  share files. Specialists, planning consultations, specialist memory, and
+  accepted-merge learning all take the concern shape, replacing the retired
+  `expert_evidence` domain list; specialists derived from a pre-concern map
+  are migrated with a warning. The type-contract coverage dimension now
+  accepts type definitions from any language. When an audit records no
+  concerns, the install warning explains how to force concern re-discovery
+  instead of claiming a plain re-run re-audits.
+
 ## [1.1.0] - 2026-08-20
 
 ### Added

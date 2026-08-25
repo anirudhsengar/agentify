@@ -464,6 +464,7 @@ async function testWriteMapGuidesSpecialistEvidence(): Promise<void> {
 
     const withoutEvidence = makeValidCodebaseMap();
     delete withoutEvidence.expert_evidence;
+    delete withoutEvidence.concern_evidence;
     const first = await writeMapTool.execute(
       "write-no-evidence",
       { map: withoutEvidence } as never,
@@ -476,7 +477,7 @@ async function testWriteMapGuidesSpecialistEvidence(): Promise<void> {
       : "";
     const firstDetails = first.details as { specialist_evidence_recorded?: boolean } | undefined;
     assert.match(firstText, /All 10 coverage dimensions closed/);
-    assert.match(firstText, /Specialist evidence is not recorded yet/);
+    assert.match(firstText, /Concern evidence is not recorded yet/);
     assert.equal(firstDetails?.specialist_evidence_recorded, false);
 
     const second = await writeMapTool.execute(
@@ -491,7 +492,7 @@ async function testWriteMapGuidesSpecialistEvidence(): Promise<void> {
       : "";
     const secondDetails = second.details as { specialist_evidence_recorded?: boolean } | undefined;
     assert.equal(secondDetails?.specialist_evidence_recorded, true);
-    assert.ok(!secondText.includes("Specialist evidence is not recorded yet"));
+    assert.ok(!secondText.includes("Concern evidence is not recorded yet"));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

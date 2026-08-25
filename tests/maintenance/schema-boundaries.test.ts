@@ -12,6 +12,7 @@ const SCHEMA_ROOT = path.join(AUDIT_ROOT, "schema");
 const EXPECTED_SCHEMA_FILES = [
   "artifact-intents.ts",
   "codebase-map.ts",
+  "concerns.ts",
   "conventions.ts",
   "coverage.ts",
   "evidence.ts",
@@ -39,6 +40,7 @@ const ALLOWED_SCHEMA_IMPORTS: ReadonlyMap<SchemaFile, readonly SchemaFile[]> = n
   ["artifact-intents.ts", ["primitives.ts"]],
   ["codebase-map.ts", [
     "artifact-intents.ts",
+    "concerns.ts",
     "conventions.ts",
     "coverage.ts",
     "evidence.ts",
@@ -52,6 +54,7 @@ const ALLOWED_SCHEMA_IMPORTS: ReadonlyMap<SchemaFile, readonly SchemaFile[]> = n
     "type-contract.ts",
     "validation-surface.ts",
   ]],
+  ["concerns.ts", ["primitives.ts"]],
   ["conventions.ts", []],
   ["coverage.ts", ["primitives.ts"]],
   ["evidence.ts", []],

@@ -179,12 +179,45 @@ test("memory queries cover domain, task, evidence, and tags", () => {
       proposed_at: "2026-07-30T01:10:00.000Z",
       payload: {
         specialist_id: "payments",
-        domain: "payments",
-        owned_paths: ["src/payments"],
-        observed_paths: ["src/payments/index.ts"],
-        contracts: ["PaymentProvider"],
-        patterns: ["provider adapters"],
-        pitfalls: ["refunds must remain idempotent"],
+        concern: "payments",
+        one_line: "Owns taking money from a customer exactly once.",
+        covers: "Provider adapters, refunds, and retry behaviour.",
+        excludes: "Who is allowed to pay, which authentication owns.",
+        flows: [
+          {
+            name: "refund a charge",
+            description: "Refund request through settled reversal.",
+            steps: [
+              { path: "src/payments/index.ts", what_happens: "Validates the refund request." },
+              { path: "src/payments/provider.ts", what_happens: "Submits the reversal." },
+            ],
+          },
+        ],
+        touchpoints: [
+          {
+            path: "src/payments/index.ts",
+            symbol: "PaymentProvider",
+            role: "The provider adapter contract.",
+            line_range: [1, 40] as [number, number],
+            centrality: "core" as const,
+          },
+        ],
+        invariants: [
+          {
+            rule: "Refunds must remain idempotent.",
+            why: "A retried reversal would double-refund.",
+            reference: "src/payments/index.ts",
+          },
+        ],
+        pitfalls: [
+          {
+            risk: "Refund retried after a partial failure.",
+            consequence: "The customer is refunded twice.",
+            reference: "src/payments/index.ts",
+          },
+        ],
+        entry_questions: ["Is this write idempotent under retry?"],
+        context_paths: ["src/payments/index.ts"],
         related_specialists: [],
         validation_commands: ["npm test -- payments"],
       },

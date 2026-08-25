@@ -1,4 +1,5 @@
 import type { CodebaseMap } from "../audit/schema.ts";
+import type { Concern } from "../audit/schema/concerns.ts";
 import { sortedUniqueStrings } from "../memory/serialization.ts";
 import { normalizeMemoryRepositoryPath } from "../memory/paths.ts";
 import type { MemoryConfidence } from "../memory/schema.ts";
@@ -9,60 +10,25 @@ import {
   SPECIALIST_READ_ONLY_EXECUTION_POLICY,
   type ProcedureDefinition,
   type SpecialistDefinition,
+  type SpecialistFlow,
   type SpecialistPortfolio,
   type SpecialistSourceKind,
+  type SpecialistTouchpoint,
 } from "./contracts.ts";
 import { specialistPortfolioDigest, validateSpecialistPortfolio } from "./validation.ts";
 
-interface RawSpecialist {
-  slug: string;
-  domain: string;
-  purpose: string;
-  ownedPaths: string[];
-  observedPaths: string[];
-  contracts: string[];
-  patterns: string[];
-  pitfalls: string[];
-  validationCommands: string[];
-  evidencePaths: string[];
-  sourceKinds: SpecialistSourceKind[];
-  stability: "high" | "medium" | "low" | null;
-  recurrence: "high" | "medium" | "low" | null;
-}
-
-interface ContractReference {
-  path: string;
-  description: string;
-}
-
-const GENERIC_DOMAIN_NAMES = new Set([
-  "app",
-  "application",
-  "codebase",
-  "docs",
-  "documentation",
-  "general",
-  "misc",
-  "repository",
-  "src",
-  "source",
-]);
-const STRUCTURAL_CONTAINER_ROOTS = new Set([
-  "apps",
-  "components",
-  "modules",
-  "packages",
-  "services",
-  "workspaces",
-]);
-const NON_APPLICATION_ROOTS = new Set([
-  ".agentify",
-  ".github",
-  "docs",
-  "scripts",
-  "test",
-  "tests",
-]);
+// Specialist discovery turns the audit's concerns into persistent specialists.
+//
+// It does not decide what a specialist is. That judgment belongs to the audit,
+// which reads the repository; encoding it here as scores and vocabularies is
+// what previously produced directory-shaped specialists and, for repositories
+// whose concerns did not resemble a web application, none at all.
+//
+// What this module does instead is verify. A concern becomes a specialist when
+// its evidence resolves to real bytes tracked at the supporting commit.
+// Everything else — how many concerns there are, what they are called, which
+// files belong to them, whether two of them overlap — is the audit's answer to
+// report, not this module's to second-guess.
 
 const VALIDATION_SIGNAL = /(?:test|lint|typecheck|check|verify|build|audit|coverage)/i;
 const PATH_FRAGMENT = /#.*$/;
@@ -75,6 +41,9 @@ const WELL_KNOWN_FILE_NAMES = new Set([
   "rakefile", "readme",
 ]);
 const MAX_MEMORY_TEXT = 4_000;
+
+/** Minimum verified touchpoints before a concern is worth persisting. */
+const MIN_VERIFIED_TOUCHPOINTS = 1;
 
 function boundedText(value: string, maximum = MAX_MEMORY_TEXT): string {
   const normalized = value.trim();
@@ -96,13 +65,7 @@ export function specialistSlug(value: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 96);
-  return slug || "domain";
-}
-
-function specialistDomainSlug(value: string): string {
-  const slug = specialistSlug(value);
-  if (slug === "payment" || slug === "payments") return "billing";
-  return slug;
+  return slug || "concern";
 }
 
 function normalizePathCandidate(value: string): string | null {
@@ -146,6 +109,14 @@ function pathScopeBase(value: string): string {
   return prefix.replace(/\/+$/, "");
 }
 
+/**
+ * Whether a repository path falls within a recorded scope.
+ *
+ * Used to match changed files against a specialist's context paths and against
+ * procedure context. It answers "is this file one this specialist knows
+ * about", never "does this specialist own this file" — several specialists
+ * matching the same path is the expected outcome for cross-cutting concerns.
+ */
 export function pathMatchesScope(repositoryPath: string, scope: string): boolean {
   const pathValue = normalizePathCandidate(repositoryPath);
   const scopeValue = normalizePathCandidate(scope);
@@ -155,8 +126,11 @@ export function pathMatchesScope(repositoryPath: string, scope: string): boolean
   return pathValue === base || pathValue.startsWith(`${base}/`);
 }
 
-function scopesOverlap(left: string, right: string): boolean {
-  return pathMatchesScope(left, right) || pathMatchesScope(right, left);
+function topLevelArea(value: string): string | null {
+  const normalized = normalizePathCandidate(value);
+  if (normalized === null) return null;
+  const root = normalized.split("/")[0]?.trim() ?? "";
+  return root.length > 0 ? root : null;
 }
 
 function allValidationCommands(map: CodebaseMap): string[] {
@@ -180,417 +154,278 @@ function allValidationCommands(map: CodebaseMap): string[] {
   ));
 }
 
-function allKnownPaths(map: CodebaseMap): string[] {
-  const paths = [
-    ...map.skeleton.top_level_tree,
-    ...map.skeleton.entry_points.map((entry) => entry.path),
-    ...map.skeleton.first_5_files_for_fresh_agent.map((entry) => entry.path),
-    ...map.module_graph.edges.flatMap((edge) => [edge.from, edge.to]),
-    ...map.module_graph.parallelizable_subtrees.flat(),
-    ...map.module_graph.shared_abstractions,
-    ...map.pitfalls.map((pitfall) => pitfall.module),
-    ...map.conventions.patterns.map((pattern) => pattern.where),
-    ...(map.validation_surface.e2e_test_files ?? []),
-    ...(map.validation_surface.e2e_config_path ? [map.validation_surface.e2e_config_path] : []),
-    map.operational_surface.build.recipe_file,
-    ...(map.operational_surface.scripts_dir_files ?? []),
-    ...(map.operational_surface.prepare_app
-      ? [
-          map.operational_surface.prepare_app.reset_db,
-          map.operational_surface.prepare_app.start,
-          map.operational_surface.prepare_app.stop,
-        ].filter((value): value is string => value !== null)
-      : []),
-    ...map.type_contract_surface.pydantic_models.map((item) => item.path),
-    ...map.type_contract_surface.typescript_interfaces.map((item) => item.path),
-    ...map.type_contract_surface.db_models.map((item) => item.path),
-    ...(map.type_contract_surface.api_contracts ?? []).map((item) => item.path),
-    ...(map.expert_evidence?.expert_domains ?? []).flatMap((expert) => [
-      ...expert.entry_points,
-      ...expert.test_paths,
-      ...expert.key_files.map((file) => file.path),
-      ...expert.key_types.map((type) => type.path),
-      ...expert.patterns.map((pattern) => pattern.example_ref),
-      ...expert.pitfalls.map((pitfall) => pitfall.reference),
-    ]),
-  ];
-  return normalizePaths(paths);
-}
+// ---------------------------------------------------------------------------
+// Legacy input
+// ---------------------------------------------------------------------------
 
-function contractReferences(map: CodebaseMap): ContractReference[] {
-  const references: ContractReference[] = [];
-  for (const item of [
-    ...map.type_contract_surface.pydantic_models,
-    ...map.type_contract_surface.typescript_interfaces,
-  ]) {
-    const pathValue = normalizePathCandidate(item.path);
-    if (pathValue !== null) {
-      references.push({
-        path: pathValue,
-        description: boundedText(`${item.name}: ${item.fields.join(", ")}`),
-      });
-    }
-  }
-  for (const item of map.type_contract_surface.db_models) {
-    const pathValue = normalizePathCandidate(item.path);
-    if (pathValue !== null) {
-      references.push({
-        path: pathValue,
-        description: boundedText(`${item.name} (${item.table}): ${item.fields.join(", ")}`),
-      });
-    }
-  }
-  for (const item of map.type_contract_surface.api_contracts ?? []) {
-    const pathValue = normalizePathCandidate(item.path);
-    if (pathValue !== null) {
-      references.push({
-        path: pathValue,
-        description: boundedText(`${item.schema_kind} contract with ${item.endpoint_count} endpoint(s)`),
-      });
-    }
-  }
-  return references.sort((left, right) => {
-    const byPath = left.path.localeCompare(right.path);
-    return byPath !== 0 ? byPath : left.description.localeCompare(right.description);
-  });
-}
-
-function pathsForScopes(knownPaths: ReadonlyArray<string>, scopes: ReadonlyArray<string>): string[] {
-  return knownPaths.filter((candidate) => scopes.some((scope) => pathMatchesScope(candidate, scope)));
-}
-
-function commandsForDomain(
-  domainTestCommand: string | null,
-  globalCommands: ReadonlyArray<string>,
-): string[] {
-  return sortedUniqueStrings([
-    ...(domainTestCommand ? [domainTestCommand] : []),
-    ...globalCommands,
-  ]).slice(0, 16);
-}
-
-function rawFromExpertEvidence(
-  map: CodebaseMap,
-  knownPaths: ReadonlyArray<string>,
-  contracts: ReadonlyArray<ContractReference>,
-  globalCommands: ReadonlyArray<string>,
-  trackedEvidenceFiles?: ReadonlySet<string>,
-): RawSpecialist[] {
-  return (map.expert_evidence?.expert_domains ?? []).map((expert) => {
-    const slug = specialistDomainSlug(expert.domain);
-    const ownedPaths = normalizePaths(expert.primary_paths);
-    // Expert-reported paths are claims, not facts: persistence binds evidence
-    // to git blobs, so anything not tracked at the supporting commit (for
-    // example a directory the model listed as a file) must not reach evidence.
-    const explicitPaths = normalizePaths([
-      ...expert.entry_points,
-      ...expert.test_paths,
-      ...expert.key_files.map((file) => file.path),
-      ...expert.key_types.map((type) => type.path),
-      ...expert.patterns.map((pattern) => pattern.example_ref),
-      ...expert.pitfalls.map((pitfall) => pitfall.reference),
-    ]).filter((candidate) => !trackedEvidenceFiles || trackedEvidenceFiles.has(candidate));
-    const observedPaths = sortedUniqueStrings([
-      ...explicitPaths,
-      ...pathsForScopes(knownPaths, ownedPaths),
-    ]);
-    const scopedContracts = sortedUniqueStrings([
-      ...expert.key_types.map((type) => boundedText(`${type.name}: ${type.purpose}`)),
-      ...contracts
-        .filter((contract) => [...ownedPaths, ...observedPaths]
-          .some((scope) => pathMatchesScope(contract.path, scope)))
-        .map((contract) => contract.description),
-    ]);
-    return {
-      slug,
-      domain: boundedText(expert.domain, 256),
-      purpose: boundedText(expert.rationale),
-      ownedPaths,
-      observedPaths,
-      contracts: scopedContracts,
-      patterns: sortedUniqueStrings([
-        ...expert.patterns.map((pattern) => boundedText(`${pattern.name}: ${pattern.description}`)),
-        ...expert.conventions,
-      ]),
-      pitfalls: sortedUniqueStrings(
-        expert.pitfalls.map((pitfall) => boundedText(`${pitfall.risk} Consequence: ${pitfall.consequence}`)),
-      ),
-      validationCommands: commandsForDomain(expert.test_command, globalCommands),
-      evidencePaths: observedPaths.filter(isLikelyFilePath),
-      sourceKinds: ["expert_evidence"],
-      stability: expert.stability,
-      recurrence: expert.recurrence,
-    };
-  });
-}
-
-function topLevelRoot(value: string): string | null {
-  const normalized = normalizePathCandidate(value);
-  if (normalized === null) return null;
-  const root = normalized.split("/")[0]?.trim() ?? "";
-  return root.length > 0 ? root : null;
-}
-
-function rawFromCohesiveStructuralEvidence(
-  map: CodebaseMap,
-  knownPaths: ReadonlyArray<string>,
-  contracts: ReadonlyArray<ContractReference>,
-  globalCommands: ReadonlyArray<string>,
-): RawSpecialist[] {
-  if (map.module_graph.parallelizable_subtrees.some((group) => group.length > 1)) return [];
-  const structuralPaths = normalizePaths([
-    ...map.module_graph.edges.flatMap((edge) => [edge.from, edge.to]),
-    ...map.type_contract_surface.pydantic_models.map((item) => item.path),
-    ...map.type_contract_surface.typescript_interfaces.map((item) => item.path),
-    ...map.type_contract_surface.db_models.map((item) => item.path),
-    ...(map.type_contract_surface.api_contracts ?? []).map((item) => item.path),
-    ...map.pitfalls.map((pitfall) => pitfall.module),
-    ...map.conventions.patterns.map((pattern) => pattern.where),
-  ]).filter(isLikelyFilePath);
-  const roots = sortedUniqueStrings(
-    structuralPaths
-      .map(topLevelRoot)
-      .filter((root): root is string => root !== null && !NON_APPLICATION_ROOTS.has(root)),
-  );
-  if (roots.length !== 1 || STRUCTURAL_CONTAINER_ROOTS.has(roots[0]!)) return [];
-
-  const domain = boundedText(map.meta.project_type, 256);
-  const slug = specialistDomainSlug(domain);
-  if (GENERIC_DOMAIN_NAMES.has(slug) || slug === "unknown" || domain.length === 0) return [];
-
-  const ownedPaths = [roots[0]!];
-  const observedPaths = pathsForScopes(knownPaths, ownedPaths);
-  const evidencePaths = observedPaths.filter(isLikelyFilePath);
-  const scopedContracts = contracts
-    .filter((contract) => ownedPaths.some((scope) => pathMatchesScope(contract.path, scope)))
-    .map((contract) => contract.description);
-  const scopedPitfalls = map.pitfalls
-    .filter((pitfall) => ownedPaths.some((scope) => pathMatchesScope(pitfall.module, scope)))
-    .map((pitfall) => boundedText(`${pitfall.what} Consequence: ${pitfall.consequence}`));
-  const scopedPatterns = map.conventions.patterns
-    .filter((pattern) => ownedPaths.some((scope) => pathMatchesScope(pattern.where, scope)))
-    .map((pattern) => boundedText(`${pattern.name}: ${pattern.description}`));
-  const independentSignals = [
-    map.module_graph.edges.some((edge) =>
-      ownedPaths.some((scope) => pathMatchesScope(edge.from, scope) || pathMatchesScope(edge.to, scope))
-    ),
-    scopedContracts.length > 0,
-    scopedPitfalls.length > 0,
-    scopedPatterns.length > 0,
-  ].filter(Boolean).length;
-  if (evidencePaths.length < 2 || independentSignals < 2 || globalCommands.length === 0) return [];
-
-  return [{
-    slug,
-    domain,
-    purpose: boundedText(
-      map.meta.domain_hypothesis.trim().length > 0
-        ? map.meta.domain_hypothesis
-        : `Repository domain inferred from cohesive structural evidence under ${ownedPaths[0]}.`,
-    ),
-    ownedPaths,
-    observedPaths,
-    contracts: sortedUniqueStrings(scopedContracts),
-    patterns: sortedUniqueStrings(scopedPatterns),
-    pitfalls: sortedUniqueStrings(scopedPitfalls),
-    validationCommands: [...globalCommands],
-    evidencePaths,
-    sourceKinds: ["structural_evidence"],
-    stability: null,
-    recurrence: null,
-  }];
-}
-
-function sourceStrength(sourceKinds: ReadonlyArray<SpecialistSourceKind>): number {
-  let score = 0;
-  if (sourceKinds.includes("expert_evidence")) score += 6;
-  if (sourceKinds.includes("structural_evidence")) score += 3;
-  return score;
-}
-
-function scopeOverlap(left: RawSpecialist, right: RawSpecialist): number {
-  const leftPaths = sortedUniqueStrings([...left.ownedPaths, ...left.observedPaths]);
-  const rightPaths = sortedUniqueStrings([...right.ownedPaths, ...right.observedPaths]);
-  if (leftPaths.length === 0 || rightPaths.length === 0) return 0;
-  let matches = 0;
-  for (const leftPath of leftPaths) {
-    if (rightPaths.some((rightPath) => scopesOverlap(leftPath, rightPath))) matches += 1;
-  }
-  return matches / Math.min(leftPaths.length, rightPaths.length);
-}
-
-function mergeRaw(left: RawSpecialist, right: RawSpecialist): RawSpecialist {
-  const leftStrength = sourceStrength(left.sourceKinds);
-  const rightStrength = sourceStrength(right.sourceKinds);
-  const preferred = rightStrength > leftStrength
-    || (rightStrength === leftStrength && right.slug.localeCompare(left.slug) < 0)
-    ? right
-    : left;
+/**
+ * Adapt a pre-concern `expert_evidence.expert_domains` entry.
+ *
+ * Old maps recorded directory-shaped domains with no flows, no per-file roles,
+ * and no scope boundary. The adaptation is deliberately lossy and honest about
+ * it: the domain's paths become peripheral touchpoints with a generic role,
+ * and confidence is capped, so an installation carried across the schema
+ * change keeps working while making it obvious that a re-audit would produce a
+ * better specialist.
+ */
+function concernFromLegacyExpertDomain(
+  expert: NonNullable<CodebaseMap["expert_evidence"]>["expert_domains"][number],
+): Concern {
+  const paths = normalizePaths([
+    ...expert.primary_paths,
+    ...expert.entry_points,
+    ...expert.test_paths,
+    ...expert.key_files.map((file) => file.path),
+    ...expert.key_types.map((type) => type.path),
+    ...expert.patterns.map((pattern) => pattern.example_ref),
+    ...expert.pitfalls.map((pitfall) => pitfall.reference),
+  ]);
   return {
-    slug: preferred.slug,
-    domain: preferred.domain,
-    purpose: preferred.purpose,
-    ownedPaths: sortedUniqueStrings([...left.ownedPaths, ...right.ownedPaths]),
-    observedPaths: sortedUniqueStrings([...left.observedPaths, ...right.observedPaths]),
-    contracts: sortedUniqueStrings([...left.contracts, ...right.contracts]),
-    patterns: sortedUniqueStrings([...left.patterns, ...right.patterns]),
-    pitfalls: sortedUniqueStrings([...left.pitfalls, ...right.pitfalls]),
-    validationCommands: sortedUniqueStrings([
-      ...left.validationCommands,
-      ...right.validationCommands,
-    ]),
-    evidencePaths: sortedUniqueStrings([...left.evidencePaths, ...right.evidencePaths]),
-    sourceKinds: sortedUniqueStrings([
-      ...left.sourceKinds,
-      ...right.sourceKinds,
-    ]) as SpecialistSourceKind[],
-    stability: preferred.stability ?? left.stability ?? right.stability,
-    recurrence: preferred.recurrence ?? left.recurrence ?? right.recurrence,
+    concern: expert.domain,
+    one_line: boundedText(expert.rationale, 512),
+    covers: boundedText(expert.rationale),
+    excludes: "Not recorded: migrated from a pre-concern audit map.",
+    flows: [],
+    touchpoints: paths.map((path) => ({
+      path,
+      symbol: null,
+      role: "Recorded as domain evidence before per-touchpoint roles existed.",
+      line_range: null,
+      centrality: "supporting" as const,
+    })),
+    invariants: [],
+    pitfalls: expert.pitfalls.map((pitfall) => ({
+      risk: pitfall.risk,
+      consequence: pitfall.consequence,
+      reference: pitfall.reference,
+    })),
+    entry_questions: [],
+    validation: expert.test_command ? [expert.test_command] : [],
+    spans_subtrees: sortedUniqueStrings(
+      paths.map(topLevelArea).filter((area): area is string => area !== null),
+    ),
+    stability: expert.stability,
+    recurrence: expert.recurrence,
+    confidence: "low",
+    last_updated: expert.last_updated,
   };
 }
 
-function mergeOverlappingCandidates(candidates: ReadonlyArray<RawSpecialist>): RawSpecialist[] {
-  const ordered = [...candidates].sort((left, right) => {
-    const byStrength = sourceStrength(right.sourceKinds) - sourceStrength(left.sourceKinds);
-    if (byStrength !== 0) return byStrength;
-    return left.slug.localeCompare(right.slug);
-  });
-  const merged: RawSpecialist[] = [];
-  for (const candidate of ordered) {
-    const index = merged.findIndex((existing) => {
-      const overlap = scopeOverlap(existing, candidate);
-      const sameSemanticDomain = existing.slug === candidate.slug;
-      return overlap >= 0.8 || sameSemanticDomain;
+function concernsFromMap(map: CodebaseMap): {
+  concerns: Concern[];
+  sourceKind: SpecialistSourceKind;
+} {
+  if (map.concern_evidence !== undefined) {
+    return { concerns: [...map.concern_evidence.concerns], sourceKind: "concern_evidence" };
+  }
+  const legacy = map.expert_evidence?.expert_domains ?? [];
+  return {
+    concerns: legacy.map(concernFromLegacyExpertDomain),
+    sourceKind: "legacy_expert_evidence",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Verification
+// ---------------------------------------------------------------------------
+
+interface VerifiedConcern {
+  concern: Concern;
+  touchpoints: SpecialistTouchpoint[];
+  flows: SpecialistFlow[];
+  droppedPaths: string[];
+}
+
+function verifyTouchpoints(
+  concern: Concern,
+  trackedEvidenceFiles: ReadonlySet<string> | undefined,
+): { kept: SpecialistTouchpoint[]; dropped: string[] } {
+  const kept: SpecialistTouchpoint[] = [];
+  const dropped: string[] = [];
+  const seen = new Set<string>();
+  for (const touchpoint of concern.touchpoints) {
+    const path = normalizePathCandidate(touchpoint.path);
+    if (path === null || !isLikelyFilePath(path)) {
+      dropped.push(touchpoint.path);
+      continue;
+    }
+    if (trackedEvidenceFiles && !trackedEvidenceFiles.has(path)) {
+      dropped.push(path);
+      continue;
+    }
+    const key = `${path} ${touchpoint.symbol ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push({
+      path,
+      symbol: touchpoint.symbol === null ? null : boundedText(touchpoint.symbol, 256),
+      role: boundedText(touchpoint.role, 1_024),
+      line_range: touchpoint.line_range === null
+        ? null
+        : [touchpoint.line_range[0], touchpoint.line_range[1]],
+      centrality: touchpoint.centrality,
     });
-    if (index < 0) merged.push(candidate);
-    else merged[index] = mergeRaw(merged[index]!, candidate);
   }
-  return merged;
+  kept.sort((left, right) => {
+    const byPath = left.path.localeCompare(right.path);
+    return byPath !== 0 ? byPath : (left.symbol ?? "").localeCompare(right.symbol ?? "");
+  });
+  return { kept, dropped: sortedUniqueStrings(dropped) };
 }
 
-function stabilityWeight(value: RawSpecialist["stability"]): number {
-  if (value === "high") return 2;
-  if (value === "medium") return 1;
-  if (value === "low") return -2;
-  return 0;
-}
-
-function recurrenceWeight(value: RawSpecialist["recurrence"]): number {
-  if (value === "high") return 2;
-  if (value === "medium") return 1;
-  if (value === "low") return -1;
-  return 0;
-}
-
-function discoveryScore(candidate: RawSpecialist): number {
-  return sourceStrength(candidate.sourceKinds)
-    + Math.min(candidate.ownedPaths.length, 3)
-    + Math.min(candidate.evidencePaths.length, 3)
-    + Math.min(candidate.contracts.length, 2)
-    + Math.min(candidate.patterns.length, 2)
-    + Math.min(candidate.pitfalls.length, 2)
-    + (candidate.validationCommands.length > 0 ? 2 : 0)
-    + stabilityWeight(candidate.stability)
-    + recurrenceWeight(candidate.recurrence)
-    - (GENERIC_DOMAIN_NAMES.has(candidate.slug) ? 6 : 0);
-}
-
-function confidenceFor(candidate: RawSpecialist, score: number): MemoryConfidence {
-  if (
-    candidate.sourceKinds.includes("expert_evidence")
-    && candidate.stability === "high"
-    && candidate.recurrence === "high"
-    && candidate.evidencePaths.length >= 2
-    && candidate.validationCommands.length > 0
-  ) {
-    return "high";
+/**
+ * Keep only flow steps whose path survived verification.
+ *
+ * A flow that loses a step is still worth keeping — it tells a specialist most
+ * of the route — but a flow reduced below two steps is no longer a trace, so
+ * it is dropped entirely rather than persisted as a single misleading hop.
+ */
+function verifyFlows(
+  concern: Concern,
+  verifiedPaths: ReadonlySet<string>,
+): SpecialistFlow[] {
+  const flows: SpecialistFlow[] = [];
+  for (const flow of concern.flows) {
+    const steps = flow.steps
+      .map((step) => ({ path: normalizePathCandidate(step.path), what_happens: step.what_happens }))
+      .filter((step): step is { path: string; what_happens: string } =>
+        step.path !== null && verifiedPaths.has(step.path)
+      )
+      .map((step) => ({ path: step.path, what_happens: boundedText(step.what_happens, 1_024) }));
+    if (steps.length < 2) continue;
+    flows.push({
+      name: boundedText(flow.name, 256),
+      description: boundedText(flow.description, 1_024),
+      steps,
+    });
   }
-  if (score >= 12 && candidate.evidencePaths.length >= 2) return "high";
-  if (score >= 8) return "medium";
-  return "low";
+  return flows.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function confidenceFor(concern: Concern, verified: VerifiedConcern): MemoryConfidence {
+  // The audit's own confidence is the ceiling; verification can only lower it.
+  const declared: MemoryConfidence = concern.confidence === "high"
+    ? "high"
+    : concern.confidence === "medium"
+      ? "medium"
+      : "low";
+  const hasTrace = verified.flows.length > 0;
+  const hasCore = verified.touchpoints.some((touchpoint) => touchpoint.centrality === "core");
+  const lostMost = verified.droppedPaths.length > verified.touchpoints.length;
+  if (lostMost) return "low";
+  if (declared === "high" && hasTrace && hasCore) return "high";
+  if (declared === "low") return "low";
+  return hasTrace || hasCore ? "medium" : "low";
 }
 
 function buildSpecialistDefinitions(
-  candidates: ReadonlyArray<RawSpecialist>,
-  map: CodebaseMap,
+  concerns: ReadonlyArray<Concern>,
+  sourceKind: SpecialistSourceKind,
+  globalCommands: ReadonlyArray<string>,
   supportingCommit: string,
-): SpecialistDefinition[] {
-  const selected: SpecialistDefinition[] = candidates
-    .map((candidate) => ({ candidate, score: discoveryScore(candidate) }))
-    .filter(({ candidate, score }) =>
-      score >= 7
-      && candidate.evidencePaths.length > 0
-      && candidate.validationCommands.length > 0
-      && (
-        candidate.ownedPaths.length
-        + candidate.contracts.length
-        + candidate.patterns.length
-        + candidate.pitfalls.length
-      ) >= 2
-    )
-    .sort((left, right) => {
-      const byScore = right.score - left.score;
-      return byScore !== 0 ? byScore : left.candidate.slug.localeCompare(right.candidate.slug);
-    })
-    .slice(0, MAX_DISCOVERED_SPECIALISTS)
-    .map(({ candidate, score }): SpecialistDefinition => ({
-      specialist_id: `specialist-${candidate.slug}`,
-      display_name: boundedText(`${titleCase(candidate.domain)} Specialist`, 256),
-      domain: boundedText(candidate.domain, 256),
-      purpose: boundedText(candidate.purpose),
-      owned_paths: candidate.ownedPaths.slice(0, 256),
-      observed_paths: sortedUniqueStrings([
-        ...candidate.observedPaths,
-        ...candidate.evidencePaths,
-      ]).slice(0, 512),
-      contracts: candidate.contracts.slice(0, 128),
-      patterns: candidate.patterns.slice(0, 128),
-      pitfalls: candidate.pitfalls.slice(0, 128),
-      related_specialists: [],
-      validation_commands: candidate.validationCommands.slice(0, 64),
-      evidence_paths: candidate.evidencePaths.slice(0, 128),
-      freshness_dependencies: sortedUniqueStrings([
-        ...candidate.ownedPaths,
-        ...candidate.observedPaths,
-        ...candidate.evidencePaths,
-      ]).slice(0, 512),
-      supporting_commit: supportingCommit,
-      freshness: "current",
-      confidence: confidenceFor(candidate, score),
-      source_kinds: candidate.sourceKinds,
-      discovery_score: score,
-      execution_policy: { ...SPECIALIST_READ_ONLY_EXECUTION_POLICY },
-    }));
+  trackedEvidenceFiles: ReadonlySet<string> | undefined,
+): { specialists: SpecialistDefinition[]; rejected: Array<{ concern: string; reason: string }> } {
+  const rejected: Array<{ concern: string; reason: string }> = [];
+  const verified: VerifiedConcern[] = [];
 
-  const byId = new Map(selected.map((specialist) => [specialist.specialist_id, specialist]));
-  for (const edge of map.module_graph.edges) {
-    const fromOwners = selected.filter((specialist) =>
-      [...specialist.owned_paths, ...specialist.observed_paths]
-        .some((scope) => pathMatchesScope(edge.from, scope))
-    );
-    const toOwners = selected.filter((specialist) =>
-      [...specialist.owned_paths, ...specialist.observed_paths]
-        .some((scope) => pathMatchesScope(edge.to, scope))
-    );
-    for (const left of fromOwners) {
-      for (const right of toOwners) {
-        if (left.specialist_id === right.specialist_id) continue;
-        const leftValue = byId.get(left.specialist_id)!;
-        const rightValue = byId.get(right.specialist_id)!;
-        leftValue.related_specialists = sortedUniqueStrings([
-          ...leftValue.related_specialists,
-          rightValue.specialist_id,
-        ]);
-        rightValue.related_specialists = sortedUniqueStrings([
-          ...rightValue.related_specialists,
-          leftValue.specialist_id,
-        ]);
-      }
+  for (const concern of concerns) {
+    const { kept, dropped } = verifyTouchpoints(concern, trackedEvidenceFiles);
+    if (kept.length < MIN_VERIFIED_TOUCHPOINTS) {
+      rejected.push({
+        concern: concern.concern,
+        reason: dropped.length > 0
+          ? `no touchpoint is a file tracked at ${supportingCommit.slice(0, 8)} (checked ${dropped.length}: ${dropped.slice(0, 3).join(", ")}${dropped.length > 3 ? ", …" : ""})`
+          : "no touchpoints were recorded",
+      });
+      continue;
+    }
+    const verifiedPaths = new Set(kept.map((touchpoint) => touchpoint.path));
+    verified.push({
+      concern,
+      touchpoints: kept,
+      flows: verifyFlows(concern, verifiedPaths),
+      droppedPaths: dropped,
+    });
+  }
+
+  const specialists = verified
+    .slice(0, MAX_DISCOVERED_SPECIALISTS)
+    .map((entry): SpecialistDefinition => {
+      const concern = entry.concern;
+      const contextPaths = sortedUniqueStrings([
+        ...entry.touchpoints.map((touchpoint) => touchpoint.path),
+        ...entry.flows.flatMap((flow) => flow.steps.map((step) => step.path)),
+      ]);
+      const validationCommands = sortedUniqueStrings([
+        ...concern.validation.filter((command) => command.trim().length > 0),
+        ...globalCommands,
+      ]).slice(0, 32);
+      return {
+        specialist_id: `specialist-${specialistSlug(concern.concern)}`,
+        display_name: boundedText(`${titleCase(concern.concern)} Specialist`, 256),
+        concern: boundedText(concern.concern, 256),
+        one_line: boundedText(concern.one_line, 512),
+        covers: boundedText(concern.covers),
+        excludes: boundedText(concern.excludes),
+        flows: entry.flows.slice(0, 32),
+        touchpoints: entry.touchpoints.slice(0, 512),
+        invariants: concern.invariants.map((invariant) => ({
+          rule: boundedText(invariant.rule, 1_024),
+          why: boundedText(invariant.why, 1_024),
+          reference: invariant.reference,
+        })).slice(0, 64),
+        pitfalls: concern.pitfalls.map((pitfall) => ({
+          risk: boundedText(pitfall.risk, 1_024),
+          consequence: boundedText(pitfall.consequence, 1_024),
+          reference: pitfall.reference,
+        })).slice(0, 64),
+        entry_questions: sortedUniqueStrings(
+          concern.entry_questions.map((question) => boundedText(question, 512)),
+        ).slice(0, 32),
+        related_specialists: [],
+        validation_commands: validationCommands,
+        evidence_paths: contextPaths.slice(0, 256),
+        context_paths: contextPaths.slice(0, 512),
+        spans_subtrees: sortedUniqueStrings(
+          contextPaths.map(topLevelArea).filter((area): area is string => area !== null),
+        ),
+        freshness_dependencies: contextPaths.slice(0, 512),
+        supporting_commit: supportingCommit,
+        freshness: "current",
+        confidence: confidenceFor(concern, entry),
+        source_kinds: [sourceKind],
+        execution_policy: { ...SPECIALIST_READ_ONLY_EXECUTION_POLICY },
+      };
+    });
+
+  // Two specialists sharing a touchpoint are related, not duplicates. This is
+  // the signal the previous implementation used to merge them together, which
+  // is precisely backwards: shared files are how cross-cutting concerns
+  // present themselves, and knowing who else reads a file is what lets one
+  // specialist warn about another's invariants.
+  for (const left of specialists) {
+    for (const right of specialists) {
+      if (left.specialist_id === right.specialist_id) continue;
+      const shares = left.context_paths.some((path) => right.context_paths.includes(path));
+      if (!shares) continue;
+      left.related_specialists = sortedUniqueStrings([
+        ...left.related_specialists,
+        right.specialist_id,
+      ]).slice(0, 32);
     }
   }
 
-  return selected.sort((left, right) => left.specialist_id.localeCompare(right.specialist_id));
+  return {
+    specialists: specialists.sort((left, right) =>
+      left.specialist_id.localeCompare(right.specialist_id)
+    ),
+    rejected,
+  };
 }
+
+// ---------------------------------------------------------------------------
+// Procedures
+// ---------------------------------------------------------------------------
 
 function procedureOwner(
   paths: ReadonlyArray<string>,
@@ -600,8 +435,7 @@ function procedureOwner(
     .map((specialist) => ({
       specialist,
       score: paths.filter((candidate) =>
-        [...specialist.owned_paths, ...specialist.observed_paths]
-          .some((scope) => pathMatchesScope(candidate, scope))
+        specialist.context_paths.some((scope) => pathMatchesScope(candidate, scope))
       ).length,
     }))
     .filter(({ score }) => score > 0)
@@ -755,18 +589,17 @@ function buildProcedureDefinitions(
   for (const specialist of specialists) {
     if (specialist.validation_commands.length === 0 || specialist.evidence_paths.length === 0) continue;
     definitions.push({
-      procedure_id: `validate-${specialistSlug(specialist.domain)}`,
-      name: `Validate ${specialist.domain}`,
-      purpose: `Run the authoritative validation surface for ${specialist.domain} changes.`,
+      procedure_id: `validate-${specialistSlug(specialist.concern)}`,
+      name: `Validate ${specialist.concern}`,
+      purpose: `Run the authoritative validation surface for ${specialist.concern} changes.`,
       owner_specialist_id: specialist.specialist_id,
-      trigger_conditions: [
-        `${specialist.domain} change`,
-        ...specialist.owned_paths,
-        ...specialist.contracts,
-      ],
-      required_context_paths: specialist.observed_paths,
+      trigger_conditions: sortedUniqueStrings([
+        `${specialist.concern} change`,
+        ...specialist.entry_questions,
+      ]).slice(0, 64),
+      required_context_paths: specialist.context_paths,
       allowed_commands: specialist.validation_commands,
-      expected_file_patterns: specialist.owned_paths,
+      expected_file_patterns: specialist.context_paths,
       side_effects: ["May create repository-local test, build, or coverage artifacts."],
       validation_commands: specialist.validation_commands,
       recovery_steps: [...defaultRecovery],
@@ -835,6 +668,10 @@ function buildProcedureDefinitions(
     .sort((left, right) => left.procedure_id.localeCompare(right.procedure_id));
 }
 
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
+
 export function discoverSpecialistPortfolio(
   map: CodebaseMap,
   supportingCommit: string,
@@ -843,23 +680,15 @@ export function discoverSpecialistPortfolio(
   const trackedEvidenceFiles = trackedRepositoryFiles
     ? new Set(normalizePaths(trackedRepositoryFiles))
     : undefined;
-  const knownPaths = allKnownPaths(map).filter((candidate) => (
-    !trackedEvidenceFiles || trackedEvidenceFiles.has(candidate)
-  ));
-  const contracts = contractReferences(map);
+  const { concerns, sourceKind } = concernsFromMap(map);
   const validationCommands = allValidationCommands(map);
-  const rawCandidates = mergeOverlappingCandidates(
-    rawFromExpertEvidence(map, knownPaths, contracts, validationCommands, trackedEvidenceFiles),
+  const { specialists, rejected } = buildSpecialistDefinitions(
+    concerns,
+    sourceKind,
+    validationCommands,
+    supportingCommit,
+    trackedEvidenceFiles,
   );
-  let candidates = rawCandidates;
-  let specialists = buildSpecialistDefinitions(candidates, map, supportingCommit);
-  if (specialists.length === 0) {
-    candidates = mergeOverlappingCandidates([
-      ...rawCandidates,
-      ...rawFromCohesiveStructuralEvidence(map, knownPaths, contracts, validationCommands),
-    ]);
-    specialists = buildSpecialistDefinitions(candidates, map, supportingCommit);
-  }
   const procedures = buildProcedureDefinitions(
     map,
     specialists,
@@ -867,26 +696,45 @@ export function discoverSpecialistPortfolio(
     supportingCommit,
     trackedEvidenceFiles,
   );
+
+  // A warning has to say what to change. "No domain met the threshold" sent a
+  // reader looking for a threshold; naming the concern and the reason its
+  // evidence failed points at the actual repair.
   const warnings: string[] = [];
-  if (specialists.length === 0) {
-    warnings.push("No repository domain met the specialist evidence and validation threshold.");
-  } else if (candidates.length > specialists.length) {
+  if (concerns.length === 0) {
     warnings.push(
-      `Specialist discovery considered ${candidates.length} recorded domain candidate(s) and retained ${specialists.length}; ` +
-      "the remainder lacked tracked file evidence, validation commands, or substance.",
+      "The audit recorded no repository concerns, so no specialist could be created. "
+      + "Check the map's open_questions and concern_evidence.not_concerns for the audit's justification. "
+      + "Re-running agentify attaches to the existing map without re-auditing; to force concern "
+      + "re-discovery, remove the concern_evidence section from "
+      + ".agentify/runtime/audit/codebase_map.json (or delete the map for a full re-audit) and run agentify again.",
     );
   }
-  if (candidates.length > MAX_DISCOVERED_SPECIALISTS) {
+  for (const entry of rejected) {
+    warnings.push(`Concern "${entry.concern}" did not become a specialist: ${entry.reason}.`);
+  }
+  if (concerns.length > MAX_DISCOVERED_SPECIALISTS) {
     warnings.push(
-      `Specialist discovery considered ${candidates.length} domain candidates and retained the strongest ${MAX_DISCOVERED_SPECIALISTS}.`,
+      `The audit recorded ${concerns.length} concerns and the strongest ${MAX_DISCOVERED_SPECIALISTS} were retained.`,
+    );
+  }
+  if (sourceKind === "legacy_expert_evidence" && specialists.length > 0) {
+    warnings.push(
+      "Specialists were migrated from a pre-concern audit map: they carry no traced flows "
+      + "or per-file roles. Re-run the audit to replace them with traced concerns.",
     );
   }
   if (procedures.length === 0) {
     warnings.push("No repository-specific procedure had both concrete evidence and validation commands.");
   }
-  const evidencePaths = sortedUniqueStrings(
-    knownPaths.filter(isLikelyFilePath),
-  ).slice(0, 128);
+
+  // The portfolio's own grounding, and the provenance a later retirement
+  // cites. Procedures contribute too, so a repository whose concerns were all
+  // rejected still has verified evidence to retire stale specialists against.
+  const evidencePaths = sortedUniqueStrings([
+    ...specialists.flatMap((specialist) => specialist.evidence_paths),
+    ...procedures.flatMap((procedure) => procedure.evidence_paths),
+  ]).slice(0, 256);
   const portfolioWithoutDigest = {
     schema_version: SPECIALIST_PORTFOLIO_SCHEMA_VERSION,
     supporting_commit: supportingCommit,

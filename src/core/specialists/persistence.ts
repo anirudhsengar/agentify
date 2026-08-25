@@ -78,7 +78,7 @@ function identityMatches(
   const expectedEvidence = new Set(evidenceIds(evidence));
   return identity.status === "active"
     && identity.display_name === definition.display_name
-    && identity.domain === definition.domain
+    && identity.domain === definition.concern
     && identity.supporting_commit === supportingCommit
     && canonicalJson(identity.memory_kinds) === canonicalJson([...SPECIALIST_MEMORY_KINDS].sort())
     && [...expectedEvidence].every((id) => identity.evidence.some((entry) => entry.evidence_id === id));
@@ -127,7 +127,7 @@ function syncSpecialistIdentity(
       agentId: definition.specialist_id,
       role: "specialist",
       displayName: definition.display_name,
-      domain: definition.domain,
+      domain: definition.concern,
       memoryKinds: SPECIALIST_MEMORY_KINDS,
       supportingCommit: input.portfolio.supporting_commit,
       evidence,
@@ -146,7 +146,7 @@ function syncSpecialistIdentity(
   }
   updateAgentIdentity(input.cwd, definition.specialist_id, {
     displayName: definition.display_name,
-    domain: definition.domain,
+    domain: definition.concern,
     status: "active",
     supportingCommit: input.portfolio.supporting_commit,
     evidence: [...evidence],
@@ -164,18 +164,22 @@ function specialistDraft(
   evidence: ReadonlyArray<EvidenceReference>,
   observedAt: string,
 ): MemoryCandidateDraft {
-  const semanticValue = {
+  const payload = {
     specialist_id: definition.specialist_id,
-    domain: definition.domain,
-    purpose: definition.purpose,
-    owned_paths: definition.owned_paths,
-    observed_paths: definition.observed_paths,
-    contracts: definition.contracts,
-    patterns: definition.patterns,
+    concern: definition.concern,
+    one_line: definition.one_line,
+    covers: definition.covers,
+    excludes: definition.excludes,
+    flows: definition.flows,
+    touchpoints: definition.touchpoints,
+    invariants: definition.invariants,
     pitfalls: definition.pitfalls,
+    entry_questions: definition.entry_questions,
+    context_paths: definition.context_paths,
     related_specialists: definition.related_specialists,
     validation_commands: definition.validation_commands,
   };
+  const semanticValue = payload;
   const memoryId = stableMemoryId("specialist-profile", definition.specialist_id, semanticValue);
   const draftWithoutCandidateId = {
     schema_version: "1" as const,
@@ -183,7 +187,7 @@ function specialistDraft(
     kind: "specialist" as const,
     proposed_by_agent_id: "orchestrator",
     owning_agent_id: definition.specialist_id,
-    statement: definition.purpose,
+    statement: definition.one_line,
     source_type: input.source_type ?? "validated_bootstrap",
     supporting_commit: definition.supporting_commit,
     evidence: [...evidence],
@@ -196,20 +200,10 @@ function specialistDraft(
     human_attribution: null,
     tags: sortedUniqueStrings([
       "specialist-profile",
-      `domain-${specialistSlug(definition.domain)}`,
+      `concern-${specialistSlug(definition.concern)}`,
     ]),
     proposed_at: observedAt,
-    payload: {
-      specialist_id: definition.specialist_id,
-      domain: definition.domain,
-      owned_paths: definition.owned_paths,
-      observed_paths: definition.observed_paths,
-      contracts: definition.contracts,
-      patterns: definition.patterns,
-      pitfalls: definition.pitfalls,
-      related_specialists: definition.related_specialists,
-      validation_commands: definition.validation_commands,
-    },
+    payload,
   };
   return {
     ...draftWithoutCandidateId,
@@ -417,12 +411,17 @@ export function materializeSpecialistPortfolio(
   const observedAt = input.observed_at
     ?? readGitCommitTimestamp(input.cwd, input.portfolio.supporting_commit);
   const evidenceCache = new Map<string, EvidenceReference>();
-  const portfolioEvidence = evidenceForPaths(
-    input,
-    input.portfolio.evidence_paths,
-    observedAt,
-    evidenceCache,
-  );
+  // Portfolio-level evidence is the provenance attached to retirements. A
+  // portfolio with no specialists has none to cite, and that is a legitimate
+  // outcome rather than a materialization failure, so resolve it only at the
+  // point a retirement actually needs it.
+  let portfolioEvidenceMemo: EvidenceReference[] | null = null;
+  const portfolioEvidence = (): EvidenceReference[] => {
+    portfolioEvidenceMemo ??= input.portfolio.evidence_paths.length === 0
+      ? []
+      : evidenceForPaths(input, input.portfolio.evidence_paths, observedAt, evidenceCache);
+    return portfolioEvidenceMemo;
+  };
   const created: string[] = [];
   const updated: string[] = [];
   const unchanged: string[] = [];
@@ -460,12 +459,12 @@ export function materializeSpecialistPortfolio(
   const retired = retireMissingSpecialists(
     input,
     new Set(input.portfolio.specialists.map((definition) => definition.specialist_id)),
-    portfolioEvidence,
+    portfolioEvidence(),
   );
   const staleProcedureMemoryIds = staleMissingProcedureMemory(
     input,
     new Set(input.portfolio.procedures.map((definition) => definition.procedure_id)),
-    portfolioEvidence,
+    portfolioEvidence(),
   );
   const allEvidence = [...evidenceCache.values()].sort((left, right) =>
     left.evidence_id.localeCompare(right.evidence_id)

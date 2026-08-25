@@ -191,15 +191,59 @@ export const EpisodeMemoryPayloadSchema = Type.Object({
   runtime_ms: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
 }, { additionalProperties: false });
 
+const SpecialistTouchpointPayloadSchema = Type.Object({
+  path: Type.String({ minLength: 1, maxLength: 1_024 }),
+  symbol: Type.Union([Type.String(SHORT_TEXT), Type.Null()]),
+  role: Type.String({ minLength: 1, maxLength: 1_024 }),
+  line_range: Type.Union([
+    Type.Tuple([Type.Integer({ minimum: 1 }), Type.Integer({ minimum: 1 })]),
+    Type.Null(),
+  ]),
+  centrality: Type.Union([
+    Type.Literal("core"),
+    Type.Literal("supporting"),
+    Type.Literal("peripheral"),
+  ]),
+}, { additionalProperties: false });
+
+const SpecialistFlowPayloadSchema = Type.Object({
+  name: Type.String(SHORT_TEXT),
+  description: Type.String({ minLength: 1, maxLength: 1_024 }),
+  steps: Type.Array(Type.Object({
+    path: Type.String({ minLength: 1, maxLength: 1_024 }),
+    what_happens: Type.String({ minLength: 1, maxLength: 1_024 }),
+  }, { additionalProperties: false }), { minItems: 2, maxItems: 32 }),
+}, { additionalProperties: false });
+
+/**
+ * A specialist is persisted by what it knows about one concern.
+ *
+ * There is no owned-path field: a concern such as authentication runs through
+ * routing, storage, and presentation at once, and several specialists sharing
+ * a touchpoint is the normal case rather than a conflict to resolve.
+ * `context_paths` is a derived read scope, not a territory claim.
+ */
 export const SpecialistMemoryPayloadSchema = Type.Object({
   specialist_id: Type.String(SAFE_ID),
-  domain: Type.String(SHORT_TEXT),
-  owned_paths: Type.Array(Type.String({ minLength: 1, maxLength: 1_024 }), { minItems: 0, maxItems: 256 }),
-  observed_paths: Type.Array(Type.String({ minLength: 1, maxLength: 1_024 }), { minItems: 1, maxItems: 512 }),
-  contracts: Type.Array(Type.String(NON_EMPTY_TEXT), { minItems: 0, maxItems: 128 }),
-  patterns: Type.Array(Type.String(NON_EMPTY_TEXT), { minItems: 0, maxItems: 128 }),
-  pitfalls: Type.Array(Type.String(NON_EMPTY_TEXT), { minItems: 0, maxItems: 128 }),
-  related_specialists: Type.Array(Type.String(SAFE_ID), { minItems: 0, maxItems: 64 }),
+  concern: Type.String(SHORT_TEXT),
+  one_line: Type.String({ minLength: 1, maxLength: 512 }),
+  covers: Type.String(NON_EMPTY_TEXT),
+  excludes: Type.String(NON_EMPTY_TEXT),
+  flows: Type.Array(SpecialistFlowPayloadSchema, { minItems: 0, maxItems: 32 }),
+  touchpoints: Type.Array(SpecialistTouchpointPayloadSchema, { minItems: 1, maxItems: 512 }),
+  invariants: Type.Array(Type.Object({
+    rule: Type.String({ minLength: 1, maxLength: 1_024 }),
+    why: Type.String({ minLength: 1, maxLength: 1_024 }),
+    reference: Type.String({ minLength: 1, maxLength: 1_024 }),
+  }, { additionalProperties: false }), { minItems: 0, maxItems: 64 }),
+  pitfalls: Type.Array(Type.Object({
+    risk: Type.String({ minLength: 1, maxLength: 1_024 }),
+    consequence: Type.String({ minLength: 1, maxLength: 1_024 }),
+    reference: Type.String({ minLength: 1, maxLength: 1_024 }),
+  }, { additionalProperties: false }), { minItems: 0, maxItems: 64 }),
+  entry_questions: Type.Array(Type.String({ minLength: 1, maxLength: 512 }), { minItems: 0, maxItems: 32 }),
+  context_paths: Type.Array(Type.String({ minLength: 1, maxLength: 1_024 }), { minItems: 1, maxItems: 512 }),
+  related_specialists: Type.Array(Type.String(SAFE_ID), { minItems: 0, maxItems: 32 }),
   validation_commands: Type.Array(Type.String({ minLength: 1, maxLength: 2_048 }), { minItems: 0, maxItems: 64 }),
 }, { additionalProperties: false });
 

@@ -30,30 +30,80 @@ export interface SpecialistExecutionPolicy {
 }
 
 export type SpecialistSourceKind =
-  | "expert_evidence"
-  | "feature_agent"
-  | "suggested_domain"
-  | "structural_evidence";
+  | "concern_evidence"
+  | "legacy_expert_evidence";
 
+export type TouchpointCentrality = "core" | "supporting" | "peripheral";
+
+/**
+ * One observed location a concern reaches.
+ *
+ * Touchpoints are deliberately not an ownership claim. The same file is
+ * expected to appear under several specialists with a different `role` in
+ * each: authentication and checkout both touch the request middleware, for
+ * entirely different reasons. `role` records the reason, which is the part a
+ * specialist actually needs.
+ */
+export interface SpecialistTouchpoint {
+  path: string;
+  symbol: string | null;
+  role: string;
+  line_range: [number, number] | null;
+  centrality: TouchpointCentrality;
+}
+
+/** One end-to-end trace through a concern, entry point through effect. */
+export interface SpecialistFlow {
+  name: string;
+  description: string;
+  steps: Array<{ path: string; what_happens: string }>;
+}
+
+export interface SpecialistInvariant {
+  rule: string;
+  why: string;
+  reference: string;
+}
+
+export interface SpecialistPitfall {
+  risk: string;
+  consequence: string;
+  reference: string;
+}
+
+/**
+ * A persistent specialist in one concern.
+ *
+ * A specialist is defined by what it knows, not by where it lives. There is no
+ * owned territory here: `context_paths` is a derived read-scope for bounding a
+ * consultation session, computed from the concern's own touchpoints and flow
+ * steps. Two specialists sharing a path is normal and carries no meaning.
+ */
 export interface SpecialistDefinition {
   specialist_id: string;
   display_name: string;
-  domain: string;
-  purpose: string;
-  owned_paths: string[];
-  observed_paths: string[];
-  contracts: string[];
-  patterns: string[];
-  pitfalls: string[];
+  concern: string;
+  one_line: string;
+  covers: string;
+  excludes: string;
+  flows: SpecialistFlow[];
+  touchpoints: SpecialistTouchpoint[];
+  invariants: SpecialistInvariant[];
+  pitfalls: SpecialistPitfall[];
+  entry_questions: string[];
   related_specialists: string[];
   validation_commands: string[];
+  /** Verified tracked paths this specialist is grounded in. Derived. */
   evidence_paths: string[];
+  /** Read scope for a bounded consultation. Derived from touchpoints and flows. */
+  context_paths: string[];
+  /** Distinct top-level areas the concern reaches. Evidence of scatter, not scope. */
+  spans_subtrees: string[];
   freshness_dependencies: string[];
   supporting_commit: string;
   freshness: MemoryFreshness;
   confidence: MemoryConfidence;
   source_kinds: SpecialistSourceKind[];
-  discovery_score: number;
   execution_policy: SpecialistExecutionPolicy;
 }
 
@@ -106,8 +156,9 @@ export interface SpecialistRoutingRequest {
 }
 
 export type RoutingReasonKind =
-  | "owned_path"
-  | "observed_path"
+  | "concern_match"
+  | "touchpoint"
+  | "context_path"
   | "contract"
   | "task_signal"
   | "risk_signal"
