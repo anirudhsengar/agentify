@@ -7,7 +7,10 @@ import {
   buildSpecialistEvidenceReference,
   readGitCommitTimestamp,
 } from "../../src/core/specialists/index.ts";
-import { makeSpecialistFixtureMap } from "../fixtures/specialist-map.ts";
+import {
+  SPECIALIST_FIXTURE_TRACKED_FILES,
+  makeSpecialistFixtureMap,
+} from "../fixtures/specialist-map.ts";
 
 const cwd = process.argv[2];
 assert.ok(cwd, "fixture repository path is required");
@@ -53,9 +56,8 @@ const layouts: Record<string, string[]> = {
 const mapEvidencePaths = [
   "src/index.ts",
   "src/lib.ts",
-  "src/billing/index.ts",
+  ...SPECIALIST_FIXTURE_TRACKED_FILES,
   "src/billing/types.ts",
-  "tests/billing.test.ts",
   "scripts/prime-db.sh",
 ];
 for (const relativePath of new Set([
