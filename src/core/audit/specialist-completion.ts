@@ -24,6 +24,19 @@ const WELL_KNOWN_FILE_NAMES = new Set([
   "rakefile",
   "readme",
 ]);
+const GENERIC_PLUMBING_FILES = new Set([
+  "build.gradle",
+  "build.gradle.kts",
+  "cargo.toml",
+  "gemfile",
+  "go.mod",
+  "makefile",
+  "package.json",
+  "pom.xml",
+  "pyproject.toml",
+  "readme",
+  "readme.md",
+]);
 
 export interface SpecialistEvidenceAssessment {
   complete: boolean;
@@ -55,7 +68,13 @@ function normalizeRepositoryPath(value: unknown, cwd?: string): string | null {
     return null;
   }
   const normalized = path.posix.normalize(trimmed).replace(/^\.\//, "").replace(/\/+$/, "");
-  if (!normalized || normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
+  if (
+    !normalized
+    || normalized === "."
+    || normalized === ".."
+    || normalized.startsWith("../")
+    || normalized.startsWith("/")
+  ) {
     return null;
   }
 
@@ -84,7 +103,6 @@ function addPath(paths: Set<string>, value: unknown, cwd?: string): void {
 
 function collectHighSignalPaths(map: CodebaseMap, cwd?: string): string[] {
   const paths = new Set<string>();
-
   for (const entry of map.skeleton.entry_points) addPath(paths, entry.path, cwd);
   for (const entry of map.skeleton.first_5_files_for_fresh_agent) addPath(paths, entry.path, cwd);
   for (const edge of map.module_graph.edges) {
@@ -115,7 +133,6 @@ function collectHighSignalPaths(map: CodebaseMap, cwd?: string): string[] {
     addPath(paths, loose.source_reference ?? pitfall.module, cwd);
   }
   addPath(paths, map.operational_surface.build.recipe_file, cwd);
-
   return [...paths].sort((left, right) => left.localeCompare(right));
 }
 
@@ -141,6 +158,12 @@ function pathsMentionedByRejections(map: CodebaseMap, candidates: readonly strin
   return [...mentioned].sort((left, right) => left.localeCompare(right));
 }
 
+function isGenericPlumbing(candidate: string): boolean {
+  const basename = path.posix.basename(candidate).toLowerCase();
+  return GENERIC_PLUMBING_FILES.has(basename)
+    || /^(?:index|main|lib)\.[a-z0-9]+$/i.test(basename);
+}
+
 function topLevelAreas(paths: readonly string[]): string[] {
   const areas = new Set<string>();
   for (const candidate of paths) {
@@ -163,10 +186,8 @@ function singleSpecialtyJustified(map: CodebaseMap): boolean {
 }
 
 function validateConcernShape(map: CodebaseMap, cwd: string | undefined, reasons: string[]): void {
-  const concerns = map.concern_evidence?.concerns ?? [];
   const seen = new Set<string>();
-
-  for (const concern of concerns) {
+  for (const concern of map.concern_evidence?.concerns ?? []) {
     const key = concern.concern.trim().toLowerCase();
     if (seen.has(key)) reasons.push(`duplicate concern name: ${concern.concern}`);
     seen.add(key);
@@ -175,10 +196,12 @@ function validateConcernShape(map: CodebaseMap, cwd: string | undefined, reasons
       reasons.push(`${concern.concern}: no end-to-end flow was recorded`);
     }
     for (const flow of concern.flows) {
-      const verifiedSteps = flow.steps
-        .map((step) => normalizeRepositoryPath(step.path, cwd))
-        .filter((candidate): candidate is string => candidate !== null);
-      if (verifiedSteps.length < 2) {
+      const verifiedSteps = new Set(
+        flow.steps
+          .map((step) => normalizeRepositoryPath(step.path, cwd))
+          .filter((candidate): candidate is string => candidate !== null),
+      );
+      if (verifiedSteps.size < 2) {
         reasons.push(`${concern.concern}: flow '${flow.name}' does not contain two verified steps`);
       }
     }
@@ -217,7 +240,9 @@ export function assessSpecialistEvidence(
   const coveredSet = new Set(covered);
   const exemptedSet = new Set(exempted);
   const uncovered = highSignal.filter((candidate) =>
-    !coveredSet.has(candidate) && !exemptedSet.has(candidate)
+    !coveredSet.has(candidate)
+    && !exemptedSet.has(candidate)
+    && !isGenericPlumbing(candidate)
   );
 
   if (
@@ -240,7 +265,6 @@ export function assessSpecialistEvidence(
   }
 
   validateConcernShape(map, cwd, reasons);
-
   const concerns = map.concern_evidence.concerns;
   if (concerns.length === 0) {
     if (highSignal.length > 2) {
@@ -287,13 +311,7 @@ export function assessSpecialistEvidence(
   };
 }
 
-/**
- * Whether the audit recorded an explicit specialist-evidence decision.
- *
- * This intentionally preserves the transport-level meaning used by write-map
- * feedback and legacy callers. Audit completion uses `assessSpecialistEvidence`
- * below, which is the stronger semantic-quality gate.
- */
+/** Field-presence signal retained for write-map feedback and legacy callers. */
 export function specialistEvidenceRecorded(map: CodebaseMap): boolean {
   return map.concern_evidence !== undefined || map.expert_evidence !== undefined;
 }
