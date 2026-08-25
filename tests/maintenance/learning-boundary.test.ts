@@ -100,14 +100,20 @@ test("trusted workflow publishes only an unmerged knowledge-maintenance PR", () 
   assert.match(architecture, /cannot expand.*permissions/is);
 });
 
-test("build and installer carry one bundled trusted learning runtime", () => {
+test("package carries the trusted learning runtime while installation stays compact and pinned", () => {
   const build = read("scripts/build.mjs");
   const installer = read("src/core/scaffold-installer.ts");
+  const launcher = read("scaffold/.github/agentify/learning-runtime.mjs");
+  const loader = read("scaffold/.github/agentify/runtime-loader.mjs");
   const packageSmoke = read("tests/package/installed-learning-smoke.mjs");
 
   assert.match(build, /src["'], "core", "learning", "cli\.ts/);
   assert.match(build, /distDir, "learning-runtime\.mjs"/);
-  assert.match(installer, /dist["'], "learning-runtime\.mjs/);
-  assert.match(installer, /\.github["'], "agentify", "learning-runtime\.mjs/);
+  assert.doesNotMatch(installer, /dist["'], "learning-runtime\.mjs/);
+  assert.match(installer, /RUNTIME_VERSION_PLACEHOLDER/);
+  assert.match(launcher, /runAgentifyRuntime\("learning-runtime\.mjs"/);
+  assert.match(loader, /PACKAGE_NAME = "@anirudhsengar\/agentify"/);
+  assert.match(loader, /PACKAGE_VERSION = "__AGENTIFY_RUNTIME_VERSION__"/);
+  assert.match(loader, /\$\{PACKAGE_NAME\}@\$\{PACKAGE_VERSION\}/);
   assert.match(packageSmoke, /dist["'], "learning-runtime\.mjs/);
 });
