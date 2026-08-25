@@ -99,12 +99,18 @@ updates.
 
 ## Dependency and package policy
 
-- Production dependencies require an installed-runtime justification and
-  maintainer approval.
-- Runtime dependencies belong in `dependencies`; build and test tooling belongs
-  in `devDependencies`.
+- The published npm package declares zero runtime `dependencies`: the `dist/`
+ bundles are fully self-contained, so user installs fetch no transitive
+ packages and run no third-party install scripts.
+- Every third-party package is a `devDependency` bundled at build time. Adding
+ one requires maintainer approval and proof that esbuild can bundle it (no
+ native modules or runtime `node_modules` filesystem assets reachable from the
+ three bundle entry points); `npm run test:package` must install and exercise
+ the exact artifact cleanly.
+- Security auditing covers the full dependency tree (`npm audit` without
+ `--omit=dev`) because the shipped bundles contain code built from that tree.
 - The npm artifact excludes raw `src/`, blocks deep imports, and contains every
-  workflow, prompt, asset, and executable needed at runtime.
+ workflow, prompt, asset, and executable needed at runtime.
 - Do not add runtime TypeScript loaders.
 
 ## Documentation and releases

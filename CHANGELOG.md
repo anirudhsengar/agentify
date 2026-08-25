@@ -21,6 +21,14 @@ All notable changes to Agentify are documented here.
   concerns, the install warning explains how to force concern re-discovery
   instead of claiming a plain re-run re-audits.
 
+### Changed
+
+- The published npm package is now zero-dependency: every runtime library is
+  bundled into `dist/` by esbuild, so `npm install --global` no longer emits
+  deprecation or install-script warnings from transitive packages. All
+  third-party packages moved to `devDependencies`; release verification audits
+  the full dependency tree.
+
 ## [1.1.0] - 2026-08-20
 
 ### Added

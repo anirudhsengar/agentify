@@ -151,7 +151,8 @@ async function testCiSeparatesConcernsAndCoversEngines(): Promise<void> {
   assert.match(workflow, /node: \["22\.19\.0", "24"\]/);
   assert.match(workflow, /npm run test:all/);
   assert.match(workflow, /npm run test:package/);
-  assert.match(workflow, /npm audit --omit=dev --audit-level=high/);
+  assert.match(workflow, /npm audit --audit-level=high/);
+  assert.doesNotMatch(workflow, /npm audit --omit=dev/, "zero-dependency package must audit the full tree");
 }
 
 async function testReleaseVerificationContractIsComplete(): Promise<void> {
@@ -167,7 +168,7 @@ async function testReleaseVerificationContractIsComplete(): Promise<void> {
   assert.equal(scripts["verify:source"], "npm run typecheck && npm run test:all");
   assert.equal(scripts["verify:scaffold"], "npm run test:scaffold-e2e");
   assert.equal(scripts["verify:package"], "npm run test:package");
-  assert.equal(scripts["verify:security"], "npm audit --omit=dev --audit-level=high");
+  assert.equal(scripts["verify:security"], "npm audit --audit-level=high");
   assert.equal(
     scripts["verify:release"],
     "npm run verify:source && npm run verify:scaffold && npm run verify:package && npm run verify:security",

@@ -16,6 +16,14 @@ dist/learning-runtime.mjs
 It also copies the prompts, workflow assets, and runtime files required by the
 installed package. Build inputs are explicit; raw `src/` files are not published.
 
+The three bundles are fully self-contained: esbuild inlines every library the
+CLI and runtimes import, including the Pi SDK. The published package therefore
+declares **zero runtime `dependencies`** — installing it fetches no transitive
+packages, runs no third-party install scripts, and prints no deprecation
+warnings from upstream code. Everything needed to build the bundles
+(`@earendil-works/pi-*`, `@clack/prompts`, `typebox`, esbuild, TypeScript) lives
+in `devDependencies`.
+
 ## Package surface
 
 The npm artifact exposes:
@@ -43,8 +51,10 @@ tests. `test:package` creates the exact tarball, checks its inventory and hashes
 installs it into isolated fixtures, exercises the public CLI, and runs installed
 workflow scenarios.
 
-`verify:release` adds the complete scaffold suite and a production dependency
-audit. It is the authoritative source-to-artifact gate.
+`verify:release` adds the complete scaffold suite and a full-tree dependency
+audit (the shipped bundles contain code drawn from the development dependency
+tree, so `npm audit` runs without `--omit=dev`). It is the authoritative
+source-to-artifact gate.
 
 ## Reproducibility
 

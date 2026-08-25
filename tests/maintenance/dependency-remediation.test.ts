@@ -8,6 +8,7 @@ const REGISTRY_SEMVER = /^(?:\^|~)?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 
 interface PackageManifest {
   dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
 }
 
 interface LockPackage {
@@ -38,6 +39,14 @@ test("production dependencies use registry semver specifications", async () => {
     );
   }
 
-  assert.equal(manifest.dependencies?.["@earendil-works/pi-ai"], "0.84.0");
-  assert.equal(manifest.dependencies?.["@earendil-works/pi-coding-agent"], "0.84.0");
+  // Zero-dependency package: esbuild inlines everything into dist/, so the
+  // published artifact must declare no production dependencies. The pinned
+  // pi packages live in devDependencies and are bundled at build time.
+  assert.deepEqual(
+    manifest.dependencies ?? {},
+    {},
+    "published package must stay zero-dependency; runtime libraries belong in devDependencies",
+  );
+  assert.equal(manifest.devDependencies?.["@earendil-works/pi-ai"], "0.84.0");
+  assert.equal(manifest.devDependencies?.["@earendil-works/pi-coding-agent"], "0.84.0");
 });

@@ -22,7 +22,8 @@ npm run verify:pack-reproducibility
 
 `verify:release` performs strict type checking, builds all bundles, runs all
 source and contract tests, runs the installed scaffold suite, installs and
-executes the exact npm artifact, and audits production dependencies.
+executes the exact npm artifact, and audits the full dependency tree (the
+zero-dependency artifact ships bundles built from that tree).
 
 ## Tag and publish
 

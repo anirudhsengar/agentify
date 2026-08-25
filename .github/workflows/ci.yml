@@ -77,7 +77,9 @@ jobs:
           node-version: "22.19.0"
           cache: npm
       - run: npm ci
-      - run: npm audit --omit=dev --audit-level=high
+      # Zero-dependency package: runtime code is bundled from devDependencies,
+      # so the audit must cover the full dependency tree.
+      - run: npm audit --audit-level=high
 
   package-smoke:
     name: Packed package and scaffold smoke

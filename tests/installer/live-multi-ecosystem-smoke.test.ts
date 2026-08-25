@@ -224,10 +224,10 @@ if (process.env.MINIMAX_API_KEY) {
     schemaVersion: 1,
     thinkingLevel: loaded.thinkingLevel,
     provider: loaded.provider ?? "minimax",
-    models: {
-      ...loaded.models,
-      primary: loaded.models.primary ?? { provider: "minimax", model: "MiniMax-M2.1" },
-    },
+    // No explicit slot default: provider-default resolution picks whatever
+    // minimax model the installed pi registry ships, so upstream model-id
+    // churn cannot break this probe.
+    models: { ...loaded.models },
   };
   const runtime = new PiSdkRuntime();
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-live-minimax-"));
