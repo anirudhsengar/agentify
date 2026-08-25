@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CodebaseMap } from "./schema/index.ts";
@@ -14,6 +15,10 @@ const DISPLAY_ANNOTATION_SUFFIX = /\s+\([^/\r\n]+\)$/;
 const DRIVE_PREFIX = /^[A-Za-z]:[\\/]/;
 const PLACEHOLDER_QUESTION = /^(?:initial draft|todo|unknown|tbd|gather\b|not observed)/i;
 const AGENTIFY_GENERATED_PATH = /^(?:\.agentify(?:\/|$)|\.github\/agentify(?:\/|$))/;
+const GLOB_SIGNAL = /[*?\[\]{}]/;
+const GIT_PATH_CHUNK_SIZE = 128;
+const GIT_PATH_CHUNK_CHARACTERS = 12_000;
+const GIT_PATH_MAX_BUFFER = 8 * 1024 * 1024;
 const WELL_KNOWN_FILE_NAMES = new Set([
   "dockerfile",
   "gemfile",
@@ -38,6 +43,11 @@ const GENERIC_PLUMBING_FILES = new Set([
   "readme.md",
 ]);
 
+export interface RejectedSpecialistConcern {
+  concern: string;
+  reasons: string[];
+}
+
 export interface SpecialistEvidenceAssessment {
   complete: boolean;
   source: "concern_evidence" | "legacy_expert_evidence" | "absent";
@@ -46,6 +56,8 @@ export interface SpecialistEvidenceAssessment {
   covered_paths: string[];
   exempted_paths: string[];
   uncovered_paths: string[];
+  accepted_concerns: string[];
+  rejected_concerns: RejectedSpecialistConcern[];
 }
 
 export interface AuditCompletionResult {
@@ -54,7 +66,9 @@ export interface AuditCompletionResult {
   complete: boolean;
 }
 
-function normalizeRepositoryPath(value: unknown, cwd?: string): string | null {
+type RepositoryPathResolver = (value: unknown) => string | null;
+
+function normalizeRepositoryPathSyntax(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value
     .trim()
@@ -64,7 +78,13 @@ function normalizeRepositoryPath(value: unknown, cwd?: string): string | null {
     .replace(DISPLAY_ANNOTATION_SUFFIX, "")
     .replaceAll("\\", "/")
     .trim();
-  if (!trimmed || trimmed === "." || URL_OR_EXTERNAL.test(trimmed) || DRIVE_PREFIX.test(trimmed)) {
+  if (
+    !trimmed
+    || trimmed === "."
+    || trimmed.includes("\0")
+    || URL_OR_EXTERNAL.test(trimmed)
+    || DRIVE_PREFIX.test(trimmed)
+  ) {
     return null;
   }
   const normalized = path.posix.normalize(trimmed).replace(/^\.\//, "").replace(/\/+$/, "");
@@ -74,86 +94,296 @@ function normalizeRepositoryPath(value: unknown, cwd?: string): string | null {
     || normalized === ".."
     || normalized.startsWith("../")
     || normalized.startsWith("/")
+    || GLOB_SIGNAL.test(normalized)
   ) {
     return null;
   }
-
-  if (cwd !== undefined) {
-    const root = path.resolve(cwd);
-    const absolute = path.resolve(root, ...normalized.split("/"));
-    if (absolute !== root && !absolute.startsWith(`${root}${path.sep}`)) return null;
-    try {
-      const stat = fs.lstatSync(absolute);
-      if (!stat.isFile() || stat.isSymbolicLink()) return null;
-    } catch {
-      return null;
-    }
-    return normalized;
-  }
-
-  const basename = path.posix.basename(normalized).toLowerCase();
-  if (!basename.includes(".") && !WELL_KNOWN_FILE_NAMES.has(basename)) return null;
   return normalized;
 }
 
-function addPath(paths: Set<string>, value: unknown, cwd?: string): void {
-  const normalized = normalizeRepositoryPath(value, cwd);
-  if (normalized !== null) paths.add(normalized);
+function likelyFileWithoutRepository(value: string): boolean {
+  const basename = path.posix.basename(value).toLowerCase();
+  return basename.includes(".") || WELL_KNOWN_FILE_NAMES.has(basename);
 }
 
-function collectHighSignalPaths(map: CodebaseMap, cwd?: string): string[] {
-  const paths = new Set<string>();
-  for (const entry of map.skeleton.entry_points) addPath(paths, entry.path, cwd);
-  for (const entry of map.skeleton.first_5_files_for_fresh_agent) addPath(paths, entry.path, cwd);
-  for (const edge of map.module_graph.edges) {
-    addPath(paths, edge.from, cwd);
-    addPath(paths, edge.to, cwd);
+function regularFileOnDisk(cwd: string, repositoryPath: string): boolean {
+  const root = path.resolve(cwd);
+  const absolute = path.resolve(root, ...repositoryPath.split("/"));
+  if (absolute !== root && !absolute.startsWith(`${root}${path.sep}`)) return false;
+  try {
+    const stat = fs.lstatSync(absolute);
+    return stat.isFile() && !stat.isSymbolicLink();
+  } catch {
+    return false;
   }
-  for (const cluster of map.module_graph.parallelizable_subtrees) {
-    for (const candidate of cluster) addPath(paths, candidate, cwd);
+}
+
+function gitPathChunks(candidates: ReadonlyArray<string>): string[][] {
+  const chunks: string[][] = [];
+  let current: string[] = [];
+  let characters = 0;
+  for (const candidate of candidates) {
+    const nextCharacters = characters + candidate.length + 1;
+    if (
+      current.length > 0
+      && (current.length >= GIT_PATH_CHUNK_SIZE || nextCharacters > GIT_PATH_CHUNK_CHARACTERS)
+    ) {
+      chunks.push(current);
+      current = [];
+      characters = 0;
+    }
+    current.push(candidate);
+    characters += candidate.length + 1;
   }
-  for (const candidate of map.module_graph.shared_abstractions) addPath(paths, candidate, cwd);
-  for (const candidate of map.module_graph.shared_state) addPath(paths, candidate, cwd);
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
+function trackedRegularFilesAtHead(
+  cwd: string,
+  candidates: ReadonlyArray<string>,
+): Set<string> | null {
+  const unique = [...new Set(candidates)].sort((left, right) => left.localeCompare(right));
+  const requested = new Set(unique);
+  const tracked = new Set<string>();
+  for (const chunk of gitPathChunks(unique)) {
+    const result = spawnSync(
+      "git",
+      ["-C", cwd, "--literal-pathspecs", "ls-tree", "-z", "HEAD", "--", ...chunk],
+      {
+        encoding: "utf8",
+        maxBuffer: GIT_PATH_MAX_BUFFER,
+        windowsHide: true,
+      },
+    );
+    if (result.error || result.status !== 0 || typeof result.stdout !== "string") return null;
+    for (const record of result.stdout.split("\0").filter(Boolean)) {
+      const separator = record.indexOf("\t");
+      if (separator < 0) continue;
+      const metadata = record.slice(0, separator).split(" ");
+      if (metadata.length < 3 || metadata[1] !== "blob" || metadata[0] === "120000") continue;
+      const repositoryPath = normalizeRepositoryPathSyntax(record.slice(separator + 1));
+      if (repositoryPath !== null && requested.has(repositoryPath)) tracked.add(repositoryPath);
+    }
+  }
+  return tracked;
+}
+
+function collectPathCandidates(map: CodebaseMap): unknown[] {
+  const values: unknown[] = [];
+  for (const entry of map.skeleton.entry_points) values.push(entry.path);
+  for (const entry of map.skeleton.first_5_files_for_fresh_agent) values.push(entry.path);
+  for (const edge of map.module_graph.edges) values.push(edge.from, edge.to);
+  for (const cluster of map.module_graph.parallelizable_subtrees) values.push(...cluster);
+  values.push(...map.module_graph.shared_abstractions, ...map.module_graph.shared_state);
   if (map.module_graph.client_server_split !== null) {
-    addPath(paths, map.module_graph.client_server_split.client, cwd);
-    addPath(paths, map.module_graph.client_server_split.server, cwd);
+    values.push(
+      map.module_graph.client_server_split.client,
+      map.module_graph.client_server_split.server,
+    );
   }
-  addPath(paths, map.module_graph.monorepo_workspace?.config_file, cwd);
+  values.push(map.module_graph.monorepo_workspace?.config_file);
 
   const typeSurface = map.type_contract_surface;
-  for (const entry of typeSurface.type_definitions ?? []) addPath(paths, entry.path, cwd);
-  for (const entry of typeSurface.typescript_interfaces) addPath(paths, entry.path, cwd);
-  for (const entry of typeSurface.pydantic_models) addPath(paths, entry.path, cwd);
-  for (const entry of typeSurface.db_models) addPath(paths, entry.path, cwd);
-  for (const entry of typeSurface.api_contracts ?? []) addPath(paths, entry.path, cwd);
-  for (const candidate of typeSurface.one_type_trace?.flow ?? []) addPath(paths, candidate, cwd);
+  for (const entry of typeSurface.type_definitions ?? []) values.push(entry.path);
+  for (const entry of typeSurface.typescript_interfaces) values.push(entry.path);
+  for (const entry of typeSurface.pydantic_models) values.push(entry.path);
+  for (const entry of typeSurface.db_models) values.push(entry.path);
+  for (const entry of typeSurface.api_contracts ?? []) values.push(entry.path);
+  values.push(...(typeSurface.one_type_trace?.flow ?? []));
 
   for (const pitfall of map.pitfalls) {
     const loose = pitfall as typeof pitfall & { source_reference?: string };
-    addPath(paths, loose.source_reference ?? pitfall.module, cwd);
+    values.push(loose.source_reference ?? pitfall.module);
   }
-  addPath(paths, map.operational_surface.build.recipe_file, cwd);
+  values.push(map.operational_surface.build.recipe_file);
+
+  for (const concern of map.concern_evidence?.concerns ?? []) {
+    for (const touchpoint of concern.touchpoints) values.push(touchpoint.path);
+    for (const flow of concern.flows) {
+      for (const step of flow.steps) values.push(step.path);
+    }
+    for (const invariant of concern.invariants) values.push(invariant.reference);
+    for (const pitfall of concern.pitfalls) values.push(pitfall.reference);
+  }
+  for (const rejection of map.concern_evidence?.not_concerns ?? []) {
+    values.push(rejection.candidate);
+  }
+  return values;
+}
+
+function createRepositoryPathResolver(
+  map: CodebaseMap,
+  cwd: string | undefined,
+): RepositoryPathResolver {
+  if (cwd === undefined) {
+    return (value) => {
+      const normalized = normalizeRepositoryPathSyntax(value);
+      return normalized !== null
+        && !AGENTIFY_GENERATED_PATH.test(normalized)
+        && likelyFileWithoutRepository(normalized) ? normalized : null;
+    };
+  }
+
+  const candidates = collectPathCandidates(map)
+    .map(normalizeRepositoryPathSyntax)
+    .filter((candidate): candidate is string => candidate !== null);
+  const tracked = trackedRegularFilesAtHead(cwd, candidates);
+  if (tracked !== null) {
+    return (value) => {
+      const normalized = normalizeRepositoryPathSyntax(value);
+      return normalized !== null
+        && !AGENTIFY_GENERATED_PATH.test(normalized)
+        && tracked.has(normalized) ? normalized : null;
+    };
+  }
+
+  // Non-git fixtures and temporarily unavailable Git installations retain the
+  // previous fail-safe behavior. Production Git repositories use the HEAD tree
+  // above, so fetched, generated, ignored, and symlink paths never qualify as
+  // specialist evidence merely because they happen to exist on disk.
+  return (value) => {
+    const normalized = normalizeRepositoryPathSyntax(value);
+    return normalized !== null
+      && !AGENTIFY_GENERATED_PATH.test(normalized)
+      && regularFileOnDisk(cwd, normalized) ? normalized : null;
+  };
+}
+
+function addPath(paths: Set<string>, value: unknown, resolvePath: RepositoryPathResolver): void {
+  const normalized = resolvePath(value);
+  if (normalized !== null) paths.add(normalized);
+}
+
+function collectHighSignalPaths(
+  map: CodebaseMap,
+  resolvePath: RepositoryPathResolver,
+): string[] {
+  const paths = new Set<string>();
+  for (const entry of map.skeleton.entry_points) addPath(paths, entry.path, resolvePath);
+  for (const entry of map.skeleton.first_5_files_for_fresh_agent) {
+    addPath(paths, entry.path, resolvePath);
+  }
+  for (const edge of map.module_graph.edges) {
+    addPath(paths, edge.from, resolvePath);
+    addPath(paths, edge.to, resolvePath);
+  }
+  for (const cluster of map.module_graph.parallelizable_subtrees) {
+    for (const candidate of cluster) addPath(paths, candidate, resolvePath);
+  }
+  for (const candidate of map.module_graph.shared_abstractions) {
+    addPath(paths, candidate, resolvePath);
+  }
+  for (const candidate of map.module_graph.shared_state) addPath(paths, candidate, resolvePath);
+  if (map.module_graph.client_server_split !== null) {
+    addPath(paths, map.module_graph.client_server_split.client, resolvePath);
+    addPath(paths, map.module_graph.client_server_split.server, resolvePath);
+  }
+  addPath(paths, map.module_graph.monorepo_workspace?.config_file, resolvePath);
+
+  const typeSurface = map.type_contract_surface;
+  for (const entry of typeSurface.type_definitions ?? []) addPath(paths, entry.path, resolvePath);
+  for (const entry of typeSurface.typescript_interfaces) addPath(paths, entry.path, resolvePath);
+  for (const entry of typeSurface.pydantic_models) addPath(paths, entry.path, resolvePath);
+  for (const entry of typeSurface.db_models) addPath(paths, entry.path, resolvePath);
+  for (const entry of typeSurface.api_contracts ?? []) addPath(paths, entry.path, resolvePath);
+  for (const candidate of typeSurface.one_type_trace?.flow ?? []) {
+    addPath(paths, candidate, resolvePath);
+  }
+
+  for (const pitfall of map.pitfalls) {
+    const loose = pitfall as typeof pitfall & { source_reference?: string };
+    addPath(paths, loose.source_reference ?? pitfall.module, resolvePath);
+  }
+  addPath(paths, map.operational_surface.build.recipe_file, resolvePath);
   return [...paths].sort((left, right) => left.localeCompare(right));
 }
 
-function collectConcernPaths(map: CodebaseMap, cwd?: string): string[] {
-  const paths = new Set<string>();
-  for (const concern of map.concern_evidence?.concerns ?? []) {
-    for (const touchpoint of concern.touchpoints) addPath(paths, touchpoint.path, cwd);
-    for (const flow of concern.flows) {
-      for (const step of flow.steps) addPath(paths, step.path, cwd);
-    }
-    for (const invariant of concern.invariants) addPath(paths, invariant.reference, cwd);
-    for (const pitfall of concern.pitfalls) addPath(paths, pitfall.reference, cwd);
+interface AssessedConcern {
+  concern: string;
+  eligible: boolean;
+  reasons: string[];
+  contextPaths: string[];
+}
+
+function assessConcern(
+  concern: NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number],
+  resolvePath: RepositoryPathResolver,
+): AssessedConcern {
+  const touchpointPaths = new Set<string>();
+  let coreTouchpoints = 0;
+  for (const touchpoint of concern.touchpoints) {
+    const repositoryPath = resolvePath(touchpoint.path);
+    if (repositoryPath === null) continue;
+    touchpointPaths.add(repositoryPath);
+    if (touchpoint.centrality === "core") coreTouchpoints += 1;
   }
-  return [...paths].sort((left, right) => left.localeCompare(right));
+
+  const flowPaths = new Set<string>();
+  let validFlows = 0;
+  for (const flow of concern.flows) {
+    const verifiedSteps = flow.steps
+      .map((step) => resolvePath(step.path))
+      .filter((candidate): candidate is string => (
+        candidate !== null && touchpointPaths.has(candidate)
+      ));
+    // A trace is an ordered sequence of observed steps. It may legitimately
+    // enter the same orchestration file more than once around another step;
+    // requiring distinct file names would reject that real control flow.
+    if (verifiedSteps.length < 2) continue;
+    validFlows += 1;
+    for (const repositoryPath of verifiedSteps) flowPaths.add(repositoryPath);
+  }
+
+  const reasons: string[] = [];
+  if (touchpointPaths.size === 0) {
+    reasons.push("no touchpoint resolves to a regular file tracked at repository HEAD");
+  }
+  if (coreTouchpoints === 0) {
+    reasons.push("no core touchpoint resolves to a regular file tracked at repository HEAD");
+  }
+  if (concern.flows.length === 0) {
+    reasons.push("no end-to-end flow was recorded");
+  } else if (validFlows === 0) {
+    reasons.push("no flow contains two tracked steps that are also recorded touchpoints");
+  }
+
+  return {
+    concern: concern.concern,
+    eligible: coreTouchpoints > 0 && validFlows > 0,
+    reasons,
+    contextPaths: [...new Set([...touchpointPaths, ...flowPaths])]
+      .sort((left, right) => left.localeCompare(right)),
+  };
+}
+
+function rejectionScope(value: string): { base: string; subtree: boolean } | null {
+  const portable = value.trim().replaceAll("\\", "/");
+  const subtree = portable.endsWith("/**") || portable.endsWith("/*") || portable.endsWith("/");
+  const baseValue = subtree ? portable.replace(/\/(?:\*\*)?\*?\/?$/, "") : portable;
+  const base = normalizeRepositoryPathSyntax(baseValue);
+  return base === null ? null : { base, subtree };
+}
+
+function rejectionCoversPath(
+  rejection: NonNullable<CodebaseMap["concern_evidence"]>["not_concerns"][number],
+  candidate: string,
+): boolean {
+  const scope = rejectionScope(rejection.candidate);
+  if (
+    scope !== null
+    && (candidate === scope.base || (scope.subtree && candidate.startsWith(`${scope.base}/`)))
+  ) {
+    return true;
+  }
+  return rejection.why_rejected.includes(candidate);
 }
 
 function pathsMentionedByRejections(map: CodebaseMap, candidates: readonly string[]): string[] {
   const mentioned = new Set<string>();
   const rejections = map.concern_evidence?.not_concerns ?? [];
   for (const candidate of candidates) {
-    if (rejections.some((entry) => entry.why_rejected.includes(candidate))) mentioned.add(candidate);
+    if (rejections.some((entry) => rejectionCoversPath(entry, candidate))) mentioned.add(candidate);
   }
   return [...mentioned].sort((left, right) => left.localeCompare(right));
 }
@@ -185,36 +415,6 @@ function singleSpecialtyJustified(map: CodebaseMap): boolean {
   );
 }
 
-function validateConcernShape(map: CodebaseMap, cwd: string | undefined, reasons: string[]): void {
-  const seen = new Set<string>();
-  for (const concern of map.concern_evidence?.concerns ?? []) {
-    const key = concern.concern.trim().toLowerCase();
-    if (seen.has(key)) reasons.push(`duplicate concern name: ${concern.concern}`);
-    seen.add(key);
-
-    if (concern.flows.length === 0) {
-      reasons.push(`${concern.concern}: no end-to-end flow was recorded`);
-    }
-    for (const flow of concern.flows) {
-      const verifiedSteps = new Set(
-        flow.steps
-          .map((step) => normalizeRepositoryPath(step.path, cwd))
-          .filter((candidate): candidate is string => candidate !== null),
-      );
-      if (verifiedSteps.size < 2) {
-        reasons.push(`${concern.concern}: flow '${flow.name}' does not contain two verified steps`);
-      }
-    }
-
-    const coreTouchpoints = concern.touchpoints.filter((touchpoint) =>
-      touchpoint.centrality === "core" && normalizeRepositoryPath(touchpoint.path, cwd) !== null
-    );
-    if (coreTouchpoints.length === 0) {
-      reasons.push(`${concern.concern}: no verified core touchpoint was recorded`);
-    }
-  }
-}
-
 export function assessSpecialistEvidence(
   map: CodebaseMap,
   options?: CoverageClosureOptions,
@@ -229,13 +429,26 @@ export function assessSpecialistEvidence(
       covered_paths: [],
       exempted_paths: [],
       uncovered_paths: [],
+      accepted_concerns: [],
+      rejected_concerns: [],
     };
   }
 
   const reasons: string[] = [];
-  const cwd = options?.cwd;
-  const highSignal = collectHighSignalPaths(map, cwd);
-  const covered = collectConcernPaths(map, cwd);
+  const resolvePath = createRepositoryPathResolver(map, options?.cwd);
+  const highSignal = collectHighSignalPaths(map, resolvePath);
+  const assessments = map.concern_evidence.concerns.map((concern) =>
+    assessConcern(concern, resolvePath)
+  );
+  const accepted = assessments.filter((assessment) => assessment.eligible);
+  const rejected = assessments
+    .filter((assessment) => !assessment.eligible)
+    .map((assessment): RejectedSpecialistConcern => ({
+      concern: assessment.concern,
+      reasons: assessment.reasons,
+    }));
+  const covered = [...new Set(accepted.flatMap((assessment) => assessment.contextPaths))]
+    .sort((left, right) => left.localeCompare(right));
   const exempted = pathsMentionedByRejections(map, highSignal);
   const coveredSet = new Set(covered);
   const exemptedSet = new Set(exempted);
@@ -264,7 +477,13 @@ export function assessSpecialistEvidence(
     reasons.push("repository process evidence treats Agentify-generated identities as application architecture");
   }
 
-  validateConcernShape(map, cwd, reasons);
+  const seen = new Set<string>();
+  for (const concern of map.concern_evidence.concerns) {
+    const key = concern.concern.trim().toLowerCase();
+    if (seen.has(key)) reasons.push(`duplicate concern name: ${concern.concern}`);
+    seen.add(key);
+  }
+
   const concerns = map.concern_evidence.concerns;
   if (concerns.length === 0) {
     if (highSignal.length > 2) {
@@ -276,14 +495,21 @@ export function assessSpecialistEvidence(
     if (!map.open_questions.some(substantiveQuestion)) {
       reasons.push("empty concern portfolio has no substantive justification in open_questions");
     }
+  } else if (accepted.length === 0) {
+    reasons.push("no recorded concern has both a tracked core touchpoint and a tracked end-to-end flow");
+    const summary = rejected
+      .slice(0, 4)
+      .map((entry) => `${entry.concern}: ${entry.reasons.join(", ")}`)
+      .join("; ");
+    if (summary) reasons.push(`rejected concern evidence: ${summary}`);
   }
 
   const areas = topLevelAreas(highSignal);
   const pathBackedRejections = map.concern_evidence.not_concerns.filter((entry) =>
-    highSignal.some((candidate) => entry.why_rejected.includes(candidate))
+    highSignal.some((candidate) => rejectionCoversPath(entry, candidate))
   ).length;
   if (
-    concerns.length === 1
+    accepted.length === 1
     && highSignal.length >= 6
     && areas.length >= 3
     && pathBackedRejections < 2
@@ -296,7 +522,7 @@ export function assessSpecialistEvidence(
 
   if (uncovered.length > 0) {
     reasons.push(
-      `high-signal repository files are neither covered by a concern nor explicitly rejected: ${uncovered.slice(0, 12).join(", ")}${uncovered.length > 12 ? ", …" : ""}`,
+      `high-signal repository files are neither covered by an accepted concern nor explicitly rejected: ${uncovered.slice(0, 12).join(", ")}${uncovered.length > 12 ? ", …" : ""}`,
     );
   }
 
@@ -308,6 +534,59 @@ export function assessSpecialistEvidence(
     covered_paths: covered,
     exempted_paths: exempted,
     uncovered_paths: uncovered,
+    accepted_concerns: accepted.map((assessment) => assessment.concern)
+      .sort((left, right) => left.localeCompare(right)),
+    rejected_concerns: rejected.sort((left, right) => left.concern.localeCompare(right.concern)),
+  };
+}
+
+/**
+ * Remove concern candidates that trusted evidence binding rejected while
+ * preserving the rejection decision in `not_concerns`.
+ *
+ * The audit map is model-authored evidence, whereas the installed specialist
+ * portfolio is a trusted projection over Git-tracked blobs. Reconciliation
+ * keeps those two layers aligned: fetched dependencies and generated artifacts
+ * remain visible as rejected audit hypotheses, but never become agents.
+ */
+export function reconcileSpecialistEvidence(
+  map: CodebaseMap,
+  assessment: SpecialistEvidenceAssessment,
+): CodebaseMap {
+  if (
+    !assessment.complete
+    || assessment.source !== "concern_evidence"
+    || assessment.rejected_concerns.length === 0
+    || map.concern_evidence === undefined
+  ) {
+    return map;
+  }
+
+  const accepted = new Set(assessment.accepted_concerns);
+  const concerns = map.concern_evidence.concerns.filter((concern) =>
+    accepted.has(concern.concern)
+  );
+  if (concerns.length === map.concern_evidence.concerns.length) return map;
+
+  const notConcerns = [...map.concern_evidence.not_concerns];
+  const existingCandidates = new Set(notConcerns.map((entry) => entry.candidate.trim().toLowerCase()));
+  for (const rejected of assessment.rejected_concerns) {
+    const key = rejected.concern.trim().toLowerCase();
+    if (existingCandidates.has(key)) continue;
+    notConcerns.push({
+      candidate: rejected.concern,
+      why_rejected:
+        `Trusted evidence binding rejected this concern: ${rejected.reasons.join("; ")}.`,
+    });
+    existingCandidates.add(key);
+  }
+
+  return {
+    ...map,
+    concern_evidence: {
+      concerns,
+      not_concerns: notConcerns,
+    },
   };
 }
 
