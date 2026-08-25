@@ -61,7 +61,7 @@ async function repairSpecialistPortfolio(
   for (let pass = 1; pass <= MAX_REPAIR_PASSES; pass += 1) {
     const map = loadCanonicalMapAt(context.cwd, stateDir);
     if (map === null) throw new Error("canonical codebase map disappeared before specialist repair");
-    const assessment = assessSpecialistEvidence(map, { cwd: context.cwd });
+    const assessment = assessSpecialistEvidence(map);
     if (assessment.complete) return { turns, cost_usd: costUsd };
 
     context.ui.status(
@@ -94,8 +94,7 @@ async function repairSpecialistPortfolio(
           "Submit the repaired concern_evidence through write_map_delta now. Do not return prose.",
         shouldRecover: () => {
           const current = loadCanonicalMapAt(context.cwd, stateDir);
-          return current !== null
-            && !assessSpecialistEvidence(current, { cwd: context.cwd }).complete;
+          return current !== null && !assessSpecialistEvidence(current).complete;
         },
       },
     });
@@ -104,9 +103,7 @@ async function repairSpecialistPortfolio(
   }
 
   const finalMap = loadCanonicalMapAt(context.cwd, stateDir);
-  const finalAssessment = finalMap === null
-    ? null
-    : assessSpecialistEvidence(finalMap, { cwd: context.cwd });
+  const finalAssessment = finalMap === null ? null : assessSpecialistEvidence(finalMap);
   throw new Error(
     "repository specialist discovery did not reach semantic closure: "
       + (finalAssessment?.reasons.slice(0, 12).join("; ") ?? "canonical map is unavailable"),
@@ -117,7 +114,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
   const result = await runBaseRepositoryAudit(context);
   const map = loadCanonicalMapAt(context.cwd, AUDIT_STATE_RELATIVE_DIR);
   if (map === null) throw new Error("repository audit returned without a canonical codebase map");
-  const assessment = assessSpecialistEvidence(map, { cwd: context.cwd });
+  const assessment = assessSpecialistEvidence(map);
   if (assessment.complete) return result;
 
   context.ui.info(
