@@ -54,6 +54,7 @@ const layouts: Record<string, string[]> = {
   "readiness-fail": ["src/index.ts", "src/lib.ts"],
 };
 const mapEvidencePaths = [
+  "README.md",
   "src/index.ts",
   "src/lib.ts",
   ...SPECIALIST_FIXTURE_TRACKED_FILES,
