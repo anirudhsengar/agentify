@@ -46,7 +46,7 @@ async function ensureProviderReachable(
 
   options.ui.info(
     first.provider
-      ? `agentify: could not reach ${first.provider} — the stored credentials may be missing, invalid, or expired.`
+      ? `agentify: could not reach ${first.provider}${first.detail ? `: ${first.detail}` : " — the stored credentials may be missing, invalid, or expired."}`
       : "agentify: could not verify the configured model provider.",
   );
   const updated = await runFullProviderSetup(configDir, options.ui, config);
@@ -54,8 +54,8 @@ async function ensureProviderReachable(
   const second = await probeProviderReachable(options.runtime, options.cwd, configDir, updated);
   if (second.ok) return updated;
   throw new Error(
-    `agentify: still could not reach ${second.provider ?? "the configured provider"} after re-entering setup. `
-    + "Double-check the API key and your network connection, then run `agentify` again.",
+    `agentify: still could not reach ${second.provider ?? "the configured provider"} after re-entering setup`
+    + `${second.detail ? `: ${second.detail}` : ". Double-check the API key and your network connection, then run `agentify` again."}`,
   );
 }
 

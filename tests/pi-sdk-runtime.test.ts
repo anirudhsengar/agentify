@@ -40,6 +40,16 @@ test("required tool choice uses the OpenAI chat and responses wire contracts", (
       parallel_tool_calls: false,
     },
   );
+  // The Codex backend accepts this shape (verified live): the named tool must
+  // be present in the session allowlist or the backend rejects the choice.
+  assert.deepEqual(
+    forceProviderToolChoice({ tools: [] }, "openai-codex-responses", "submit"),
+    {
+      tools: [],
+      tool_choice: { type: "function", name: "submit" },
+      parallel_tool_calls: false,
+    },
+  );
 });
 
 test("required tool choice preserves unknown provider payloads", () => {
@@ -67,4 +77,16 @@ test("provider output caps use nested Google and Bedrock wire contracts", () => 
     capProviderOutputTokens({ inferenceConfig: { temperature: 0 } }, "bedrock-converse-stream", 4_096),
     { inferenceConfig: { temperature: 0, maxTokens: 4_096 } },
   );
+});
+
+test("provider output caps narrow OpenAI responses but never touch the Codex payload", () => {
+  assert.deepEqual(
+    capProviderOutputTokens({ max_output_tokens: 131_072, tools: [] }, "openai-responses", 4_096),
+    { max_output_tokens: 4_096, tools: [] },
+  );
+  // The ChatGPT Codex backend rejects max_output_tokens outright ("Codex
+  // error: Unsupported parameter: max_output_tokens"); injecting it fails
+  // every request, so the payload must pass through untouched.
+  const codexPayload = { model: "gpt-5.6-luna", tools: [], tool_choice: "auto" };
+  assert.equal(capProviderOutputTokens(codexPayload, "openai-codex-responses", 4_096), codexPayload);
 });

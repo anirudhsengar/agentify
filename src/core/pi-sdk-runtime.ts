@@ -112,7 +112,13 @@ export function capProviderOutputTokens(payload: unknown, api: string, maximum: 
     }
     return { ...payload, max_tokens: boundedTokenValue(payload.max_tokens, maximum) };
   }
-  if (api === "openai-responses" || api === "openai-codex-responses") {
+  if (api === "openai-codex-responses") {
+    // The ChatGPT Codex backend rejects `max_output_tokens` outright
+    // ("Codex error: Unsupported parameter: max_output_tokens") — pi-ai's own
+    // codex API never sends it. Injecting it here fails every request.
+    return payload;
+  }
+  if (api === "openai-responses") {
     return { ...payload, max_output_tokens: boundedTokenValue(payload.max_output_tokens, maximum) };
   }
   if (api === "google-generative-ai" || api === "google-vertex") {

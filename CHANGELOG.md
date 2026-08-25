@@ -46,6 +46,16 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- ChatGPT-subscription (openai-codex) sessions no longer fail every request.
+  Agentify's per-request output cap injected `max_output_tokens` into the raw
+  provider payload, but the ChatGPT Codex backend rejects that parameter
+  outright (`Codex error: Unsupported parameter: max_output_tokens`; pi-ai's
+  own codex API never sends it). Every probe and audit request died with a
+  provider error that surfaced only as "could not reach openai-codex — the
+  stored credentials may be missing, invalid, or expired". The cap now leaves
+  codex payloads untouched. The reachability probe also reports the actual
+  provider error message instead of only the generic credential hint, and
+  both payload-rewrite behaviors are pinned by unit tests.
 - A stored OAuth subscription credential now counts as usable authentication
   for a plain `agentify` run. The first-run gate (`hasStoredAuth`) only
   recognized API-key entries — OAuth credentials persist as
