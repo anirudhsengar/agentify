@@ -9,6 +9,9 @@ bash "$root/tests/test-agentify-learn-lifecycle.sh"
 
 expected=$(cat <<'EOF'
 .github/agentify-task-policy.json
+.github/agentify/learning-runtime.mjs
+.github/agentify/runtime-loader.mjs
+.github/agentify/task-runtime.mjs
 .github/agentify/validation-smoke.mjs
 .github/scripts/complete-accepted-task-merge.mjs
 .github/scripts/publish-task-draft.mjs

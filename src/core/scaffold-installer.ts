@@ -11,6 +11,8 @@ import { isAgentifyOwnedTaskPolicyFile } from "./installer/task-policy.ts";
 import { AGENTIFY_INSTALLED_CONTROL_PATHS } from "./artifacts/managed-installation-paths.ts";
 
 const TASK_POLICY_PORTABLE_PATH = ".github/agentify-task-policy.json";
+const RUNTIME_LOADER_PORTABLE_PATH = ".github/agentify/runtime-loader.mjs";
+const RUNTIME_VERSION_PLACEHOLDER = "__AGENTIFY_RUNTIME_VERSION__";
 
 export interface InstallScaffoldRuntimeOptions {
   cwd: string;
@@ -83,29 +85,47 @@ function copyManaged(
   };
 }
 
+function packageVersion(packageRoot: string): string {
+  const metadata = JSON.parse(
+    fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"),
+  ) as { name?: unknown; version?: unknown };
+  if (metadata.name !== "@anirudhsengar/agentify") {
+    throw new Error("Agentify package root has an unexpected package identity");
+  }
+  if (
+    typeof metadata.version !== "string"
+    || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(metadata.version)
+  ) {
+    throw new Error("Agentify package root has no valid semantic version");
+  }
+  return metadata.version;
+}
+
+function contentFor(
+  source: string,
+  portableRelative: string,
+  options: InstallScaffoldRuntimeOptions,
+): string | undefined {
+  if (portableRelative === TASK_POLICY_PORTABLE_PATH && options.taskPolicyConfiguration) {
+    return `${JSON.stringify(options.taskPolicyConfiguration, null, 2)}\n`;
+  }
+  if (portableRelative === RUNTIME_LOADER_PORTABLE_PATH) {
+    const sourceContent = fs.readFileSync(source, "utf8");
+    if (!sourceContent.includes(RUNTIME_VERSION_PLACEHOLDER)) {
+      throw new Error("Agentify runtime loader is missing its version placeholder");
+    }
+    return sourceContent.replaceAll(
+      RUNTIME_VERSION_PLACEHOLDER,
+      packageVersion(options.packageRoot),
+    );
+  }
+  return undefined;
+}
+
 export function installScaffoldRuntime(options: InstallScaffoldRuntimeOptions): ArtifactWrite[] {
   const scaffoldRoot = path.join(options.packageRoot, "scaffold");
   if (!fs.existsSync(scaffoldRoot)) {
     return [];
-  }
-  const bundledRuntimes = [
-    {
-      source: path.join(options.packageRoot, "dist", "learning-runtime.mjs"),
-      destination: path.join(options.cwd, ".github", "agentify", "learning-runtime.mjs"),
-      label: "learning",
-    },
-    {
-      source: path.join(options.packageRoot, "dist", "task-runtime.mjs"),
-      destination: path.join(options.cwd, ".github", "agentify", "task-runtime.mjs"),
-      label: "task lifecycle",
-    },
-  ];
-  for (const runtime of bundledRuntimes) {
-    if (!fs.existsSync(runtime.source)) {
-      throw new Error(
-        `Agentify ${runtime.label} runtime is missing from dist; run the package build before installing the GitHub runtime`,
-      );
-    }
   }
 
   const writes: ArtifactWrite[] = [];
@@ -114,20 +134,10 @@ export function installScaffoldRuntime(options: InstallScaffoldRuntimeOptions): 
     const portableRelative = relative.split(path.sep).join("/");
     if (!AGENTIFY_INSTALLED_CONTROL_PATHS.has(portableRelative)) continue;
     const destination = path.join(options.cwd, relative);
-    const policyContent = portableRelative === ".github/agentify-task-policy.json"
-      && options.taskPolicyConfiguration
-      ? `${JSON.stringify(options.taskPolicyConfiguration, null, 2)}\n`
-      : undefined;
     writes.push(copyManaged(source, destination, {
-      content: policyContent,
+      content: contentFor(source, portableRelative, options),
       knownManaged: options.knownManagedPaths?.has(portableRelative) === true
         || (portableRelative === TASK_POLICY_PORTABLE_PATH && isAgentifyOwnedTaskPolicyFile(destination)),
-    }));
-  }
-  for (const runtime of bundledRuntimes) {
-    const relative = path.relative(options.cwd, runtime.destination).split(path.sep).join("/");
-    writes.push(copyManaged(runtime.source, runtime.destination, {
-      knownManaged: options.knownManagedPaths?.has(relative) === true,
     }));
   }
   return writes;

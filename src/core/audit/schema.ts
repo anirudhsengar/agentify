@@ -1,7 +1,7 @@
 // Stable audit-schema façade.
 //
 // TypeBox declarations are owned by cohesive modules under ./schema/. This
-// This module intentionally declares nothing: it provides one import path while
+// module intentionally declares nothing: it provides one import path while
 // forwarding schema values, algorithms, and static types from their owners.
 
 export {
@@ -38,16 +38,22 @@ export { COVERAGE_DIMENSIONS } from "./coverage.ts";
 export {
   AGENTS_MD_MAX_LINES,
   MIN_PITFALLS_FOR_COVERED,
-  assessAuditCompletion,
   assessCoverageClosure,
   extractCoverageSummary,
-  specialistEvidenceRecorded,
 } from "./coverage.ts";
 export type {
-  AuditCompletionResult,
   CoverageClosureResult,
   CoverageDimension,
   CoverageSummary,
 } from "./coverage.ts";
+export {
+  assessAuditCompletion,
+  assessSpecialistEvidence,
+  specialistEvidenceRecorded,
+} from "./specialist-completion.ts";
+export type {
+  AuditCompletionResult,
+  SpecialistEvidenceAssessment,
+} from "./specialist-completion.ts";
 export { applyMapDefaults } from "./map-defaults.ts";
 export type { AppliedMapDefaults } from "./map-defaults.ts";
