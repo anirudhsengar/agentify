@@ -154,9 +154,12 @@ test("installed readiness consumes installer-attested policy and service facts",
   assert.match(read("src/core/audit/paths.ts"), /\.agentify\/runtime\/audit/);
 });
 
-test("fresh scaffold installation uses an exact focused allowlist", () => {
+test("fresh scaffold installation uses an exact compact runtime allowlist", () => {
   const installer = read("src/core/scaffold-installer.ts");
   const managedPaths = read("src/core/artifacts/managed-installation-paths.ts");
+  const launcher = read("scaffold/.github/agentify/task-runtime.mjs");
+  const loader = read("scaffold/.github/agentify/runtime-loader.mjs");
+
   assert.match(installer, /AGENTIFY_INSTALLED_CONTROL_PATHS/);
   for (const unrelated of [
     "agent-command.yml", "agent-implement.yml", "agent-implement-pr.yml",
@@ -164,6 +167,15 @@ test("fresh scaffold installation uses an exact focused allowlist", () => {
   ]) {
     assert.doesNotMatch(managedPaths, new RegExp(unrelated.replace(".", "\\.")));
   }
-  assert.match(installer, /dist", "task-runtime\.mjs"/);
-  assert.match(installer, /\.github", "agentify", "task-runtime\.mjs"/);
+  for (const required of [
+    ".github/agentify/runtime-loader.mjs",
+    ".github/agentify/task-runtime.mjs",
+    ".github/agentify/learning-runtime.mjs",
+  ]) {
+    assert.match(managedPaths, new RegExp(required.replaceAll(".", "\\.")));
+  }
+  assert.doesNotMatch(installer, /dist["'], "task-runtime\.mjs/);
+  assert.match(installer, /RUNTIME_VERSION_PLACEHOLDER/);
+  assert.match(launcher, /runAgentifyRuntime\("task-runtime\.mjs"/);
+  assert.match(loader, /PACKAGE_VERSION = "__AGENTIFY_RUNTIME_VERSION__"/);
 });
