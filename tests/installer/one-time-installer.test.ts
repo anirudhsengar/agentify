@@ -19,7 +19,10 @@ import {
   type InstallerProcessRunner,
   DEFAULT_INSTALLER_PROCESS_RUNNER,
 } from "../../src/core/installer/index.ts";
-import { makeSpecialistFixtureMap } from "../fixtures/specialist-map.ts";
+import {
+  SPECIALIST_FIXTURE_TRACKED_FILES,
+  makeSpecialistFixtureMap,
+} from "../fixtures/specialist-map.ts";
 import { runAgentifyApp } from "../../src/core/agentify-app.ts";
 import { installScaffoldRuntime } from "../../src/core/scaffold-installer.ts";
 import { packageRoot as installedPackageRoot } from "../../src/core/pi-sdk-runtime.ts";
@@ -684,9 +687,8 @@ async function testOneCommandInitialAuditInstallation(): Promise<void> {
   try {
     for (const relative of [
       "src/lib.ts",
-      "src/billing/index.ts",
+      ...SPECIALIST_FIXTURE_TRACKED_FILES,
       "src/billing/types.ts",
-      "tests/billing.test.ts",
       "scripts/prime-db.sh",
     ]) {
       const destination = path.join(cwd, relative);
