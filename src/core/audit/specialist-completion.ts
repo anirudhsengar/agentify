@@ -13,6 +13,7 @@ const LINE_SUFFIX = /:(?:L)?\d+(?:-(?:L)?\d+)?$/i;
 const DISPLAY_ANNOTATION_SUFFIX = /\s+\([^/\r\n]+\)$/;
 const DRIVE_PREFIX = /^[A-Za-z]:[\\/]/;
 const PLACEHOLDER_QUESTION = /^(?:initial draft|todo|unknown|tbd|gather\b|not observed)/i;
+const AGENTIFY_GENERATED_PATH = /^(?:\.agentify(?:\/|$)|\.github\/agentify(?:\/|$))/;
 const WELL_KNOWN_FILE_NAMES = new Set([
   "dockerfile",
   "gemfile",
@@ -174,13 +175,11 @@ function validateConcernShape(map: CodebaseMap, cwd: string | undefined, reasons
       reasons.push(`${concern.concern}: no end-to-end flow was recorded`);
     }
     for (const flow of concern.flows) {
-      const steps = new Set(
-        flow.steps
-          .map((step) => normalizeRepositoryPath(step.path, cwd))
-          .filter((candidate): candidate is string => candidate !== null),
-      );
-      if (steps.size < 2) {
-        reasons.push(`${concern.concern}: flow '${flow.name}' does not contain two distinct repository files`);
+      const verifiedSteps = flow.steps
+        .map((step) => normalizeRepositoryPath(step.path, cwd))
+        .filter((candidate): candidate is string => candidate !== null);
+      if (verifiedSteps.length < 2) {
+        reasons.push(`${concern.concern}: flow '${flow.name}' does not contain two verified steps`);
       }
     }
 
@@ -229,9 +228,15 @@ export function assessSpecialistEvidence(
   }
   if (
     map.meta.languages.length === 0
-    || map.meta.languages.every((language) => language.trim().toLowerCase() === "unknown")
+    || map.meta.languages.some((language) => language.trim().toLowerCase() === "unknown")
   ) {
     reasons.push("repository languages/formats were not identified");
+  }
+  if (map.skeleton.top_level_tree.some((entry) => AGENTIFY_GENERATED_PATH.test(entry.trim()))) {
+    reasons.push("repository topography includes Agentify-generated paths");
+  }
+  if (map.meta.lifecycle.agent_definitions.paths.some((entry) => AGENTIFY_GENERATED_PATH.test(entry.trim()))) {
+    reasons.push("repository process evidence treats Agentify-generated identities as application architecture");
   }
 
   validateConcernShape(map, cwd, reasons);
@@ -282,11 +287,15 @@ export function assessSpecialistEvidence(
   };
 }
 
-export function specialistEvidenceRecorded(
-  map: CodebaseMap,
-  options?: CoverageClosureOptions,
-): boolean {
-  return assessSpecialistEvidence(map, options).complete;
+/**
+ * Whether the audit recorded an explicit specialist-evidence decision.
+ *
+ * This intentionally preserves the transport-level meaning used by write-map
+ * feedback and legacy callers. Audit completion uses `assessSpecialistEvidence`
+ * below, which is the stronger semantic-quality gate.
+ */
+export function specialistEvidenceRecorded(map: CodebaseMap): boolean {
+  return map.concern_evidence !== undefined || map.expert_evidence !== undefined;
 }
 
 export function assessAuditCompletion(
@@ -294,10 +303,10 @@ export function assessAuditCompletion(
   options?: CoverageClosureOptions,
 ): AuditCompletionResult {
   const coverage = assessCoverageClosure(map, options);
-  const specialistRecorded = specialistEvidenceRecorded(map, options);
+  const specialistAssessment = assessSpecialistEvidence(map, options);
   return {
     coverage,
-    specialistEvidenceRecorded: specialistRecorded,
-    complete: coverage.unresolved.length === 0 && specialistRecorded,
+    specialistEvidenceRecorded: specialistAssessment.complete,
+    complete: coverage.unresolved.length === 0 && specialistAssessment.complete,
   };
 }
