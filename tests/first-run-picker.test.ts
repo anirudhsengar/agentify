@@ -25,6 +25,10 @@ class TestUi implements AgentifyUi {
     return answer;
   }
 
+  async promptText(): Promise<string> {
+    throw new Error("unexpected text prompt");
+  }
+
   async promptSecret(): Promise<string> {
     const answer = this.secrets.shift();
     if (answer === undefined) throw new Error("unexpected secret prompt");

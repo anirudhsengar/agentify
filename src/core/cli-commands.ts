@@ -3,9 +3,9 @@
 
 import * as path from "node:path";
 import type { Model, Api } from "@earendil-works/pi-ai";
+import { CredentialSynchronizationError } from "@earendil-works/pi-coding-agent";
 import {
   AGENTIFY_PROVIDERS,
-  getProviderEnvValue,
   hasProviderEnvironmentAuth,
   isAgentifyProvider,
 } from "./provider-auth.ts";
@@ -15,6 +15,12 @@ import {
   loadAgentifyConfig,
   saveAgentifyConfig,
 } from "./agentify-config.ts";
+import {
+  buildLoginOptions,
+  createAuthInteraction,
+  loginOptionLabel,
+  type AuthLoginOption,
+} from "./auth-login.ts";
 import { selectModelForRole } from "./models/resolver.ts";
 import {
   printPublicCommandHelp,
@@ -109,31 +115,15 @@ function providerLabel(value: AgentifyProvider): string {
   return AGENTIFY_PROVIDERS.find((p) => p.value === value)?.label ?? value;
 }
 
-/**
- * Returns true if the provider is OAuth-only — i.e., no env var carries
- * a usable key, and the provider relies on a Pi-side OAuth flow. Today
- * that is just `openai-codex`.
- */
-function isOAuthOnlyProvider(provider: AgentifyProvider): boolean {
-  const entry = AGENTIFY_PROVIDERS.find((p) => p.value === provider);
-  return entry !== undefined && entry.env.length === 0;
-}
-
-function printOAuthInstructions(
-  out: NodeJS.WritableStream,
-  provider: AgentifyProvider,
-): void {
-  out.write(`${providerLabel(provider)} uses OAuth and cannot be configured via the agentify CLI.\n`);
-  out.write(`Run \`pi auth login ${provider}\` to complete the OAuth flow; agentify will pick up the saved credentials.\n`);
-}
-
-function credentialPrompt(label: string, env: readonly string[]): string {
-  if (env.length === 0) return `${label} credential`;
-  return `${label} API key (${env.join(" or ")})`;
-}
-
 function buildAuthStorage(configDir: string): AgentifyCredentialStore {
   return new AgentifyCredentialStore(authPath(configDir));
+}
+
+async function buildModelRuntime(configDir: string) {
+  return (await createAgentifyModelRuntime({
+    authFile: authPath(configDir),
+    modelsFile: path.join(configDir, "models.json"),
+  })).modelRuntime;
 }
 
 async function buildModelRegistry(configDir: string) {
@@ -149,6 +139,86 @@ async function buildModelRegistry(configDir: string) {
 
 const LOGIN_FLAGS = new Set(["provider"]);
 const LOGIN_TAKES_VALUE = new Set(["provider"]);
+
+/** Sentinel value for the API-key branch of the first-level selector. */
+const API_KEY_MENU = "__api_key__";
+
+function ambientAuthMessage(option: AuthLoginOption): string {
+  const entry = AGENTIFY_PROVIDERS.find((p) => p.value === option.providerId);
+  const envHint = entry && entry.env.length > 0
+    ? `set ${entry.env.join(" or ")}`
+    : "configure its documented environment credentials";
+  return `${option.providerName} reads ambient credentials from the environment; ${envHint} and run agentify again. No stored login is required.`;
+}
+
+/**
+ * Record the provider pointer after a successful login so `models show`
+ * reflects the user's intent. The pointer is only written for providers in
+ * the static allowlist that config parsing accepts; the credential itself is
+ * already persisted by Pi regardless.
+ */
+function recordLoginProvider(configDir: string, providerId: string): void {
+  if (!isAgentifyProvider(providerId)) return;
+  const existing = loadAgentifyConfig(configDir);
+  saveAgentifyConfig(configDir, {
+    ...existing,
+    provider: providerId,
+    thinkingLevel: existing.thinkingLevel ?? "high",
+  });
+}
+
+/**
+ * Interactive provider/method selection mirroring Pi's `/login`: with no
+ * `--provider`, the first level lists every subscription (OAuth) method by
+ * its Pi name, then "Sign in with an API key"; `--provider <id>` jumps
+ * straight to that provider, asking only when it supports both methods.
+ */
+async function selectLoginOption(
+  ctx: SubcommandContext,
+  providers: Parameters<typeof buildLoginOptions>[0],
+  providerId: string | undefined,
+): Promise<AuthLoginOption | null> {
+  const { subscriptions, apiKeys } = buildLoginOptions(providers);
+  if (providerId !== undefined) {
+    const candidates = [...subscriptions, ...apiKeys].filter(
+      (option) => option.providerId === providerId,
+    );
+    if (candidates.length === 0) {
+      ctx.err.write(`agentify: login: unknown provider '${providerId}'\n`);
+      return null;
+    }
+    if (candidates.length === 1) return candidates[0]!;
+    const providerName = candidates[0]!.providerName;
+    const choice = await ctx.ui.promptSelect(
+      `Select authentication method for ${providerName}:`,
+      candidates.map((option) => ({
+        label: option.authType === "oauth"
+          ? (option.loginLabel ?? "Sign in with an account")
+          : "Sign in with an API key",
+        value: option.authType,
+      })),
+    );
+    return candidates.find((option) => option.authType === choice) ?? null;
+  }
+
+  const firstLevel = [
+    ...subscriptions.map((option) => ({
+      label: loginOptionLabel(option),
+      value: `oauth:${option.providerId}`,
+    })),
+    { label: "Sign in with an API key", value: API_KEY_MENU },
+  ];
+  const choice = await ctx.ui.promptSelect("Select authentication method:", firstLevel);
+  if (choice !== API_KEY_MENU) {
+    const provider = choice.slice("oauth:".length);
+    return subscriptions.find((option) => option.providerId === provider) ?? null;
+  }
+  const apiChoice = await ctx.ui.promptSelect(
+    "Select provider to configure:",
+    apiKeys.map((option) => ({ label: option.providerName, value: option.providerId })),
+  );
+  return apiKeys.find((option) => option.providerId === apiChoice) ?? null;
+}
 
 export async function loginCommand(
   argv: ReadonlyArray<string>,
@@ -167,79 +237,64 @@ export async function loginCommand(
     return 1;
   }
 
-  let providerValue: string | undefined =
+  const providerArg =
     typeof parsed.flags.provider === "string" ? parsed.flags.provider : undefined;
-  if (providerValue !== undefined && !isAgentifyProvider(providerValue)) {
-    ctx.err.write(`agentify: login: unknown provider '${providerValue}'\n`);
-    return 1;
-  }
-
-  if (providerValue === undefined) {
-    providerValue = await ctx.ui.promptSelect(
-      "Choose an LLM provider for agentify:",
-      AGENTIFY_PROVIDERS.map((p) => ({ label: p.label, value: p.value })),
-    );
-    if (!isAgentifyProvider(providerValue)) {
-      ctx.err.write(`agentify: login: unsupported provider: ${providerValue}\n`);
-      return 1;
-    }
-  }
-
-  const provider = providerValue;
-  const entry = AGENTIFY_PROVIDERS.find((p) => p.value === provider);
-  if (!entry) {
-    ctx.err.write(`agentify: login: unknown provider '${provider}'\n`);
-    return 1;
-  }
-
-  if (isOAuthOnlyProvider(provider)) {
-    printOAuthInstructions(ctx.out, provider);
-    return 0;
-  }
-
-  if (hasProviderEnvironmentAuth(provider)) {
-    const envKey = getProviderEnvValue(provider);
-    ctx.out.write(
-      `${providerLabel(provider)} is configured via environment (${envKey === undefined ? entry.env.join(",") : entry.env.find((e) => process.env[e]) ?? entry.env[0]}); ` +
-        "agentify will use that value at runtime. To replace it with a stored key, unset the env var and run `agentify login` again, or use `agentify logout --provider " +
-        provider +
-        "` to clear any persisted credential.\n",
-    );
-    // Still update the config provider pointer so `models show` reflects
-    // the user's intent.
-    const existing = loadAgentifyConfig(ctx.configDir);
-    saveAgentifyConfig(ctx.configDir, {
-      ...existing,
-      provider,
-      thinkingLevel: existing.thinkingLevel ?? "high",
-    });
-    return 0;
-  }
-
   const interactive = ctx.stdinIsTTY ?? Boolean(process.stdin.isTTY);
+
+  // Non-interactive fast path: an environment-configured provider needs no
+  // stored credential, so scripts can assert auth readiness without a TTY.
+  if (!interactive && providerArg !== undefined && isAgentifyProvider(providerArg)) {
+    const entry = AGENTIFY_PROVIDERS.find((p) => p.value === providerArg);
+    if (entry && entry.env.length > 0 && hasProviderEnvironmentAuth(providerArg)) {
+      ctx.out.write(
+        `${providerLabel(providerArg)} is configured via environment; agentify will use that value at runtime.\n`,
+      );
+      recordLoginProvider(ctx.configDir, providerArg);
+      return 0;
+    }
+    ctx.err.write(
+      entry && entry.env.length > 0
+        ? `agentify: login: no credential found for ${providerArg}; set ${entry.env.join(" or ")} or run this command in an interactive terminal\n`
+        : `agentify: login: ${providerArg} requires an interactive sign-in; run \`agentify login\` in a terminal\n`,
+    );
+    return 1;
+  }
   if (!interactive) {
     ctx.err.write(
-      `agentify: login: no credential found for ${provider}; set ${entry.env.join(" or ")} or run this command in an interactive terminal\n`,
+      "agentify: login: provider sign-in requires an interactive terminal; pass --provider with a configured environment credential for non-interactive checks\n",
     );
     return 1;
   }
-  const key = await ctx.ui.promptSecret(credentialPrompt(entry.label, entry.env));
-  if (!key.trim()) {
-    ctx.err.write(`agentify: login: no API key provided\n`);
+
+  const modelRuntime = await buildModelRuntime(ctx.configDir);
+  const option = await selectLoginOption(ctx, modelRuntime.getProviders(), providerArg);
+  if (!option) return 1;
+
+  if (option.ambientOnly) {
+    ctx.out.write(`${ambientAuthMessage(option)}\n`);
+    return 0;
+  }
+
+  const interaction = createAuthInteraction({ ui: ctx.ui, out: ctx.out });
+  try {
+    await modelRuntime.login(option.providerId, option.authType, interaction);
+  } catch (error) {
+    if (error instanceof CredentialSynchronizationError) {
+      ctx.out.write(
+        `Logged in to ${option.providerName}, but local model state could not be synchronized: ${error.message}\n`,
+      );
+      recordLoginProvider(ctx.configDir, option.providerId);
+      return 0;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    ctx.err.write(`agentify: login: failed to log in to ${option.providerName}: ${message}\n`);
     return 1;
   }
 
-  const authStorage = buildAuthStorage(ctx.configDir);
-  await authStorage.set(provider, { type: "api_key", key: key.trim() });
-
-  const existing = loadAgentifyConfig(ctx.configDir);
-  saveAgentifyConfig(ctx.configDir, {
-    ...existing,
-    provider,
-    thinkingLevel: existing.thinkingLevel ?? "high",
-  });
-
-  ctx.out.write(`logged in ${provider}; config written to ${configPath(ctx.configDir)}\n`);
+  recordLoginProvider(ctx.configDir, option.providerId);
+  ctx.out.write(
+    `logged in ${option.providerId} (${option.methodName}); config written to ${configPath(ctx.configDir)}\n`,
+  );
   return 0;
 }
 

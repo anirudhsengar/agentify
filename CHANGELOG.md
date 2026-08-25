@@ -20,6 +20,14 @@ All notable changes to Agentify are documented here.
   accepts type definitions from any language. When an audit records no
   concerns, the install warning explains how to force concern re-discovery
   instead of claiming a plain re-run re-audits.
+- `agentify login` now mirrors the Pi coding agent's authentication surface
+  exactly: the method selector is built from the installed Pi model registry,
+  listing every subscription sign-in (Anthropic Claude Pro/Max, OpenAI ChatGPT
+  Plus/Pro, GitHub Copilot, Kimi, OpenRouter, Radius, xAI) by Pi's own label
+  first, then "Sign in with an API key". OAuth flows run through Pi's own
+  login implementations — browser launch, device codes, and manual-code paste
+  with out-of-band abort — and credentials persist to `~/.agentify/auth.json`.
+  A parity test pins the static provider allowlist to the Pi registry.
 
 ### Changed
 

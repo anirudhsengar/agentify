@@ -87,13 +87,14 @@ test("unexpected positional arguments identify only public maintenance commands"
 test("public utility subcommands retain argv dispatch and output channels", () => {
   const sandbox = createCliSandbox("agentify-parity-utility");
   try {
+    // OAuth-only providers cannot sign in without a TTY: the CLI fails
+    // closed on stderr and points at the interactive flow.
     const login = runCompiledCli(["login", "--provider", "openai-codex"], sandbox);
-    assert.equal(login.status, 0);
-    assert.equal(login.stderr, "");
+    assert.notEqual(login.status, 0);
+    assert.equal(login.stdout, "");
     assert.equal(
-      login.stdout,
-      "OpenAI Codex uses OAuth and cannot be configured via the agentify CLI.\n" +
-        "Run `pi auth login openai-codex` to complete the OAuth flow; agentify will pick up the saved credentials.\n",
+      login.stderr,
+      "agentify: login: openai-codex requires an interactive sign-in; run `agentify login` in a terminal\n",
     );
 
     const models = runCompiledCli(["models"], sandbox);

@@ -37,6 +37,8 @@ export interface AgentifyUi {
     choices: ReadonlyArray<{ label: string; value: string }>,
   ): Promise<string>;
   promptSecret(message: string): Promise<string>;
+  /** Free-form single-line text input (e.g. pasting an OAuth redirect URL). */
+  promptText(message: string, placeholder?: string): Promise<string>;
 }
 
 export interface AgentRuntimeSessionOptions {

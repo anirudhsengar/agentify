@@ -92,4 +92,16 @@ export class ClackUi implements AgentifyUi {
     return result as string;
   }
 
+  async promptText(message: string, placeholder?: string): Promise<string> {
+    this.ensureInteractive(message);
+    const result = await clack.text({
+      message,
+      ...(placeholder !== undefined ? { placeholder } : {}),
+    });
+    if (clack.isCancel(result)) {
+      throw new Error("Interrupted.");
+    }
+    return result as string;
+  }
+
 }

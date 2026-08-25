@@ -56,6 +56,10 @@ class TestUi implements AgentifyUi {
     if (answer === undefined) throw new Error("unexpected secret prompt");
     return answer;
   }
+
+  async promptText(): Promise<string> {
+    throw new Error("unexpected text prompt");
+  }
 }
 
 function tempDir(): string {
@@ -117,11 +121,47 @@ const tests: Array<{ name: string; run: () => Promise<void> }> = [
     }),
   },
   {
-    name: "OAuth providers print setup instructions",
+    name: "interactive login through the API-key menu stores a credential",
     run: () => withConfig(async (configDir) => {
-      const { ctx, out } = context(configDir, new TestUi());
-      assert.equal(await loginCommand(["--provider", "openai-codex"], ctx), 0);
-      assert.match(out.text(), /pi auth login openai-codex/);
+      // First-level selector answers with the API-key branch sentinel, then
+      // the provider id, then Pi's own secret prompt receives the key.
+      const { ctx } = context(configDir, new TestUi(["__api_key__", "openai"], ["sk-menu"]));
+      assert.equal(await loginCommand([], ctx), 0);
+      assert.equal(await new AgentifyCredentialStore(authPath(configDir)).has("openai"), true);
+      assert.equal(loadAgentifyConfig(configDir).provider, "openai");
+    }),
+  },
+  {
+    name: "non-interactive OAuth-only provider reports the interactive requirement",
+    run: () => withConfig(async (configDir) => {
+      const { ctx, err } = context(configDir, new TestUi(), false);
+      assert.equal(await loginCommand(["--provider", "openai-codex"], ctx), 1);
+      assert.match(err.text(), /interactive sign-in/);
+    }),
+  },
+  {
+    name: "non-interactive login accepts an environment-configured provider",
+    run: () => withConfig(async (configDir) => {
+      const previous = process.env["OPENAI_API_KEY"];
+      process.env["OPENAI_API_KEY"] = "sk-env";
+      try {
+        const { ctx, out } = context(configDir, new TestUi(), false);
+        assert.equal(await loginCommand(["--provider", "openai"], ctx), 0);
+        assert.match(out.text(), /configured via environment/);
+        assert.equal(loadAgentifyConfig(configDir).provider, "openai");
+        assert.equal(await new AgentifyCredentialStore(authPath(configDir)).has("openai"), false);
+      } finally {
+        if (previous === undefined) delete process.env["OPENAI_API_KEY"];
+        else process.env["OPENAI_API_KEY"] = previous;
+      }
+    }),
+  },
+  {
+    name: "unknown provider ids are rejected",
+    run: () => withConfig(async (configDir) => {
+      const { ctx, err } = context(configDir, new TestUi());
+      assert.equal(await loginCommand(["--provider", "not-a-provider"], ctx), 1);
+      assert.match(err.text(), /unknown provider/);
     }),
   },
   {

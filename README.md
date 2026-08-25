@@ -100,14 +100,19 @@ npm install --global @anirudhsengar/agentify
 
 cd /path/to/your/repository
 
-# Anthropic is an example; choose a provider supported by your environment.
+# Run without arguments to pick a sign-in method interactively:
+# subscription sign-ins (Claude Pro/Max, ChatGPT Plus/Pro, GitHub Copilot, …)
+# are listed first, then "Sign in with an API key".
+agentify login
+
+# Or jump straight to a provider.
 agentify login --provider anthropic
 agentify models list --provider anthropic
 # Replace <model-id> with a value returned by the previous command.
 agentify models set "anthropic/<model-id>"
 ```
 
-Provider credentials are read from provider environment variables, supported OAuth instructions, or a masked interactive prompt. They are never accepted as command-line values or written to the repository.
+`agentify login` offers exactly the authentication methods the Pi model runtime supports for each provider: OAuth subscription sign-in where available (browser or device-code flow), otherwise an API key. Credentials are read from provider environment variables, the stored OAuth/API-key credentials from login, or a masked interactive prompt. They are never accepted as command-line values or written to the repository.
 
 ### 2. Run the one-time installer
 

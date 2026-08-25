@@ -189,14 +189,17 @@ try {
   assert.equal(positional.stdout, "");
   assert.match(positional.stderr, /Known subcommands: login, logout, models/);
 
+  // OAuth-only providers fail closed without a TTY and point at the
+  // interactive login flow.
   const utility = run(nodeCommand, [bin, "login", "--provider", "openai-codex"], {
     cwd: installRoot,
     env,
     timeout: 30_000,
+    expectFailure: true,
   });
-  assert.equal(utility.stderr, "");
-  assert.match(utility.stdout, /OpenAI Codex uses OAuth/);
-  assert.match(utility.stdout, /pi auth login openai-codex/);
+  assert.equal(utility.stdout, "");
+  assert.match(utility.stderr, /requires an interactive sign-in/);
+  assert.match(utility.stderr, /agentify login/);
 
   for (const internalPath of [
     "audit/prompt.ts",

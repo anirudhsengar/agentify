@@ -54,6 +54,7 @@ class InstallerTestUi implements AgentifyUi {
   async promptMultiSelect(): Promise<ReadonlyArray<string>> { throw new Error("installer test must not prompt"); }
   async promptCheckboxList(): Promise<ReadonlyArray<string>> { throw new Error("installer test must not prompt"); }
   async promptSecret(): Promise<string> { throw new Error("installer test must not prompt"); }
+  async promptText(): Promise<string> { throw new Error("installer test must not prompt"); }
 }
 
 class InstallerAuditRuntime implements AgentRuntime {

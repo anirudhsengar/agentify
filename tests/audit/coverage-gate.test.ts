@@ -35,6 +35,7 @@ class SilentUi implements AgentifyUi {
   async promptMultiSelect(): Promise<ReadonlyArray<string>> { throw new Error("no prompt"); }
   async promptCheckboxList(): Promise<ReadonlyArray<string>> { throw new Error("no prompt"); }
   async promptSecret(): Promise<string> { throw new Error("no prompt"); }
+  async promptText(): Promise<string> { throw new Error("no prompt"); }
 }
 
 /**
