@@ -101,6 +101,26 @@ test("model runtimes have no GitHub credential path", () => {
   assert.doesNotMatch(controller, /specialist-blocked|consultation\.unresolved_questions/);
 });
 
+test("workflow carries the credential store and rotates it back through AGENT_PAT", () => {
+  const workflow = read("scaffold/.github/workflows/agentify-issue.yml");
+  const controller = read("scaffold/.github/scripts/run-task-lifecycle.mjs");
+  const modelRuntime = read("src/core/task-lifecycle/model-runtime.ts");
+  // The workflow exposes the uploaded credential store and the automation
+  // token; the model environment scrubber already strips both.
+  assert.match(workflow, /PI_AUTH_JSON:\s*\$\{\{ secrets\.PI_AUTH_JSON \}\}/);
+  assert.match(workflow, /AGENT_PAT:\s*\$\{\{ secrets\.AGENT_PAT \}\}/);
+  // The controller materializes the store once per run, never rewrites it
+  // mid-run, and writes rotated OAuth tokens back best-effort.
+  assert.match(controller, /materializeAuth\(configDir, authJson\)/);
+  assert.match(controller, /if \(this\.authState\) return;/);
+  assert.match(controller, /syncAuthSecret\(\)/);
+  assert.match(controller, /"secret", "set", "PI_AUTH_JSON"/);
+  assert.match(controller, /PI_API_KEY or PI_AUTH_JSON is required/);
+  // The trusted runtime accepts either transport and fails closed otherwise.
+  assert.match(modelRuntime, /assertTaskModelCredentialStore\(configDir, provider\)/);
+  assert.match(modelRuntime, /task model credential store has no usable/);
+});
+
 test("task execution uses a stable facade over downward-only focused modules", () => {
   const facade = read("src/core/task-lifecycle/execution.ts");
   const modules = files("src/core/task-lifecycle/execution");

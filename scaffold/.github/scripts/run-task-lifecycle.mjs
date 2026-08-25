@@ -11,6 +11,7 @@ import * as path from "node:path";
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
 const MAX_EVENT_BYTES = 4 * 1024 * 1024;
 const MAX_COMMENT_BYTES = 12_000;
+const MAX_AUTH_BYTES = 256 * 1024;
 const SHA = /^[0-9a-f]{40}$/;
 const SAFE_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const SENSITIVE_ENVIRONMENT = /(?:^|_)(?:API_?KEY|AUTH|CREDENTIAL|PASSWORD|PRIVATE_?KEY|SECRET|TOKEN)(?:$|_)/i;
@@ -242,6 +243,9 @@ class Controller {
     this.runAttempt = String(process.env.GITHUB_RUN_ATTEMPT ?? "1");
     this.outputDirectory = path.resolve(process.env.AGENTIFY_TASK_OUTPUT_DIR ?? path.join(process.env.RUNNER_TEMP ?? os.tmpdir(), "agentify-task-output"));
     this.temp = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP ?? os.tmpdir(), "agentify-task-controller-"));
+    // Set once PI_AUTH_JSON is materialized; records the received content so a
+    // rotated OAuth refresh token can be written back to the secret at exit.
+    this.authState = null;
     this.state = null;
     this.plan = null;
     this.specialists = [];
@@ -1107,18 +1111,91 @@ class Controller {
     return this.execute();
   }
 
+  /**
+   * Write the PI_AUTH_JSON credential payload to the model-runtime config
+   * directory. Runs once per controller: later model calls must keep the
+   * on-disk file untouched because OAuth refreshes rotate tokens in place.
+   */
+  materializeAuth(configDir, raw) {
+    if (this.authState) return;
+    const text = String(raw);
+    if (Buffer.byteLength(text, "utf8") < 2 || Buffer.byteLength(text, "utf8") > MAX_AUTH_BYTES) {
+      fail("PI_AUTH_JSON is not one bounded JSON payload");
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      fail("PI_AUTH_JSON is not valid JSON");
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      fail("PI_AUTH_JSON must contain a provider credential object");
+    }
+    for (const [providerId, credential] of Object.entries(parsed)) {
+      const shapeOk = credential && typeof credential === "object" && !Array.isArray(credential)
+        && ((credential.type === "api_key" && (credential.key === undefined || typeof credential.key === "string"))
+          || (credential.type === "oauth"
+            && typeof credential.refresh === "string"
+            && typeof credential.access === "string"
+            && typeof credential.expires === "number"));
+      if (!shapeOk) fail(`PI_AUTH_JSON contains an invalid credential entry for ${providerId}`);
+    }
+    const target = path.join(configDir, "auth.json");
+    writeText(target, text.endsWith("\n") ? text : `${text}\n`);
+    this.authState = { path: target, original: fs.readFileSync(target, "utf8") };
+  }
+
+  /**
+   * Persist a rotated OAuth credential back to the PI_AUTH_JSON secret.
+   * Refresh-token rotation invalidates the previously stored token, so a run
+   * that refreshed must write back or the next run authenticates with a dead
+   * token. Best-effort: a failed write-back never fails the lifecycle run.
+   */
+  syncAuthSecret() {
+    if (!this.authState) return;
+    let current;
+    try {
+      current = fs.readFileSync(this.authState.path, "utf8");
+    } catch {
+      return;
+    }
+    if (current === this.authState.original) return;
+    if (!process.env.AGENT_PAT) {
+      console.error("agentify: OAuth credential rotated but AGENT_PAT is unavailable; update the PI_AUTH_JSON secret manually before the next run.");
+      return;
+    }
+    const result = run("gh", ["secret", "set", "PI_AUTH_JSON", "--repo", this.repository], {
+      input: current,
+      env: { ...trustedGitHubEnvironment(), GITHUB_TOKEN: process.env.AGENT_PAT, GH_TOKEN: process.env.AGENT_PAT },
+      allowFailure: true,
+      timeout: 60_000,
+    });
+    if (result.status !== 0) {
+      console.error(`agentify: failed to write back the rotated PI_AUTH_JSON secret: ${String(result.stderr || result.stdout || "unknown failure").slice(0, 500)}`);
+      return;
+    }
+    this.authState.original = current;
+  }
+
   modelConfig() {
     const key = process.env.PI_API_KEY;
+    const authJson = process.env.PI_AUTH_JSON;
     const provider = process.env.PI_PROVIDER ?? "anthropic";
     const model = process.env.PI_MODEL ?? "";
-    if (!key || !model) fail("PI_API_KEY and PI_MODEL are required for the approved builder/reviewer phase");
-    const keyFile = path.join(this.temp, `provider-key-${crypto.randomUUID()}`);
-    writeText(keyFile, `${key}\n`);
+    if (!model) fail("PI_MODEL is required for the approved builder/reviewer phase");
+    if (!key && !authJson) fail("PI_API_KEY or PI_AUTH_JSON is required for the approved builder/reviewer phase");
+    const configDir = path.join(this.temp, "model-runtime");
+    let keyFile = "";
+    if (key) {
+      keyFile = path.join(this.temp, `provider-key-${crypto.randomUUID()}`);
+      writeText(keyFile, `${key}\n`);
+    }
+    if (authJson) this.materializeAuth(configDir, authJson);
     return {
       provider,
       model,
       thinking_level: process.env.PI_THINKING ?? "high",
-      config_dir: path.join(this.temp, "model-runtime"),
+      config_dir: configDir,
       cwd: this.root,
       api_key_file: keyFile,
       timeout_ms: Math.min(600_000, Math.max(1, Number(this.policyConfig.model_timeout_ms ?? 600_000))),
@@ -1735,5 +1812,10 @@ try {
   console.error(`agentify task lifecycle failed: ${message}`);
   process.exitCode = 1;
 } finally {
+  try {
+    controller.syncAuthSecret();
+  } catch (syncError) {
+    console.error(`agentify: credential write-back failed: ${syncError instanceof Error ? syncError.message : String(syncError)}`);
+  }
   controller.cleanup();
 }

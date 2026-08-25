@@ -176,6 +176,33 @@ export function configureGitHubInstallation(
     providerSecret = input.providerSecret.name;
   }
 
+  let credentialSecret: "PI_AUTH_JSON" | null = null;
+  if (input.credentialSecret) {
+    if (input.credentialSecret.name !== "PI_AUTH_JSON") {
+      throw new Error("provider credential payload must use the managed PI_AUTH_JSON name");
+    }
+    const bytes = Buffer.byteLength(input.credentialSecret.value, "utf8");
+    if (bytes < 2 || bytes > 256 * 1024) throw new Error("provider credential payload is outside its bounded size");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(input.credentialSecret.value);
+    } catch {
+      throw new Error("provider credential payload is not valid JSON");
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("provider credential payload must contain a provider credential object");
+    }
+    const result = runner.run({
+      program: "gh",
+      args: ["secret", "set", "PI_AUTH_JSON", "--repo", input.repository.full_name],
+      cwd: input.cwd,
+      timeoutMs: 30_000,
+      input: input.credentialSecret.value,
+    });
+    assertSuccess("GitHub secret PI_AUTH_JSON", result);
+    credentialSecret = "PI_AUTH_JSON";
+  }
+
   let automationSecret: "AGENT_PAT" | null = null;
   if (input.automationSecret) {
     if (input.automationSecret.name !== "AGENT_PAT") {
@@ -197,6 +224,7 @@ export function configureGitHubInstallation(
     labels_configured: REQUIRED_LABELS.length,
     variables_configured: [...variables.keys()],
     provider_secret_configured: providerSecret,
+    credential_secret_configured: credentialSecret,
     automation_secret_configured: automationSecret,
   };
 }

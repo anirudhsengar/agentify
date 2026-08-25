@@ -1,6 +1,7 @@
 // CLI entry for `agentify`.
 
 import { stdin as input, stdout as output, stderr as errOutput } from "node:process";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { packageRoot, PiSdkRuntime } from "./core/pi-sdk-runtime.ts";
 import { readPackageVersion } from "./core/package-version.ts";
@@ -268,8 +269,26 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       }
     }
     let providerSecret: GitHubConfigurationInput["providerSecret"];
+    let credentialSecret: GitHubConfigurationInput["credentialSecret"];
     let automationSecret: GitHubConfigurationInput["automationSecret"];
-    if (resolvedProvider && localApiKey) {
+    const credentialStore = new AgentifyCredentialStore(authPath(configDir));
+    const storedCredentials = resolvedProvider ? await credentialStore.list() : [];
+    if (storedCredentials.length > 0) {
+      if (input.isTTY) {
+        const kinds = [...new Set(storedCredentials.map((entry) => entry.type === "oauth" ? "OAuth subscription" : "API key"))].join(" and ");
+        const choice = await ui.promptSelect(
+          `Set the stored ${kinds} credential(s) as the PI_AUTH_JSON GitHub Actions secret now? This carries subscription sign-ins and API keys to the workflow; the payload is sent to GitHub only through stdin and is never logged or stored in the repository.`,
+          [
+            { label: "Skip — show secure setup guidance", value: "skip" },
+            { label: "Set PI_AUTH_JSON with explicit consent", value: "set" },
+          ],
+        );
+        if (choice === "set") {
+          const raw = fs.readFileSync(authPath(configDir), "utf8");
+          if (raw.trim()) credentialSecret = { name: "PI_AUTH_JSON", value: raw, explicitConsent: true };
+        }
+      }
+    } else if (resolvedProvider && localApiKey) {
       providerSecret = { name: "PI_API_KEY", value: localApiKey, explicitConsent: true };
     } else if (input.isTTY && resolvedProvider) {
       const choice = await ui.promptSelect(
@@ -286,10 +305,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     }
     if (input.isTTY) {
       const choice = await ui.promptSelect(
-        "Set a dedicated GitHub automation token so Agentify-created pull requests trigger the repository's normal pull-request workflows? The token is sent to GitHub only through stdin and is never logged or stored in the repository.",
+        "Set a dedicated GitHub automation token so Agentify-created pull requests trigger the repository's normal pull-request workflows and rotated OAuth credentials can be written back to PI_AUTH_JSON? The token is sent to GitHub only through stdin and is never logged or stored in the repository.",
         [
-          { label: "Skip — use the built-in workflow token (PR-triggered workflows may not run)", value: "skip" },
-          { label: "Set AGENT_PAT (Contents + Pull requests write)", value: "set" },
+          { label: "Skip — use the built-in workflow token (PR-triggered workflows and OAuth token write-back may not run)", value: "skip" },
+          { label: "Set AGENT_PAT (Contents + Pull requests + Secrets write)", value: "set" },
         ],
       );
       if (choice === "set") {
@@ -307,6 +326,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       providerVerified,
       validationApproval: validationApproval ?? undefined,
       providerSecret,
+      credentialSecret,
       automationSecret,
       repairedPaths,
     });
@@ -314,11 +334,15 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       if (line.startsWith("Blocker")) ui.error(`agentify: ${line}`);
       else ui.info(`agentify: ${line}`);
     }
-    if (!providerSecret && resolvedProvider) {
-      ui.info("agentify: configure the PI_API_KEY Actions secret with `gh secret set PI_API_KEY`; enter the value through stdin, never as a command argument.");
+    if (!credentialSecret && !providerSecret && resolvedProvider) {
+      if (storedCredentials.length > 0) {
+        ui.info("agentify: carry the stored credentials to Actions with `gh secret set PI_AUTH_JSON < ~/.agentify/auth.json`; enter the value through stdin, never as a command argument.");
+      } else {
+        ui.info("agentify: configure the PI_API_KEY Actions secret with `gh secret set PI_API_KEY`; enter the value through stdin, never as a command argument.");
+      }
     }
     if (!automationSecret) {
-      ui.info("agentify: optional but recommended: configure AGENT_PAT with target-repository Contents and Pull requests read/write so Agentify-created pull requests trigger normal checks; enter the token through stdin.");
+      ui.info("agentify: optional but recommended: configure AGENT_PAT with target-repository Contents, Pull requests, and Secrets read/write so Agentify-created pull requests trigger normal checks and rotated OAuth credentials persist; enter the token through stdin.");
     }
     if (report.disposition !== "ready") {
       throw new Error(`installation completed with readiness status ${report.disposition}`);

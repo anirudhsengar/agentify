@@ -50,6 +50,7 @@ export interface FinalizeOneTimeInstallationInput {
   providerVerified: boolean;
   validationApproval?: RepositoryValidationApproval;
   providerSecret?: GitHubConfigurationInput["providerSecret"];
+  credentialSecret?: GitHubConfigurationInput["credentialSecret"];
   automationSecret?: GitHubConfigurationInput["automationSecret"];
   runner?: InstallerProcessRunner;
   repairedPaths?: ReadonlyArray<string>;
@@ -430,6 +431,7 @@ export function finalizeOneTimeInstallation(
         provider: input.provider,
         model: input.model,
         providerSecret: input.providerSecret,
+        credentialSecret: input.credentialSecret,
         automationSecret: input.automationSecret,
         runner: input.runner,
       });

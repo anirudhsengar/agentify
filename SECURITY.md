@@ -89,10 +89,22 @@ memory, manifests, or generated repository files. Durable values are scanned for
 common token, private-key, and credential forms before persistence.
 
 The installer copies a resolved local provider API key to the `PI_API_KEY`
-GitHub Actions secret when one is already present, or prompts interactively
-when a TTY is available and no local key is resolved. `AGENT_PAT` is set only
-after interactive consent. Secret values are passed to `gh secret set` through
-stdin and are never placed in argv or output.
+GitHub Actions secret when one is already present and no stored credential
+exists, or prompts interactively when a TTY is available and no local key is
+resolved. When `agentify login` has stored credentials — API keys or OAuth
+subscription tokens — the installer offers, only after interactive consent, to
+upload the credential store as the `PI_AUTH_JSON` Actions secret. `AGENT_PAT`
+is set only after interactive consent. Secret values are passed to
+`gh secret set` through stdin and are never placed in argv or output.
+
+Inside the workflow, `PI_AUTH_JSON` is materialized once per run into a
+`0600` file under the runner temp directory that only the trusted runtime
+reads; the secret itself is scrubbed from every model and validation process
+environment. When a provider rotates an OAuth refresh token during a run, the
+trusted controller writes the updated credential store back to the
+`PI_AUTH_JSON` secret at exit using `AGENT_PAT` (best-effort, never failing
+the run), because the previously stored refresh token is invalidated by
+rotation.
 
 ## GitHub workflow authority
 

@@ -489,6 +489,13 @@ async function testGitHubConfigurationAndSecretStdin(): Promise<void> {
         value: "never-on-command-line",
         explicitConsent: true,
       },
+      credentialSecret: {
+        name: "PI_AUTH_JSON",
+        value: `${JSON.stringify({
+          anthropic: { type: "oauth", refresh: "refresh-token", access: "access-token", expires: 4_000_000_000_000 },
+        }, null, 2)}\n`,
+        explicitConsent: true,
+      },
       automationSecret: {
         name: "AGENT_PAT",
         value: "also-never-on-command-line",
@@ -501,18 +508,48 @@ async function testGitHubConfigurationAndSecretStdin(): Promise<void> {
     assert.ok(!result.variables_configured.includes("PI_VERSION"));
     assert.ok(!result.variables_configured.includes("AGENT_BOT_LOGIN"));
     assert.equal(result.provider_secret_configured, "PI_API_KEY");
+    assert.equal(result.credential_secret_configured, "PI_AUTH_JSON");
     assert.equal(result.automation_secret_configured, "AGENT_PAT");
     assert.ok(requests.some((request) => request.args.join(" ") === "variable delete PI_VERSION --repo owner/repo"));
     assert.ok(requests.some((request) => request.args.join(" ") === "variable delete AGENT_BOT_LOGIN --repo owner/repo"));
     assert.ok(requests.some((request) => request.args.join(" ") === "api --method PUT repos/owner/repo/actions/permissions/workflow -f default_workflow_permissions=read -F can_approve_pull_request_reviews=true"));
     const secrets = requests.filter((request) => request.program === "gh" && request.args[0] === "secret");
-    assert.equal(secrets.length, 2);
+    assert.equal(secrets.length, 3);
     assert.equal(secrets.find((request) => request.args.includes("PI_API_KEY"))?.input, "never-on-command-line");
+    assert.match(String(secrets.find((request) => request.args.includes("PI_AUTH_JSON"))?.input), /refresh-token/);
     assert.equal(secrets.find((request) => request.args.includes("AGENT_PAT"))?.input, "also-never-on-command-line");
     assert.ok(secrets.every((request) => (
       !request.args.includes("never-on-command-line")
       && !request.args.includes("also-never-on-command-line")
+      && !request.args.includes("refresh-token")
     )));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testCredentialSecretValidation(): Promise<void> {
+  const cwd = tempRepo("agentify-installer-auth-json-");
+  try {
+    const preflight = inspectRepositoryForInstallation({
+      cwd,
+      runner: fakeRunner(cwd),
+      runValidation: true,
+    });
+    assert.ok(preflight.identity);
+    const configure = (value: string) => configureGitHubInstallation({
+      cwd,
+      repository: preflight.identity!,
+      agentifyVersion: "1.0.0",
+      provider: "anthropic",
+      model: "claude-sonnet",
+      credentialSecret: { name: "PI_AUTH_JSON", value, explicitConsent: true },
+      runner: fakeRunner(cwd),
+    });
+    assert.equal(configure(`${JSON.stringify({ anthropic: { type: "api_key", key: "sk" } })}\n`).credential_secret_configured, "PI_AUTH_JSON");
+    assert.throws(() => configure("not json"), /not valid JSON/);
+    assert.throws(() => configure(JSON.stringify(["anthropic"])), /provider credential object/);
+    assert.throws(() => configure(""), /bounded size/);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -851,6 +888,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "validation smoke scaffolded when missing", fn: testValidationSmokeScaffoldedWhenMissing },
   { name: "dependency validation requires lockfile", fn: testDependencyValidationRequiresLockfile },
   { name: "GitHub configuration and secret stdin", fn: testGitHubConfigurationAndSecretStdin },
+  { name: "PI_AUTH_JSON credential secret validation", fn: testCredentialSecretValidation },
   { name: "initial installation and idempotent attach", fn: testInitialInstallationAndIdempotentAttach },
   { name: "bootstrap evidence preserves tracked path casing", fn: testBootstrapEvidencePreservesTrackedPathCasing },
   { name: "one-command initial audit installation", fn: testOneCommandInitialAuditInstallation },

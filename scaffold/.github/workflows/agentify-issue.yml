@@ -58,8 +58,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ github.token }}
+          AGENT_PAT: ${{ secrets.AGENT_PAT }}
           AGENTIFY_PR_TOKEN: ${{ secrets.AGENT_PAT }}
           PI_API_KEY: ${{ secrets.PI_API_KEY }}
+          PI_AUTH_JSON: ${{ secrets.PI_AUTH_JSON }}
           PI_PROVIDER: ${{ vars.PI_PROVIDER || 'anthropic' }}
           PI_MODEL: ${{ vars.PI_MODEL }}
           PI_THINKING: ${{ vars.PI_THINKING || 'high' }}

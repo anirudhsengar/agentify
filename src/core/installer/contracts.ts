@@ -163,6 +163,16 @@ export interface GitHubConfigurationInput {
     value: string;
     explicitConsent: true;
   };
+  /**
+   * The local Pi credential store (`auth.json`) uploaded as the managed
+   * PI_AUTH_JSON secret so GitHub Actions can authenticate with API keys and
+   * OAuth subscription credentials alike.
+   */
+  credentialSecret?: {
+    name: "PI_AUTH_JSON";
+    value: string;
+    explicitConsent: true;
+  };
   automationSecret?: {
     name: "AGENT_PAT";
     value: string;
@@ -175,6 +185,7 @@ export interface GitHubConfigurationResult {
   labels_configured: number;
   variables_configured: string[];
   provider_secret_configured: string | null;
+  credential_secret_configured: "PI_AUTH_JSON" | null;
   automation_secret_configured: "AGENT_PAT" | null;
 }
 

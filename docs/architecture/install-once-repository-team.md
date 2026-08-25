@@ -72,11 +72,14 @@ The local installer performs these steps in order:
     and lockfile hashes;
 12. run deterministic installation canaries;
 13. configure required GitHub labels, non-secret variables, and the repository
-    Actions permission needed to create unmerged draft pull requests; copy a
-    resolved local provider API key to the `PI_API_KEY` Actions secret when one
-    is already present, and set a dedicated automation token only after
+    Actions permission needed to create unmerged draft pull requests; with
+    interactive consent, upload the stored provider credentials (API keys and
+    OAuth subscription sign-ins) to the `PI_AUTH_JSON` Actions secret — or copy
+    a resolved environment API key to the `PI_API_KEY` secret when no stored
+    credential exists — and set a dedicated automation token only after
     interactive consent when the maintainer wants those pull requests to
-    trigger ordinary repository workflows;
+    trigger ordinary repository workflows and rotated OAuth credentials to be
+    written back to `PI_AUTH_JSON`;
 14. enable issue intake only when every required check passes.
 
 The trusted controller launches validation with fixed argv vectors and no direct

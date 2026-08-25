@@ -28,6 +28,13 @@ All notable changes to Agentify are documented here.
   login implementations — browser launch, device codes, and manual-code paste
   with out-of-band abort — and credentials persist to `~/.agentify/auth.json`.
   A parity test pins the static provider allowlist to the Pi registry.
+- GitHub Actions carry-over for OAuth subscription credentials: the installer
+  offers (with explicit consent) to upload the stored credential set as the
+  `PI_AUTH_JSON` Actions secret; the issue workflow materializes it once per
+  run into a `0600` file read only by the trusted runtime, and writes rotated
+  OAuth refresh tokens back to the secret at exit through `AGENT_PAT`
+  (best-effort). `PI_API_KEY` remains supported for environment-only API-key
+  setups. `AGENT_PAT` now also needs Secrets read/write for the write-back.
 
 ### Changed
 

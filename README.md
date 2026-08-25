@@ -129,7 +129,7 @@ The installer:
 - installs the issue and accepted-merge learning workflows;
 - writes a repository-bound task policy containing validation and lockfile hashes;
 - configures required labels and non-secret repository variables;
-- copies a resolved local provider API key to the `PI_API_KEY` Actions secret when one is already present;
+- with interactive consent, uploads the stored provider credentials (API keys and OAuth subscription sign-ins) to the `PI_AUTH_JSON` Actions secret, or copies a resolved environment API key to `PI_API_KEY`;
 - runs deterministic installation canaries and enables issue intake only when all checks pass.
 
 The CLI is an installer and maintenance interface. Do not rerun it for ordinary tasks; use GitHub issues after installation.
@@ -138,15 +138,19 @@ The CLI is an installer and maintenance interface. Do not rerun it for ordinary 
 
 The installer can configure these GitHub Actions secrets:
 
-- **`PI_API_KEY`** — the model-provider credential used by the installed workflows. When a local provider key is already resolved from the environment or stored credentials, the installer copies it through `gh secret set` stdin. Otherwise it prompts interactively, or prints `gh secret set` guidance when no TTY is available.
-- **`AGENT_PAT`** — optional but recommended; used only by trusted workflow code to push the task branch and publish its draft pull request. A dedicated token allows the resulting pull request to trigger the repository's normal pull-request workflows. This secret is set only after interactive consent.
+- **`PI_AUTH_JSON`** — the stored provider credentials used by the installed workflows, covering both API keys and OAuth subscription sign-ins created by `agentify login`. Set only after interactive consent; the payload passes through `gh secret set` stdin. To configure manually: `gh secret set PI_AUTH_JSON < ~/.agentify/auth.json`.
+- **`PI_API_KEY`** — fallback for environment-only API-key setups with no stored credential. When a local provider key is resolved from the environment, the installer copies it through `gh secret set` stdin; otherwise it prompts interactively, or prints `gh secret set` guidance when no TTY is available.
+- **`AGENT_PAT`** — optional but recommended; used only by trusted workflow code to push the task branch, publish its draft pull request, and write rotated OAuth credentials back to `PI_AUTH_JSON`. A dedicated token allows the resulting pull request to trigger the repository's normal pull-request workflows, and lets OAuth subscription credentials survive provider-side refresh-token rotation. This secret is set only after interactive consent.
+
+When an OAuth access token expires during a run, the trusted runtime refreshes it under lock and persists the rotated credential back to `PI_AUTH_JSON` at the end of the run through `AGENT_PAT`. Without that write-back, the next run would authenticate with an invalidated refresh token.
 
 A fine-grained `AGENT_PAT` needs access only to the target repository with:
 
 - **Contents:** read and write
 - **Pull requests:** read and write
+- **Secrets:** read and write
 
-Neither credential is exposed to model processes.
+No credential is exposed to model processes.
 
 ## Queue your first task
 
