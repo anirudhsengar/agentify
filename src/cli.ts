@@ -37,6 +37,9 @@ import { ClackUi, printBanner } from "./core/ui/index.ts";
 import { getProviderEnvValue, isAgentifyProvider } from "./core/provider-auth.ts";
 import { selectModelForRole } from "./core/models/resolver.ts";
 import { AgentifyCredentialStore, createAgentifyModelRuntime } from "./core/pi-credential-store.ts";
+import { registerBundledOAuthFlows } from "./core/register-bundled-oauth-flows.ts";
+
+registerBundledOAuthFlows();
 
 function printHelp(): void {
   output.write(`agentify ${readPackageVersion()}

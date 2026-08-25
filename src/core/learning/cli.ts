@@ -2,6 +2,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { registerBundledOAuthFlows } from "../register-bundled-oauth-flows.ts";
+
+registerBundledOAuthFlows();
 import type { MemoryCandidateDraft } from "../memory/schema.ts";
 import type {
   AcceptedMergeEvent,

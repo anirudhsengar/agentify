@@ -4,6 +4,7 @@ import { build } from "esbuild";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createSinglePiAiPlugin } from "./lib/single-pi-ai-plugin.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const distDir = path.join(repoRoot, "dist");
@@ -17,6 +18,8 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(piSdkPackage.version ?? "")) {
 const esmBanner = {
   js: `import { createRequire as __agentifyCreateRequire } from "node:module"; const require = __agentifyCreateRequire(import.meta.url);`,
 };
+
+const singlePiAiPlugin = createSinglePiAiPlugin(repoRoot);
 
 fs.rmSync(distDir, { recursive: true, force: true });
 fs.mkdirSync(distDir, { recursive: true });
@@ -43,6 +46,7 @@ for (const entry of [
     format: "esm",
     target: "node22",
     banner: esmBanner,
+    plugins: [singlePiAiPlugin],
     sourcemap: false,
     legalComments: "none",
     logLevel: "info",

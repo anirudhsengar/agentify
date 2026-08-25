@@ -46,6 +46,19 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- OAuth login and token refresh work from the installed package again. Pi
+  loads each OAuth flow implementation through a bundler-opaque dynamic
+  import, which survived esbuild bundling and crashed at runtime (`Cannot
+  find module dist/openai-codex.js`) on the first `login`, `refresh`, or
+  `toAuth` call. All three bundle entry points now register Pi's statically
+  bundled OAuth flows — and, because pi-coding-agent ships with a shrinkwrap
+  that forces a second nested pi-ai copy npm will not dedupe, the build now
+  resolves every bare pi-ai import to the single top-level copy so the
+  registration reaches the ModelRuntime path that actually loads flows. A
+  regression test reproduces the single-file bundle failure through the real
+  ModelRuntime graph (with and without registration, and with and without
+  the single-copy plugin) and pins the entry-point and build wiring.
+
 - Concern-evidence writes no longer fail blind. When a `write_map_delta`
   carrying `concern_evidence` failed schema validation and the sanitizer
   recovery also failed, the tool threw "Internal error: sanitized audit
