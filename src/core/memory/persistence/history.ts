@@ -2,90 +2,281 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {
   AgentIdentitySchema,
-  CandidateDecisionEventSchema,
   MemoryMutationEventSchema,
   MemoryRecordSchema,
   type AgentIdentity,
-  type CandidateDecisionEvent,
-  type MemoryCandidate,
   type MemoryMutationEvent,
   type MemoryMutationOperation,
   type MemoryRecord,
 } from "../schema.ts";
 import {
-  agentIdentityRelativePath,
-  candidateDecisionRelativePath,
-  identityHistoryRelativePath,
-  isTeamMemoryOperationalPath,
-  isTeamMemoryVisiblePath,
-  memoryHistoryRelativePath,
-  memoryRecordRelativePath,
   normalizeMemoryRepositoryPath,
-  runtimeCandidateRelativePath,
-  teamMemoryRoot,
-  validateMemoryId,
 } from "../paths.ts";
-import { digestCanonical } from "../serialization.ts";
 import { TeamMemoryError, type MemoryStoreOptions } from "../contracts.ts";
 import {
-  assertNonEmpty,
   makeMutationEvent,
-  validateDecisionEvent,
   validateIdentitySemantics,
   validateMutationEvent,
   validateRecordSemantics,
   validateSchema,
 } from "../validation.ts";
 import {
-  TEAM_IGNORE_CONTENT,
+  assertVisibleWriteCapacity,
+} from "./manifest.ts";
+import {
+  currentRelativePath,
+  historyEventFiles as historyEventFilesBase,
+  historyRelativePath,
+  latestEventsByEntity as latestEventsByEntityBase,
+  persistVersionedEntityInternal as persistVersionedEntityInternalBase,
+  readMutationEvent as readMutationEventBase,
+  recoverEntityFromEvent as recoverEntityFromEventBase,
+} from "./history-base.ts";
+import {
   errorCode,
-  readJsonFile,
   readRelativeJson,
   repositoryRoot,
   writeJsonAtomic,
   writeJsonImmutable,
 } from "./files.ts";
-import {
-  assertVisibleWriteCapacity,
-  directoryEntriesIfPresent,
-} from "./manifest.ts";
 
-export function readCandidateDecisionIfPresent(
+export {
+  assertCandidateAcceptanceCapacity,
+  candidateDecisionFiles,
+  cleanupUncommittedInitialization,
+  createCandidateDecisionEvent,
+  currentRelativePath,
+  historyRelativePath,
+  isTeamMemoryManagedPath,
+  readCandidateDecisionIfPresent,
+  recognizableVisibleStateExistsWithoutManifest,
+  removeRuntimeCandidate,
+  visibleStateExistsWithoutManifest,
+  writeCandidateDecisionInternal,
+} from "./history-base.ts";
+
+const CURRENT_MEMORY_DIRECTORIES = [
+  ".agentify/knowledge/codebase",
+  ".agentify/knowledge/procedures",
+  ".agentify/knowledge/episodes",
+  ".agentify/knowledge/specialists",
+  ".agentify/knowledge/orchestrator",
+  ".agentify/policies",
+] as const;
+const CURRENT_AGENT_DIRECTORIES = [
+  ".agentify/agents/roles",
+  ".agentify/agents/specialists",
+] as const;
+const COMPACT_INITIAL_MEMORY_KINDS = new Set([
+  "policy",
+  "procedure",
+  "specialist",
+]);
+const INITIAL_HISTORY_REASON =
+  "Initial bootstrap state; immutable revision history begins with the first material change.";
+
+function compactInitialEntity(entity: AgentIdentity | MemoryRecord): boolean {
+  if (entity.revision !== 1) return false;
+  return "agent_id" in entity || COMPACT_INITIAL_MEMORY_KINDS.has(entity.kind);
+}
+
+function entityType(entity: AgentIdentity | MemoryRecord): "agent_identity" | "memory_record" {
+  return "agent_id" in entity ? "agent_identity" : "memory_record";
+}
+
+function entityId(entity: AgentIdentity | MemoryRecord): string {
+  return "agent_id" in entity ? entity.agent_id : entity.memory_id;
+}
+
+function initialOperation(entity: AgentIdentity | MemoryRecord): MemoryMutationOperation {
+  return "agent_id" in entity ? "create" : "accept";
+}
+
+function initialActor(entity: AgentIdentity | MemoryRecord): string {
+  if ("agent_id" in entity && entity.role !== "specialist") return "agentify-installer";
+  return "knowledge-maintainer";
+}
+
+function initialEvent(entity: AgentIdentity | MemoryRecord): MemoryMutationEvent {
+  return makeMutationEvent(
+    entityType(entity),
+    entity,
+    initialOperation(entity),
+    initialActor(entity),
+    INITIAL_HISTORY_REASON,
+    entity.created_at,
+    null,
+  );
+}
+
+function pendingInitialEventRelativePath(entity: AgentIdentity | MemoryRecord): string {
+  const kind = "agent_id" in entity ? "agents" : "memory";
+  return `.agentify/runtime/initial-history/${kind}/${entityId(entity)}.json`;
+}
+
+function pendingInitialEventAbsolutePath(
   cwd: string,
-  candidateId: string,
-): CandidateDecisionEvent | null {
-  const relativePath = candidateDecisionRelativePath(candidateId);
+  entity: AgentIdentity | MemoryRecord,
+): string {
+  return path.join(
+    repositoryRoot(cwd),
+    ...pendingInitialEventRelativePath(entity).split("/"),
+  );
+}
+
+function removePendingInitialEvent(cwd: string, entity: AgentIdentity | MemoryRecord): void {
+  const absolute = pendingInitialEventAbsolutePath(cwd, entity);
   try {
-    const event = validateDecisionEvent(
-      validateSchema<CandidateDecisionEvent>(
-        CandidateDecisionEventSchema,
-        readRelativeJson(cwd, relativePath),
-        "candidate decision event",
-      ),
-    );
-    if (event.candidate_id !== candidateId) {
-      throw new TeamMemoryError(
-        "corrupt_state",
-        `candidate decision path does not match ${candidateId}`,
-      );
-    }
-    return event;
+    fs.unlinkSync(absolute);
   } catch (error) {
-    if (error instanceof TeamMemoryError && error.code === "not_found") return null;
-    throw error;
+    if (errorCode(error) !== "ENOENT") throw error;
+  }
+  for (const directory of [path.dirname(absolute), path.dirname(path.dirname(absolute))]) {
+    try {
+      fs.rmdirSync(directory);
+    } catch (error) {
+      if (!new Set(["ENOENT", "ENOTEMPTY"]).has(errorCode(error) ?? "")) throw error;
+    }
   }
 }
 
-export function currentRelativePath(after: AgentIdentity | MemoryRecord): string {
-  return "agent_id" in after
-    ? agentIdentityRelativePath(after.role, after.agent_id)
-    : memoryRecordRelativePath(after.kind, after.memory_id);
+function readEntityAtPath(cwd: string, relativePath: string): AgentIdentity | MemoryRecord {
+  const parsed = readRelativeJson(cwd, relativePath);
+  if (typeof parsed === "object" && parsed !== null && "agent_id" in parsed) {
+    return validateIdentitySemantics(
+      validateSchema<AgentIdentity>(AgentIdentitySchema, parsed, "agent identity"),
+    );
+  }
+  return validateRecordSemantics(
+    validateSchema<MemoryRecord>(MemoryRecordSchema, parsed, "memory record"),
+  );
 }
 
-export function historyRelativePath(after: AgentIdentity | MemoryRecord): string {
-  return "agent_id" in after
-    ? identityHistoryRelativePath(after.agent_id, after.revision)
-    : memoryHistoryRelativePath(after.memory_id, after.revision);
+function filesInDirectory(cwd: string, relativeDirectory: string): string[] {
+  const absolute = path.join(repositoryRoot(cwd), ...relativeDirectory.split("/"));
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(absolute, { withFileTypes: true });
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") return [];
+    throw error;
+  }
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .map((entry) => `${relativeDirectory}/${entry.name}`)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function currentEntityPaths(cwd: string): string[] {
+  const paths: string[] = [];
+  const orchestrator = ".agentify/agents/orchestrator.json";
+  if (fs.existsSync(path.join(repositoryRoot(cwd), ...orchestrator.split("/")))) {
+    paths.push(orchestrator);
+  }
+  for (const directory of CURRENT_AGENT_DIRECTORIES) {
+    paths.push(...filesInDirectory(cwd, directory));
+  }
+  for (const directory of CURRENT_MEMORY_DIRECTORIES) {
+    paths.push(...filesInDirectory(cwd, directory));
+  }
+  return [...new Set(paths)].sort((left, right) => left.localeCompare(right));
+}
+
+function currentEntityForHistoryPath(
+  cwd: string,
+  relativeHistoryPath: string,
+): AgentIdentity | MemoryRecord | null {
+  const normalized = normalizeMemoryRepositoryPath(relativeHistoryPath, "memory event path");
+  const match = normalized.match(
+    /^\.agentify\/history\/(agents|memory)\/([a-z0-9][a-z0-9._-]{0,127})\/(\d{12})\.json$/,
+  );
+  if (!match || Number(match[3]) !== 1) return null;
+  const id = match[2]!;
+  const candidates = match[1] === "agents"
+    ? [
+        id === "orchestrator" ? ".agentify/agents/orchestrator.json" : null,
+        `.agentify/agents/roles/${id}.json`,
+        `.agentify/agents/specialists/${id}.json`,
+      ].filter((value): value is string => value !== null)
+    : CURRENT_MEMORY_DIRECTORIES.map((directory) => `${directory}/${id}.json`);
+  const existing = candidates.filter((candidate) =>
+    fs.existsSync(path.join(repositoryRoot(cwd), ...candidate.split("/")))
+  );
+  if (existing.length === 0) return null;
+  if (existing.length > 1) {
+    throw new TeamMemoryError("corrupt_state", `entity ${id} exists at multiple current paths`);
+  }
+  const entity = readEntityAtPath(cwd, existing[0]!);
+  if (entityId(entity) !== id || entity.revision !== 1 || !compactInitialEntity(entity)) return null;
+  return entity;
+}
+
+function readPendingInitialEvents(cwd: string): MemoryMutationEvent[] {
+  const events: MemoryMutationEvent[] = [];
+  for (const directory of [
+    ".agentify/runtime/initial-history/agents",
+    ".agentify/runtime/initial-history/memory",
+  ]) {
+    for (const relativePath of filesInDirectory(cwd, directory)) {
+      const event = validateMutationEvent(
+        validateSchema<MemoryMutationEvent>(
+          MemoryMutationEventSchema,
+          readRelativeJson(cwd, relativePath),
+          "pending initial memory mutation event",
+        ),
+      );
+      if (event.revision !== 1 || event.before_digest !== null) {
+        throw new TeamMemoryError(
+          "corrupt_state",
+          `pending initial event is not a revision-one baseline: ${relativePath}`,
+        );
+      }
+      events.push(event);
+    }
+  }
+  return events;
+}
+
+/**
+ * Revision-one bootstrap snapshots are already integrity-bound by the current
+ * record and manifest. Return a synthetic immutable event for readers without
+ * committing a byte-for-byte duplicate history file.
+ */
+export function readMutationEvent(cwd: string, relativePath: string): MemoryMutationEvent {
+  try {
+    return readMutationEventBase(cwd, relativePath);
+  } catch (error) {
+    if (!(error instanceof TeamMemoryError) || error.code !== "not_found") throw error;
+  }
+
+  const normalized = normalizeMemoryRepositoryPath(relativePath, "memory event path");
+  for (const pending of readPendingInitialEvents(cwd)) {
+    if (historyRelativePath(pending.after) === normalized) return pending;
+  }
+  const entity = currentEntityForHistoryPath(cwd, normalized);
+  if (entity === null) {
+    throw new TeamMemoryError("not_found", `memory mutation event not found: ${normalized}`);
+  }
+  return initialEvent(entity);
+}
+
+/** Include virtual revision-one paths so point-in-time readers retain semantics. */
+export function historyEventFiles(cwd: string, entityKind: "agents" | "memory"): string[] {
+  const physical = new Set(
+    historyEventFilesBase(cwd, entityKind),
+  );
+  for (const relativePath of currentEntityPaths(cwd)) {
+    const entity = readEntityAtPath(cwd, relativePath);
+    if (!compactInitialEntity(entity)) continue;
+    if (("agent_id" in entity ? "agents" : "memory") !== entityKind) continue;
+    physical.add(historyRelativePath(entity));
+  }
+  for (const event of readPendingInitialEvents(cwd)) {
+    if ((event.entity_type === "agent_identity" ? "agents" : "memory") === entityKind) {
+      physical.add(historyRelativePath(event.after));
+    }
+  }
+  return [...physical].sort((left, right) => left.localeCompare(right));
 }
 
 export function persistVersionedEntityInternal(
@@ -98,264 +289,78 @@ export function persistVersionedEntityInternal(
   beforeDigest: string | null,
   options?: MemoryStoreOptions,
 ): void {
-  const event = makeMutationEvent(
-    "agent_id" in after ? "agent_identity" : "memory_record",
-    after,
-    operation,
-    actor,
-    reason,
-    occurredAt,
-    beforeDigest,
-  );
-  const historyPath = historyRelativePath(after);
   const currentPath = currentRelativePath(after);
-  assertVisibleWriteCapacity(cwd, [
-    { relativePath: historyPath, value: event },
-    { relativePath: currentPath, value: after },
-  ]);
-  writeJsonImmutable(cwd, historyPath, event);
-  options?.afterHistoryWrite?.(
-    path.join(repositoryRoot(cwd), ...historyPath.split("/")),
-    path.join(repositoryRoot(cwd), ...currentPath.split("/")),
-  );
-  writeJsonAtomic(cwd, currentPath, after, options);
-}
-
-export function recognizableVisibleStateExistsWithoutManifest(cwd: string): boolean {
-  const root = teamMemoryRoot(cwd);
-  try {
-    const stat = fs.lstatSync(root);
-    if (stat.isSymbolicLink() || !stat.isDirectory()) return false;
-    const names = new Set(fs.readdirSync(root));
-    if (!["agents", "knowledge", "policies", "history"].some((name) => names.has(name))) {
-      return false;
-    }
-    const ignorePath = path.join(root, ".gitignore");
-    const ignoreStat = fs.lstatSync(ignorePath);
-    if (ignoreStat.isSymbolicLink() || !ignoreStat.isFile() || ignoreStat.size > 4_096) {
-      return false;
-    }
-    return fs.readFileSync(ignorePath, "utf-8") === TEAM_IGNORE_CONTENT;
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") return false;
-    throw error;
+  if (compactInitialEntity(after)) {
+    const event = makeMutationEvent(
+      entityType(after),
+      after,
+      operation,
+      actor,
+      reason,
+      occurredAt,
+      beforeDigest,
+    );
+    const pendingPath = pendingInitialEventRelativePath(after);
+    assertVisibleWriteCapacity(cwd, [{ relativePath: currentPath, value: after }]);
+    writeJsonAtomic(cwd, pendingPath, event, options);
+    options?.afterHistoryWrite?.(
+      path.join(repositoryRoot(cwd), ...pendingPath.split("/")),
+      path.join(repositoryRoot(cwd), ...currentPath.split("/")),
+    );
+    writeJsonAtomic(cwd, currentPath, after, options);
+    removePendingInitialEvent(cwd, after);
+    return;
   }
-}
 
-export function visibleStateExistsWithoutManifest(cwd: string): boolean {
-  const root = teamMemoryRoot(cwd);
-  try {
-    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-      if (
-        entry.name !== "runtime"
-        && entry.name !== "state-transactions"
-      ) return true;
-    }
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") return false;
-    throw error;
-  }
-  return false;
-}
-
-export function cleanupUncommittedInitialization(cwd: string): void {
-  const root = teamMemoryRoot(cwd);
-  for (const entry of [
-    "manifest.json",
-    ".gitignore",
-    "agents",
-    "knowledge",
-    "policies",
-    "history",
-  ]) {
-    try {
-      fs.rmSync(path.join(root, entry), { recursive: true, force: true });
-    } catch {
-      // Best effort. A subsequent recovery will fail closed on remaining partial state.
+  if (after.revision === 2) {
+    const current = readEntityAtPath(cwd, currentPath);
+    const baselinePath = historyRelativePath(current);
+    const baselineAbsolute = path.join(repositoryRoot(cwd), ...baselinePath.split("/"));
+    if (
+      compactInitialEntity(current)
+      && current.revision === 1
+      && current.content_digest === beforeDigest
+      && !fs.existsSync(baselineAbsolute)
+    ) {
+      const baseline = initialEvent(current);
+      const event = makeMutationEvent(
+        entityType(after),
+        after,
+        operation,
+        actor,
+        reason,
+        occurredAt,
+        beforeDigest,
+      );
+      const eventPath = historyRelativePath(after);
+      assertVisibleWriteCapacity(cwd, [
+        { relativePath: baselinePath, value: baseline },
+        { relativePath: eventPath, value: event },
+        { relativePath: currentPath, value: after },
+      ]);
+      writeJsonImmutable(cwd, baselinePath, baseline);
+      writeJsonImmutable(cwd, eventPath, event);
+      options?.afterHistoryWrite?.(
+        path.join(repositoryRoot(cwd), ...eventPath.split("/")),
+        path.join(repositoryRoot(cwd), ...currentPath.split("/")),
+      );
+      writeJsonAtomic(cwd, currentPath, after, options);
+      return;
     }
   }
-}
 
-export function createCandidateDecisionEvent(
-  candidate: MemoryCandidate,
-  decision: "accepted" | "rejected",
-  actor: string,
-  reason: string,
-  resultingMemoryId: string | null,
-  occurredAt: string,
-): CandidateDecisionEvent {
-  const normalizedActor = assertNonEmpty(actor, "candidate decision actor");
-  const normalizedReason = assertNonEmpty(reason, "candidate decision reason");
-  const withoutDigest: Omit<CandidateDecisionEvent, "event_digest"> = {
-    schema_version: "1",
-    event_type: "candidate_decision",
-    candidate_id: candidate.candidate_id,
-    memory_id: candidate.memory_id,
-    candidate,
-    decision,
-    actor: normalizedActor,
-    reason: normalizedReason,
-    occurred_at: occurredAt,
-    candidate_digest: candidate.candidate_digest,
-    resulting_memory_id: resultingMemoryId,
-  };
-  const event: CandidateDecisionEvent = {
-    ...withoutDigest,
-    event_digest: digestCanonical(withoutDigest),
-  };
-  validateSchema<CandidateDecisionEvent>(
-    CandidateDecisionEventSchema,
-    event,
-    "candidate decision event",
-  );
-  return validateDecisionEvent(event);
-}
-
-export function assertCandidateAcceptanceCapacity(
-  cwd: string,
-  after: MemoryRecord,
-  operation: Extract<MemoryMutationOperation, "accept" | "merge_evidence">,
-  actor: string,
-  reason: string,
-  occurredAt: string,
-  beforeDigest: string | null,
-  candidate: MemoryCandidate,
-): void {
-  const mutation = makeMutationEvent(
-    "memory_record",
+  // Preserve the existing event-first behavior for ordinary memory and every
+  // revision after the first material change.
+  persistVersionedEntityInternalBase(
+    cwd,
     after,
     operation,
     actor,
     reason,
     occurredAt,
     beforeDigest,
+    options,
   );
-  const decision = createCandidateDecisionEvent(
-    candidate,
-    "accepted",
-    actor,
-    reason,
-    after.memory_id,
-    occurredAt,
-  );
-  assertVisibleWriteCapacity(cwd, [
-    { relativePath: historyRelativePath(after), value: mutation },
-    { relativePath: currentRelativePath(after), value: after },
-    { relativePath: candidateDecisionRelativePath(candidate.candidate_id), value: decision },
-  ]);
-}
-
-export function writeCandidateDecisionInternal(
-  cwd: string,
-  candidate: MemoryCandidate,
-  decision: "accepted" | "rejected",
-  actor: string,
-  reason: string,
-  resultingMemoryId: string | null,
-  occurredAt: string,
-): CandidateDecisionEvent {
-  const event = createCandidateDecisionEvent(
-    candidate,
-    decision,
-    actor,
-    reason,
-    resultingMemoryId,
-    occurredAt,
-  );
-  const relativePath = candidateDecisionRelativePath(candidate.candidate_id);
-  assertVisibleWriteCapacity(cwd, [{ relativePath, value: event }]);
-  writeJsonImmutable(cwd, relativePath, event);
-  return event;
-}
-
-export function removeRuntimeCandidate(cwd: string, candidateId: string): void {
-  const absolute = path.join(repositoryRoot(cwd), ...runtimeCandidateRelativePath(candidateId).split("/"));
-  try {
-    const stat = fs.lstatSync(absolute);
-    if (stat.isSymbolicLink() || !stat.isFile()) {
-      throw new TeamMemoryError("unsafe_path", `runtime memory candidate is not a regular file: ${candidateId}`);
-    }
-    fs.unlinkSync(absolute);
-  } catch (error) {
-    if (errorCode(error) !== "ENOENT") throw error;
-  }
-}
-
-export function historyEventFiles(cwd: string, entityType: "agents" | "memory"): string[] {
-  const base = `.agentify/history/${entityType}`;
-  const root = path.join(repositoryRoot(cwd), ...base.split("/"));
-  const files: string[] = [];
-  let entities: fs.Dirent[];
-  try {
-    entities = fs.readdirSync(root, { withFileTypes: true });
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") return [];
-    throw new TeamMemoryError("corrupt_state", `cannot list ${base}`, { cause: error });
-  }
-  for (const entity of entities) {
-    if (!entity.isDirectory()) {
-      throw new TeamMemoryError("unsafe_path", `${base}/${entity.name} must be a directory`);
-    }
-    validateMemoryId(entity.name, "history entity ID");
-    const entityDirectory = path.join(root, entity.name);
-    for (const entry of fs.readdirSync(entityDirectory, { withFileTypes: true })) {
-      if (!entry.isFile() || !/^\d{12}\.json$/.test(entry.name)) {
-        throw new TeamMemoryError("unsafe_path", `${base}/${entity.name} contains invalid event ${entry.name}`);
-      }
-      const stat = fs.lstatSync(path.join(entityDirectory, entry.name));
-      if (stat.isSymbolicLink()) {
-        throw new TeamMemoryError("unsafe_path", `${base}/${entity.name}/${entry.name} is a symlink`);
-      }
-      files.push(`${base}/${entity.name}/${entry.name}`);
-    }
-  }
-  return files.sort((left, right) => left.localeCompare(right));
-}
-
-export function candidateDecisionFiles(cwd: string): string[] {
-  return directoryEntriesIfPresent(cwd, ".agentify/history/candidates")
-    .map((entry) => {
-      if (!entry.isFile() || !entry.name.endsWith(".json")) {
-        throw new TeamMemoryError(
-          "unsafe_path",
-          `.agentify/history/candidates contains unsupported entry ${entry.name}`,
-        );
-      }
-      const candidateId = entry.name.slice(0, -".json".length);
-      validateMemoryId(candidateId, "candidate ID");
-      return `.agentify/history/candidates/${entry.name}`;
-    });
-}
-
-export function readMutationEvent(cwd: string, relativePath: string): MemoryMutationEvent {
-  const normalized = normalizeMemoryRepositoryPath(relativePath, "memory event path");
-  const match = normalized.match(
-    /^\.agentify\/history\/(agents|memory)\/([a-z0-9][a-z0-9._-]{0,127})\/(\d{12})\.json$/,
-  );
-  if (!match) {
-    throw new TeamMemoryError("corrupt_state", `invalid memory event path: ${normalized}`);
-  }
-  const event = validateMutationEvent(
-    validateSchema<MemoryMutationEvent>(
-      MemoryMutationEventSchema,
-      readRelativeJson(cwd, normalized),
-      "memory mutation event",
-    ),
-  );
-  const expectedEntityType = match[1] === "agents" ? "agent_identity" : "memory_record";
-  const expectedEntityId = match[2]!;
-  const expectedRevision = Number(match[3]);
-  if (
-    event.entity_type !== expectedEntityType
-    || event.entity_id !== expectedEntityId
-    || event.revision !== expectedRevision
-  ) {
-    throw new TeamMemoryError(
-      "corrupt_state",
-      `memory event path does not match its entity snapshot: ${normalized}`,
-    );
-  }
-  return event;
 }
 
 export function recoverEntityFromEvent(
@@ -364,163 +369,31 @@ export function recoverEntityFromEvent(
   options: MemoryStoreOptions | undefined,
   repaired: string[],
 ): void {
-  const relativeCurrent = currentRelativePath(event.after);
-  const absoluteCurrent = path.join(repositoryRoot(cwd), ...relativeCurrent.split("/"));
-  let current: AgentIdentity | MemoryRecord | null = null;
-  try {
-    const parsed = readJsonFile(absoluteCurrent, relativeCurrent);
-    if ("agent_id" in event.after) {
-      current = validateIdentitySemantics(
-        validateSchema<AgentIdentity>(AgentIdentitySchema, parsed, "agent identity"),
-      );
-    } else {
-      current = validateRecordSemantics(
-        validateSchema<MemoryRecord>(MemoryRecordSchema, parsed, "memory record"),
-      );
-    }
-  } catch (error) {
-    if (errorCode(error) !== "ENOENT" && !(error instanceof TeamMemoryError)) throw error;
-    current = null;
-  }
-  if (current && current.revision > event.revision) {
-    throw new TeamMemoryError(
-      "corrupt_state",
-      `${relativeCurrent} is ahead of its immutable event history`,
-    );
-  }
-  if (
-    current
-    && current.revision === event.revision
-    && current.content_digest !== event.after_digest
-  ) {
-    throw new TeamMemoryError(
-      "corrupt_state",
-      `${relativeCurrent} conflicts with immutable event revision ${event.revision}`,
-    );
-  }
-  if (!current || current.revision < event.revision) {
-    writeJsonAtomic(cwd, relativeCurrent, event.after, options);
-    repaired.push(relativeCurrent);
+  recoverEntityFromEventBase(cwd, event, options, repaired);
+  if (event.revision === 1 && compactInitialEntity(event.after)) {
+    removePendingInitialEvent(cwd, event.after);
   }
 }
 
 export function latestEventsByEntity(cwd: string): Map<string, MemoryMutationEvent> {
-  const grouped = new Map<string, MemoryMutationEvent[]>();
-  for (const relativePath of [
-    ...historyEventFiles(cwd, "agents"),
-    ...historyEventFiles(cwd, "memory"),
-  ]) {
-    const event = readMutationEvent(cwd, relativePath);
-    if (event.entity_type === "memory_record" && event.actor !== "knowledge-maintainer") {
+  const latest = latestEventsByEntityBase(cwd);
+  for (const pending of readPendingInitialEvents(cwd)) {
+    const key = `${pending.entity_type}:${pending.entity_id}`;
+    const existing = latest.get(key);
+    if (existing && existing.after_digest !== pending.after_digest) {
       throw new TeamMemoryError(
-        "policy_violation",
-        `memory event ${event.entity_id}@${event.revision} was not written by the knowledge-maintainer role`,
+        "corrupt_state",
+        `pending initial event conflicts with visible history for ${key}`,
       );
     }
-    if (
-      event.entity_type === "agent_identity"
-      && "agent_id" in event.after
-      && (event.after.role === "specialist" || event.revision > 1)
-      && event.actor !== "knowledge-maintainer"
-    ) {
-      throw new TeamMemoryError(
-        "policy_violation",
-        `agent event ${event.entity_id}@${event.revision} was not written by the knowledge-maintainer role`,
-      );
-    }
-    const key = `${event.entity_type}:${event.entity_id}`;
-    const events = grouped.get(key) ?? [];
-    events.push(event);
-    grouped.set(key, events);
+    if (!existing) latest.set(key, pending);
   }
-
-  const latest = new Map<string, MemoryMutationEvent>();
-  for (const [key, events] of grouped) {
-    events.sort((left, right) => left.revision - right.revision);
-    let previous: MemoryMutationEvent | null = null;
-    for (const event of events) {
-      if (previous === null) {
-        if (event.revision !== 1 || event.before_digest !== null) {
-          throw new TeamMemoryError(
-            "corrupt_state",
-            `${key} event history must begin at revision 1 with no before digest`,
-          );
-        }
-        const allowedFirst = event.entity_type === "agent_identity"
-          ? event.operation === "create"
-          : event.operation === "accept";
-        if (!allowedFirst) {
-          throw new TeamMemoryError(
-            "corrupt_state",
-            `${key} history begins with invalid ${event.operation} operation`,
-          );
-        }
-      } else {
-        if (event.revision !== previous.revision + 1) {
-          throw new TeamMemoryError(
-            "corrupt_state",
-            `${key} event history is not contiguous at revision ${event.revision}`,
-          );
-        }
-        if (event.before_digest !== previous.after_digest) {
-          throw new TeamMemoryError(
-            "corrupt_state",
-            `${key} event history digest chain breaks at revision ${event.revision}`,
-          );
-        }
-        if (event.entity_type === "agent_identity") {
-          if (!("agent_id" in previous.after) || !("agent_id" in event.after)) {
-            throw new TeamMemoryError("corrupt_state", `${key} changes entity type across revisions`);
-          }
-          if (
-            event.after.role !== previous.after.role
-            || event.after.created_at !== previous.after.created_at
-            || event.after.read_only !== previous.after.read_only
-            || event.after.write_authority !== previous.after.write_authority
-            || event.after.github_write_authority !== previous.after.github_write_authority
-          ) {
-            throw new TeamMemoryError(
-              "corrupt_state",
-              `${key} changes immutable identity fields at revision ${event.revision}`,
-            );
-          }
-        } else {
-          if (!("memory_id" in previous.after) || !("memory_id" in event.after)) {
-            throw new TeamMemoryError("corrupt_state", `${key} changes entity type across revisions`);
-          }
-          if (
-            event.after.kind !== previous.after.kind
-            || event.after.owning_agent_id !== previous.after.owning_agent_id
-            || event.after.created_at !== previous.after.created_at
-            || event.after.semantic_digest !== previous.after.semantic_digest
-          ) {
-            throw new TeamMemoryError(
-              "corrupt_state",
-              `${key} changes immutable memory semantics at revision ${event.revision}`,
-            );
-          }
-        }
-        if (Date.parse(event.occurred_at) < Date.parse(previous.occurred_at)) {
-          throw new TeamMemoryError(
-            "corrupt_state",
-            `${key} event timestamps move backwards at revision ${event.revision}`,
-          );
-        }
-        if (event.operation === "create" || event.operation === "accept") {
-          throw new TeamMemoryError(
-            "corrupt_state",
-            `${key} repeats initial operation ${event.operation} at revision ${event.revision}`,
-          );
-        }
-      }
-      previous = event;
-    }
-    latest.set(key, events[events.length - 1]!);
+  for (const relativePath of currentEntityPaths(cwd)) {
+    const entity = readEntityAtPath(cwd, relativePath);
+    const key = `${entityType(entity)}:${entityId(entity)}`;
+    if (latest.has(key)) continue;
+    if (!compactInitialEntity(entity)) continue;
+    latest.set(key, initialEvent(entity));
   }
   return latest;
-}
-
-export function isTeamMemoryManagedPath(relativePath: string): boolean {
-  const normalized = normalizeMemoryRepositoryPath(relativePath);
-  return isTeamMemoryVisiblePath(normalized) || isTeamMemoryOperationalPath(normalized);
 }
