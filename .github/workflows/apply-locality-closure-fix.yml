@@ -30,6 +30,7 @@ jobs:
             | base64 --decode > /tmp/locality-closure.patch.gz
           echo "ec144e73ddf3b5c763f03422c85827ee9534860e59e3450f08c8c0771a75c106  /tmp/locality-closure.patch.gz" \
             | sha256sum --check
+          gzip --test /tmp/locality-closure.patch.gz
           gzip --decompress --stdout /tmp/locality-closure.patch.gz > /tmp/locality-closure.patch
           git apply --check /tmp/locality-closure.patch
           git apply /tmp/locality-closure.patch
