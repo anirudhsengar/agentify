@@ -23,25 +23,11 @@ jobs:
         with:
           node-version: "22.19.0"
           cache: npm
-      - name: Apply the actual implementation and remove all staging artifacts
+      - name: Materialize the corrected source implementation
         shell: bash
         run: |
           set -euo pipefail
-          # The payload was authored against a fixture that used a literal
-          # newline inside one template string. Current main uses the equivalent
-          # escaped newline, so normalize that single fixture before applying.
-          python - <<'PY'
-          from pathlib import Path
-
-          target = Path("tests/audit/tracked-specialist-closure.test.ts")
-          text = target.read_text()
-          old = 'fs.writeFileSync(destination, `${JSON.stringify(aqaShapedMap(), null, 2)}\\n`);'
-          new = 'fs.writeFileSync(destination, `${JSON.stringify(aqaShapedMap(), null, 2)}\n`);'
-          if text.count(old) != 1:
-              raise SystemExit(f"expected one stale repair fixture, found {text.count(old)}")
-          target.write_text(text.replace(old, new, 1))
-          PY
-          python .github/implementation/apply-locality-aware-closure.py
+          python .github/implementation/materialize-corrective.py
           rm -rf .github/implementation
           rm -f \
             .github/materialization-trigger \
@@ -52,7 +38,7 @@ jobs:
             .github/workflows/qualify-locality-aware-closure.yml \
             .github/workflows/materialize-locality-closure.yml
           git diff --check
-      - name: Commit the exact clean implementation candidate
+      - name: Commit the exact clean candidate before qualification
         shell: bash
         run: |
           set -euo pipefail
@@ -62,13 +48,13 @@ jobs:
           git diff --cached --check
           changed="$(git diff --cached --name-only --diff-filter=ACMR)"
           printf '%s\n' "$changed"
-          if ! grep -Eq '^(src/|tests/)' <<<"$changed"; then
-            echo "materialization produced no source or regression-test changes" >&2
+          if ! grep -Eq '^(src/|tests/|scripts/)' <<<"$changed"; then
+            echo "materialization produced no implementation or regression-test changes" >&2
             exit 1
           fi
           git commit -m "fix: materialize locality-aware semantic closure"
       - run: npm ci
-      - name: Run focused semantic-closure regressions
+      - name: Run focused corrective regressions
         shell: bash
         run: |
           set -euo pipefail
@@ -77,6 +63,7 @@ jobs:
             tests/audit/locality-aware-semantic-closure.test.ts \
             tests/audit/repository-cluster-closure.test.ts \
             tests/audit/tracked-specialist-closure.test.ts
+          node --test tests/implementation-diff-gate.test.mjs
       - name: Run complete release qualification
         run: npm run verify:release
       - name: Push validated implementation
