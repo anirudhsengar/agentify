@@ -23,15 +23,22 @@ jobs:
         with:
           node-version: "22.19.0"
           cache: npm
-      - name: Materialize the corrected source implementation
+      - name: Materialize a staging-free source candidate
         shell: bash
         run: |
           set -euo pipefail
           python .github/implementation/materialize-corrective-v4.py
           rm -rf .github/implementation
-          rm -f .github/materialization-trigger
+          rm -f \
+            .github/materialization-trigger \
+            .github/workflows/apply-locality-aware-closure.yml \
+            .github/workflows/apply-locality-closure-fix-v2.yml \
+            .github/workflows/apply-locality-closure-fix.yml \
+            .github/workflows/export-locality-closure-workspace.yml \
+            .github/workflows/qualify-locality-aware-closure.yml \
+            .github/workflows/materialize-locality-closure.yml
           git diff --check
-      - name: Commit the qualified candidate
+      - name: Commit the exact candidate before qualification
         shell: bash
         run: |
           set -euo pipefail
@@ -55,12 +62,13 @@ jobs:
           node --test tests/implementation-diff-gate.test.mjs
       - name: Run complete release qualification
         run: npm run verify:release
-      - name: Restore the published workflow tree and push the qualified source
+      - name: Restore branch workflows after qualification and push non-workflow bytes
         shell: bash
         run: |
           set -euo pipefail
-          git checkout origin/fix/materialize-locality-closure -- .github/workflows/ci.yml
-          git add .github/workflows/ci.yml
+          git checkout origin/fix/materialize-locality-closure -- .github/workflows
+          git add .github/workflows
           git commit --amend --no-edit
           git diff --quiet origin/fix/materialize-locality-closure -- .github/workflows
+          git diff --check origin/fix/materialize-locality-closure...HEAD
           git push origin HEAD:fix/materialize-locality-closure
