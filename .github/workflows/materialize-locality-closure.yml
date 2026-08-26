@@ -27,7 +27,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python .github/implementation/materialize-corrective.py
+          python .github/implementation/materialize-corrective-v2.py
           rm -rf .github/implementation
           rm -f \
             .github/materialization-trigger \
