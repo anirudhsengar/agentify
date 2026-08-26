@@ -92,7 +92,7 @@
     "test:learning": "tsx tests/learning/merge-learning.test.ts && tsx tests/learning/reconciliation.test.ts && tsx tests/learning/self-update.test.ts && tsx tests/learning/proposal.test.ts",
     "test:lifecycle": "tsx tests/task-lifecycle/task-lifecycle.test.ts && tsx tests/task-lifecycle/builder-tools.test.ts && tsx tests/task-lifecycle/generative-invariants.test.ts && tsx tests/task-lifecycle/validation-runner.test.ts && tsx tests/task-lifecycle/github-runtime.test.ts",
     "test:installer": "tsx tests/installer/one-time-installer.test.ts",
-    "verify:source": "npm run typecheck && npm run test:all",
+    "verify:source": "npm run verify:repository-clean && npm run typecheck && npm run test:all",
     "verify:scaffold": "npm run test:scaffold-e2e",
     "verify:package": "npm run test:package",
     "verify:security": "npm audit --audit-level=high",
@@ -105,7 +105,8 @@
     "inspect-log": "node src/core/audit/scripts/inspect-log.mjs",
     "build": "node scripts/build.mjs",
     "prepack": "npm run build",
-    "test:memory": "tsx tests/memory/memory-schema.test.ts && tsx tests/memory/memory-provenance.test.ts && tsx tests/memory/memory-store.test.ts && tsx tests/memory/memory-queries-compaction.test.ts"
+    "test:memory": "tsx tests/memory/memory-schema.test.ts && tsx tests/memory/memory-provenance.test.ts && tsx tests/memory/memory-store.test.ts && tsx tests/memory/memory-queries-compaction.test.ts",
+    "verify:repository-clean": "node scripts/verify-implementation-diff.mjs"
   },
   "exports": {
     "./package.json": "./package.json"

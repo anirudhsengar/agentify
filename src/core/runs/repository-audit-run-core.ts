@@ -224,7 +224,12 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
   const mapTools = createWriteMapTools({ stateDir });
   const promptContent = loadBuilderPrompt(stateDir);
   const promptSha = crypto.createHash("sha256").update(promptContent).digest("hex");
-  const log = new AgentifyLog({ cwd: context.cwd, configDir: defaultConfigDir() });
+  const log = context.auditLog ?? new AgentifyLog({ cwd: context.cwd, configDir: defaultConfigDir() });
+  const ownsLog = context.auditLog === undefined;
+  const deferLogCompletion = context.deferAuditLogCompletion === true;
+  if (deferLogCompletion && ownsLog) {
+    throw new Error("deferred audit logging requires a caller-owned AgentifyLog");
+  }
   const startedAt = Date.now();
   setThinkingLevel(context.config.thinkingLevel);
 
@@ -457,21 +462,23 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       && specialistRecorded;
     const success = map !== null && closure.unresolved.length === 0 && specialistRecorded;
     const status = success ? "success" : runtimeResult.aborted ? "aborted" : "partial";
-    log.sessionEnd({
-      duration_ms: Date.now() - startedAt,
-      was_aborted: runtimeResult.aborted && !intentionallyStopped,
-      status,
-    });
-    log.runEnd({
-      exit_code: success ? 0 : -1,
-      status,
-      coverage: {
-        covered: closure.closed.length,
-        gap: closure.unresolved.length,
-        total: COVERAGE_DIMENSIONS.length,
-      },
-      agents_md_path: null,
-    });
+    if (!deferLogCompletion) {
+      log.sessionEnd({
+        duration_ms: Date.now() - startedAt,
+        was_aborted: runtimeResult.aborted && !intentionallyStopped,
+        status,
+      });
+      log.runEnd({
+        exit_code: success ? 0 : -1,
+        status,
+        coverage: {
+          covered: closure.closed.length,
+          gap: closure.unresolved.length,
+          total: COVERAGE_DIMENSIONS.length,
+        },
+        agents_md_path: null,
+      });
+    }
     if (!success) {
       const failedProvider = providerAuthFailure(runtimeResult.diagnostics);
       if (failedProvider) {
@@ -494,7 +501,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     spinner.stop("repository audit complete", "success");
     spinnerStopped = true;
     context.ui.info(`agentify: validated codebase map written to ${stateDir}/${DEFAULT_MAP_FILENAME}`);
-    context.ui.info(`agentify: audit log written to ${log.logPath}`);
+    if (!deferLogCompletion) context.ui.info(`agentify: audit log written to ${log.logPath}`);
     return {
       map_path: `${stateDir}/${DEFAULT_MAP_FILENAME}`,
       covered_dimensions: closure.closed.length,
@@ -503,15 +510,17 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       cost_usd: runtimeResult.costUsd ?? (observedCost > 0 ? observedCost : null),
     };
   } catch (error) {
-    log.runEnd({
-      exit_code: -1,
-      status: "error",
-      error_message: error instanceof Error ? error.message : String(error),
-    });
+    if (!deferLogCompletion) {
+      log.runEnd({
+        exit_code: -1,
+        status: "error",
+        error_message: error instanceof Error ? error.message : String(error),
+      });
+    }
     throw error;
   } finally {
     context.signal?.removeEventListener("abort", forwardAbort);
     if (!spinnerStopped) spinner.stop("repository audit failed", "error");
-    await log.close();
+    if (ownsLog) await log.close();
   }
 }
