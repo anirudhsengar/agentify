@@ -90,4 +90,17 @@ initializeTeamMemoryStore({
   actor: "agentify-installer",
   options: { now: () => new Date(observedAt) },
 });
-write(".agentify/runtime/audit/codebase_map.json", `${JSON.stringify(makeSpecialistFixtureMap(), null, 2)}\n`);
+const map = makeSpecialistFixtureMap();
+if (profile === "small") {
+  map.concern_evidence?.not_concerns.push(
+    {
+      candidate: "src/math.ts",
+      why_rejected: "Synthetic installer qualification filler paired only with tests/math.test.ts; it varies repository shape and is not a recurring maintenance specialty.",
+    },
+    {
+      candidate: "tests/math.test.ts",
+      why_rejected: "Synthetic installer qualification filler paired only with src/math.ts; it varies repository shape and is not a recurring maintenance specialty.",
+    },
+  );
+}
+write(".agentify/runtime/audit/codebase_map.json", `${JSON.stringify(map, null, 2)}\n`);
