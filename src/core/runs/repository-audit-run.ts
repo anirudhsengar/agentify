@@ -347,7 +347,6 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         },
         agents_md_path: null,
       });
-      terminalWritten = true;
       context.ui.info(`agentify: audit log written to ${log.logPath}`);
     }
     throw error;
