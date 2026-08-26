@@ -17,6 +17,7 @@ import {
   specialistSlug,
 } from "../specialists/index.ts";
 import { listTrackedFilesAtCommit } from "../specialists/evidence.ts";
+import { readInstalledTrustedValidationArgv } from "../specialists/trusted-commands.ts";
 import type { SpecialistPortfolio } from "../specialists/contracts.ts";
 import type {
   AcceptedMergeChange,
@@ -47,6 +48,7 @@ function loadCurrentPortfolio(
     map,
     supportingCommit,
     listTrackedFilesAtCommit(cwd, supportingCommit),
+    { trustedValidationArgv: readInstalledTrustedValidationArgv(cwd) },
   );
 }
 

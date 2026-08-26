@@ -16,7 +16,12 @@ import {
   type SpecialistTouchpoint,
 } from "./contracts.ts";
 import { specialistPortfolioDigest, validateSpecialistPortfolio } from "./validation.ts";
-import { executableValidationCommands } from "./commands.ts";
+import {
+  executableValidationCommandArgv,
+  executableValidationCommands,
+  isExecutableValidationCommand,
+  validationCommandArgvKey,
+} from "./commands.ts";
 
 // Specialist discovery turns the audit's concerns into persistent specialists.
 //
@@ -46,6 +51,11 @@ const MAX_MEMORY_TEXT = 4_000;
 
 /** Minimum verified touchpoints before a concern is worth persisting. */
 const MIN_VERIFIED_TOUCHPOINTS = 1;
+
+export interface SpecialistDiscoveryOptions {
+  /** Exact argv vectors trusted by the installed repository task policy. */
+  trustedValidationArgv?: ReadonlyArray<ReadonlyArray<string>>;
+}
 
 function boundedText(value: string, maximum = MAX_MEMORY_TEXT): string {
   const normalized = value.trim();
@@ -145,9 +155,89 @@ function topLevelArea(value: string): string | null {
   return root.length > 0 ? root : null;
 }
 
+interface ValidationCommandInventory {
+  commands: string[];
+  rejected: string[];
+  untrusted: string[];
+}
+
+interface TrustedCommandIndex {
+  bySemanticKey: ReadonlyMap<string, string>;
+  commands: string[];
+}
+
+function commandStringFromArgv(argv: ReadonlyArray<string>): string {
+  return argv.map((token) => {
+    if (/^[A-Za-z0-9_@.+~:/=-]+$/.test(token)) return token;
+    return `"${token.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+  }).join(" ");
+}
+
+function semanticCommandKeys(argv: ReadonlyArray<string>): string[] {
+  const keys = new Set([validationCommandArgvKey(argv)]);
+  if (argv[0] === "npm" && argv[1] === "run" && argv[2] === "test") {
+    keys.add(validationCommandArgvKey(["npm", "test", ...argv.slice(3)]));
+  } else if (argv[0] === "npm" && argv[1] === "test") {
+    keys.add(validationCommandArgvKey(["npm", "run", "test", ...argv.slice(2)]));
+  }
+  return [...keys];
+}
+
+function trustedCommandIndex(
+  trustedValidationArgv: SpecialistDiscoveryOptions["trustedValidationArgv"],
+): TrustedCommandIndex | undefined {
+  if (trustedValidationArgv === undefined) return undefined;
+  const bySemanticKey = new Map<string, string>();
+  const commands: string[] = [];
+  for (const argv of trustedValidationArgv) {
+    if (argv.length === 0) continue;
+    const command = commandStringFromArgv(argv);
+    if (!isExecutableValidationCommand(command)) continue;
+    commands.push(command);
+    for (const key of semanticCommandKeys(argv)) {
+      if (!bySemanticKey.has(key)) bySemanticKey.set(key, command);
+    }
+  }
+  return {
+    bySemanticKey,
+    commands: sortedUniqueStrings(commands),
+  };
+}
+
+function reconcileValidationCommands(
+  values: ReadonlyArray<string>,
+  trusted: TrustedCommandIndex | undefined,
+): ValidationCommandInventory {
+  const executable = executableValidationCommands(values);
+  if (trusted === undefined) {
+    return { ...executable, untrusted: [] };
+  }
+  const commands: string[] = [];
+  const untrusted: string[] = [];
+  for (const command of executable.commands) {
+    const argv = executableValidationCommandArgv(command);
+    const trustedCommand = argv === null
+      ? undefined
+      : semanticCommandKeys(argv)
+          .map((key) => trusted.bySemanticKey.get(key))
+          .find((candidate): candidate is string => candidate !== undefined);
+    if (trustedCommand !== undefined) {
+      commands.push(trustedCommand);
+    } else {
+      untrusted.push(command);
+    }
+  }
+  return {
+    commands: sortedUniqueStrings(commands),
+    rejected: executable.rejected,
+    untrusted: sortedUniqueStrings(untrusted),
+  };
+}
+
 function allValidationCommands(
   map: CodebaseMap,
-): { commands: string[]; rejected: string[] } {
+  trusted: TrustedCommandIndex | undefined,
+): ValidationCommandInventory {
   const commands = [
     map.validation_surface.test_command,
     map.validation_surface.lint_command,
@@ -163,9 +253,15 @@ function allValidationCommands(
     ...(map.validation_surface.per_change_type.refactor?.mandatory ?? []),
     ...(map.validation_surface.per_change_type.security?.mandatory ?? []),
   ];
-  return executableValidationCommands(commands.filter((command): command is string =>
-    typeof command === "string" && command.trim().length > 0
-  ));
+  const reconciled = reconcileValidationCommands(
+    commands.filter((command): command is string =>
+      typeof command === "string" && command.trim().length > 0
+    ),
+    trusted,
+  );
+  return trusted === undefined
+    ? reconciled
+    : { ...reconciled, commands: [...trusted.commands] };
 }
 
 // ---------------------------------------------------------------------------
@@ -328,19 +424,156 @@ function confidenceFor(concern: Concern, verified: VerifiedConcern): MemoryConfi
   return hasTrace || hasCore ? "medium" : "low";
 }
 
+function tracePathCandidate(value: string): string | null {
+  const trimmed = value.trim();
+  const firstToken = trimmed.split(/\s+/, 1)[0];
+  if (firstToken && firstToken !== trimmed) {
+    const tokenPath = normalizePathCandidate(firstToken);
+    if (tokenPath !== null) return tokenPath;
+  }
+  return normalizePathCandidate(trimmed);
+}
+
+function addDependencyTouchpoint(
+  specialist: SpecialistDefinition,
+  repositoryPath: string,
+  role: string,
+): void {
+  if (!specialist.touchpoints.some((touchpoint) => touchpoint.path === repositoryPath)) {
+    specialist.touchpoints = [
+      ...specialist.touchpoints,
+      {
+        path: repositoryPath,
+        symbol: null,
+        role: boundedText(role, 1_024),
+        line_range: null,
+        centrality: "supporting" as const,
+      },
+    ].sort((left, right) => left.path.localeCompare(right.path)).slice(0, 512);
+  }
+  specialist.context_paths = sortedUniqueStrings([
+    ...specialist.context_paths,
+    repositoryPath,
+  ]).slice(0, 512);
+  specialist.evidence_paths = sortedUniqueStrings([
+    ...specialist.evidence_paths,
+    repositoryPath,
+  ]).slice(0, 256);
+  specialist.freshness_dependencies = sortedUniqueStrings([
+    ...specialist.freshness_dependencies,
+    repositoryPath,
+  ]).slice(0, 512);
+  const area = topLevelArea(repositoryPath);
+  if (area !== null) {
+    specialist.spans_subtrees = sortedUniqueStrings([
+      ...specialist.spans_subtrees,
+      area,
+    ]).slice(0, 128);
+  }
+}
+
+/**
+ * Add one-hop repository dependencies and the traced shared type contract to
+ * each specialist. These are context dependencies, not ownership claims. The
+ * added overlap is then used to connect related specialists.
+ */
+function enrichSpecialistDependencyContext(
+  map: CodebaseMap,
+  specialists: SpecialistDefinition[],
+  trackedEvidenceFiles: ReadonlySet<string> | undefined,
+): void {
+  if (trackedEvidenceFiles === undefined || specialists.length === 0) return;
+
+  const verified = (value: string): string | null => {
+    const candidate = normalizePathCandidate(value);
+    return candidate !== null && isVerifiedFilePath(candidate, trackedEvidenceFiles)
+      ? candidate
+      : null;
+  };
+  const adjacency = new Map<string, Set<string>>();
+  const connect = (left: string, right: string): void => {
+    const neighbors = adjacency.get(left) ?? new Set<string>();
+    neighbors.add(right);
+    adjacency.set(left, neighbors);
+  };
+  for (const edge of map.module_graph.edges) {
+    const from = verified(edge.from);
+    const to = verified(edge.to);
+    if (from === null || to === null || from === to) continue;
+    connect(from, to);
+    connect(to, from);
+  }
+
+  const trace = map.type_contract_surface.one_type_trace;
+  const tracePaths = trace === null
+    ? []
+    : sortedUniqueStrings(
+        trace.flow
+          .map(tracePathCandidate)
+          .filter((candidate): candidate is string =>
+            candidate !== null && trackedEvidenceFiles.has(candidate)
+          ),
+      );
+  const typeDefinitions = [
+    ...(map.type_contract_surface.type_definitions ?? []),
+    ...map.type_contract_surface.typescript_interfaces,
+    ...map.type_contract_surface.pydantic_models,
+    ...map.type_contract_surface.db_models,
+  ];
+  const tracedDefinitionPaths = trace === null
+    ? []
+    : sortedUniqueStrings(typeDefinitions
+        .filter((definition) => definition.name.trim().toLowerCase() === trace.name.trim().toLowerCase())
+        .map((definition) => verified(definition.path))
+        .filter((candidate): candidate is string => candidate !== null));
+
+  for (const specialist of specialists) {
+    const originalContext = new Set(specialist.context_paths);
+    const graphDependencies = new Set<string>();
+    for (const repositoryPath of originalContext) {
+      for (const dependency of adjacency.get(repositoryPath) ?? []) {
+        if (!originalContext.has(dependency)) graphDependencies.add(dependency);
+      }
+    }
+    for (const dependency of [...graphDependencies]
+      .sort((left, right) => left.localeCompare(right))
+      .slice(0, 32)) {
+      addDependencyTouchpoint(
+        specialist,
+        dependency,
+        "Shared repository dependency connected to this concern by the audited module graph.",
+      );
+    }
+
+    if (trace !== null && tracePaths.some((repositoryPath) => originalContext.has(repositoryPath))) {
+      for (const definitionPath of tracedDefinitionPaths.slice(0, 8)) {
+        addDependencyTouchpoint(
+          specialist,
+          definitionPath,
+          `Shared ${boundedText(trace.name, 256)} contract definition consumed by this concern.`,
+        );
+      }
+    }
+  }
+}
+
 function buildSpecialistDefinitions(
+  map: CodebaseMap,
   concerns: ReadonlyArray<Concern>,
   sourceKind: SpecialistSourceKind,
   globalCommands: ReadonlyArray<string>,
   supportingCommit: string,
   trackedEvidenceFiles: ReadonlySet<string> | undefined,
+  trusted: TrustedCommandIndex | undefined,
 ): {
   specialists: SpecialistDefinition[];
   rejected: Array<{ concern: string; reason: string }>;
   rejectedCommands: string[];
+  untrustedCommands: string[];
 } {
   const rejected: Array<{ concern: string; reason: string }> = [];
   const rejectedCommands: string[] = [];
+  const untrustedCommands: string[] = [];
   const verified: VerifiedConcern[] = [];
 
   for (const concern of concerns) {
@@ -382,8 +615,9 @@ function buildSpecialistDefinitions(
         ...entry.touchpoints.map((touchpoint) => touchpoint.path),
         ...entry.flows.flatMap((flow) => flow.steps.map((step) => step.path)),
       ]);
-      const concernCommands = executableValidationCommands(concern.validation);
+      const concernCommands = reconcileValidationCommands(concern.validation, trusted);
       rejectedCommands.push(...concernCommands.rejected);
+      untrustedCommands.push(...concernCommands.untrusted);
       const validationCommands = sortedUniqueStrings([
         ...concernCommands.commands,
         ...globalCommands,
@@ -426,6 +660,8 @@ function buildSpecialistDefinitions(
       };
     });
 
+  enrichSpecialistDependencyContext(map, specialists, trackedEvidenceFiles);
+
   // Two specialists sharing a touchpoint are related, not duplicates. This is
   // the signal the previous implementation used to merge them together, which
   // is precisely backwards: shared files are how cross-cutting concerns
@@ -449,6 +685,7 @@ function buildSpecialistDefinitions(
     ),
     rejected,
     rejectedCommands: sortedUniqueStrings(rejectedCommands),
+    untrustedCommands: sortedUniqueStrings(untrustedCommands),
   };
 }
 
@@ -573,6 +810,8 @@ function buildProcedureDefinitions(
   supportingCommit: string,
   trackedEvidenceFiles?: ReadonlySet<string>,
   rejectedCommands: string[] = [],
+  untrustedCommands: string[] = [],
+  trusted?: TrustedCommandIndex,
 ): ProcedureDefinition[] {
   const definitions: ProcedureDefinition[] = [];
   const defaultRecovery = [
@@ -588,8 +827,12 @@ function buildProcedureDefinitions(
     const evidencePaths = sourcePath && isVerifiedFilePath(sourcePath, trackedEvidenceFiles)
       ? [sourcePath]
       : [];
-    const existingCommand = executableValidationCommands([candidate.existing_command]);
+    const existingCommand = reconcileValidationCommands(
+      [candidate.existing_command],
+      trusted,
+    );
     rejectedCommands.push(...existingCommand.rejected);
+    untrustedCommands.push(...existingCommand.untrusted);
     const validationCommands = sortedUniqueStrings([
       ...(VALIDATION_SIGNAL.test(candidate.existing_command)
         ? existingCommand.commands
@@ -710,22 +953,35 @@ export function discoverSpecialistPortfolio(
   map: CodebaseMap,
   supportingCommit: string,
   trackedRepositoryFiles?: ReadonlyArray<string>,
+  options: SpecialistDiscoveryOptions = {},
 ): SpecialistPortfolio {
   const trackedEvidenceFiles = trackedRepositoryFiles
     ? new Set(normalizePaths(trackedRepositoryFiles))
     : undefined;
   const { concerns, sourceKind } = concernsFromMap(map);
-  const validationInventory = allValidationCommands(map);
-  const { specialists, rejected, rejectedCommands } = buildSpecialistDefinitions(
+  const trusted = trustedCommandIndex(options.trustedValidationArgv);
+  const validationInventory = allValidationCommands(map, trusted);
+  const {
+    specialists,
+    rejected,
+    rejectedCommands,
+    untrustedCommands,
+  } = buildSpecialistDefinitions(
+    map,
     concerns,
     sourceKind,
     validationInventory.commands,
     supportingCommit,
     trackedEvidenceFiles,
+    trusted,
   );
   const commandRejections = [
     ...validationInventory.rejected,
     ...rejectedCommands,
+  ];
+  const commandTrustRejections = [
+    ...validationInventory.untrusted,
+    ...untrustedCommands,
   ];
   const procedures = buildProcedureDefinitions(
     map,
@@ -734,6 +990,8 @@ export function discoverSpecialistPortfolio(
     supportingCommit,
     trackedEvidenceFiles,
     commandRejections,
+    commandTrustRejections,
+    trusted,
   );
 
   // A warning has to say what to change. "No domain met the threshold" sent a
@@ -767,6 +1025,12 @@ export function discoverSpecialistPortfolio(
     warnings.push(
       `Ignored non-executable validation directive: ${JSON.stringify(command)}. `
       + "Record an exact single command instead of prose or a conditional instruction.",
+    );
+  }
+  for (const command of sortedUniqueStrings(commandTrustRejections).slice(0, 12)) {
+    warnings.push(
+      `Ignored executable but unverified validation command: ${JSON.stringify(command)}. `
+      + "Only commands that passed installer verification and appear in the trusted repository task policy may be persisted in specialists or procedures.",
     );
   }
   if (procedures.length === 0) {

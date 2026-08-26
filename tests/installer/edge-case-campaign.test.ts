@@ -368,7 +368,7 @@ async function shellBuildOnlyNoTest(): Promise<void> {
     writeRepo(cwd, { "compile.sh": "#!/usr/bin/env bash\nset -e\necho compiled\n" });
     const { commands, blockers } = discoverRepositoryCommands(cwd, fakeRunner(cwd), false);
     assert.ok(commands.some((command) => command.kind === "build" && command.required));
-    assert.equal(blockers.length, 0, `expected no blockers, got ${JSON.stringify(blockers)}`);
+    assert.ok(hasBlocker(blockers, "missing_deterministic_validation"));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

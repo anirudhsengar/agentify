@@ -7,3 +7,4 @@ export * from "./process-runner.ts";
 export * from "./repository-inspection.ts";
 export * from "./runtime-repair.ts";
 export * from "./task-policy.ts";
+export * from "./validation-contract.ts";

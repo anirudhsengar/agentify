@@ -13,6 +13,10 @@ import { DEFAULT_INSTALLER_PROCESS_RUNNER } from "./process-runner.ts";
 import { commandId, COMMAND_TIMEOUTS, unsafeReason } from "./build-systems/shared.ts";
 import { createRepositoryValidationApproval } from "./task-policy.ts";
 import { packageRoot } from "../pi-sdk-runtime.ts";
+import {
+  AGENTIFY_VALIDATION_SMOKE_COMMAND_ID,
+  isVerifiedRepositoryTestCommand,
+} from "./validation-contract.ts";
 
 export interface ParsedCommandTarget {
   program: string;
@@ -66,32 +70,76 @@ export function parseCommandString(raw: string): ParsedCommandTarget | null {
   };
 }
 
-export function extractAuditedCommandCandidates(map: CodebaseMap): string[] {
-  const candidates: string[] = [];
+export interface AuditedCommandCandidate {
+  command: string;
+  kind: InstallerCommandKind;
+}
 
-  if (typeof map.validation_surface?.test_command === "string") {
-    candidates.push(map.validation_surface.test_command);
-  }
-  if (typeof map.validation_surface?.lint_command === "string") {
-    candidates.push(map.validation_surface.lint_command);
-  }
-  if (typeof map.validation_surface?.typecheck_command === "string") {
-    candidates.push(map.validation_surface.typecheck_command);
-  }
+function inferredAuditedCommandKind(command: string): InstallerCommandKind {
+  const normalized = command.trim().toLowerCase();
+  if (
+    /(?:^|[\s:_-])(?:test|tests|pytest|jest|vitest|rspec|ctest)(?:$|[\s:_-])/.test(normalized)
+    || /\b(?:go|cargo|mvn|gradle|gradlew|make)\s+test\b/.test(normalized)
+    || /\btox\b/.test(normalized)
+  ) return "test";
+  if (
+    /(?:^|[\s:_-])(?:lint|fmt|format)(?:$|[\s:_-])/.test(normalized)
+    || /\b(?:eslint|ruff|golangci-lint|gofmt|prettier|clippy)\b/.test(normalized)
+  ) return "lint";
+  if (
+    /(?:^|[\s:_-])(?:typecheck|type-check|vet)(?:$|[\s:_-])/.test(normalized)
+    || /\b(?:tsc|mypy|pyright)\b/.test(normalized)
+    || /\bcargo\s+check\b/.test(normalized)
+  ) return "typecheck";
+  if (/(?:^|[\s:_-])(?:package|pack)(?:$|[\s:_-])/.test(normalized)) return "package";
+  return "build";
+}
+
+export function extractAuditedCommandCandidates(map: CodebaseMap): AuditedCommandCandidate[] {
+  const candidates: AuditedCommandCandidate[] = [];
+
+  const add = (command: unknown, kind: InstallerCommandKind): void => {
+    if (typeof command !== "string" || command.trim().length === 0) return;
+    candidates.push({ command: command.trim(), kind });
+  };
+
+  add(map.validation_surface?.test_command, "test");
+  add(map.validation_surface?.e2e_command, "test");
+  add(map.validation_surface?.lint_command, "lint");
+  add(map.validation_surface?.typecheck_command, "typecheck");
 
   const perChange = map.validation_surface?.per_change_type;
   if (perChange) {
-    for (const group of [perChange.feature, perChange.bug, perChange.chore]) {
+    for (const group of [
+      perChange.feature,
+      perChange.bug,
+      perChange.chore,
+      perChange.refactor,
+      perChange.security,
+    ]) {
       if (Array.isArray(group?.mandatory)) {
         for (const cmd of group.mandatory) {
-          if (typeof cmd === "string") candidates.push(cmd);
+          if (typeof cmd === "string") add(cmd, inferredAuditedCommandKind(cmd));
         }
       }
     }
   }
 
-  return [...new Set(candidates.map((c) => c.trim()).filter(Boolean))]
-    .filter((cmd) => !INSTALL_SCRIPT_PATTERN.test(cmd) && !PACKAGE_INSTALL_PATTERN.test(cmd));
+  const unique = new Map<string, AuditedCommandCandidate>();
+  for (const candidate of candidates) {
+    if (
+      INSTALL_SCRIPT_PATTERN.test(candidate.command)
+      || PACKAGE_INSTALL_PATTERN.test(candidate.command)
+    ) continue;
+    const key = `${candidate.kind}\u0000${candidate.command}`;
+    if (!unique.has(key)) unique.set(key, candidate);
+  }
+  return [...unique.values()].sort((left, right) => {
+    const testPriority = Number(right.kind === "test") - Number(left.kind === "test");
+    return testPriority !== 0
+      ? testPriority
+      : left.command.localeCompare(right.command);
+  });
 }
 
 export function testAuditedValidationCommand(
@@ -196,12 +244,13 @@ function installValidationSmokeAsset(cwd: string): boolean {
 }
 
 /**
- * When no repository validation command verifies, Agentify adds one: an
- * Agentify-owned, dependency-free smoke validator installed under
+ * When no repository validation command verifies, Agentify installs a bounded
+ * diagnostic: an Agentify-owned, dependency-free smoke validator under
  * `.github/agentify/` that checks tracked JSON validity, JavaScript syntax,
  * and committed-secret patterns. Returns the
- * verified command, or null when the validator could not be installed or did
- * not pass on the current tree.
+ * verified diagnostic command, or null when the validator could not be
+ * installed or did not pass on the current tree. Callers must never treat this
+ * command as repository behavioral validation.
  */
 export function scaffoldValidationSmokeCommand(
   cwd: string,
@@ -217,7 +266,7 @@ export function scaffoldValidationSmokeCommand(
   const output = `${result.stdout}\n${result.stderr}`;
   if (result.status !== 0 || result.timedOut) return null;
   return {
-    command_id: commandId("test", "agentify-validation-smoke"),
+    command_id: AGENTIFY_VALIDATION_SMOKE_COMMAND_ID,
     kind: "test",
     argv: ["node", VALIDATION_SMOKE_RELATIVE_PATH],
     cwd: ".",
@@ -243,21 +292,29 @@ export function refinePreflightWithAudit(input: {
   let preflight = { ...input.preflight };
   let commands = [...preflight.commands];
 
-  const hasPassingRequired = commands.some(
-    (c) => c.kind !== "install" && c.required && c.assessment === "verified",
-  );
+  const hasPassingRequiredTest = commands.some(isVerifiedRepositoryTestCommand);
 
-  if (hasPassingRequired && preflight.disposition === "ready") {
+  if (hasPassingRequiredTest && preflight.disposition === "ready") {
     return { preflight: input.preflight, validationApproval: null };
   }
 
-  if (!hasPassingRequired && input.map) {
+  if (!hasPassingRequiredTest && input.map) {
     const candidates = extractAuditedCommandCandidates(input.map);
     for (const candidate of candidates) {
-      const verified = testAuditedValidationCommand(input.cwd, candidate, runner);
+      if (candidate.kind !== "test") continue;
+      const verified = testAuditedValidationCommand(
+        input.cwd,
+        candidate.command,
+        runner,
+        candidate.kind,
+      );
       if (verified) {
         commands = [
-          ...commands.filter((c) => c.assessment !== "failed" || !c.required),
+          ...commands.filter((command) => !(
+            command.kind === verified.kind
+            && command.required
+            && command.assessment === "failed"
+          )),
           verified,
         ];
         break;
@@ -265,38 +322,68 @@ export function refinePreflightWithAudit(input: {
     }
   }
 
-  // If no repository validation command verifies, Agentify adds one itself:
-  // install the Agentify-owned validation smoke asset and verify it.
-  const stillNoVerified = !commands.some(
-    (c) => c.kind !== "install" && c.required && c.assessment === "verified",
+  // If no repository validation command verifies, install and run the
+  // Agentify-owned smoke as a bounded diagnostic. It never substitutes for a
+  // repository-owned test and it does not erase failed repository commands.
+  const stillNoRepositoryTest = !commands.some(isVerifiedRepositoryTestCommand);
+  const hasAnyVerified = commands.some(
+    (command) => command.kind !== "install"
+      && command.required
+      && command.assessment === "verified",
   );
-  if (stillNoVerified) {
+  if (stillNoRepositoryTest && !hasAnyVerified) {
     const scaffolded = scaffoldValidationSmokeCommand(input.cwd, runner);
     if (scaffolded) {
       commands = [
-        ...commands.filter((c) => c.assessment !== "failed" || !c.required),
+        ...commands.filter((command) =>
+          command.command_id !== AGENTIFY_VALIDATION_SMOKE_COMMAND_ID
+        ),
         scaffolded,
       ];
     }
   }
 
-  // Filter out blockers that were fixed by finding a verified validation command
-  const hasNowPassing = commands.some(
-    (c) => c.kind !== "install" && c.required && c.assessment === "verified",
+  // A formatter, linter, build, or Agentify-owned smoke check is useful
+  // evidence, but none proves the repository's application behavior. Issue
+  // intake and draft publication require one repository-owned test command.
+  const hasNowPassingTest = commands.some(isVerifiedRepositoryTestCommand);
+  const hasFailedRequiredValidation = commands.some((command) =>
+    command.kind !== "install"
+    && command.required
+    && command.assessment === "failed"
   );
 
-  let blockers = preflight.blockers;
-  if (hasNowPassing) {
-    blockers = blockers.filter(
-      (b) => b.code !== "validation_failed" && b.code !== "missing_deterministic_validation",
-    );
+  let blockers = preflight.blockers.filter((blocker) => {
+    if (blocker.code === "missing_deterministic_validation") return !hasNowPassingTest;
+    if (blocker.code === "validation_failed") {
+      return hasFailedRequiredValidation;
+    }
+    return true;
+  });
+  if (
+    !hasNowPassingTest
+    && !blockers.some((blocker) => blocker.code === "missing_deterministic_validation")
+  ) {
+    blockers = [
+      ...blockers,
+      {
+        code: "missing_deterministic_validation",
+        message: "No repository-owned test command completed successfully.",
+        remediation:
+          "Record and repair one deterministic repository test command. Formatting, lint, build, typecheck, and Agentify smoke checks cannot establish application readiness by themselves.",
+      },
+    ];
   }
 
   preflight = {
     ...preflight,
     commands,
     blockers,
-    disposition: blockers.length === 0 ? "ready" : "analyzable-only",
+    disposition: blockers.length === 0 && preflight.analysis_allowed && preflight.identity !== null
+      ? "ready"
+      : preflight.analysis_allowed
+        ? "analyzable-only"
+        : "blocked",
   };
 
   const validationApproval = preflight.disposition === "ready"

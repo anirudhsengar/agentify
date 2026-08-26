@@ -203,6 +203,12 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
       entry.code === "validation_failed" && /after Agentify installed/.test(entry.message)
     )));
     assert.equal(report.github_issue_intake_enabled, false);
+    assert.equal(report.procedures_installed, 0);
+    const policy = JSON.parse(
+      fs.readFileSync(path.join(cwd, ".github", "agentify-task-policy.json"), "utf8"),
+    ) as { configured: boolean; policy: unknown };
+    assert.equal(policy.configured, false);
+    assert.equal(policy.policy, null);
     assert.equal(
       requests.some((request) => request.program === "gh" && request.args[0] === "label"),
       false,
@@ -440,9 +446,10 @@ async function testValidationSmokeScaffoldedWhenMissing(): Promise<void> {
     assert.equal(smoke.required, true);
     assert.deepEqual(smoke.argv, ["node", ".github/agentify/validation-smoke.mjs"]);
     assert.ok(
-      !refined.preflight.blockers.some((entry) => entry.code === "missing_deterministic_validation"),
-      "the scaffolded verified command must clear the missing-validation blocker",
+      refined.preflight.blockers.some((entry) => entry.code === "missing_deterministic_validation"),
+      "the Agentify-owned smoke must not impersonate a repository test command",
     );
+    assert.equal(refined.preflight.disposition, "analyzable-only");
     const asset = path.join(cwd, ".github", "agentify", "validation-smoke.mjs");
     assert.ok(fs.existsSync(asset), "validation smoke asset must be installed");
     assert.match(fs.readFileSync(asset, "utf-8"), /^#!\/usr\/bin\/env node\r?\n\/\/ agentify:managed\r?\n/);

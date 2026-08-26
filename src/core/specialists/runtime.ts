@@ -8,6 +8,7 @@ import type { MaterializedPortfolioResult, SpecialistPortfolio } from "./contrac
 import { discoverSpecialistPortfolio } from "./discovery.ts";
 import { listTrackedFilesAtCommit, readGitHeadCommit } from "./evidence.ts";
 import { materializeSpecialistPortfolio } from "./persistence.ts";
+import { readInstalledTrustedValidationArgv } from "./trusted-commands.ts";
 
 export type RepositorySpecialistSyncResult =
   | { status: "memory_absent" }
@@ -19,6 +20,10 @@ export type RepositorySpecialistSyncResult =
       materialized: MaterializedPortfolioResult;
     };
 
+export interface SynchronizeRepositorySpecialistsOptions {
+  trustedValidationArgv?: ReadonlyArray<ReadonlyArray<string>>;
+}
+
 /**
  * Synchronize deterministic specialist and procedure expertise when the
  * vendor-neutral team-memory store has already been established by the trusted
@@ -26,6 +31,7 @@ export type RepositorySpecialistSyncResult =
  */
 export function synchronizeRepositorySpecialists(
   cwd: string,
+  options: SynchronizeRepositorySpecialistsOptions = {},
 ): RepositorySpecialistSyncResult {
   if (!hasRecognizedManifestMarker(cwd)) return { status: "memory_absent" };
 
@@ -34,10 +40,13 @@ export function synchronizeRepositorySpecialists(
   if (map === null) return { status: "map_absent", state_dir: null };
 
   const supportingCommit = readGitHeadCommit(cwd);
+  const trustedValidationArgv = options.trustedValidationArgv
+    ?? readInstalledTrustedValidationArgv(cwd);
   const portfolio = discoverSpecialistPortfolio(
     map,
     supportingCommit,
     listTrackedFilesAtCommit(cwd, supportingCommit),
+    { trustedValidationArgv },
   );
   const materialized = materializeSpecialistPortfolio({
     cwd,
