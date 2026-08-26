@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  apply-qualify-commit:
+  apply-commit-qualify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -36,28 +36,7 @@ jobs:
             .github/workflows/apply-verified-validation-fix.yml
           rmdir .github/implementation 2>/dev/null || true
           git diff --check
-      - run: npm ci
-      - name: Run complete release qualification
-        id: qualify
-        shell: bash
-        run: |
-          set +e
-          npm run verify:release 2>&1 | tee verify-release.log
-          status=${PIPESTATUS[0]}
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
-      - name: Upload release qualification diagnostics
-        if: steps.qualify.outputs.status != '0'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: verified-validation-release-failure
-          path: verify-release.log
-          if-no-files-found: error
-          retention-days: 1
-      - name: Fail unsuccessful qualification
-        if: steps.qualify.outputs.status != '0'
-        run: exit 1
-      - name: Commit validated implementation
+      - name: Commit the clean implementation candidate
         shell: bash
         run: |
           set -euo pipefail
@@ -67,3 +46,25 @@ jobs:
           git diff --cached --check
           git commit -m "fix: require verified tests and shared specialist context"
           git push origin HEAD:fix/verified-validation-and-shared-context
+      - run: npm ci
+      - name: Run complete release qualification
+        id: qualify
+        shell: bash
+        run: |
+          set +e
+          log="$RUNNER_TEMP/verify-release.log"
+          npm run verify:release 2>&1 | tee "$log"
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload release qualification diagnostics
+        if: steps.qualify.outputs.status != '0'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: verified-validation-release-failure
+          path: ${{ runner.temp }}/verify-release.log
+          if-no-files-found: error
+          retention-days: 1
+      - name: Fail unsuccessful qualification
+        if: steps.qualify.outputs.status != '0'
+        run: exit 1
