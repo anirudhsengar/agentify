@@ -1,0 +1,68 @@
+name: Materialize locality-aware closure
+
+on:
+  push:
+    branches: [fix/materialize-locality-closure]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-locality-aware-closure
+  cancel-in-progress: false
+
+jobs:
+  materialize-qualify-push:
+    if: github.event.head_commit.message == 'ci: materialize locality closure implementation'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Apply the actual implementation and remove all staging artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .github/implementation/apply-locality-aware-closure.py
+          rm -rf .github/implementation
+          rm -f \
+            .github/workflows/apply-locality-aware-closure.yml \
+            .github/workflows/apply-locality-closure-fix-v2.yml \
+            .github/workflows/apply-locality-closure-fix.yml \
+            .github/workflows/export-locality-closure-workspace.yml \
+            .github/workflows/qualify-locality-aware-closure.yml \
+            .github/workflows/materialize-locality-closure.yml
+          git diff --check
+      - name: Commit the exact clean implementation candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Anirudh Sengar"
+          git config user.email "111981402+anirudhsengar@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          changed="$(git diff --cached --name-only --diff-filter=ACMR)"
+          printf '%s\n' "$changed"
+          if ! grep -Eq '^(src/|tests/)' <<<"$changed"; then
+            echo "materialization produced no source or regression-test changes" >&2
+            exit 1
+          fi
+          git commit -m "fix: materialize locality-aware semantic closure"
+      - run: npm ci
+      - name: Run focused semantic-closure regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npx tsx --test \
+            tests/audit/locality-aware-semantic-closure.test.ts \
+            tests/audit/repository-cluster-closure.test.ts \
+            tests/audit/tracked-specialist-closure.test.ts
+      - name: Run complete release qualification
+        run: npm run verify:release
+      - name: Push validated implementation
+        run: git push origin HEAD:fix/materialize-locality-closure
