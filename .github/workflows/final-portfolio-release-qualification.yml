@@ -1,0 +1,50 @@
+name: Final portfolio release qualification
+
+on:
+  push:
+    branches: [fix/portfolio-closure-command-contracts]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: final-portfolio-release-qualification
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - name: Require completed implementation
+        run: |
+          grep -q 'uncovered_clusters' src/core/audit/specialist-completion.ts
+          grep -Eq 'executable.*command|command.*executable' src/core/specialists/discovery.ts
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - run: npm ci
+      - run: npm run verify:release
+      - name: Publish qualification result and remove this workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh pr comment 5 --repo anirudhsengar/agentify --body "Final release qualification passed on the PR head: source/type checks, complete tests, scaffold E2E, exact packed-package qualification, and dependency audit."
+          git config user.name "Anirudh Sengar"
+          git config user.email "111981402+anirudhsengar@users.noreply.github.com"
+          rm -f .github/workflows/final-portfolio-release-qualification.yml
+          git add -A
+          git diff --cached --check
+          git commit -m "validate: qualify portfolio closure release"
+          git push origin HEAD:fix/portfolio-closure-command-contracts
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment 5 --repo anirudhsengar/agentify --body "Final release qualification failed. Do not merge; inspect ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
