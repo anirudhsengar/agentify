@@ -90,4 +90,11 @@ initializeTeamMemoryStore({
   actor: "agentify-installer",
   options: { now: () => new Date(observedAt) },
 });
-write(".agentify/runtime/audit/codebase_map.json", `${JSON.stringify(makeSpecialistFixtureMap(), null, 2)}\n`);
+const map = makeSpecialistFixtureMap();
+if (profile === "small") {
+  map.concern_evidence?.not_concerns.push({
+    candidate: "src/math.ts",
+    why_rejected: "Synthetic package-qualification arithmetic only; tests/math.test.ts does not represent a recurring repository specialty.",
+  });
+}
+write(".agentify/runtime/audit/codebase_map.json", `${JSON.stringify(map, null, 2)}\n`);
