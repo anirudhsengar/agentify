@@ -38,7 +38,25 @@ jobs:
           git diff --check
       - run: npm ci
       - name: Run complete release qualification
-        run: npm run verify:release
+        id: qualify
+        shell: bash
+        run: |
+          set +e
+          npm run verify:release 2>&1 | tee verify-release.log
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload release qualification diagnostics
+        if: steps.qualify.outputs.status != '0'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: verified-validation-release-failure
+          path: verify-release.log
+          if-no-files-found: error
+          retention-days: 1
+      - name: Fail unsuccessful qualification
+        if: steps.qualify.outputs.status != '0'
+        run: exit 1
       - name: Commit validated implementation
         shell: bash
         run: |
