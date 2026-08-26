@@ -16,6 +16,7 @@ import {
   type SpecialistTouchpoint,
 } from "./contracts.ts";
 import { specialistPortfolioDigest, validateSpecialistPortfolio } from "./validation.ts";
+import { executableValidationCommands } from "./commands.ts";
 
 // Specialist discovery turns the audit's concerns into persistent specialists.
 //
@@ -144,7 +145,9 @@ function topLevelArea(value: string): string | null {
   return root.length > 0 ? root : null;
 }
 
-function allValidationCommands(map: CodebaseMap): string[] {
+function allValidationCommands(
+  map: CodebaseMap,
+): { commands: string[]; rejected: string[] } {
   const commands = [
     map.validation_surface.test_command,
     map.validation_surface.lint_command,
@@ -160,7 +163,7 @@ function allValidationCommands(map: CodebaseMap): string[] {
     ...(map.validation_surface.per_change_type.refactor?.mandatory ?? []),
     ...(map.validation_surface.per_change_type.security?.mandatory ?? []),
   ];
-  return sortedUniqueStrings(commands.filter((command): command is string =>
+  return executableValidationCommands(commands.filter((command): command is string =>
     typeof command === "string" && command.trim().length > 0
   ));
 }
@@ -331,8 +334,13 @@ function buildSpecialistDefinitions(
   globalCommands: ReadonlyArray<string>,
   supportingCommit: string,
   trackedEvidenceFiles: ReadonlySet<string> | undefined,
-): { specialists: SpecialistDefinition[]; rejected: Array<{ concern: string; reason: string }> } {
+): {
+  specialists: SpecialistDefinition[];
+  rejected: Array<{ concern: string; reason: string }>;
+  rejectedCommands: string[];
+} {
   const rejected: Array<{ concern: string; reason: string }> = [];
+  const rejectedCommands: string[] = [];
   const verified: VerifiedConcern[] = [];
 
   for (const concern of concerns) {
@@ -374,8 +382,10 @@ function buildSpecialistDefinitions(
         ...entry.touchpoints.map((touchpoint) => touchpoint.path),
         ...entry.flows.flatMap((flow) => flow.steps.map((step) => step.path)),
       ]);
+      const concernCommands = executableValidationCommands(concern.validation);
+      rejectedCommands.push(...concernCommands.rejected);
       const validationCommands = sortedUniqueStrings([
-        ...concern.validation.filter((command) => command.trim().length > 0),
+        ...concernCommands.commands,
         ...globalCommands,
       ]).slice(0, 32);
       return {
@@ -438,6 +448,7 @@ function buildSpecialistDefinitions(
       left.specialist_id.localeCompare(right.specialist_id)
     ),
     rejected,
+    rejectedCommands: sortedUniqueStrings(rejectedCommands),
   };
 }
 
@@ -561,6 +572,7 @@ function buildProcedureDefinitions(
   globalCommands: ReadonlyArray<string>,
   supportingCommit: string,
   trackedEvidenceFiles?: ReadonlySet<string>,
+  rejectedCommands: string[] = [],
 ): ProcedureDefinition[] {
   const definitions: ProcedureDefinition[] = [];
   const defaultRecovery = [
@@ -576,13 +588,19 @@ function buildProcedureDefinitions(
     const evidencePaths = sourcePath && isVerifiedFilePath(sourcePath, trackedEvidenceFiles)
       ? [sourcePath]
       : [];
+    const existingCommand = executableValidationCommands([candidate.existing_command]);
+    rejectedCommands.push(...existingCommand.rejected);
     const validationCommands = sortedUniqueStrings([
       ...(VALIDATION_SIGNAL.test(candidate.existing_command)
-        ? [candidate.existing_command]
+        ? existingCommand.commands
         : []),
       ...globalCommands,
     ]).slice(0, 16);
-    if (evidencePaths.length === 0 || validationCommands.length === 0) continue;
+    if (
+      evidencePaths.length === 0
+      || existingCommand.commands.length === 0
+      || validationCommands.length === 0
+    ) continue;
     const procedureId = specialistSlug(candidate.name);
     definitions.push({
       procedure_id: procedureId,
@@ -591,7 +609,7 @@ function buildProcedureDefinitions(
       owner_specialist_id: procedureOwner(evidencePaths, specialists),
       trigger_conditions: sortedUniqueStrings([boundedText(candidate.purpose), boundedText(candidate.name, 256)]).slice(0, 64),
       required_context_paths: evidencePaths,
-      allowed_commands: [candidate.existing_command.trim()],
+      allowed_commands: existingCommand.commands,
       expected_file_patterns: evidencePaths,
       side_effects: [boundedText(`Runs repository command: ${candidate.existing_command.trim()}`)],
       validation_commands: validationCommands,
@@ -697,20 +715,25 @@ export function discoverSpecialistPortfolio(
     ? new Set(normalizePaths(trackedRepositoryFiles))
     : undefined;
   const { concerns, sourceKind } = concernsFromMap(map);
-  const validationCommands = allValidationCommands(map);
-  const { specialists, rejected } = buildSpecialistDefinitions(
+  const validationInventory = allValidationCommands(map);
+  const { specialists, rejected, rejectedCommands } = buildSpecialistDefinitions(
     concerns,
     sourceKind,
-    validationCommands,
+    validationInventory.commands,
     supportingCommit,
     trackedEvidenceFiles,
   );
+  const commandRejections = [
+    ...validationInventory.rejected,
+    ...rejectedCommands,
+  ];
   const procedures = buildProcedureDefinitions(
     map,
     specialists,
-    validationCommands,
+    validationInventory.commands,
     supportingCommit,
     trackedEvidenceFiles,
+    commandRejections,
   );
 
   // A warning has to say what to change. "No domain met the threshold" sent a
@@ -740,8 +763,14 @@ export function discoverSpecialistPortfolio(
       + "or per-file roles. Re-run the audit to replace them with traced concerns.",
     );
   }
+  for (const command of sortedUniqueStrings(commandRejections).slice(0, 12)) {
+    warnings.push(
+      `Ignored non-executable validation directive: ${JSON.stringify(command)}. `
+      + "Record an exact single command instead of prose or a conditional instruction.",
+    );
+  }
   if (procedures.length === 0) {
-    warnings.push("No repository-specific procedure had both concrete evidence and validation commands.");
+    warnings.push("No repository-specific procedure had both concrete evidence and executable validation commands.");
   }
 
   // The portfolio's own grounding, and the provenance a later retirement

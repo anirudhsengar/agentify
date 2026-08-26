@@ -55,6 +55,7 @@ export {
 export type {
   AuditCompletionResult,
   RejectedSpecialistConcern,
+  RepositoryBehaviorCluster,
   SpecialistEvidenceAssessment,
 } from "./specialist-completion.ts";
 export { applyMapDefaults } from "./map-defaults.ts";

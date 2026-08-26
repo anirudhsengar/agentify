@@ -43,6 +43,7 @@ import {
   type CandidateDecisionEvent,
   type MemoryMutationEvent,
   type MemoryRecord,
+  type TeamMemoryManifest,
 } from "../schema.ts";
 import {
   sha256Hex,
@@ -209,10 +210,17 @@ export function validateCandidateDecisionState(
 export function validateCurrentEntitiesHaveHistory(
   cwd: string,
   latest: ReadonlyMap<string, MemoryMutationEvent>,
+  manifest: TeamMemoryManifest,
 ): void {
+  const revisionOneSnapshotsAreBaselines = manifest.history_mode === "snapshot-v1";
   for (const relativePath of currentMemoryRecordPaths(cwd)) {
     const record = readMemoryRecordAtPath(cwd, relativePath);
     const event = latest.get(`memory_record:${record.memory_id}`);
+    if (
+      event === undefined
+      && revisionOneSnapshotsAreBaselines
+      && record.revision === 1
+    ) continue;
     if (!event || event.revision !== record.revision || event.after_digest !== record.content_digest) {
       throw new TeamMemoryError(
         "corrupt_state",
@@ -249,6 +257,11 @@ export function validateCurrentEntitiesHaveHistory(
         ),
       );
       const event = latest.get(`agent_identity:${identity.agent_id}`);
+      if (
+        event === undefined
+        && revisionOneSnapshotsAreBaselines
+        && identity.revision === 1
+      ) continue;
       if (!event || event.revision !== identity.revision || event.after_digest !== identity.content_digest) {
         throw new TeamMemoryError(
           "corrupt_state",
@@ -341,7 +354,7 @@ export function recoverTeamMemoryStoreInternal(
   for (const event of latest.values()) {
     recoverEntityFromEvent(cwd, event, options, repaired);
   }
-  validateCurrentEntitiesHaveHistory(cwd, latest);
+  validateCurrentEntitiesHaveHistory(cwd, latest, manifest);
   validateRequiredTeamState(cwd);
   validateCandidateDecisionState(cwd, latest, options);
   const initializationJournal = readInitializationJournalIfPresent(cwd);

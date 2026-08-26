@@ -123,6 +123,7 @@ function initializePersistentTeam(
     supportingCommit: preflight.identity.current_commit,
     evidence: [evidence],
     actor: "agentify-installer",
+    options: { deferInitialHistory: true },
   });
   ensureSelfUpdatePolicy(cwd, preflight);
 }

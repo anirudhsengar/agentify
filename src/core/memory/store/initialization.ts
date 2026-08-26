@@ -81,6 +81,7 @@ export function materializeTeamMemoryInitialization(
     revision: 1,
     root: TEAM_MEMORY_ROOT_RELATIVE,
     repository_id: journal.repository_id,
+    history_mode: options?.deferInitialHistory === true ? "snapshot-v1" : "full",
     created_at: journal.created_at,
     updated_at: journal.created_at,
   }, options);

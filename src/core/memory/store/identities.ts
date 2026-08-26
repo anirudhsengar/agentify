@@ -23,6 +23,7 @@ import {
   type AgentIdentity,
   AgentIdentitySchema,
   type MemoryKind,
+  type MemoryMutationEvent,
   type MemoryRecord,
 } from "../schema.ts";
 import {
@@ -131,7 +132,18 @@ export function assertCurrentEntityMatchesImmutableHistory(
   cwd: string,
   entity: AgentIdentity | MemoryRecord,
 ): void {
-  const event = readMutationEvent(cwd, historyRelativePath(entity));
+  let event: MemoryMutationEvent;
+  try {
+    event = readMutationEvent(cwd, historyRelativePath(entity));
+  } catch (error) {
+    if (
+      error instanceof TeamMemoryError
+      && error.code === "not_found"
+      && entity.revision === 1
+      && readTeamMemoryManifest(cwd).history_mode === "snapshot-v1"
+    ) return;
+    throw error;
+  }
   const entityType = "agent_id" in entity ? "agent_identity" : "memory_record";
   const entityId = "agent_id" in entity ? entity.agent_id : entity.memory_id;
   if (

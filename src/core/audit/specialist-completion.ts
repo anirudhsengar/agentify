@@ -42,10 +42,62 @@ const GENERIC_PLUMBING_FILES = new Set([
   "readme",
   "readme.md",
 ]);
+const TEST_DIRECTORY_NAMES = new Set([
+  "__tests__",
+  "e2e",
+  "integration",
+  "spec",
+  "specs",
+  "test",
+  "tests",
+]);
+const DOCUMENTATION_DIRECTORY_NAMES = new Set([
+  "doc",
+  "docs",
+  "documentation",
+  "man",
+  "manual",
+]);
+const GENERATED_DIRECTORY_NAMES = new Set([
+  ".cache",
+  ".venv",
+  "__pycache__",
+  "build",
+  "coverage",
+  "dist",
+  "generated",
+  "node_modules",
+  "target",
+  "third_party",
+  "vendor",
+  "venv",
+]);
+const AMBIGUOUS_CLUSTER_KEYS = new Set([
+  "app",
+  "base",
+  "common",
+  "config",
+  "conftest",
+  "constants",
+  "helper",
+  "helpers",
+  "index",
+  "lib",
+  "main",
+  "mod",
+  "package",
+  "setup",
+]);
 
 export interface RejectedSpecialistConcern {
   concern: string;
   reasons: string[];
+}
+
+export interface RepositoryBehaviorCluster {
+  cluster_key: string;
+  implementation_paths: string[];
+  test_paths: string[];
 }
 
 export interface SpecialistEvidenceAssessment {
@@ -58,6 +110,8 @@ export interface SpecialistEvidenceAssessment {
   uncovered_paths: string[];
   accepted_concerns: string[];
   rejected_concerns: RejectedSpecialistConcern[];
+  repository_clusters: RepositoryBehaviorCluster[];
+  uncovered_clusters: RepositoryBehaviorCluster[];
 }
 
 export interface AuditCompletionResult {
@@ -67,6 +121,11 @@ export interface AuditCompletionResult {
 }
 
 type RepositoryPathResolver = (value: unknown) => string | null;
+
+interface RepositoryEvidenceContext {
+  resolvePath: RepositoryPathResolver;
+  trackedFiles: Set<string> | undefined;
+}
 
 function normalizeRepositoryPathSyntax(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -142,7 +201,35 @@ function gitPathChunks(candidates: ReadonlyArray<string>): string[][] {
 function trackedRegularFilesAtHead(
   cwd: string,
   candidates: ReadonlyArray<string>,
-): Set<string> | null {
+): { files: Set<string>; complete: boolean } | null {
+  const fullTree = spawnSync(
+    "git",
+    ["-C", cwd, "ls-tree", "-r", "-z", "--full-tree", "HEAD"],
+    {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      windowsHide: true,
+    },
+  );
+  if (!fullTree.error && fullTree.status === 0 && typeof fullTree.stdout === "string") {
+    const tracked = new Set<string>();
+    for (const record of fullTree.stdout.split("\0").filter(Boolean)) {
+      const separator = record.indexOf("\t");
+      if (separator < 0) continue;
+      const metadata = record.slice(0, separator).split(" ");
+      if (metadata.length < 3 || metadata[1] !== "blob" || metadata[0] === "120000") continue;
+      const repositoryPath = normalizeRepositoryPathSyntax(record.slice(separator + 1));
+      if (repositoryPath !== null && !AGENTIFY_GENERATED_PATH.test(repositoryPath)) {
+        tracked.add(repositoryPath);
+      }
+    }
+    return { files: tracked, complete: true };
+  }
+
+  // A bounded exact-path fallback preserves evidence binding when a platform's
+  // Git cannot return the recursive tree in one response. Cluster discovery is
+  // unavailable in that degraded mode, but model-proposed paths still fail
+  // closed against exact tracked blobs.
   const unique = [...new Set(candidates)].sort((left, right) => left.localeCompare(right));
   const requested = new Set(unique);
   const tracked = new Set<string>();
@@ -166,7 +253,82 @@ function trackedRegularFilesAtHead(
       if (repositoryPath !== null && requested.has(repositoryPath)) tracked.add(repositoryPath);
     }
   }
-  return tracked;
+  return { files: tracked, complete: false };
+}
+
+function filenameStem(repositoryPath: string): string {
+  const basename = path.posix.basename(repositoryPath);
+  const extension = path.posix.extname(basename);
+  return extension.length > 0 ? basename.slice(0, -extension.length) : basename;
+}
+
+function isTestRepositoryPath(repositoryPath: string): boolean {
+  const segments = repositoryPath.split("/");
+  const directories = segments.slice(0, -1).map((segment) => segment.toLowerCase());
+  if (directories.some((segment) => TEST_DIRECTORY_NAMES.has(segment))) return true;
+  const stem = filenameStem(repositoryPath);
+  return /^(?:test|tests|spec|specs)[._-]+/i.test(stem)
+    || /[._-]+(?:test|tests|spec|specs)$/i.test(stem)
+    || /(?:Test|Tests|Spec|Specs)$/.test(stem);
+}
+
+function clusterKey(repositoryPath: string): string | null {
+  let stem = filenameStem(repositoryPath)
+    .replace(/^(?:test|tests|spec|specs)[._-]+/i, "")
+    .replace(/[._-]+(?:test|tests|spec|specs)$/i, "")
+    .replace(/(?:Test|Tests|Spec|Specs)$/, "")
+    .replace(/^_+/, "")
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+  if (stem.endsWith("-d")) stem = stem.slice(0, -2);
+  return stem.length >= 3 && !AMBIGUOUS_CLUSTER_KEYS.has(stem) ? stem : null;
+}
+
+function eligibleImplementationPath(repositoryPath: string): boolean {
+  if (isTestRepositoryPath(repositoryPath) || isGenericPlumbing(repositoryPath)) return false;
+  const directories = repositoryPath.split("/").slice(0, -1).map((segment) => segment.toLowerCase());
+  return !directories.some((segment) =>
+    DOCUMENTATION_DIRECTORY_NAMES.has(segment) || GENERATED_DIRECTORY_NAMES.has(segment)
+  );
+}
+
+function discoverRepositoryBehaviorClusters(
+  trackedFiles: ReadonlySet<string> | undefined,
+): RepositoryBehaviorCluster[] {
+  if (trackedFiles === undefined) return [];
+  const implementations = new Map<string, string[]>();
+  const tests = new Map<string, string[]>();
+  for (const repositoryPath of trackedFiles) {
+    const key = clusterKey(repositoryPath);
+    if (key === null) continue;
+    if (isTestRepositoryPath(repositoryPath)) {
+      const paths = tests.get(key) ?? [];
+      paths.push(repositoryPath);
+      tests.set(key, paths);
+    } else if (eligibleImplementationPath(repositoryPath)) {
+      const paths = implementations.get(key) ?? [];
+      paths.push(repositoryPath);
+      implementations.set(key, paths);
+    }
+  }
+
+  const clusters: RepositoryBehaviorCluster[] = [];
+  for (const [key, implementationPaths] of implementations) {
+    const testPaths = tests.get(key) ?? [];
+    // Very broad basename matches are ambiguous in large monorepos. Do not
+    // convert them into artificial specialties; require a bounded behavioral
+    // unit with a concrete implementation/test mirror.
+    if (testPaths.length === 0 || implementationPaths.length > 4 || testPaths.length > 12) continue;
+    clusters.push({
+      cluster_key: key,
+      implementation_paths: [...new Set(implementationPaths)]
+        .sort((left, right) => left.localeCompare(right)),
+      test_paths: [...new Set(testPaths)]
+        .sort((left, right) => left.localeCompare(right)),
+    });
+  }
+  return clusters.sort((left, right) => left.cluster_key.localeCompare(right.cluster_key));
 }
 
 function collectPathCandidates(map: CodebaseMap): unknown[] {
@@ -212,16 +374,19 @@ function collectPathCandidates(map: CodebaseMap): unknown[] {
   return values;
 }
 
-function createRepositoryPathResolver(
+function createRepositoryEvidenceContext(
   map: CodebaseMap,
   cwd: string | undefined,
-): RepositoryPathResolver {
+): RepositoryEvidenceContext {
   if (cwd === undefined) {
-    return (value) => {
-      const normalized = normalizeRepositoryPathSyntax(value);
-      return normalized !== null
-        && !AGENTIFY_GENERATED_PATH.test(normalized)
-        && likelyFileWithoutRepository(normalized) ? normalized : null;
+    return {
+      resolvePath: (value) => {
+        const normalized = normalizeRepositoryPathSyntax(value);
+        return normalized !== null
+          && !AGENTIFY_GENERATED_PATH.test(normalized)
+          && likelyFileWithoutRepository(normalized) ? normalized : null;
+      },
+      trackedFiles: undefined,
     };
   }
 
@@ -230,11 +395,14 @@ function createRepositoryPathResolver(
     .filter((candidate): candidate is string => candidate !== null);
   const tracked = trackedRegularFilesAtHead(cwd, candidates);
   if (tracked !== null) {
-    return (value) => {
-      const normalized = normalizeRepositoryPathSyntax(value);
-      return normalized !== null
-        && !AGENTIFY_GENERATED_PATH.test(normalized)
-        && tracked.has(normalized) ? normalized : null;
+    return {
+      resolvePath: (value) => {
+        const normalized = normalizeRepositoryPathSyntax(value);
+        return normalized !== null
+          && !AGENTIFY_GENERATED_PATH.test(normalized)
+          && tracked.files.has(normalized) ? normalized : null;
+      },
+      trackedFiles: tracked.complete ? tracked.files : undefined,
     };
   }
 
@@ -242,11 +410,14 @@ function createRepositoryPathResolver(
   // previous fail-safe behavior. Production Git repositories use the HEAD tree
   // above, so fetched, generated, ignored, and symlink paths never qualify as
   // specialist evidence merely because they happen to exist on disk.
-  return (value) => {
-    const normalized = normalizeRepositoryPathSyntax(value);
-    return normalized !== null
-      && !AGENTIFY_GENERATED_PATH.test(normalized)
-      && regularFileOnDisk(cwd, normalized) ? normalized : null;
+  return {
+    resolvePath: (value) => {
+      const normalized = normalizeRepositoryPathSyntax(value);
+      return normalized !== null
+        && !AGENTIFY_GENERATED_PATH.test(normalized)
+        && regularFileOnDisk(cwd, normalized) ? normalized : null;
+    },
+    trackedFiles: undefined,
   };
 }
 
@@ -431,12 +602,23 @@ export function assessSpecialistEvidence(
       uncovered_paths: [],
       accepted_concerns: [],
       rejected_concerns: [],
+      repository_clusters: [],
+      uncovered_clusters: [],
     };
   }
 
   const reasons: string[] = [];
-  const resolvePath = createRepositoryPathResolver(map, options?.cwd);
-  const highSignal = collectHighSignalPaths(map, resolvePath);
+  const repository = createRepositoryEvidenceContext(map, options?.cwd);
+  const resolvePath = repository.resolvePath;
+  const repositoryClusters = discoverRepositoryBehaviorClusters(repository.trackedFiles);
+  const clusterPaths = repositoryClusters.flatMap((cluster) => [
+    ...cluster.implementation_paths,
+    ...cluster.test_paths,
+  ]);
+  const highSignal = [...new Set([
+    ...collectHighSignalPaths(map, resolvePath),
+    ...clusterPaths,
+  ])].sort((left, right) => left.localeCompare(right));
   const assessments = map.concern_evidence.concerns.map((concern) =>
     assessConcern(concern, resolvePath)
   );
@@ -456,6 +638,11 @@ export function assessSpecialistEvidence(
     !coveredSet.has(candidate)
     && !exemptedSet.has(candidate)
     && !isGenericPlumbing(candidate)
+  );
+  const uncoveredSet = new Set(uncovered);
+  const uncoveredClusters = repositoryClusters.filter((cluster) =>
+    [...cluster.implementation_paths, ...cluster.test_paths]
+      .some((candidate) => uncoveredSet.has(candidate))
   );
 
   if (
@@ -520,9 +707,20 @@ export function assessSpecialistEvidence(
     );
   }
 
-  if (uncovered.length > 0) {
+  if (uncoveredClusters.length > 0) {
+    const summary = uncoveredClusters.slice(0, 8).map((cluster) => {
+      const paths = [...cluster.implementation_paths, ...cluster.test_paths];
+      return `${cluster.cluster_key} [${paths.slice(0, 4).join(", ")}${paths.length > 4 ? ", …" : ""}]`;
+    }).join("; ");
     reasons.push(
-      `high-signal repository files are neither covered by an accepted concern nor explicitly rejected: ${uncovered.slice(0, 12).join(", ")}${uncovered.length > 12 ? ", …" : ""}`,
+      `repository implementation/test clusters are neither covered by an accepted concern nor explicitly rejected: ${summary}${uncoveredClusters.length > 8 ? "; …" : ""}`,
+    );
+  }
+  const clusterPathSet = new Set(clusterPaths);
+  const unclustered = uncovered.filter((candidate) => !clusterPathSet.has(candidate));
+  if (unclustered.length > 0) {
+    reasons.push(
+      `high-signal repository files are neither covered by an accepted concern nor explicitly rejected: ${unclustered.slice(0, 12).join(", ")}${unclustered.length > 12 ? ", …" : ""}`,
     );
   }
 
@@ -537,6 +735,8 @@ export function assessSpecialistEvidence(
     accepted_concerns: accepted.map((assessment) => assessment.concern)
       .sort((left, right) => left.localeCompare(right)),
     rejected_concerns: rejected.sort((left, right) => left.concern.localeCompare(right.concern)),
+    repository_clusters: repositoryClusters,
+    uncovered_clusters: uncoveredClusters,
   };
 }
 
@@ -556,7 +756,6 @@ export function reconcileSpecialistEvidence(
   if (
     !assessment.complete
     || assessment.source !== "concern_evidence"
-    || assessment.rejected_concerns.length === 0
     || map.concern_evidence === undefined
   ) {
     return map;
@@ -566,8 +765,6 @@ export function reconcileSpecialistEvidence(
   const concerns = map.concern_evidence.concerns.filter((concern) =>
     accepted.has(concern.concern)
   );
-  if (concerns.length === map.concern_evidence.concerns.length) return map;
-
   const notConcerns = [...map.concern_evidence.not_concerns];
   const existingCandidates = new Set(notConcerns.map((entry) => entry.candidate.trim().toLowerCase()));
   for (const rejected of assessment.rejected_concerns) {
@@ -580,9 +777,17 @@ export function reconcileSpecialistEvidence(
     });
     existingCandidates.add(key);
   }
+  const openQuestions = map.open_questions.filter((question) =>
+    !PLACEHOLDER_QUESTION.test(question.trim())
+  );
+  const concernsChanged = concerns.length !== map.concern_evidence.concerns.length;
+  const rejectionsChanged = notConcerns.length !== map.concern_evidence.not_concerns.length;
+  const questionsChanged = openQuestions.length !== map.open_questions.length;
+  if (!concernsChanged && !rejectionsChanged && !questionsChanged) return map;
 
   return {
     ...map,
+    open_questions: openQuestions,
     concern_evidence: {
       concerns,
       not_concerns: notConcerns,

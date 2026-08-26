@@ -46,12 +46,18 @@ function repairPrompt(assessment: SpecialistEvidenceAssessment): string {
       .map((entry) => `${entry.concern} (${entry.reasons.join("; ")})`)
       .join(", ")
     : "none";
+  const uncoveredClusters = assessment.uncovered_clusters.length > 0
+    ? assessment.uncovered_clusters.slice(0, 12).map((cluster) =>
+      `${cluster.cluster_key}: ${[...cluster.implementation_paths, ...cluster.test_paths].join(", ")}`
+    ).join("; ")
+    : "none";
 
   return [
     "The repository's coverage map is complete, but its specialist portfolio failed the trusted semantic-quality gate.",
     `Current failures: ${assessment.reasons.slice(0, 12).join("; ")}.`,
     `Accepted concerns to preserve: ${assessment.accepted_concerns.join(", ") || "none"}.`,
     `Tracked high-signal files still unaccounted for: ${uncovered}.`,
+    `Repository implementation/test clusters still unaccounted for: ${uncoveredClusters}.`,
     `Concern candidates rejected by trusted evidence binding: ${rejected}.`,
     needsBroadDiscovery
       ? "Run concern_scout against the repository root once, then one concern_tracer for each retained candidate."
@@ -59,6 +65,7 @@ function repairPrompt(assessment: SpecialistEvidenceAssessment): string {
     "A repository path is evidence only when that exact path is a regular Git blob tracked at HEAD. Extensionless tracked files such as Jenkinsfiles are valid; fetched dependencies, ignored/generated outputs, symlinks, path templates, glob expressions, and process labels are not.",
     "Trace every retained concern through at least two ordered tracked steps and record at least one tracked core touchpoint. A flow may revisit the same orchestration file around another step; do not collapse ordered steps into a set of filenames.",
     "For each uncovered tracked path, add it to the appropriate concern as a real touchpoint/flow step, or put its exact path in not_concerns.candidate with a repository-specific reason.",
+    "For each implementation/test cluster, trace the behavior through both implementation and authoritative tests. Create a distinct specialist when the cluster is a cohesive recurring contract; otherwise attach both sides to an existing concern or explicitly reject the exact paths.",
     "Remove or retrace any rejected concern whose evidence is only fetched, generated, ignored, or conceptual. Do not preserve it merely because one supporting tracked file was mentioned.",
     "Shared files must appear under every concern they serve with the role they play in that concern; overlap is expected and must never cause merging.",
     "Do not include .agentify/** or .github/agentify/** as repository architecture, specialists, or application evidence.",
