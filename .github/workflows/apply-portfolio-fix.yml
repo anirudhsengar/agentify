@@ -1,0 +1,73 @@
+name: Apply portfolio closure fix
+
+on:
+  push:
+    branches: [fix/portfolio-closure-command-contracts]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-portfolio-closure-fix
+  cancel-in-progress: false
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Locate and apply staged implementation patch
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=b5bdc72fb36feb17ddf94b4b568312411a77625f
+          patch_file=""
+          while IFS= read -r candidate; do
+            [[ "$candidate" == ".github/workflows/apply-portfolio-fix.yml" ]] && continue
+            [[ -f "$candidate" ]] || continue
+            [[ $(stat -c %s "$candidate") -le 8000000 ]] || continue
+            decoded="$(mktemp)"
+            if base64 --decode "$candidate" > "$decoded" 2>/dev/null \
+              && grep -q '^diff --git ' "$decoded" \
+              && git apply --check "$decoded"; then
+              patch_file="$candidate"
+              mv "$decoded" /tmp/agentify-implementation.patch
+              break
+            fi
+            rm -f "$decoded"
+          done < <(git diff --name-only "$base"..HEAD)
+          if [[ -z "$patch_file" ]]; then
+            echo "No valid staged implementation patch found" >&2
+            exit 1
+          fi
+          git apply /tmp/agentify-implementation.patch
+          rm -f "$patch_file" .github/workflows/apply-portfolio-fix.yml
+          echo "patch_file=$patch_file" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Run focused specialist and memory tests
+        run: |
+          npx tsx tests/audit/specialist-completion.test.ts
+          npx tsx tests/audit/tracked-specialist-closure.test.ts
+          npx tsx tests/specialists/specialist-discovery.test.ts
+          npx tsx tests/specialists/specialist-persistence.test.ts
+          npx tsx tests/memory/memory-store.test.ts
+      - name: Run complete source suite
+        run: npm run test:all
+      - name: Commit validated implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Anirudh Sengar"
+          git config user.email "111981402+anirudhsengar@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: close repository portfolios and validate commands"
+          git push origin HEAD:fix/portfolio-closure-command-contracts
