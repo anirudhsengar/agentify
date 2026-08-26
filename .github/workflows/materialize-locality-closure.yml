@@ -30,6 +30,7 @@ jobs:
           python .github/implementation/apply-locality-aware-closure.py
           rm -rf .github/implementation
           rm -f \
+            .github/materialization-trigger \
             .github/workflows/apply-locality-aware-closure.yml \
             .github/workflows/apply-locality-closure-fix-v2.yml \
             .github/workflows/apply-locality-closure-fix.yml \
