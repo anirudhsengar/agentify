@@ -110,14 +110,20 @@ process.exit(1);
   for (const [index, profile] of profiles.entries()) {
     const fixture = path.join(fixturesRoot, profile);
     const isScaffolded = profile === "readiness-fail";
-    const first = run(nodeCommand, [bin], { cwd: fixture, env, timeout: 900_000 });
+    const first = run(nodeCommand, [bin], {
+      cwd: fixture,
+      env,
+      timeout: 900_000,
+      expectFailure: isScaffolded,
+    });
     if (isScaffolded) {
-      // A repository with no verifiable validation of its own is not abandoned:
-      // Agentify installs its own deterministic validation smoke and verifies it.
-      assert.match(
-        `${first.stdout}\n${first.stderr}`,
-        /validation-smoke|ready/,
-      );
+      // Agentify may install its own bounded smoke diagnostic, but repository
+      // automation remains fail-closed until an application-owned test passes.
+      const output = `${first.stdout}\n${first.stderr}`;
+      assert.match(output, /Agentify readiness: analyzable-only/);
+      assert.match(output, /Blocker \[missing_deterministic_validation\]/);
+      assert.match(output, /GitHub issue intake disabled/);
+      assert.match(output, /Draft PR publication disabled/);
     }
     assert.match(first.stdout, /Automatic application merge disabled/);
     for (const relative of [
@@ -139,17 +145,19 @@ process.exit(1);
     ]) assert.ok(fs.existsSync(path.join(fixture, relative)), `${profile}: ${relative}`);
     const policy = JSON.parse(fs.readFileSync(path.join(fixture, ".github/agentify-task-policy.json"), "utf-8"));
     assert.equal(policy.schema_version, "2");
-    assert.equal(policy.configured, true);
+    assert.equal(policy.configured, !isScaffolded);
     assert.equal(policy.repository.repository_id, String(987651 + index));
-    assert.notEqual(policy.validation_approval, null);
     assert.equal(policy.validation_execution.mode, "maintainer-approved-unsandboxed");
     assert.equal(policy.application_merge, "disabled");
     if (isScaffolded) {
-      const commands = policy.policy.validation_commands.map((command) => command.argv.join(" "));
-      assert.ok(
-        commands.includes("node .github/agentify/validation-smoke.mjs"),
-        `readiness-fail policy must record the scaffolded validation smoke; got: ${commands.join(", ")}`,
-      );
+      assert.equal(policy.validation_approval, null);
+      assert.equal(policy.policy, null);
+    } else {
+      assert.notEqual(policy.validation_approval, null);
+      assert.ok(policy.policy.validation_commands.some((command) => (
+        command.command_id.startsWith("test-")
+        && command.command_id !== "test-agentify-validation-smoke"
+      )), `${profile}: configured policy requires a verified repository test`);
     }
   }
 
@@ -182,13 +190,13 @@ process.exit(1);
     "installer.validation-approval-configured",
     "installer.schema-v2-fail-closed-policy-written",
     "installer.managed-runtime-installed",
-    "installer.validation-smoke-scaffolded-when-missing",
+    "installer.validation-smoke-fails-closed-without-repository-test",
     "installer.canonical-audit-map-versioned",
     "installer.transient-audit-history-ignored",
     "installer.repeated-decline-preserves-memory",
     "installer.checkout-round-trip-preserves-map",
   ]);
-  console.log(`installed one-time installer qualification passed for small, moderate, monorepo, attached-team, and validation-scaffolded fixtures (${packageJson.name}@${packageJson.version}).`);
+  console.log(`installed one-time installer qualification passed for ready fixtures and the fail-closed missing-test fixture (${packageJson.name}@${packageJson.version}).`);
 } finally {
   removeOwnedArtifact(resolvedArtifact);
   fs.rmSync(root, { recursive: true, force: true });

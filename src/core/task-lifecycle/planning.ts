@@ -4,6 +4,7 @@ import { buildLearningContext } from "../learning/context.ts";
 import type { LearningContextResult } from "../learning/contracts.ts";
 import { discoverSpecialistPortfolio } from "../specialists/discovery.ts";
 import { listTrackedFilesAtCommit, readGitHeadCommit } from "../specialists/evidence.ts";
+import { readInstalledTrustedValidationArgv } from "../specialists/trusted-commands.ts";
 import { routeSpecialistPortfolio } from "../specialists/routing.ts";
 import type {
   ProcedureDefinition,
@@ -169,6 +170,7 @@ export function loadCurrentSpecialistPortfolio(cwd: string) {
     map,
     supportingCommit,
     listTrackedFilesAtCommit(cwd, supportingCommit),
+    { trustedValidationArgv: readInstalledTrustedValidationArgv(cwd) },
   );
 }
 

@@ -138,7 +138,7 @@ function containsDirectiveProse(tokens: ReadonlyArray<CommandToken>, executableI
 }
 
 /** True only for a single, concrete argv-like command rather than prose. */
-export function isExecutableValidationCommand(value: string): boolean {
+export function executableValidationCommandArgv(value: string): string[] | null {
   const normalized = value.trim();
   if (
     normalized.length === 0
@@ -146,10 +146,10 @@ export function isExecutableValidationCommand(value: string): boolean {
     || normalized !== value
     || CONTROL_CHARACTER.test(normalized)
   ) {
-    return false;
+    return null;
   }
   const tokens = tokenizeCommand(normalized);
-  if (tokens === null || tokens.length === 0) return false;
+  if (tokens === null || tokens.length === 0) return null;
 
   let executableIndex = 0;
   while (
@@ -159,16 +159,26 @@ export function isExecutableValidationCommand(value: string): boolean {
   ) {
     executableIndex += 1;
   }
-  if (executableIndex >= tokens.length) return false;
+  if (executableIndex >= tokens.length) return null;
   const executable = tokens[executableIndex]!;
   if (
     executable.quoted
     || executable.value.startsWith("-")
     || !EXECUTABLE_TOKEN.test(executable.value)
   ) {
-    return false;
+    return null;
   }
-  return !containsDirectiveProse(tokens, executableIndex);
+  if (containsDirectiveProse(tokens, executableIndex)) return null;
+  return tokens.map((token) => token.value);
+}
+
+/** True only for a single, concrete argv-like command rather than prose. */
+export function isExecutableValidationCommand(value: string): boolean {
+  return executableValidationCommandArgv(value) !== null;
+}
+
+export function validationCommandArgvKey(argv: ReadonlyArray<string>): string {
+  return JSON.stringify(argv);
 }
 
 export function executableValidationCommands(

@@ -40,6 +40,12 @@ import {
   buildRepositoryTaskPolicyConfiguration,
   readRepositoryTaskPolicyConfiguration,
 } from "./task-policy.ts";
+import {
+  AGENTIFY_VALIDATION_SMOKE_COMMAND_ID,
+  isRepositoryOwnedValidationCommand,
+  isVerifiedValidationCommand,
+  trustedValidationArgv,
+} from "./validation-contract.ts";
 
 export interface FinalizeOneTimeInstallationInput {
   cwd: string;
@@ -275,18 +281,31 @@ function runInstallationCanaries(
   ]) add(`runtime:${file}`, fs.existsSync(path.join(cwd, file)), `${file} is installed`);
 
   const configuration = readRepositoryTaskPolicyConfiguration(cwd);
+  const expectsReadyPolicy = preflight.disposition === "ready";
   let policyValid = false;
-  if (configuration?.configured === true && configuration.policy) {
+  if (expectsReadyPolicy && configuration?.configured === true && configuration.policy) {
     try {
       validateTaskLifecyclePolicy(configuration.policy);
       policyValid = configuration.repository?.repository_id === preflight.identity?.repository_id
-        && configuration.repository?.current_commit === preflight.identity?.current_commit;
+        && configuration.repository?.current_commit === preflight.identity?.current_commit
+        && configuration.policy.validation_commands.some((command) =>
+          command.command_id.startsWith("test-")
+          && command.command_id !== AGENTIFY_VALIDATION_SMOKE_COMMAND_ID
+        );
     } catch {
       policyValid = false;
     }
+  } else if (!expectsReadyPolicy) {
+    policyValid = configuration?.configured === false && configuration.policy === null;
   }
-  add("repository-task-policy", policyValid, "repository-specific typed task policy is configured and identity-bound");
-  if (preflight.identity && configuration?.policy) {
+  add(
+    "repository-task-policy",
+    policyValid,
+    expectsReadyPolicy
+      ? "repository-specific typed task policy is configured, identity-bound, and carries a repository test"
+      : "repository task policy is deliberately fail-closed while readiness blockers remain",
+  );
+  if (expectsReadyPolicy && preflight.identity && configuration?.policy) {
     const lifecycle = assessTaskReadiness({
       repository: {
         repository_id: preflight.identity.repository_id,
@@ -311,6 +330,12 @@ function runInstallationCanaries(
       issue_text: "Deterministic local lifecycle installation canary. Do not merge or deploy.",
     });
     add("lifecycle-readiness", lifecycle.disposition === "ready", `lifecycle canary disposition is ${lifecycle.disposition}`);
+  } else if (!expectsReadyPolicy) {
+    add(
+      "lifecycle-readiness",
+      configuration?.configured === false && configuration.policy === null,
+      "issue intake and draft publication are intentionally disabled",
+    );
   } else {
     add("lifecycle-readiness", false, "verified identity or configured task policy is missing");
   }
@@ -324,6 +349,18 @@ function withBlocker(
   remediation: string,
 ): void {
   blockers.push({ code, message, remediation });
+}
+
+function preflightForInstalledPolicy(
+  preflight: RepositoryInstallationPreflight,
+  blockers: ReadonlyArray<InstallerBlocker>,
+): RepositoryInstallationPreflight {
+  if (preflight.disposition === "ready" && blockers.length === 0) return preflight;
+  return {
+    ...preflight,
+    disposition: preflight.analysis_allowed ? "analyzable-only" : "blocked",
+    blockers: [...blockers],
+  };
 }
 
 export function finalizeOneTimeInstallation(
@@ -350,7 +387,6 @@ export function finalizeOneTimeInstallation(
   let specialistSync: RepositorySpecialistSyncResult = { status: "memory_absent" };
   try {
     initializePersistentTeam(input.cwd, effectivePreflight);
-    specialistSync = synchronizeRepositorySpecialists(input.cwd);
   } catch (error) {
     withBlocker(
       blockers,
@@ -362,38 +398,48 @@ export function finalizeOneTimeInstallation(
     );
   }
 
-  try {
-    const writes = installScaffoldRuntime({
-      cwd: input.cwd,
-      packageRoot: packageRoot(),
-      taskPolicyConfiguration: buildRepositoryTaskPolicyConfiguration(
-        effectivePreflight,
-        validationApproval ?? null,
-        input.cwd,
-      ),
-    });
-    const conflicts = writes.filter(
-      (write) => write.action === "alongside",
-    );
-    if (conflicts.length > 0) {
-      withBlocker(
-        blockers,
-        "user_owned_workflow_conflict",
-        `User-owned files conflict with ${conflicts.length} required Agentify installation path(s).`,
-        "Review the preserved *.agentify.* files and explicitly resolve each conflict.",
-      );
+  const installManagedScaffold = (
+    policyPreflight: RepositoryInstallationPreflight,
+  ): void => {
+    try {
+      const writes = installScaffoldRuntime({
+        cwd: input.cwd,
+        packageRoot: packageRoot(),
+        taskPolicyConfiguration: buildRepositoryTaskPolicyConfiguration(
+          policyPreflight,
+          validationApproval ?? null,
+          input.cwd,
+        ),
+      });
+      const conflicts = writes.filter((write) => write.action === "alongside");
+      if (
+        conflicts.length > 0
+        && !blockers.some((blocker) => blocker.code === "user_owned_workflow_conflict")
+      ) {
+        withBlocker(
+          blockers,
+          "user_owned_workflow_conflict",
+          `User-owned files conflict with ${conflicts.length} required Agentify installation path(s).`,
+          "Review the preserved *.agentify.* files and explicitly resolve each conflict.",
+        );
+      }
+    } catch (error) {
+      if (!blockers.some((blocker) => blocker.code === "installation_canary_failed")) {
+        withBlocker(
+          blockers,
+          "installation_canary_failed",
+          error instanceof Error ? error.message : String(error),
+          "Rebuild the exact Agentify package and repair only verified Agentify-owned runtime paths.",
+        );
+      }
     }
-  } catch (error) {
-    withBlocker(
-      blockers,
-      "installation_canary_failed",
-      error instanceof Error ? error.message : String(error),
-      "Rebuild the exact Agentify package and repair only verified Agentify-owned runtime paths.",
-    );
-  }
+  };
+
+  let policyPreflight = preflightForInstalledPolicy(effectivePreflight, blockers);
+  installManagedScaffold(policyPreflight);
 
   if (effectivePreflight.disposition === "ready") {
-    const verified = effectivePreflight.commands.filter((c) => c.kind !== "install" && c.required);
+    const verified = effectivePreflight.commands.filter(isVerifiedValidationCommand);
     for (const cmd of verified) {
       const res = (input.runner ?? DEFAULT_INSTALLER_PROCESS_RUNNER).run({
         program: cmd.argv[0]!,
@@ -413,7 +459,28 @@ export function finalizeOneTimeInstallation(
     installedValidationCommands = effectivePreflight.commands;
   }
 
-  const canary = runInstallationCanaries(input.cwd, effectivePreflight, specialistSync);
+  // Persist the policy state that actually survived installation-time checks,
+  // then derive specialists and procedures from that exact trusted command set.
+  policyPreflight = preflightForInstalledPolicy(effectivePreflight, blockers);
+  installManagedScaffold(policyPreflight);
+  try {
+    specialistSync = synchronizeRepositorySpecialists(input.cwd, {
+      trustedValidationArgv: policyPreflight.disposition === "ready"
+        ? trustedValidationArgv(effectivePreflight.commands)
+        : [],
+    });
+  } catch (error) {
+    withBlocker(
+      blockers,
+      error instanceof Error && /ambiguous/i.test(error.message)
+        ? "ambiguous_agentify_state"
+        : "installation_canary_failed",
+      error instanceof Error ? error.message : String(error),
+      "Resolve the reported persistent-state ownership or provenance problem without deleting retained evidence.",
+    );
+  }
+
+  const canary = runInstallationCanaries(input.cwd, policyPreflight, specialistSync);
   if (!canary.passed) {
     withBlocker(
       blockers,
@@ -423,7 +490,12 @@ export function finalizeOneTimeInstallation(
     );
   }
 
-  if (effectivePreflight.identity && blockers.length === 0 && canary.passed) {
+  if (
+    policyPreflight.disposition === "ready"
+    && effectivePreflight.identity
+    && blockers.length === 0
+    && canary.passed
+  ) {
     try {
       configureGitHubInstallation({
         cwd: input.cwd,
@@ -446,15 +518,36 @@ export function finalizeOneTimeInstallation(
     }
   }
 
+  const ready = effectivePreflight.disposition === "ready"
+    && blockers.length === 0
+    && canary.passed;
+  if (!ready) {
+    // The committed artifacts must agree with the report. Never leave an
+    // executable policy or command-bearing procedures behind after any later
+    // readiness failure.
+    policyPreflight = preflightForInstalledPolicy(effectivePreflight, blockers);
+    installManagedScaffold(policyPreflight);
+    try {
+      specialistSync = synchronizeRepositorySpecialists(input.cwd, {
+        trustedValidationArgv: [],
+      });
+    } catch {
+      // The original specialist/canary blocker already records the actionable
+      // state failure; this best-effort projection only removes stale authority.
+    }
+  }
+
   const synchronized = specialistSync.status === "synchronized" ? specialistSync : null;
-  const ready = effectivePreflight.disposition === "ready" && blockers.length === 0 && canary.passed;
   return {
     disposition: ready ? "ready" : effectivePreflight.analysis_allowed ? "analyzable-only" : "blocked",
     repository: effectivePreflight.identity,
     specialists_installed: synchronized?.portfolio.specialists.length ?? 0,
     specialist_warnings: synchronized?.portfolio.warnings ?? [],
     procedures_installed: synchronized?.portfolio.procedures.length ?? 0,
-    validation_commands_verified: installedValidationCommands.filter((command) => command.assessment === "verified").length,
+    validation_commands_verified: installedValidationCommands
+      .filter(isVerifiedValidationCommand)
+      .filter(isRepositoryOwnedValidationCommand)
+      .length,
     github_issue_intake_enabled: ready,
     draft_pr_publication_enabled: ready,
     automatic_knowledge_refresh_enabled: ready,

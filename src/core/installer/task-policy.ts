@@ -15,6 +15,7 @@ import type {
   RepositoryValidationApproval,
   RepositoryValidationExecution,
 } from "./contracts.ts";
+import { verifiedRepositoryTestCommands } from "./validation-contract.ts";
 
 const TASK_POLICY_RELATIVE_PATH = ".github/agentify-task-policy.json";
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -195,6 +196,7 @@ export function buildRepositoryTaskPolicyConfiguration(
   cwd = process.cwd(),
 ): RepositoryTaskPolicyConfiguration {
   const commands = validationCommands(preflight);
+  const hasVerifiedRepositoryTest = verifiedRepositoryTestCommands(preflight.commands).length > 0;
   const approvalCurrent = repositoryValidationApprovalCurrent({
     cwd,
     preflight,
@@ -203,6 +205,7 @@ export function buildRepositoryTaskPolicyConfiguration(
   const configured = preflight.disposition === "ready"
     && preflight.identity !== null
     && commands.length > 0
+    && hasVerifiedRepositoryTest
     && preflight.allowed_write_paths.length > 0
     && approvalCurrent;
   if (!configured) {

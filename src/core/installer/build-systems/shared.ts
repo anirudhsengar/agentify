@@ -189,6 +189,7 @@ export function collectBlockers(
     command.assessment === "unsafe" && !/credential|service endpoint/.test(command.detail)
   ));
   const validation = commands.filter((command) => command.kind !== "install" && command.required);
+  const repositoryTests = validation.filter((command) => command.kind === "test");
   if (unsafeProduction) {
     blockers.push({
       code: "unsafe_production_credentials",
@@ -203,13 +204,15 @@ export function collectBlockers(
       remediation: "Separate deterministic validation from external mutation and deployment commands.",
     });
   }
-  if (validation.length === 0) {
+  if (repositoryTests.length === 0) {
     blockers.push({
       code: "missing_deterministic_validation",
-      message: "No deterministic test, typecheck, or lint command was discovered.",
-      remediation: "Add at least one deterministic application-owned validation command.",
+      message: "No deterministic repository test command was discovered.",
+      remediation:
+        "Add at least one application-owned test command. Formatting, lint, typecheck, build, and Agentify smoke checks are supporting gates, not substitutes for behavioral validation.",
     });
-  } else if (runValidation && commands.some((command) => (
+  }
+  if (runValidation && commands.some((command) => (
     command.kind !== "install" && command.required && command.assessment === "failed"
   ))) {
     const failing = commands
