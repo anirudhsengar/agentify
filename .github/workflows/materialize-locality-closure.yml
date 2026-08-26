@@ -27,6 +27,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The payload was authored against a fixture that used a literal
+          # newline inside one template string. Current main uses the equivalent
+          # escaped newline, so normalize that single fixture before applying.
+          python - <<'PY'
+          from pathlib import Path
+
+          target = Path("tests/audit/tracked-specialist-closure.test.ts")
+          text = target.read_text()
+          old = 'fs.writeFileSync(destination, `${JSON.stringify(aqaShapedMap(), null, 2)}\\n`);'
+          new = 'fs.writeFileSync(destination, `${JSON.stringify(aqaShapedMap(), null, 2)}\n`);'
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one stale repair fixture, found {text.count(old)}")
+          target.write_text(text.replace(old, new, 1))
+          PY
           python .github/implementation/apply-locality-aware-closure.py
           rm -rf .github/implementation
           rm -f \
