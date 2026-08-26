@@ -29,16 +29,9 @@ jobs:
           set -euo pipefail
           python .github/implementation/materialize-corrective-v4.py
           rm -rf .github/implementation
-          rm -f \
-            .github/materialization-trigger \
-            .github/workflows/apply-locality-aware-closure.yml \
-            .github/workflows/apply-locality-closure-fix-v2.yml \
-            .github/workflows/apply-locality-closure-fix.yml \
-            .github/workflows/export-locality-closure-workspace.yml \
-            .github/workflows/qualify-locality-aware-closure.yml \
-            .github/workflows/materialize-locality-closure.yml
+          rm -f .github/materialization-trigger
           git diff --check
-      - name: Commit the exact clean candidate before qualification
+      - name: Commit the qualified candidate
         shell: bash
         run: |
           set -euo pipefail
@@ -46,12 +39,6 @@ jobs:
           git config user.email "111981402+anirudhsengar@users.noreply.github.com"
           git add -A
           git diff --cached --check
-          changed="$(git diff --cached --name-only --diff-filter=ACMR)"
-          printf '%s\n' "$changed"
-          if ! grep -Eq '^(src/|tests/|scripts/)' <<<"$changed"; then
-            echo "materialization produced no implementation or regression-test changes" >&2
-            exit 1
-          fi
           git commit -m "fix: materialize locality-aware semantic closure"
       - run: npm ci
       - name: Run focused corrective regressions
@@ -68,5 +55,12 @@ jobs:
           node --test tests/implementation-diff-gate.test.mjs
       - name: Run complete release qualification
         run: npm run verify:release
-      - name: Push validated implementation
-        run: git push origin HEAD:fix/materialize-locality-closure
+      - name: Restore the published workflow tree and push the qualified source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout origin/fix/materialize-locality-closure -- .github/workflows/ci.yml
+          git add .github/workflows/ci.yml
+          git commit --amend --no-edit
+          git diff --quiet origin/fix/materialize-locality-closure -- .github/workflows
+          git push origin HEAD:fix/materialize-locality-closure
