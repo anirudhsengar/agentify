@@ -1,0 +1,70 @@
+name: Apply locality-aware semantic closure fix
+
+on:
+  push:
+    branches: [fix/locality-aware-semantic-closure]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-locality-aware-semantic-closure
+  cancel-in-progress: false
+
+jobs:
+  apply-commit-qualify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Apply exact implementation patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/implementation/locality-closure.patch.gz.b64.part* \
+            | base64 --decode > /tmp/locality-closure.patch.gz
+          echo "ec144e73ddf3b5c763f03422c85827ee9534860e59e3450f08c8c0771a75c106  /tmp/locality-closure.patch.gz" \
+            | sha256sum --check
+          gzip --test /tmp/locality-closure.patch.gz
+          gzip --decompress --stdout /tmp/locality-closure.patch.gz > /tmp/locality-closure.patch
+          git apply --check /tmp/locality-closure.patch
+          git apply /tmp/locality-closure.patch
+          rm -f \
+            .github/implementation/locality-closure.patch.gz.b64.part* \
+            .github/workflows/apply-locality-closure-fix.yml \
+            .github/workflows/export-locality-closure-workspace.yml
+          rmdir .github/implementation 2>/dev/null || true
+          git diff --check
+      - name: Commit the exact candidate before package qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Anirudh Sengar"
+          git config user.email "111981402+anirudhsengar@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: make semantic closure locality-aware"
+          test -z "$(git status --porcelain)"
+      - run: npm ci
+      - name: Run complete release qualification
+        id: qualify
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run verify:release 2>&1 | tee /tmp/locality-closure-qualification.log
+      - name: Upload qualification diagnostics
+        if: failure() && steps.qualify.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: locality-closure-qualification-failure
+          path: /tmp/locality-closure-qualification.log
+          if-no-files-found: error
+          retention-days: 2
+      - name: Push qualified implementation
+        shell: bash
+        run: git push origin HEAD:fix/locality-aware-semantic-closure
