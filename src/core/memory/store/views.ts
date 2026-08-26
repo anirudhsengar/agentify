@@ -67,7 +67,7 @@ export function readAgentMemoryView(
   agentId: string,
   options: { asOf?: string; includeInactive?: boolean } = {},
 ): AgentMemoryView {
-  readTeamMemoryManifest(cwd);
+  const manifest = readTeamMemoryManifest(cwd);
   let identity: AgentIdentity;
   let records: MemoryRecord[];
   const asOf = options.asOf ?? new Date().toISOString();
@@ -75,17 +75,43 @@ export function readAgentMemoryView(
     identity = readAgentIdentity(cwd, agentId);
     records = listMemoryRecordsInternal(cwd);
   } else {
+    const cutoff = Date.parse(options.asOf);
+    if (!Number.isFinite(cutoff)) {
+      throw new TeamMemoryError("invalid_input", `invalid point-in-time timestamp: ${options.asOf}`);
+    }
     latestEventsByEntity(cwd);
     const events = eventsAsOf(cwd, options.asOf);
     const identityEvent = events.get(`agent_identity:${agentId}`);
-    if (!identityEvent || !("agent_id" in identityEvent.after)) {
-      throw new TeamMemoryError("not_found", `agent identity did not exist at ${options.asOf}: ${agentId}`);
+    if (identityEvent && "agent_id" in identityEvent.after) {
+      identity = identityEvent.after;
+    } else {
+      const currentIdentity = readAgentIdentity(cwd, agentId);
+      if (
+        manifest.history_mode !== "snapshot-v1"
+        || currentIdentity.revision !== 1
+        || Date.parse(currentIdentity.created_at) > cutoff
+      ) {
+        throw new TeamMemoryError("not_found", `agent identity did not exist at ${options.asOf}: ${agentId}`);
+      }
+      identity = currentIdentity;
     }
-    identity = identityEvent.after;
+
     records = [...events.values()]
       .filter((event) => event.entity_type === "memory_record")
       .map((event) => event.after)
       .filter((after): after is MemoryRecord => "memory_id" in after);
+    if (manifest.history_mode === "snapshot-v1") {
+      const represented = new Set(records.map((record) => record.memory_id));
+      for (const record of listMemoryRecordsInternal(cwd)) {
+        if (
+          record.revision === 1
+          && !represented.has(record.memory_id)
+          && Date.parse(record.created_at) <= cutoff
+        ) {
+          records.push(record);
+        }
+      }
+    }
   }
   const visible = (() => {
     if (identity.role === "orchestrator" || identity.role === "knowledge_maintainer") {

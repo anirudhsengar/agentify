@@ -38,6 +38,11 @@ export interface EvidenceProvenanceContext {
 export interface MemoryStoreOptions {
   now?: () => Date;
   staleLockMs?: number;
+  /**
+   * Persist revision-one entities as current snapshots without duplicating them
+   * into history. The first later mutation backfills the immutable baseline.
+   */
+  deferInitialHistory?: boolean;
   /** Test seam invoked after the initialization journal is durable. */
   afterInitializationJournalWrite?: (journalPath: string) => void;
   /** Test seam invoked after an immutable history event is durable. */

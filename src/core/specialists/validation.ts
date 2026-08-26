@@ -18,6 +18,7 @@ import {
   type SpecialistDefinition,
   type SpecialistPortfolio,
 } from "./contracts.ts";
+import { isExecutableValidationCommand } from "./commands.ts";
 
 const COMMIT_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const MAX_TEXT = 4_000;
@@ -153,8 +154,13 @@ function assertSpecialist(
   assertNormalizedStrings(
     definition.validation_commands,
     `specialist ${definition.specialist_id} validation commands`,
-    { maximumItems: 64 },
+    { allowEmpty: true, maximumItems: 64 },
   );
+  for (const command of definition.validation_commands) {
+    if (!isExecutableValidationCommand(command)) {
+      fail(`specialist ${definition.specialist_id} has non-executable validation command ${JSON.stringify(command)}`);
+    }
+  }
   assertNormalizedStrings(definition.evidence_paths, `specialist ${definition.specialist_id} evidence paths`, {
     paths: true,
     maximumItems: 256,
@@ -204,6 +210,11 @@ function assertProcedure(
     `procedure ${definition.procedure_id} allowed commands`,
     { allowEmpty: true, maximumItems: 64 },
   );
+  for (const command of definition.allowed_commands) {
+    if (!isExecutableValidationCommand(command)) {
+      fail(`procedure ${definition.procedure_id} has non-executable allowed command ${JSON.stringify(command)}`);
+    }
+  }
   assertNormalizedStrings(
     definition.expected_file_patterns,
     `procedure ${definition.procedure_id} file patterns`,
@@ -219,6 +230,11 @@ function assertProcedure(
     `procedure ${definition.procedure_id} validation commands`,
     { maximumItems: 64 },
   );
+  for (const command of definition.validation_commands) {
+    if (!isExecutableValidationCommand(command)) {
+      fail(`procedure ${definition.procedure_id} has non-executable validation command ${JSON.stringify(command)}`);
+    }
+  }
   if (definition.recovery_steps.length === 0 || definition.recovery_steps.length > 64) {
     fail(`procedure ${definition.procedure_id} recovery steps are outside the bounded contract`);
   }

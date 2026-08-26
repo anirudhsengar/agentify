@@ -422,6 +422,10 @@ export const TeamMemoryManifestSchema = Type.Object({
   revision: Type.Integer({ minimum: 1 }),
   root: Type.Literal(".agentify"),
   repository_id: Type.String({ minLength: 1, maxLength: 512 }),
+  history_mode: Type.Optional(Type.Union([
+    Type.Literal("full"),
+    Type.Literal("snapshot-v1"),
+  ])),
   created_at: MemoryTimestampSchema,
   updated_at: MemoryTimestampSchema,
   entries: Type.Array(TeamMemoryManifestEntrySchema, {

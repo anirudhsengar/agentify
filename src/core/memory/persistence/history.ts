@@ -48,6 +48,8 @@ import {
 import {
   assertVisibleWriteCapacity,
   directoryEntriesIfPresent,
+  readManifestIfPresent,
+  type VisibleWriteProjection,
 } from "./manifest.ts";
 
 export function readCandidateDecisionIfPresent(
@@ -88,6 +90,158 @@ export function historyRelativePath(after: AgentIdentity | MemoryRecord): string
     : memoryHistoryRelativePath(after.memory_id, after.revision);
 }
 
+function snapshotV1HistoryEnabled(cwd: string, options?: MemoryStoreOptions): boolean {
+  const manifest = readManifestIfPresent(cwd);
+  if (manifest !== null) return manifest.history_mode === "snapshot-v1";
+  return options?.deferInitialHistory === true;
+}
+
+function historyFileExists(cwd: string, relativePath: string): boolean {
+  const absolute = path.join(repositoryRoot(cwd), ...relativePath.split("/"));
+  try {
+    const stat = fs.lstatSync(absolute);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      throw new TeamMemoryError("unsafe_path", `${relativePath} must be a regular immutable event`);
+    }
+    return true;
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") return false;
+    throw error;
+  }
+}
+
+function readDeferredBaseline(
+  cwd: string,
+  after: AgentIdentity | MemoryRecord,
+): AgentIdentity | MemoryRecord {
+  const relativePath = currentRelativePath(after);
+  const parsed = readRelativeJson(cwd, relativePath);
+  const baseline = "agent_id" in after
+    ? validateIdentitySemantics(
+        validateSchema<AgentIdentity>(AgentIdentitySchema, parsed, "deferred identity baseline"),
+      )
+    : validateRecordSemantics(
+        validateSchema<MemoryRecord>(MemoryRecordSchema, parsed, "deferred memory baseline"),
+      );
+  if (baseline.revision !== 1) {
+    throw new TeamMemoryError(
+      "corrupt_state",
+      `${relativePath} cannot backfill revision one from current revision ${baseline.revision}`,
+    );
+  }
+  if (
+    ("agent_id" in after && (!("agent_id" in baseline) || baseline.agent_id !== after.agent_id))
+    || (!("agent_id" in after) && ("agent_id" in baseline || baseline.memory_id !== after.memory_id))
+  ) {
+    throw new TeamMemoryError("corrupt_state", `${relativePath} does not match its deferred baseline entity`);
+  }
+  return baseline;
+}
+
+interface VersionedEntityWritePlan {
+  currentPath: string;
+  current: AgentIdentity | MemoryRecord;
+  baselinePath: string | null;
+  baselineEvent: MemoryMutationEvent | null;
+  historyPath: string | null;
+  event: MemoryMutationEvent | null;
+}
+
+function versionedEntityWritePlan(
+  cwd: string,
+  after: AgentIdentity | MemoryRecord,
+  operation: MemoryMutationOperation,
+  actor: string,
+  reason: string,
+  occurredAt: string,
+  beforeDigest: string | null,
+  options?: MemoryStoreOptions,
+): VersionedEntityWritePlan {
+  const currentPath = currentRelativePath(after);
+  if (snapshotV1HistoryEnabled(cwd, options) && after.revision === 1) {
+    return {
+      currentPath,
+      current: after,
+      baselinePath: null,
+      baselineEvent: null,
+      historyPath: null,
+      event: null,
+    };
+  }
+
+  let baselinePath: string | null = null;
+  let baselineEvent: MemoryMutationEvent | null = null;
+  if (snapshotV1HistoryEnabled(cwd, options) && after.revision > 1) {
+    const candidatePath = "agent_id" in after
+      ? identityHistoryRelativePath(after.agent_id, 1)
+      : memoryHistoryRelativePath(after.memory_id, 1);
+    if (!historyFileExists(cwd, candidatePath)) {
+      const baseline = readDeferredBaseline(cwd, after);
+      baselinePath = candidatePath;
+      baselineEvent = makeMutationEvent(
+        "agent_id" in baseline ? "agent_identity" : "memory_record",
+        baseline,
+        "agent_id" in baseline ? "create" : "accept",
+        "agent_id" in baseline && baseline.role !== "specialist"
+          ? "agentify-installer"
+          : "knowledge-maintainer",
+        "materialize deferred revision-one bootstrap baseline",
+        baseline.created_at,
+        null,
+      );
+    }
+  }
+
+  const event = makeMutationEvent(
+    "agent_id" in after ? "agent_identity" : "memory_record",
+    after,
+    operation,
+    actor,
+    reason,
+    occurredAt,
+    beforeDigest,
+  );
+  return {
+    currentPath,
+    current: after,
+    baselinePath,
+    baselineEvent,
+    historyPath: historyRelativePath(after),
+    event,
+  };
+}
+
+export function versionedEntityWriteProjections(
+  cwd: string,
+  after: AgentIdentity | MemoryRecord,
+  operation: MemoryMutationOperation,
+  actor: string,
+  reason: string,
+  occurredAt: string,
+  beforeDigest: string | null,
+  options?: MemoryStoreOptions,
+): VisibleWriteProjection[] {
+  const plan = versionedEntityWritePlan(
+    cwd,
+    after,
+    operation,
+    actor,
+    reason,
+    occurredAt,
+    beforeDigest,
+    options,
+  );
+  const projections: VisibleWriteProjection[] = [];
+  if (plan.baselinePath !== null && plan.baselineEvent !== null) {
+    projections.push({ relativePath: plan.baselinePath, value: plan.baselineEvent });
+  }
+  if (plan.historyPath !== null && plan.event !== null) {
+    projections.push({ relativePath: plan.historyPath, value: plan.event });
+  }
+  projections.push({ relativePath: plan.currentPath, value: plan.current });
+  return projections;
+}
+
 export function persistVersionedEntityInternal(
   cwd: string,
   after: AgentIdentity | MemoryRecord,
@@ -98,27 +252,40 @@ export function persistVersionedEntityInternal(
   beforeDigest: string | null,
   options?: MemoryStoreOptions,
 ): void {
-  const event = makeMutationEvent(
-    "agent_id" in after ? "agent_identity" : "memory_record",
+  const plan = versionedEntityWritePlan(
+    cwd,
     after,
     operation,
     actor,
     reason,
     occurredAt,
     beforeDigest,
+    options,
   );
-  const historyPath = historyRelativePath(after);
-  const currentPath = currentRelativePath(after);
-  assertVisibleWriteCapacity(cwd, [
-    { relativePath: historyPath, value: event },
-    { relativePath: currentPath, value: after },
-  ]);
-  writeJsonImmutable(cwd, historyPath, event);
-  options?.afterHistoryWrite?.(
-    path.join(repositoryRoot(cwd), ...historyPath.split("/")),
-    path.join(repositoryRoot(cwd), ...currentPath.split("/")),
+  assertVisibleWriteCapacity(
+    cwd,
+    versionedEntityWriteProjections(
+      cwd,
+      after,
+      operation,
+      actor,
+      reason,
+      occurredAt,
+      beforeDigest,
+      options,
+    ),
   );
-  writeJsonAtomic(cwd, currentPath, after, options);
+  if (plan.baselinePath !== null && plan.baselineEvent !== null) {
+    writeJsonImmutable(cwd, plan.baselinePath, plan.baselineEvent);
+  }
+  if (plan.historyPath !== null && plan.event !== null) {
+    writeJsonImmutable(cwd, plan.historyPath, plan.event);
+    options?.afterHistoryWrite?.(
+      path.join(repositoryRoot(cwd), ...plan.historyPath.split("/")),
+      path.join(repositoryRoot(cwd), ...plan.currentPath.split("/")),
+    );
+  }
+  writeJsonAtomic(cwd, plan.currentPath, plan.current, options);
 }
 
 export function recognizableVisibleStateExistsWithoutManifest(cwd: string): boolean {
@@ -220,16 +387,8 @@ export function assertCandidateAcceptanceCapacity(
   occurredAt: string,
   beforeDigest: string | null,
   candidate: MemoryCandidate,
+  options?: MemoryStoreOptions,
 ): void {
-  const mutation = makeMutationEvent(
-    "memory_record",
-    after,
-    operation,
-    actor,
-    reason,
-    occurredAt,
-    beforeDigest,
-  );
   const decision = createCandidateDecisionEvent(
     candidate,
     "accepted",
@@ -239,8 +398,16 @@ export function assertCandidateAcceptanceCapacity(
     occurredAt,
   );
   assertVisibleWriteCapacity(cwd, [
-    { relativePath: historyRelativePath(after), value: mutation },
-    { relativePath: currentRelativePath(after), value: after },
+    ...versionedEntityWriteProjections(
+      cwd,
+      after,
+      operation,
+      actor,
+      reason,
+      occurredAt,
+      beforeDigest,
+      options,
+    ),
     { relativePath: candidateDecisionRelativePath(candidate.candidate_id), value: decision },
   ]);
 }

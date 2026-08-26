@@ -236,6 +236,7 @@ export function acceptMemoryCandidate(
         timestamp,
         duplicate.content_digest,
         candidate,
+        options,
       );
       persistVersionedEntityInternal(
         cwd,
@@ -281,6 +282,7 @@ export function acceptMemoryCandidate(
       timestamp,
       null,
       candidate,
+      options,
     );
     persistVersionedEntityInternal(
       cwd,
