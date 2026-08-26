@@ -27,7 +27,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python .github/implementation/materialize-corrective-v3.py
+          python .github/implementation/materialize-corrective-v4.py
           rm -rf .github/implementation
           rm -f \
             .github/materialization-trigger \
@@ -63,7 +63,8 @@ jobs:
             tests/audit/locality-aware-semantic-closure.test.ts \
             tests/audit/repository-cluster-closure.test.ts \
             tests/audit/tracked-specialist-closure.test.ts \
-            tests/audit/specialist-completion.test.ts
+            tests/audit/specialist-completion.test.ts \
+            tests/release-safety.test.ts
           node --test tests/implementation-diff-gate.test.mjs
       - name: Run complete release qualification
         run: npm run verify:release
