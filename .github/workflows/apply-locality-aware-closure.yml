@@ -23,18 +23,20 @@ jobs:
         with:
           node-version: "22.19.0"
           cache: npm
-      - name: Apply implementation
+      - name: Apply actual implementation and remove every staging artifact
         shell: bash
         run: |
           set -euo pipefail
           python .github/implementation/apply-locality-aware-closure.py
+          rm -rf .github/implementation
           rm -f \
-            .github/implementation/apply-locality-aware-closure.py \
             .github/workflows/apply-locality-aware-closure.yml \
-            .github/workflows/export-locality-closure-workspace.yml
-          rmdir .github/implementation 2>/dev/null || true
+            .github/workflows/apply-locality-closure-fix-v2.yml \
+            .github/workflows/apply-locality-closure-fix.yml \
+            .github/workflows/export-locality-closure-workspace.yml \
+            .github/workflows/qualify-locality-aware-closure.yml
           git diff --check
-      - name: Commit exact candidate before qualification
+      - name: Commit exact clean candidate before qualification
         shell: bash
         run: |
           set -euo pipefail
@@ -42,7 +44,13 @@ jobs:
           git config user.email "111981402+anirudhsengar@users.noreply.github.com"
           git add -A
           git diff --cached --check
-          git commit -m "fix: make semantic closure locality aware"
+          changed="$(git diff --cached --name-only --diff-filter=ACMR)"
+          printf '%s\n' "$changed"
+          if ! grep -Eq '^(src/|tests/)' <<<"$changed"; then
+            echo "implementation staging did not materialize source and regression tests" >&2
+            exit 1
+          fi
+          git commit -m "fix: materialize locality-aware semantic closure"
       - run: npm ci
       - name: Run focused regressions
         shell: bash
