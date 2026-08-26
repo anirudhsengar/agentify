@@ -1,6 +1,8 @@
 name: Materialize locality-aware closure
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [fix/materialize-locality-closure]
 
@@ -13,11 +15,12 @@ concurrency:
 
 jobs:
   materialize-qualify-push:
-    if: github.event.head_commit.message == 'ci: materialize locality closure implementation'
+    if: github.event_name == 'pull_request' || github.event.head_commit.message == 'ci: materialize locality closure implementation'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: fix/materialize-locality-closure
           fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
