@@ -110,7 +110,12 @@ process.exit(1);
   for (const [index, profile] of profiles.entries()) {
     const fixture = path.join(fixturesRoot, profile);
     const isScaffolded = profile === "readiness-fail";
-    const first = run(nodeCommand, [bin], { cwd: fixture, env, timeout: 900_000 });
+    const first = run(nodeCommand, [bin], {
+      cwd: fixture,
+      env,
+      timeout: 900_000,
+      expectFailure: isScaffolded,
+    });
     if (isScaffolded) {
       // Agentify may install its own bounded smoke diagnostic, but repository
       // automation remains fail-closed until an application-owned test passes.
