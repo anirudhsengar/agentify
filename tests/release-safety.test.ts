@@ -165,7 +165,14 @@ async function testReleaseVerificationContractIsComplete(): Promise<void> {
     scripts["test:package"],
     "node tests/package/exact-artifact-qualification.mjs",
   );
-  assert.equal(scripts["verify:source"], "npm run typecheck && npm run test:all");
+  assert.equal(
+    scripts["verify:source"],
+    "npm run verify:repository-clean && npm run typecheck && npm run test:all",
+  );
+  assert.equal(
+    scripts["verify:repository-clean"],
+    "node scripts/verify-implementation-diff.mjs",
+  );
   assert.equal(scripts["verify:scaffold"], "npm run test:scaffold-e2e");
   assert.equal(scripts["verify:package"], "npm run test:package");
   assert.equal(scripts["verify:security"], "npm audit --audit-level=high");

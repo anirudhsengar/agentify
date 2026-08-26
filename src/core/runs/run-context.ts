@@ -1,3 +1,4 @@
+import type { AgentifyLog } from "../audit/log.ts";
 import type {
   AgentifyConfig,
   AgentifyUi,
@@ -11,4 +12,7 @@ export interface RunContext {
   runtime: AgentRuntime;
   config: AgentifyConfig;
   signal?: AbortSignal;
+  /** Internal ownership handoff used to keep coverage and semantic repair in one log. */
+  auditLog?: AgentifyLog;
+  deferAuditLogCompletion?: boolean;
 }

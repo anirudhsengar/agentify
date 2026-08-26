@@ -385,20 +385,28 @@ test("an existing tracked-complete map reconciles without rerunning the model", 
   }
 });
 
-class LastPassRepairRuntime implements AgentRuntime {
+class ProgressiveRepairRuntime implements AgentRuntime {
   baseCalls = 0;
   repairCalls = 0;
 
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     if (/trusted semantic-quality gate/i.test(options.userPrompt)) {
       this.repairCalls += 1;
-      if (this.repairCalls === 2) {
+      if (this.repairCalls <= 3) {
         const destination = path.join(
           options.cwd,
           options.spawnExplorerStateDir ?? ".agentify/runtime/audit",
           "codebase_map.json",
         );
-        fs.writeFileSync(destination, `${JSON.stringify(aqaShapedMap(), null, 2)}\n`);
+        const repaired = aqaShapedMap();
+        if (this.repairCalls < 3) {
+          repaired.concern_evidence!.concerns = repaired.concern_evidence!.concerns.slice(
+            0,
+            this.repairCalls,
+          );
+        }
+        fs.writeFileSync(destination, `${JSON.stringify(repaired, null, 2)}
+`);
       }
     } else {
       this.baseCalls += 1;
@@ -407,7 +415,7 @@ class LastPassRepairRuntime implements AgentRuntime {
   }
 }
 
-test("the final bounded repair pass may close the portfolio and persists only accepted concerns", async () => {
+test("progressive semantic repair may exceed two passes while each pass closes tracked gaps", async () => {
   const repository = createRepository();
   const previousHome = process.env["HOME"];
   const temporaryHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-repair-home-"));
@@ -422,7 +430,7 @@ test("the final bounded repair pass may close the portfolio and persists only ac
     fs.mkdirSync(path.dirname(mapPath), { recursive: true });
     fs.writeFileSync(mapPath, `${JSON.stringify(initial, null, 2)}\n`);
 
-    const runtime = new LastPassRepairRuntime();
+    const runtime = new ProgressiveRepairRuntime();
     const ui = new RepairUi();
     const result = await runRepositoryAudit({
       cwd: repository.cwd,
@@ -432,8 +440,8 @@ test("the final bounded repair pass may close the portfolio and persists only ac
     });
 
     assert.equal(runtime.baseCalls, 1);
-    assert.equal(runtime.repairCalls, 2);
-    assert.equal(result.turns, 3);
+    assert.equal(runtime.repairCalls, 3);
+    assert.equal(result.turns, 4);
     assert.ok(ui.messages.some((message) => /retained 4 tracked specialist concern/i.test(message)));
 
     const persisted = JSON.parse(fs.readFileSync(mapPath, "utf8")) as CodebaseMap;
@@ -449,6 +457,15 @@ test("the final bounded repair pass may close the portfolio and persists only ac
     assert.ok(persisted.concern_evidence?.not_concerns.some((entry) =>
       entry.candidate === "TKG playlist compilation and generated Make topology"
     ));
+
+    const logDirectory = path.join(temporaryHome, ".agentify", "logs", "agentify");
+    const logFiles = fs.readdirSync(logDirectory).filter((name) => name.endsWith(".jsonl"));
+    assert.equal(logFiles.length, 1);
+    const events = fs.readFileSync(path.join(logDirectory, logFiles[0]!), "utf8")
+      .trim().split("\n").map((line) => JSON.parse(line) as { event: string; payload: string });
+    const runEnds = events.filter((event) => event.event === "agentify.run_end");
+    assert.equal(runEnds.length, 1, "coverage and semantic repair must share one terminal outcome");
+    assert.equal((JSON.parse(runEnds[0]!.payload) as { status: string }).status, "success");
   } finally {
     if (previousHome === undefined) delete process.env["HOME"];
     else process.env["HOME"] = previousHome;

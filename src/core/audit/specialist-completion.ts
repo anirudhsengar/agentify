@@ -87,6 +87,8 @@ const AMBIGUOUS_CLUSTER_KEYS = new Set([
   "mod",
   "package",
   "setup",
+  "type",
+  "types",
 ]);
 
 export interface RejectedSpecialistConcern {
@@ -98,6 +100,12 @@ export interface RepositoryBehaviorCluster {
   cluster_key: string;
   implementation_paths: string[];
   test_paths: string[];
+}
+
+export interface RepositoryConcernAttachment {
+  concern: string;
+  paths: string[];
+  reason: string;
 }
 
 export interface SpecialistEvidenceAssessment {
@@ -112,6 +120,7 @@ export interface SpecialistEvidenceAssessment {
   rejected_concerns: RejectedSpecialistConcern[];
   repository_clusters: RepositoryBehaviorCluster[];
   uncovered_clusters: RepositoryBehaviorCluster[];
+  attachments: RepositoryConcernAttachment[];
 }
 
 export interface AuditCompletionResult {
@@ -272,7 +281,7 @@ function isTestRepositoryPath(repositoryPath: string): boolean {
     || /(?:Test|Tests|Spec|Specs)$/.test(stem);
 }
 
-function clusterKey(repositoryPath: string): string | null {
+function clusterStem(repositoryPath: string): string | null {
   let stem = filenameStem(repositoryPath)
     .replace(/^(?:test|tests|spec|specs)[._-]+/i, "")
     .replace(/[._-]+(?:test|tests|spec|specs)$/i, "")
@@ -283,6 +292,60 @@ function clusterKey(repositoryPath: string): string | null {
     .toLowerCase();
   if (stem.endsWith("-d")) stem = stem.slice(0, -2);
   return stem.length >= 3 && !AMBIGUOUS_CLUSTER_KEYS.has(stem) ? stem : null;
+}
+
+const SOURCE_ROOT_DIRECTORY_NAMES = new Set(["app", "lib", "pkg", "src"]);
+
+function directorySegments(repositoryPath: string): string[] {
+  const directory = path.posix.dirname(repositoryPath);
+  return directory === "." ? [] : directory.split("/").filter(Boolean);
+}
+
+function localitySegments(repositoryPath: string): string[] {
+  const segments = directorySegments(repositoryPath);
+  while (
+    segments.length > 0
+    && (SOURCE_ROOT_DIRECTORY_NAMES.has(segments[0]!.toLowerCase())
+      || TEST_DIRECTORY_NAMES.has(segments[0]!.toLowerCase()))
+  ) {
+    segments.shift();
+  }
+  return segments.filter((segment) => !TEST_DIRECTORY_NAMES.has(segment.toLowerCase()));
+}
+
+function commonPrefixLength(left: readonly string[], right: readonly string[]): number {
+  let length = 0;
+  while (length < left.length && length < right.length && left[length] === right[length]) length += 1;
+  return length;
+}
+
+function commonSuffixLength(left: readonly string[], right: readonly string[]): number {
+  let length = 0;
+  while (
+    length < left.length
+    && length < right.length
+    && left[left.length - length - 1] === right[right.length - length - 1]
+  ) length += 1;
+  return length;
+}
+
+function conventionalTopLevelTest(repositoryPath: string): boolean {
+  const first = repositoryPath.split("/")[0]?.toLowerCase();
+  return first !== undefined && TEST_DIRECTORY_NAMES.has(first);
+}
+
+function clusterLocalityScore(implementationPath: string, testPath: string): number {
+  const implementationDirectory = path.posix.dirname(implementationPath);
+  const testDirectory = path.posix.dirname(testPath);
+  if (implementationDirectory === testDirectory) return 1_000;
+  const implementationLocality = localitySegments(implementationPath);
+  const testLocality = localitySegments(testPath);
+  if (
+    implementationLocality.length > 0
+    && implementationLocality.join("/") === testLocality.join("/")
+  ) return 800;
+  return commonSuffixLength(implementationLocality, testLocality) * 120
+    + commonPrefixLength(implementationLocality, testLocality) * 40;
 }
 
 function eligibleImplementationPath(repositoryPath: string): boolean {
@@ -300,7 +363,7 @@ function discoverRepositoryBehaviorClusters(
   const implementations = new Map<string, string[]>();
   const tests = new Map<string, string[]>();
   for (const repositoryPath of trackedFiles) {
-    const key = clusterKey(repositoryPath);
+    const key = clusterStem(repositoryPath);
     if (key === null) continue;
     if (isTestRepositoryPath(repositoryPath)) {
       const paths = tests.get(key) ?? [];
@@ -314,19 +377,40 @@ function discoverRepositoryBehaviorClusters(
   }
 
   const clusters: RepositoryBehaviorCluster[] = [];
-  for (const [key, implementationPaths] of implementations) {
-    const testPaths = tests.get(key) ?? [];
-    // Very broad basename matches are ambiguous in large monorepos. Do not
-    // convert them into artificial specialties; require a bounded behavioral
-    // unit with a concrete implementation/test mirror.
-    if (testPaths.length === 0 || implementationPaths.length > 4 || testPaths.length > 12) continue;
-    clusters.push({
-      cluster_key: key,
-      implementation_paths: [...new Set(implementationPaths)]
-        .sort((left, right) => left.localeCompare(right)),
-      test_paths: [...new Set(testPaths)]
-        .sort((left, right) => left.localeCompare(right)),
-    });
+  for (const [stem, implementationValues] of implementations) {
+    const implementationPaths = [...new Set(implementationValues)]
+      .sort((left, right) => left.localeCompare(right));
+    const testPaths = [...new Set(tests.get(stem) ?? [])]
+      .sort((left, right) => left.localeCompare(right));
+    if (testPaths.length === 0) continue;
+    const assigned = new Map<string, string[]>();
+    for (const testPath of testPaths) {
+      const ranked = implementationPaths.map((implementationPath) => ({
+        implementationPath,
+        score: clusterLocalityScore(implementationPath, testPath),
+      })).sort((left, right) => right.score - left.score
+        || left.implementationPath.localeCompare(right.implementationPath));
+      const best = ranked[0];
+      if (best === undefined) continue;
+      const tied = ranked.filter((candidate) => candidate.score === best.score);
+      const conventionalFallback = implementationPaths.length === 1
+        && conventionalTopLevelTest(testPath);
+      if (tied.length !== 1 || (best.score < 40 && !conventionalFallback)) continue;
+      const paths = assigned.get(best.implementationPath) ?? [];
+      paths.push(testPath);
+      assigned.set(best.implementationPath, paths);
+    }
+
+    for (const implementationPath of implementationPaths) {
+      const matchedTests = assigned.get(implementationPath) ?? [];
+      if (matchedTests.length === 0) continue;
+      const locality = path.posix.dirname(implementationPath);
+      clusters.push({
+        cluster_key: implementationPaths.length === 1 ? stem : `${stem}@${locality}`,
+        implementation_paths: [implementationPath],
+        test_paths: matchedTests.sort((left, right) => left.localeCompare(right)),
+      });
+    }
   }
   return clusters.sort((left, right) => left.cluster_key.localeCompare(right.cluster_key));
 }
@@ -494,16 +578,25 @@ function assessConcern(
   let validFlows = 0;
   for (const flow of concern.flows) {
     const verifiedSteps = flow.steps
-      .map((step) => resolvePath(step.path))
-      .filter((candidate): candidate is string => (
-        candidate !== null && touchpointPaths.has(candidate)
-      ));
-    // A trace is an ordered sequence of observed steps. It may legitimately
-    // enter the same orchestration file more than once around another step;
-    // requiring distinct file names would reject that real control flow.
-    if (verifiedSteps.length < 2) continue;
+      .map((step) => ({
+        path: resolvePath(step.path),
+        operation: step.what_happens.trim().toLowerCase(),
+      }))
+      .filter((candidate): candidate is { path: string; operation: string } => candidate.path !== null);
+    const distinctOperations = new Set(verifiedSteps.map((step) => `${step.path}\0${step.operation}`));
+    if (verifiedSteps.length < 2 || distinctOperations.size < 2) continue;
     validFlows += 1;
-    for (const repositoryPath of verifiedSteps) flowPaths.add(repositoryPath);
+    for (const step of verifiedSteps) flowPaths.add(step.path);
+  }
+
+  const referencedPaths = new Set<string>();
+  for (const invariant of concern.invariants) {
+    const repositoryPath = resolvePath(invariant.reference);
+    if (repositoryPath !== null) referencedPaths.add(repositoryPath);
+  }
+  for (const pitfall of concern.pitfalls) {
+    const repositoryPath = resolvePath(pitfall.reference);
+    if (repositoryPath !== null) referencedPaths.add(repositoryPath);
   }
 
   const reasons: string[] = [];
@@ -516,16 +609,202 @@ function assessConcern(
   if (concern.flows.length === 0) {
     reasons.push("no end-to-end flow was recorded");
   } else if (validFlows === 0) {
-    reasons.push("no flow contains two tracked steps that are also recorded touchpoints");
+    reasons.push("no flow contains two distinct ordered operations in tracked repository files");
   }
 
   return {
     concern: concern.concern,
     eligible: coreTouchpoints > 0 && validFlows > 0,
     reasons,
-    contextPaths: [...new Set([...touchpointPaths, ...flowPaths])]
+    contextPaths: [...new Set([...touchpointPaths, ...flowPaths, ...referencedPaths])]
       .sort((left, right) => left.localeCompare(right)),
   };
+}
+
+const SEMANTIC_STOP_WORDS = new Set([
+  "and", "behavior", "contract", "core", "end", "file", "implementation", "integration",
+  "module", "repository", "runtime", "supporting", "test", "tests", "through", "with",
+]);
+
+function semanticTokens(value: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const raw of value.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
+    if (raw.length < 3 || SEMANTIC_STOP_WORDS.has(raw)) continue;
+    const token = raw.length > 4 && raw.endsWith("s") ? raw.slice(0, -1) : raw;
+    tokens.add(token);
+  }
+  return tokens;
+}
+
+function tokensRelated(left: string, right: string): boolean {
+  return left === right
+    || (Math.min(left.length, right.length) >= 4
+      && (left.startsWith(right) || right.startsWith(left)));
+}
+
+function concernSemanticTokens(
+  concern: NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number],
+): Set<string> {
+  const values: string[] = [
+    concern.concern,
+    concern.one_line,
+    concern.covers,
+    concern.excludes,
+    ...concern.entry_questions,
+    ...concern.flows.flatMap((flow) => [flow.name, flow.description]),
+    ...concern.touchpoints.flatMap((touchpoint) => [
+      touchpoint.path,
+      touchpoint.role,
+      touchpoint.symbol ?? "",
+    ]),
+  ];
+  return semanticTokens(values.join(" "));
+}
+
+function pathSemanticTokens(paths: readonly string[], label: string): Set<string> {
+  // Directory names are useful for locality scoring but are weak semantic
+  // evidence. Including them here lets a repository or package name make
+  // every sibling implementation look related to one accepted concern.
+  // Compare only the behavioral label and file stems; path affinity is
+  // evaluated independently by directoryAffinity().
+  const stems = paths.map((repositoryPath) => filenameStem(repositoryPath));
+  return semanticTokens(`${label} ${stems.join(" ")}`);
+}
+
+function directoryAffinity(candidate: string, contextPath: string): number {
+  if (candidate === contextPath) return 2_000;
+  const candidateDirectory = path.posix.dirname(candidate);
+  const contextDirectory = path.posix.dirname(contextPath);
+  if (candidateDirectory === contextDirectory) return candidateDirectory === "." ? 400 : 900;
+  const candidateSegments = directorySegments(candidate);
+  const contextSegments = directorySegments(contextPath);
+  const prefix = commonPrefixLength(candidateSegments, contextSegments);
+  const suffix = commonSuffixLength(candidateSegments, contextSegments);
+  const ancestor = candidateDirectory.startsWith(`${contextDirectory}/`)
+    || contextDirectory.startsWith(`${candidateDirectory}/`);
+  return prefix * 40 + suffix * 80 + (ancestor ? 160 : 0);
+}
+
+interface AttachmentConcernCandidate {
+  concern: NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
+  assessment: AssessedConcern;
+  tokens: Set<string>;
+}
+
+function selectUniqueConcern(input: {
+  paths: readonly string[];
+  label: string;
+  candidates: readonly AttachmentConcernCandidate[];
+  mode: "cluster" | "high-signal";
+}): AttachmentConcernCandidate | null {
+  const candidateTokens = pathSemanticTokens(input.paths, input.label);
+  const ranked = input.candidates.map((candidate) => {
+    const pathScore = Math.max(
+      ...input.paths.flatMap((repositoryPath) =>
+        candidate.assessment.contextPaths.map((contextPath) => directoryAffinity(repositoryPath, contextPath))
+      ),
+      0,
+    );
+    let semanticMatches = 0;
+    for (const token of candidateTokens) {
+      if ([...candidate.tokens].some((other) => tokensRelated(token, other))) semanticMatches += 1;
+    }
+    return {
+      candidate,
+      pathScore,
+      semanticMatches,
+      score: pathScore + Math.min(semanticMatches, 4) * 160,
+    };
+  }).filter((entry) => input.mode === "cluster"
+    ? entry.semanticMatches > 0 && (entry.pathScore >= 40 || entry.semanticMatches >= 2)
+    : entry.pathScore >= 850
+  ).sort((left, right) => right.score - left.score
+    || left.candidate.concern.concern.localeCompare(right.candidate.concern.concern));
+  const best = ranked[0];
+  if (best === undefined) return null;
+  const second = ranked[1];
+  if (second !== undefined && best.score - second.score < 80) return null;
+  return best.candidate;
+}
+
+function inferRepositoryConcernAttachments(input: {
+  map: CodebaseMap;
+  accepted: readonly AssessedConcern[];
+  clusters: readonly RepositoryBehaviorCluster[];
+  structuralHighSignal: readonly string[];
+}): RepositoryConcernAttachment[] {
+  const concerns = input.map.concern_evidence?.concerns ?? [];
+  const candidates: AttachmentConcernCandidate[] = input.accepted.flatMap((assessment) => {
+    const concern = concerns.find((candidate) => candidate.concern === assessment.concern);
+    return concern === undefined ? [] : [{ concern, assessment, tokens: concernSemanticTokens(concern) }];
+  });
+  const attachmentPaths = new Map<string, Set<string>>();
+  const reasons = new Map<string, Set<string>>();
+  const add = (concern: string, paths: readonly string[], reason: string): void => {
+    const pathSet = attachmentPaths.get(concern) ?? new Set<string>();
+    const reasonSet = reasons.get(concern) ?? new Set<string>();
+    for (const repositoryPath of paths) pathSet.add(repositoryPath);
+    reasonSet.add(reason);
+    attachmentPaths.set(concern, pathSet);
+    reasons.set(concern, reasonSet);
+  };
+  const rejected = (repositoryPath: string): boolean =>
+    (input.map.concern_evidence?.not_concerns ?? [])
+      .some((entry) => rejectionCoversPath(entry, repositoryPath));
+
+  for (const cluster of input.clusters) {
+    const clusterPaths = [...cluster.implementation_paths, ...cluster.test_paths]
+      .filter((repositoryPath) => !rejected(repositoryPath));
+    const direct = candidates.filter((candidate) => clusterPaths.some((repositoryPath) =>
+      candidate.assessment.contextPaths.includes(repositoryPath)
+    ));
+    if (direct.length > 0) {
+      for (const candidate of direct) {
+        add(candidate.concern.concern, clusterPaths, "tracked path-local implementation/test mirror");
+      }
+      continue;
+    }
+    const selected = selectUniqueConcern({
+      paths: cluster.implementation_paths,
+      label: cluster.cluster_key,
+      candidates,
+      mode: "cluster",
+    });
+    if (selected !== null) {
+      add(
+        selected.concern.concern,
+        clusterPaths,
+        "unique path-local and semantic match to accepted concern evidence",
+      );
+    }
+  }
+
+  const alreadyCovered = new Set([
+    ...input.accepted.flatMap((assessment) => assessment.contextPaths),
+    ...[...attachmentPaths.values()].flatMap((paths) => [...paths]),
+  ]);
+  for (const repositoryPath of input.structuralHighSignal) {
+    if (alreadyCovered.has(repositoryPath) || rejected(repositoryPath) || isGenericPlumbing(repositoryPath)) continue;
+    const selected = selectUniqueConcern({
+      paths: [repositoryPath],
+      label: filenameStem(repositoryPath),
+      candidates,
+      mode: "high-signal",
+    });
+    if (selected === null) continue;
+    add(
+      selected.concern.concern,
+      [repositoryPath],
+      "unique same-directory dependency of accepted concern evidence",
+    );
+    alreadyCovered.add(repositoryPath);
+  }
+
+  return [...attachmentPaths.entries()].map(([concern, paths]) => ({
+    concern,
+    paths: [...paths].sort((left, right) => left.localeCompare(right)),
+    reason: [...(reasons.get(concern) ?? [])].sort().join("; "),
+  })).sort((left, right) => left.concern.localeCompare(right.concern));
 }
 
 function rejectionScope(value: string): { base: string; subtree: boolean } | null {
@@ -604,6 +883,7 @@ export function assessSpecialistEvidence(
       rejected_concerns: [],
       repository_clusters: [],
       uncovered_clusters: [],
+      attachments: [],
     };
   }
 
@@ -615,8 +895,9 @@ export function assessSpecialistEvidence(
     ...cluster.implementation_paths,
     ...cluster.test_paths,
   ]);
+  const structuralHighSignal = collectHighSignalPaths(map, resolvePath);
   const highSignal = [...new Set([
-    ...collectHighSignalPaths(map, resolvePath),
+    ...structuralHighSignal,
     ...clusterPaths,
   ])].sort((left, right) => left.localeCompare(right));
   const assessments = map.concern_evidence.concerns.map((concern) =>
@@ -629,8 +910,23 @@ export function assessSpecialistEvidence(
       concern: assessment.concern,
       reasons: assessment.reasons,
     }));
-  const covered = [...new Set(accepted.flatMap((assessment) => assessment.contextPaths))]
-    .sort((left, right) => left.localeCompare(right));
+  // Inferred attachments depend on an exact tracked repository tree. Without
+  // one (for example schema-only callers and degraded non-Git fixtures), only
+  // explicit concern evidence may satisfy semantic closure. This prevents
+  // filename or directory heuristics from silently absorbing distinct public
+  // surfaces such as help rendering or type declarations.
+  const attachments = repository.trackedFiles === undefined
+    ? []
+    : inferRepositoryConcernAttachments({
+      map,
+      accepted,
+      clusters: repositoryClusters,
+      structuralHighSignal,
+    });
+  const covered = [...new Set([
+    ...accepted.flatMap((assessment) => assessment.contextPaths),
+    ...attachments.flatMap((attachment) => attachment.paths),
+  ])].sort((left, right) => left.localeCompare(right));
   const exempted = pathsMentionedByRejections(map, highSignal);
   const coveredSet = new Set(covered);
   const exemptedSet = new Set(exempted);
@@ -737,6 +1033,7 @@ export function assessSpecialistEvidence(
     rejected_concerns: rejected.sort((left, right) => left.concern.localeCompare(right.concern)),
     repository_clusters: repositoryClusters,
     uncovered_clusters: uncoveredClusters,
+    attachments,
   };
 }
 
@@ -762,9 +1059,35 @@ export function reconcileSpecialistEvidence(
   }
 
   const accepted = new Set(assessment.accepted_concerns);
-  const concerns = map.concern_evidence.concerns.filter((concern) =>
-    accepted.has(concern.concern)
+  const attachmentsByConcern = new Map(
+    assessment.attachments.map((attachment) => [attachment.concern, attachment]),
   );
+  let attachmentsChanged = false;
+  const concerns = map.concern_evidence.concerns
+    .filter((concern) => accepted.has(concern.concern))
+    .map((concern) => {
+      const attachment = attachmentsByConcern.get(concern.concern);
+      if (attachment === undefined) return concern;
+      const existing = new Set(concern.touchpoints.map((touchpoint) =>
+        normalizeRepositoryPathSyntax(touchpoint.path) ?? touchpoint.path
+      ));
+      const additions = attachment.paths.filter((repositoryPath) => !existing.has(repositoryPath));
+      if (additions.length === 0) return concern;
+      attachmentsChanged = true;
+      return {
+        ...concern,
+        touchpoints: [
+          ...concern.touchpoints,
+          ...additions.map((repositoryPath) => ({
+            path: repositoryPath,
+            symbol: null,
+            role: `Trusted semantic closure attached this tracked dependency: ${attachment.reason}.`,
+            line_range: null,
+            centrality: "supporting" as const,
+          })),
+        ],
+      };
+    });
   const notConcerns = [...map.concern_evidence.not_concerns];
   const existingCandidates = new Set(notConcerns.map((entry) => entry.candidate.trim().toLowerCase()));
   for (const rejected of assessment.rejected_concerns) {
@@ -780,7 +1103,7 @@ export function reconcileSpecialistEvidence(
   const openQuestions = map.open_questions.filter((question) =>
     !PLACEHOLDER_QUESTION.test(question.trim())
   );
-  const concernsChanged = concerns.length !== map.concern_evidence.concerns.length;
+  const concernsChanged = concerns.length !== map.concern_evidence.concerns.length || attachmentsChanged;
   const rejectionsChanged = notConcerns.length !== map.concern_evidence.not_concerns.length;
   const questionsChanged = openQuestions.length !== map.open_questions.length;
   if (!concernsChanged && !rejectionsChanged && !questionsChanged) return map;
