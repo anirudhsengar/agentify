@@ -1,0 +1,1 @@
+This staging-branch trigger exists only to run the source-only PR guard. It is never copied to or merged through PR #11.
