@@ -1,0 +1,119 @@
+name: Finalize PR 11 source-only v7
+
+on:
+  push:
+    branches: [fix/axum-discovery-receipts-public-surfaces]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-pr11-source-only-v7-exact
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    if: "github.event.head_commit.message == 'ci: finalize pr11 source-only v7'"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: fix/axum-discovery-receipts-public-surfaces
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Build one clean main-parented candidate commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          root = Path.cwd()
+          source = (root / ".github/workflows/finalize-pr11-source-v6.yml").read_text()
+          start_marker = "          python - <<'PY'\n"
+          end_marker = "          PY\n"
+          start = source.index(start_marker) + len(start_marker)
+          end = source.index(end_marker, start)
+          script = textwrap.dedent(source[start:end])
+          exec(compile(script, "<finalize-v6-materialization>", "exec"))
+          PY
+
+          rm -rf .github
+          git checkout origin/main -- .github
+          git add -A
+          git diff --cached --check
+
+          git config user.name "Anirudh Sengar"
+          git config user.email "111981402+anirudhsengar@users.noreply.github.com"
+          parent=$(git rev-parse origin/main)
+          tree=$(git write-tree)
+          commit=$(printf '%s\n\n%s\n' \
+            'fix: require trusted specialist discovery closure' \
+            'Require successful current-HEAD explorer receipts, workspace/public-surface ownership, complete verified flows, and strict command classification.' \
+            | git commit-tree "$tree" -p "$parent")
+
+          git reset --hard "$commit"
+          git clean -fdx
+          test -z "$(git status --porcelain --untracked-files=all)"
+          test "$(git rev-parse "$commit^")" = "$parent"
+
+          files=$(git diff --name-only "$parent" "$commit")
+          printf '%s\n' "$files"
+          test -n "$files"
+          ! printf '%s\n' "$files" | grep -Ev '^(src|tests)/'
+          printf '%s\n' "$files" | grep -Eq '^src/'
+          printf '%s\n' "$files" | grep -Eq '^tests/'
+          node scripts/verify-implementation-diff.mjs "$parent" "$commit"
+
+          echo "CANDIDATE_COMMIT=$commit" >> "$GITHUB_ENV"
+          echo "CANDIDATE_PARENT=$parent" >> "$GITHUB_ENV"
+      - name: Install exact dependencies on the clean candidate
+        run: npm ci
+      - name: Run focused discovery regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npx tsx tests/audit/explorer-receipts.test.ts
+          npx tsx tests/audit/workspace-public-surface-closure.test.ts
+          npx tsx tests/audit/spawn-explorer-budget.test.ts
+          npx tsx tests/audit/coverage-gate.test.ts
+          npx tsx tests/audit/tracked-specialist-closure.test.ts
+          npx tsx tests/installer/one-time-installer.test.ts
+          npx tsx tests/specialists/flow-preservation.test.ts
+          npx tsx tests/specialists/command-contracts.test.ts
+      - name: Run complete release qualification on the clean candidate
+        run: npm run verify:release
+      - name: Publish the exact qualified commit as the PR head
+        shell: bash
+        env:
+          EXPECTED_OLD_HEAD: fc4f04d06746e70da463b4bf95211910a53b3b20
+          TARGET_BRANCH: fix/trusted-specialist-discovery-workspace-closure
+        run: |
+          set -euo pipefail
+          test -n "$CANDIDATE_COMMIT"
+          test -n "$CANDIDATE_PARENT"
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$CANDIDATE_PARENT"
+          test "$(git rev-parse "$CANDIDATE_COMMIT^")" = "$CANDIDATE_PARENT"
+
+          files=$(git diff --name-only "$CANDIDATE_PARENT" "$CANDIDATE_COMMIT")
+          test -n "$files"
+          ! printf '%s\n' "$files" | grep -Ev '^(src|tests)/'
+          printf '%s\n' "$files" | grep -Eq '^src/'
+          printf '%s\n' "$files" | grep -Eq '^tests/'
+          node scripts/verify-implementation-diff.mjs "$CANDIDATE_PARENT" "$CANDIDATE_COMMIT"
+
+          remote_head=$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | awk '{print $1}')
+          test "$remote_head" = "$EXPECTED_OLD_HEAD"
+          git push origin "$CANDIDATE_COMMIT:refs/heads/$TARGET_BRANCH" \
+            --force-with-lease="refs/heads/$TARGET_BRANCH:$EXPECTED_OLD_HEAD"
+          echo "Published exact qualified PR head: $CANDIDATE_COMMIT"
