@@ -94,6 +94,15 @@ jobs:
               return { turns: 1, costUsd: null, aborted: false };''',
           )
           coverage_path.write_text(coverage)
+
+          specialist_path = root / "src/core/audit/specialist-completion.ts"
+          specialist = specialist_path.read_text()
+          old_reason = "repository behavioral clusters are neither covered by an accepted concern nor explicitly rejected:"
+          new_reason = "repository implementation/test and public-surface clusters are neither covered by an accepted concern nor explicitly rejected:"
+          reason_count = specialist.count(old_reason)
+          if reason_count != 1:
+              raise RuntimeError(f"specialist diagnostic replacement expected once, found {reason_count}")
+          specialist_path.write_text(specialist.replace(old_reason, new_reason, 1))
           PY
 
           rm -rf .github
