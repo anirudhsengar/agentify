@@ -145,7 +145,8 @@ focus_acknowledged: <echo of FOCUS>
  that every concern uses. They earn a specialist only when the
  repository has real invariants about them. Say which it is.
 
-- **Aim for 3–8 concerns** in a repository of ordinary size. Two
- usually means you named subtrees. Twelve usually means you named
- files. But report what you actually found — an unusual repository is
- allowed to be unusual, and `rejected` is where you show your work.
+- **Do not target a numeric range.** Report every distinct,
+ evidence-backed specialty a maintainer would recognize, and reject
+ candidates that are only files, folders, or generic mechanics. Small
+ repositories may have one concern; large frameworks may have many.
+ Portfolio size is an outcome of the evidence, never a pruning rule.

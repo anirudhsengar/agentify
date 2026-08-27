@@ -559,6 +559,7 @@ interface AssessedConcern {
   eligible: boolean;
   reasons: string[];
   contextPaths: string[];
+  corePaths: string[];
 }
 
 function assessConcern(
@@ -566,12 +567,16 @@ function assessConcern(
   resolvePath: RepositoryPathResolver,
 ): AssessedConcern {
   const touchpointPaths = new Set<string>();
+  const coreTouchpointPaths = new Set<string>();
   let coreTouchpoints = 0;
   for (const touchpoint of concern.touchpoints) {
     const repositoryPath = resolvePath(touchpoint.path);
     if (repositoryPath === null) continue;
     touchpointPaths.add(repositoryPath);
-    if (touchpoint.centrality === "core") coreTouchpoints += 1;
+    if (touchpoint.centrality === "core") {
+      coreTouchpoints += 1;
+      coreTouchpointPaths.add(repositoryPath);
+    }
   }
 
   const flowPaths = new Set<string>();
@@ -618,6 +623,8 @@ function assessConcern(
     reasons,
     contextPaths: [...new Set([...touchpointPaths, ...flowPaths, ...referencedPaths])]
       .sort((left, right) => left.localeCompare(right)),
+    corePaths: [...coreTouchpointPaths]
+      .sort((left, right) => left.localeCompare(right)),
   };
 }
 
@@ -649,7 +656,6 @@ function concernSemanticTokens(
     concern.concern,
     concern.one_line,
     concern.covers,
-    concern.excludes,
     ...concern.entry_questions,
     ...concern.flows.flatMap((flow) => [flow.name, flow.description]),
     ...concern.touchpoints.flatMap((touchpoint) => [
@@ -671,6 +677,25 @@ function pathSemanticTokens(paths: readonly string[], label: string): Set<string
   return semanticTokens(`${label} ${stems.join(" ")}`);
 }
 
+function matchingTokenCount(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
+  let matches = 0;
+  for (const token of left) {
+    if ([...right].some((other) => tokensRelated(token, other))) matches += 1;
+  }
+  return matches;
+}
+
+function attachmentConflictsWithExclusions(
+  candidate: AttachmentConcernCandidate,
+  paths: readonly string[],
+  label: string,
+): boolean {
+  return matchingTokenCount(
+    pathSemanticTokens(paths, label),
+    candidate.excludedTokens,
+  ) > 0;
+}
+
 function directoryAffinity(candidate: string, contextPath: string): number {
   if (candidate === contextPath) return 2_000;
   const candidateDirectory = path.posix.dirname(candidate);
@@ -689,6 +714,7 @@ interface AttachmentConcernCandidate {
   concern: NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
   assessment: AssessedConcern;
   tokens: Set<string>;
+  excludedTokens: Set<string>;
 }
 
 function selectUniqueConcern(input: {
@@ -705,20 +731,20 @@ function selectUniqueConcern(input: {
       ),
       0,
     );
-    let semanticMatches = 0;
-    for (const token of candidateTokens) {
-      if ([...candidate.tokens].some((other) => tokensRelated(token, other))) semanticMatches += 1;
-    }
+    const semanticMatches = matchingTokenCount(candidateTokens, candidate.tokens);
+    const exclusionMatches = matchingTokenCount(candidateTokens, candidate.excludedTokens);
     return {
       candidate,
       pathScore,
       semanticMatches,
+      exclusionMatches,
       score: pathScore + Math.min(semanticMatches, 4) * 160,
     };
-  }).filter((entry) => input.mode === "cluster"
-    ? entry.semanticMatches > 0 && (entry.pathScore >= 40 || entry.semanticMatches >= 2)
-    : entry.pathScore >= 850
-  ).sort((left, right) => right.score - left.score
+  }).filter((entry) => entry.exclusionMatches === 0 && (
+    input.mode === "cluster"
+      ? entry.semanticMatches > 0 && (entry.pathScore >= 40 || entry.semanticMatches >= 2)
+      : entry.pathScore >= 850
+  )).sort((left, right) => right.score - left.score
     || left.candidate.concern.concern.localeCompare(right.candidate.concern.concern));
   const best = ranked[0];
   if (best === undefined) return null;
@@ -736,7 +762,12 @@ function inferRepositoryConcernAttachments(input: {
   const concerns = input.map.concern_evidence?.concerns ?? [];
   const candidates: AttachmentConcernCandidate[] = input.accepted.flatMap((assessment) => {
     const concern = concerns.find((candidate) => candidate.concern === assessment.concern);
-    return concern === undefined ? [] : [{ concern, assessment, tokens: concernSemanticTokens(concern) }];
+    return concern === undefined ? [] : [{
+      concern,
+      assessment,
+      tokens: concernSemanticTokens(concern),
+      excludedTokens: semanticTokens(concern.excludes),
+    }];
   });
   const attachmentPaths = new Map<string, Set<string>>();
   const reasons = new Map<string, Set<string>>();
@@ -755,9 +786,16 @@ function inferRepositoryConcernAttachments(input: {
   for (const cluster of input.clusters) {
     const clusterPaths = [...cluster.implementation_paths, ...cluster.test_paths]
       .filter((repositoryPath) => !rejected(repositoryPath));
-    const direct = candidates.filter((candidate) => clusterPaths.some((repositoryPath) =>
-      candidate.assessment.contextPaths.includes(repositoryPath)
-    ));
+    const direct = candidates.filter((candidate) =>
+      !attachmentConflictsWithExclusions(
+        candidate,
+        cluster.implementation_paths,
+        cluster.cluster_key,
+      )
+      && clusterPaths.some((repositoryPath) =>
+        candidate.assessment.contextPaths.includes(repositoryPath)
+      )
+    );
     if (direct.length > 0) {
       for (const candidate of direct) {
         add(candidate.concern.concern, clusterPaths, "tracked path-local implementation/test mirror");
@@ -923,12 +961,43 @@ export function assessSpecialistEvidence(
       clusters: repositoryClusters,
       structuralHighSignal,
     });
-  const covered = [...new Set([
+  const contextualPaths = new Set([
     ...accepted.flatMap((assessment) => assessment.contextPaths),
     ...attachments.flatMap((attachment) => attachment.paths),
-  ])].sort((left, right) => left.localeCompare(right));
+  ]);
+  const coreOwnedPaths = new Set(
+    accepted.flatMap((assessment) => assessment.corePaths),
+  );
+  const explicitOwnersByPath = new Map<string, Set<string>>();
+  for (const assessment of accepted) {
+    for (const repositoryPath of assessment.contextPaths) {
+      const owners = explicitOwnersByPath.get(repositoryPath) ?? new Set<string>();
+      owners.add(assessment.concern);
+      explicitOwnersByPath.set(repositoryPath, owners);
+    }
+  }
+
+  const coveredSet = new Set<string>();
+  for (const cluster of repositoryClusters) {
+    const implementationsCovered = cluster.implementation_paths.every((repositoryPath) => {
+      const explicitOwnerCount = explicitOwnersByPath.get(repositoryPath)?.size ?? 0;
+      return explicitOwnerCount > 1
+        ? coreOwnedPaths.has(repositoryPath)
+        : contextualPaths.has(repositoryPath);
+    });
+    if (!implementationsCovered) continue;
+    for (const repositoryPath of cluster.implementation_paths) coveredSet.add(repositoryPath);
+    for (const repositoryPath of cluster.test_paths) {
+      if (contextualPaths.has(repositoryPath)) coveredSet.add(repositoryPath);
+    }
+  }
+  for (const repositoryPath of structuralHighSignal) {
+    if (!isGenericPlumbing(repositoryPath) && contextualPaths.has(repositoryPath)) {
+      coveredSet.add(repositoryPath);
+    }
+  }
+  const covered = [...coveredSet].sort((left, right) => left.localeCompare(right));
   const exempted = pathsMentionedByRejections(map, highSignal);
-  const coveredSet = new Set(covered);
   const exemptedSet = new Set(exempted);
   const uncovered = highSignal.filter((candidate) =>
     !coveredSet.has(candidate)

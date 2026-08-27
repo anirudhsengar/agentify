@@ -8,7 +8,6 @@ import type {
 import type { MemoryStoreOptions } from "../memory/contracts.ts";
 
 export const SPECIALIST_PORTFOLIO_SCHEMA_VERSION = "1" as const;
-export const MAX_DISCOVERED_SPECIALISTS = 8;
 export const MAX_DISCOVERED_PROCEDURES = 64;
 export const MAX_ROUTED_SPECIALISTS = 4;
 export const MAX_ROUTED_PROCEDURES = 6;
