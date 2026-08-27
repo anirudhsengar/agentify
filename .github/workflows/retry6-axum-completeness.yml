@@ -1,0 +1,312 @@
+name: Retry 6 Axum discovery completeness fix
+
+on:
+  push:
+    branches: [fix/axum-discovery-receipts-public-surfaces]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: retry6-axum-discovery-completeness
+  cancel-in-progress: false
+
+jobs:
+  materialize-validate-push:
+    if: "github.event.head_commit.message == 'ci: retry6 axum discovery completeness fix'"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: fix/axum-discovery-receipts-public-surfaces
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Apply source implementation and compatibility regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          root = Path.cwd()
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = root / path
+              text = target.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{path}: expected one occurrence, found {count}: {old[:120]!r}")
+              target.write_text(text.replace(old, new))
+
+          # Replay the already validated source materialization script and its
+          # syntax corrections. The workflow deletes all prior staging files
+          # from the candidate before any qualification is run.
+          source_path = root / ".github/workflows/retry5-axum-completeness.yml"
+          source = source_path.read_text()
+          start_marker = "          python - <<'PY'\n"
+          end_marker = "          PY\n"
+          start = source.index(start_marker) + len(start_marker)
+          end = source.index(end_marker, start)
+          script = textwrap.dedent(source[start:end])
+          exec(compile(script, "<retry5-source-materialization>", "exec"))
+
+          # Real Pi events expose resultText/isError directly on the event.
+          # Continue accepting nested tool results for unit-level callers.
+          replace_once(
+              "src/core/audit/explorer-receipts.ts",
+              '''function reportConcernFromText(text: string): string | null {
+            const match = text.match(/(?:^|\\n)\\s*concern:\\s*([^\\r\\n]+)/i);
+            return match?.[1]?.trim() || null;
+          }
+          ''',
+              '''function focusFromText(text: string): string | null {
+            const quoted = text.match(/\\bfocus=(?:"([^"]+)"|'([^']+)')/i);
+            if (quoted !== null) return quoted[1]?.trim() || quoted[2]?.trim() || null;
+            const plain = text.match(/\\bfocus=([^;\\r\\n]+)/i);
+            return plain?.[1]?.trim() || null;
+          }
+
+          function reportConcernFromText(text: string): string | null {
+            const match = text.match(/(?:^|\\n)\\s*concern:\\s*([^\\r\\n]+)/i);
+            return match?.[1]?.trim() || null;
+          }
+          ''',
+          )
+          replace_once(
+              "src/core/audit/explorer-receipts.ts",
+              '''    const result = event.result;
+              const text = resultText(result);
+              const mode = modeFromResult(result, text);
+              if (mode === null) return;
+              const details = isRecord(result) && isRecord(result.details) ? result.details : {};
+              const targetPath = stringField(details.target_path)
+                ?? text.match(/\\b(?:explored|for)\\s+(.+?)\\s+(?:in\\s+\\d+ms|failed:)/i)?.[1]?.trim()
+                ?? ".";
+              const focus = stringField(details.focus);
+              const reportConcern = stringField(details.report_concern)
+                ?? (mode === "concern_tracer" ? reportConcernFromText(text) : null);
+              const success = !(isRecord(result) && result.isError === true);
+          ''',
+              '''    const nestedResult = isRecord(event.result) ? event.result : null;
+              const result = nestedResult ?? event;
+              const text = resultText(result);
+              const mode = modeFromResult(result, text);
+              if (mode === null) return;
+              const details = isRecord(result.details)
+                ? result.details
+                : isRecord(event.details) ? event.details : {};
+              const targetPath = stringField(details.target_path)
+                ?? text.match(/\\b(?:explored|for)\\s+(.+?)\\s+(?:in\\s+\\d+ms|failed:)/i)?.[1]?.trim()
+                ?? ".";
+              const focus = stringField(details.focus) ?? focusFromText(text);
+              const reportConcern = stringField(details.report_concern)
+                ?? (mode === "concern_tracer" ? reportConcernFromText(text) : null);
+              const success = event.isError !== true
+                && !(nestedResult !== null && nestedResult.isError === true);
+          ''',
+          )
+          replace_once(
+              "src/core/audit/spawn-explorer-tool.ts",
+              '''                        text: `Error: sub-agent (mode=${mode}) for ${params.target_path} failed: ${msg}`,
+          ''',
+              '''                        text: `Error: sub-agent (mode=${mode}) for ${params.target_path} failed: ${params.focus?.trim() ? `focus=${JSON.stringify(params.focus.trim())}; ` : ""}${msg}`,
+          ''',
+          )
+          replace_once(
+              "tests/audit/explorer-receipts.test.ts",
+              '''  return {
+              type: "tool_execution_end",
+              toolName: "spawn_explorer",
+              result: {
+                ...(input.success ? {} : { isError: true }),
+                content: [{ type: "text", text }],
+                details: {
+                  mode: input.mode,
+                  target_path: input.targetPath ?? ".",
+                  focus: input.focus ?? null,
+                  report_concern: input.reportConcern ?? null,
+                  failure_kind: input.failureKind ?? (input.success ? null : "timeout"),
+                },
+              },
+            };
+          ''',
+              '''  return {
+              type: "tool_execution_end",
+              toolName: "spawn_explorer",
+              ...(input.success ? {} : { isError: true }),
+              resultText: text,
+              details: {
+                mode: input.mode,
+                target_path: input.targetPath ?? ".",
+                focus: input.focus ?? null,
+                report_concern: input.reportConcern ?? null,
+                failure_kind: input.failureKind ?? (input.success ? null : "timeout"),
+              },
+            };
+          ''',
+          )
+
+          coverage_path = root / "tests/audit/coverage-gate.test.ts"
+          coverage = coverage_path.read_text()
+          helper_marker = '''}
+
+          class ScriptedRuntime implements AgentRuntime {
+          '''
+          helper = '''}
+
+          function emitExplorerReceipts(
+            options: AgentRuntimeSessionOptions,
+            map: NonNullable<ReturnType<typeof loadCanonicalMapAt>>,
+          ): void {
+            options.onEvent?.({
+              type: "tool_execution_end",
+              toolName: "spawn_explorer",
+              resultText: "Sub-agent (mode=concern_scout) explored . in 1ms.\\n\\n## Report\\n",
+              details: {
+                mode: "concern_scout",
+                target_path: ".",
+                focus: null,
+                report_concern: null,
+              },
+            } as never);
+            for (const concern of map.concern_evidence?.concerns ?? []) {
+              options.onEvent?.({
+                type: "tool_execution_end",
+                toolName: "spawn_explorer",
+                resultText: `Sub-agent (mode=concern_tracer) explored . in 1ms.\\n\\n## Report\\nconcern: ${concern.concern}\\n`,
+                details: {
+                  mode: "concern_tracer",
+                  target_path: ".",
+                  focus: concern.concern,
+                  report_concern: concern.concern,
+                },
+              } as never);
+            }
+          }
+
+          class ScriptedRuntime implements AgentRuntime {
+          '''
+          if coverage.count(helper_marker) != 1:
+              raise RuntimeError("coverage-gate helper insertion point is not unique")
+          coverage = coverage.replace(helper_marker, helper)
+          coverage = coverage.replace(
+              '''    this.write(options.cwd, options.spawnExplorerStateDir);
+              return { turns: 1, costUsd: null, aborted: false };
+          ''',
+              '''    this.write(options.cwd, options.spawnExplorerStateDir);
+              const map = loadCanonicalMapAt(options.cwd, options.spawnExplorerStateDir);
+              if (map !== null) emitExplorerReceipts(options, map);
+              return { turns: 1, costUsd: null, aborted: false };
+          ''',
+              1,
+          )
+          coverage = coverage.replace(
+              '''    writeMap(
+              options.cwd,
+              options.spawnExplorerStateDir ?? ".agentify/runtime/audit",
+              makeValidCodebaseMap(),
+            );
+            options.onEvent?.({ type: "message_end" } as never);
+          ''',
+              '''    const map = makeValidCodebaseMap();
+            writeMap(
+              options.cwd,
+              options.spawnExplorerStateDir ?? ".agentify/runtime/audit",
+              map,
+            );
+            emitExplorerReceipts(options, map);
+            options.onEvent?.({ type: "message_end" } as never);
+          ''',
+              1,
+          )
+          coverage = coverage.replace(
+              '''    assert.ok(options.spawnExplorerStateDir);
+            writeMap(options.cwd, options.spawnExplorerStateDir, makeValidCodebaseMap());
+            return { turns: 1, costUsd: null, aborted: false };
+          ''',
+              '''    assert.ok(options.spawnExplorerStateDir);
+            const map = makeValidCodebaseMap();
+            writeMap(options.cwd, options.spawnExplorerStateDir, map);
+            emitExplorerReceipts(options, map);
+            return { turns: 1, costUsd: null, aborted: false };
+          ''',
+              1,
+          )
+          coverage = coverage.replace(
+              '''    assert.equal(options.recoveryPromptIfToolNotCalled?.requiredToolName, "write_map_delta");
+            writeMap(options.cwd, stateDir, makeValidCodebaseMap());
+            return { turns: 1, costUsd: null, aborted: false };
+          ''',
+              '''    assert.equal(options.recoveryPromptIfToolNotCalled?.requiredToolName, "write_map_delta");
+            const map = makeValidCodebaseMap();
+            writeMap(options.cwd, stateDir, map);
+            emitExplorerReceipts(options, map);
+            return { turns: 1, costUsd: null, aborted: false };
+          ''',
+              1,
+          )
+          coverage_path.write_text(coverage)
+
+          for workflow in [
+              ".github/workflows/materialize-axum-completeness.yml",
+              ".github/workflows/retry-axum-completeness.yml",
+              ".github/workflows/retry2-axum-completeness.yml",
+              ".github/workflows/retry3-axum-completeness.yml",
+              ".github/workflows/retry4-axum-completeness.yml",
+              ".github/workflows/retry5-axum-completeness.yml",
+              ".github/workflows/retry6-axum-completeness.yml",
+          ]:
+              path = root / workflow
+              if path.exists():
+                  path.unlink()
+          PY
+          git diff --check
+          git status --short
+      - name: Commit exact source candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Anirudh Sengar"
+          git config user.email "111981402+anirudhsengar@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: require complete specialist exploration"
+      - run: npm ci
+      - name: Run focused Axum-shaped regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npx tsx tests/audit/explorer-receipts.test.ts
+          npx tsx tests/audit/workspace-public-surface-closure.test.ts
+          npx tsx tests/audit/spawn-explorer-budget.test.ts
+          npx tsx tests/audit/coverage-gate.test.ts
+          npx tsx tests/specialists/flow-preservation.test.ts
+          npx tsx tests/specialists/command-contracts.test.ts
+      - name: Run complete release qualification
+        run: npm run verify:release
+      - name: Prove final branch contains source, not staging machinery
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          node scripts/verify-implementation-diff.mjs origin/main HEAD
+          for workflow in \
+            .github/workflows/materialize-axum-completeness.yml \
+            .github/workflows/retry-axum-completeness.yml \
+            .github/workflows/retry2-axum-completeness.yml \
+            .github/workflows/retry3-axum-completeness.yml \
+            .github/workflows/retry4-axum-completeness.yml \
+            .github/workflows/retry5-axum-completeness.yml \
+            .github/workflows/retry6-axum-completeness.yml; do
+            test ! -e "$workflow"
+          done
+          git diff --name-only origin/main...HEAD | grep -Eq '^(src|tests)/'
+          ! git diff --name-only origin/main...HEAD | grep -E '^\.github/(implementation/|workflows/(apply|export|materialize|qualify|retry)-)'
+      - name: Push qualified source candidate
+        run: git push origin HEAD:fix/axum-discovery-receipts-public-surfaces
