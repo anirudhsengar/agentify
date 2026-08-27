@@ -1,0 +1,1 @@
+Retrigger the exact source-only finalizer after matching local qualification. This remains isolated from PR #11.
