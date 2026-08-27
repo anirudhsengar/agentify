@@ -1,0 +1,898 @@
+name: Materialize semantic ownership source fix
+
+on:
+  push:
+    branches: [fix/behavioral-specialists-readiness-guidance]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-behavioral-specialists
+  cancel-in-progress: false
+
+jobs:
+  materialize-validate-push:
+    if: "github.event.head_commit.message == 'ci: materialize semantic ownership source fix'"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: fix/behavioral-specialists-readiness-guidance
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Apply direct production source and regression changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def read(path: str) -> str:
+              return Path(path).read_text(encoding="utf-8")
+
+          def write(path: str, content: str) -> None:
+              target = Path(path)
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_text(content, encoding="utf-8")
+
+          def replace_once(path: str, old: str, new: str, label: str) -> None:
+              content = read(path)
+              count = content.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{label}: expected one occurrence, found {count}")
+              write(path, content.replace(old, new, 1))
+
+          # Remove the arbitrary discovery ceiling. Routing remains bounded per task, but
+          # persistence must retain every concern the trusted audit accepted.
+          replace_once(
+              "src/core/specialists/contracts.ts",
+              'export const MAX_DISCOVERED_SPECIALISTS = 8;\n',
+              '',
+              "specialist cap contract",
+          )
+          replace_once(
+              "src/core/specialists/discovery.ts",
+              '  MAX_DISCOVERED_SPECIALISTS,\n',
+              '',
+              "specialist cap discovery import",
+          )
+          replace_once(
+              "src/core/specialists/discovery.ts",
+              '''  const specialists = verified
+              .slice(0, MAX_DISCOVERED_SPECIALISTS)
+              .map((entry): SpecialistDefinition => {
+          ''',
+              '''  const specialists = verified
+              .map((entry): SpecialistDefinition => {
+          ''',
+              "specialist cap discovery slice",
+          )
+          replace_once(
+              "src/core/specialists/discovery.ts",
+              '''  if (concerns.length > MAX_DISCOVERED_SPECIALISTS) {
+              warnings.push(
+                `The audit recorded ${concerns.length} concerns and the strongest ${MAX_DISCOVERED_SPECIALISTS} were retained.`,
+              );
+            }
+          ''',
+              '',
+              "specialist cap warning",
+          )
+          replace_once(
+              "src/core/specialists/validation.ts",
+              '  MAX_DISCOVERED_SPECIALISTS,\n',
+              '',
+              "specialist cap validation import",
+          )
+          replace_once(
+              "src/core/specialists/validation.ts",
+              '''  if (portfolio.specialists.length > MAX_DISCOVERED_SPECIALISTS) {
+              fail(`specialist portfolio exceeds ${MAX_DISCOVERED_SPECIALISTS} specialists`);
+            }
+          ''',
+              '',
+              "specialist cap validation gate",
+          )
+
+          # Discovery should not bias the model toward a fixed portfolio size.
+          replace_once(
+              "src/core/audit/prompts/explorers/concern_scout.md",
+              '''- **Aim for 3–8 concerns** in a repository of ordinary size. Two
+           usually means you named subtrees. Twelve usually means you named
+           files. But report what you actually found — an unusual repository is
+           allowed to be unusual, and `rejected` is where you show your work.
+          ''',
+              '''- **Do not target a numeric range.** Report every distinct,
+           evidence-backed specialty a maintainer would recognize, and reject
+           candidates that are only files, folders, or generic mechanics. Small
+           repositories may have one concern; large frameworks may have many.
+           Portfolio size is an outcome of the evidence, never a pruning rule.
+          ''',
+              "concern scout numeric target",
+          )
+
+          # Track which paths are explicitly core to a concern and participate in a
+          # verified flow. Supporting mentions remain useful context, but they cannot
+          # silently claim ownership of shared high-signal behavior.
+          replace_once(
+              "src/core/audit/specialist-completion.ts",
+              '''interface AssessedConcern {
+            concern: string;
+            eligible: boolean;
+            reasons: string[];
+            contextPaths: string[];
+          }
+          ''',
+              '''interface AssessedConcern {
+            concern: string;
+            eligible: boolean;
+            reasons: string[];
+            contextPaths: string[];
+            corePaths: string[];
+          }
+          ''',
+              "assessed concern behavioral ownership field",
+          )
+          replace_once(
+              "src/core/audit/specialist-completion.ts",
+              '''  const touchpointPaths = new Set<string>();
+            let coreTouchpoints = 0;
+          ''',
+              '''  const touchpointPaths = new Set<string>();
+            const coreTouchpointPaths = new Set<string>();
+            let coreTouchpoints = 0;
+          ''',
+              "core touchpoint path inventory",
+          )
+          replace_once(
+              "src/core/audit/specialist-completion.ts",
+              '''    touchpointPaths.add(repositoryPath);
+              if (touchpoint.centrality === "core") coreTouchpoints += 1;
+          ''',
+              '''    touchpointPaths.add(repositoryPath);
+              if (touchpoint.centrality === "core") {
+                coreTouchpoints += 1;
+                coreTouchpointPaths.add(repositoryPath);
+              }
+          ''',
+              "core touchpoint path recording",
+          )
+          replace_once(
+              "src/core/audit/specialist-completion.ts",
+              '''    contextPaths: [...new Set([...touchpointPaths, ...flowPaths, ...referencedPaths])]
+                .sort((left, right) => left.localeCompare(right)),
+            };
+          }
+          ''',
+              '''    contextPaths: [...new Set([...touchpointPaths, ...flowPaths, ...referencedPaths])]
+                .sort((left, right) => left.localeCompare(right)),
+              corePaths: [...coreTouchpointPaths]
+                .sort((left, right) => left.localeCompare(right)),
+            };
+          }
+          ''',
+              "behavioral core projection",
+          )
+
+          # Exclusions are negative evidence. They must not improve a semantic match, and
+          # deterministic attachment must not place excluded behavior under a concern.
+          replace_once(
+              "src/core/audit/specialist-completion.ts",
+              '''    concern.one_line,
+              concern.covers,
+              concern.excludes,
+              ...concern.entry_questions,
+          ''',
+              '''    concern.one_line,
+              concern.covers,
+              ...concern.entry_questions,
+          ''',
+              "remove exclusions from positive semantic tokens",
+          )
+          replace_once(
+              "src/core/audit/specialist-completion.ts",
+              '''interface AttachmentConcernCandidate {
+            concern: NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
+            assessment: AssessedConcern;
+            tokens: Set<string>;
+          }
+          ''',
+              '''interface AttachmentConcernCandidate {
+            concern: NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
+            assessment: AssessedConcern;
+            tokens: Set<string>;
+            excludedTokens: Set<string>;
+          }
+          ''',
+              "attachment exclusion token field",
+          )
+          replace_once(
+              "src/core/audit/specialist-completion.ts",
+              '''function directoryAffinity(candidate: string, contextPath: string): number {
+          ''',
+              '''function matchingTokenCount(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
+            let matches = 0;
+            for (const token of left) {
+              if ([...right].some((other) => tokensRelated(token, other))) matches += 1;
+            }
+            return matches;
+          }
+
+          function attachmentConflictsWithExclusions(
+            candidate: AttachmentConcernCandidate,
+            paths: readonly string[],
+            label: string,
+          ): boolean {
+            return matchingTokenCount(
+              pathSemanticTokens(paths, label),
+              candidate.excludedTokens,
+            ) > 0;
+          }
+
+          function directoryAffinity(candidate: string, contextPath: string): number {
+          ''',
+              "attachment exclusion helpers",
+          )
+          replace_once(
+              "src/core/audit/specialist-completion.ts",
+              '''    let semanticMatches = 0;
+              for (const token of candidateTokens) {
+                if ([...candidate.tokens].some((other) => tokensRelated(token, other))) semanticMatches += 1;
+              }
+              return {
+                candidate,
+                pathScore,
+                semanticMatches,
+                score: pathScore + Math.min(semanticMatches, 4) * 160,
+              };
+            }).filter((entry) => input.mode === "cluster"
+              ? entry.semanticMatches > 0 && (entry.pathScore >= 40 || entry.semanticMatches >= 2)
+              : entry.pathScore >= 850
+            ).sort((left, right) => right.score - left.score
+          ''',
+              '''    const semanticMatches = matchingTokenCount(candidateTokens, candidate.tokens);
+              const exclusionMatches = matchingTokenCount(candidateTokens, candidate.excludedTokens);
+              return {
+                candidate,
+                pathScore,
+                semanticMatches,
+                exclusionMatches,
+                score: pathScore + Math.min(semanticMatches, 4) * 160,
+              };
+            }).filter((entry) => entry.exclusionMatches === 0 && (
+              input.mode === "cluster"
+                ? entry.semanticMatches > 0 && (entry.pathScore >= 40 || entry.semanticMatches >= 2)
+                : entry.pathScore >= 850
+            )).sort((left, right) => right.score - left.score
+          ''',
+              "negative attachment ranking",
+          )
+          replace_once(
+              "src/core/audit/specialist-completion.ts",
+              '''    return concern === undefined ? [] : [{ concern, assessment, tokens: concernSemanticTokens(concern) }];
+          ''',
+              '''    return concern === undefined ? [] : [{
+                concern,
+                assessment,
+                tokens: concernSemanticTokens(concern),
+                excludedTokens: semanticTokens(concern.excludes),
+              }];
+          ''',
+              "attachment candidate exclusion inventory",
+          )
+          replace_once(
+              "src/core/audit/specialist-completion.ts",
+              '''    const direct = candidates.filter((candidate) => clusterPaths.some((repositoryPath) =>
+                candidate.assessment.contextPaths.includes(repositoryPath)
+              ));
+          ''',
+              '''    const direct = candidates.filter((candidate) =>
+                !attachmentConflictsWithExclusions(
+                  candidate,
+                  cluster.implementation_paths,
+                  cluster.cluster_key,
+                )
+                && clusterPaths.some((repositoryPath) =>
+                  candidate.assessment.contextPaths.includes(repositoryPath)
+                )
+              );
+          ''',
+              "direct attachment exclusion gate",
+          )
+
+          # A source/test mirror may attach to one existing concern when it is a unique,
+          # non-excluded local dependency. But structural files and implementation files
+          # shared by multiple concerns require one explicit core touchpoint that also
+          # participates in a verified flow. This exposes missing cross-cutting
+          # specialties such as a request Context lifecycle.
+          replace_once(
+              "src/core/audit/specialist-completion.ts",
+              '''  const covered = [...new Set([
+              ...accepted.flatMap((assessment) => assessment.contextPaths),
+              ...attachments.flatMap((attachment) => attachment.paths),
+            ])].sort((left, right) => left.localeCompare(right));
+            const exempted = pathsMentionedByRejections(map, highSignal);
+            const coveredSet = new Set(covered);
+            const exemptedSet = new Set(exempted);
+          ''',
+              '''  const contextualPaths = new Set([
+              ...accepted.flatMap((assessment) => assessment.contextPaths),
+              ...attachments.flatMap((attachment) => attachment.paths),
+            ]);
+            const coreOwnedPaths = new Set(
+              accepted.flatMap((assessment) => assessment.corePaths),
+            );
+            const explicitOwnersByPath = new Map<string, Set<string>>();
+            for (const assessment of accepted) {
+              for (const repositoryPath of assessment.contextPaths) {
+                const owners = explicitOwnersByPath.get(repositoryPath) ?? new Set<string>();
+                owners.add(assessment.concern);
+                explicitOwnersByPath.set(repositoryPath, owners);
+              }
+            }
+
+            const coveredSet = new Set<string>();
+            for (const cluster of repositoryClusters) {
+              const implementationsCovered = cluster.implementation_paths.every((repositoryPath) => {
+                const explicitOwnerCount = explicitOwnersByPath.get(repositoryPath)?.size ?? 0;
+                return explicitOwnerCount > 1
+                  ? coreOwnedPaths.has(repositoryPath)
+                  : contextualPaths.has(repositoryPath);
+              });
+              if (!implementationsCovered) continue;
+              for (const repositoryPath of cluster.implementation_paths) coveredSet.add(repositoryPath);
+              for (const repositoryPath of cluster.test_paths) {
+                if (contextualPaths.has(repositoryPath)) coveredSet.add(repositoryPath);
+              }
+            }
+            for (const repositoryPath of structuralHighSignal) {
+              if (!isGenericPlumbing(repositoryPath) && contextualPaths.has(repositoryPath)) {
+                coveredSet.add(repositoryPath);
+              }
+            }
+            const covered = [...coveredSet].sort((left, right) => left.localeCompare(right));
+            const exempted = pathsMentionedByRejections(map, highSignal);
+            const exemptedSet = new Set(exempted);
+          ''',
+              "behavioral closure coverage projection",
+          )
+
+          # Tell repair sessions what the trusted gate now requires.
+          replace_once(
+              "src/core/runs/repository-audit-run.ts",
+              '''    "Implementation/test clusters are path-local. Trace both sides when they form a cohesive recurring contract; otherwise attach them to an existing concern or explicitly reject the exact paths.",
+              "Shared files must appear under every concern they serve with the role they play in that concern; overlap is expected and must never cause merging.",
+          ''',
+              '''    "Implementation/test clusters are path-local. Trace both sides when they form a cohesive recurring contract; otherwise attach them to an existing concern or explicitly reject the exact paths.",
+              "Treat a concern's excludes statement as negative evidence. Never attach a path or cluster to a concern that excludes that behavior; retain or create the adjacent concern, or reject the exact path with repository-specific evidence.",
+              "A high-signal implementation shared by multiple concerns is not closed by supporting mentions. Record one explicit core touchpoint under the concern whose verified flow owns the behavior, or create a distinct concern.",
+              "Shared files must appear under every concern they serve with the role they play in that concern; overlap is expected and must never cause merging.",
+          ''',
+              "semantic repair ownership instructions",
+          )
+
+          # Generate readiness-aware instructions from the trusted policy state.
+          replace_once(
+              "src/core/scaffold-installer.ts",
+              '''const TASK_POLICY_PORTABLE_PATH = ".github/agentify-task-policy.json";
+          const RUNTIME_LOADER_PORTABLE_PATH = ".github/agentify/runtime-loader.mjs";
+          const RUNTIME_VERSION_PLACEHOLDER = "__AGENTIFY_RUNTIME_VERSION__";
+          ''',
+              '''const TASK_POLICY_PORTABLE_PATH = ".github/agentify-task-policy.json";
+          const RUNTIME_LOADER_PORTABLE_PATH = ".github/agentify/runtime-loader.mjs";
+          const AGENTS_PORTABLE_PATH = "AGENTS.md";
+          const SETUP_PORTABLE_PATH = "SETUP.md";
+          const RUNTIME_VERSION_PLACEHOLDER = "__AGENTIFY_RUNTIME_VERSION__";
+          ''',
+              "readiness documentation paths",
+          )
+          replace_once(
+              "src/core/scaffold-installer.ts",
+              '''function contentFor(
+            source: string,
+            portableRelative: string,
+            options: InstallScaffoldRuntimeOptions,
+          ): string | undefined {
+          ''',
+              '''function replaceDocumentationSection(
+            content: string,
+            startHeading: string,
+            endHeading: string,
+            replacement: string,
+          ): string {
+            const start = content.indexOf(`${startHeading}\\n`);
+            const end = content.indexOf(`${endHeading}\\n`, start + startHeading.length);
+            if (start < 0 || end < 0 || end <= start) {
+              throw new Error(`Agentify scaffold documentation is missing ${startHeading}`);
+            }
+            return `${content.slice(0, start)}${replacement.trimEnd()}\\n\\n${content.slice(end)}`;
+          }
+
+          function readinessAwareDocumentation(
+            source: string,
+            portableRelative: string,
+            configuration: RepositoryTaskPolicyConfiguration,
+          ): string {
+            const content = fs.readFileSync(source, "utf8");
+            if (configuration.configured) return content;
+
+            if (portableRelative === AGENTS_PORTABLE_PATH) {
+              const readyGuidance = [
+                "Use GitHub issues with the `agentify:queue` label to request implementation.",
+                "Agentify plans with a read-only planner and repository-specific read-only",
+                "specialists, grants exactly one builder bounded write authority, validates",
+                "deterministically, obtains an role-separated automated read-only review, and",
+                "stops at an unmerged draft pull request.",
+              ].join("\\n");
+              const disabledGuidance = [
+                "Issue execution is disabled because the trusted repository task policy is not",
+                "configured. The orchestrator and specialists are available only for analysis.",
+                "Resolve the installer blockers and rerun Agentify verification before adding",
+                "the `agentify:queue` label or expecting a draft pull request.",
+              ].join("\\n");
+              if (!content.includes(readyGuidance)) {
+                throw new Error("Agentify AGENTS.md scaffold is missing its managed work guidance");
+              }
+              return content.replace(readyGuidance, disabledGuidance);
+            }
+
+            if (portableRelative === SETUP_PORTABLE_PATH) {
+              const readyIntroduction = [
+                "Agentify is installed once for this repository. Authorized GitHub issues are",
+                "the normal work interface; do not rerun the CLI for ordinary tasks.",
+              ].join("\\n");
+              const disabledIntroduction = [
+                "Agentify's repository analysis and specialist memory are installed, but issue",
+                "execution is disabled because the trusted repository task policy is not",
+                "configured. Do not queue work until the installer reports readiness `ready`.",
+              ].join("\\n");
+              if (!content.includes(readyIntroduction)) {
+                throw new Error("Agentify SETUP.md scaffold is missing its managed introduction");
+              }
+              return replaceDocumentationSection(
+                content.replace(readyIntroduction, disabledIntroduction),
+                "## Queue work",
+                "## Credentials",
+                [
+                  "## Issue execution disabled",
+                  "",
+                  "The `agentify:queue` label will not start authorized work in this state.",
+                  "Resolve the installer blockers—typically a missing toolchain, failed repository",
+                  "validation, or incomplete policy attestation—and rerun Agentify verification.",
+                  "When `.github/agentify-task-policy.json` becomes configured, Agentify rewrites",
+                  "this guide with the issue workflow and trusted maintainer commands.",
+                ].join("\\n"),
+              );
+            }
+
+            return content;
+          }
+
+          function contentFor(
+            source: string,
+            portableRelative: string,
+            options: InstallScaffoldRuntimeOptions,
+          ): string | undefined {
+          ''',
+              "readiness documentation rendering",
+          )
+          replace_once(
+              "src/core/scaffold-installer.ts",
+              '''  if (portableRelative === TASK_POLICY_PORTABLE_PATH && options.taskPolicyConfiguration) {
+              return `${JSON.stringify(options.taskPolicyConfiguration, null, 2)}\\n`;
+            }
+          ''',
+              '''  if (portableRelative === TASK_POLICY_PORTABLE_PATH && options.taskPolicyConfiguration) {
+              return `${JSON.stringify(options.taskPolicyConfiguration, null, 2)}\\n`;
+            }
+            if (
+              options.taskPolicyConfiguration
+              && (portableRelative === AGENTS_PORTABLE_PATH || portableRelative === SETUP_PORTABLE_PATH)
+            ) {
+              return readinessAwareDocumentation(
+                source,
+                portableRelative,
+                options.taskPolicyConfiguration,
+              );
+            }
+          ''',
+              "readiness documentation content selection",
+          )
+
+          write(
+              "tests/specialists/unbounded-specialist-portfolio.test.ts",
+              r'''import assert from "node:assert/strict";
+          import * as fs from "node:fs";
+          import test from "node:test";
+          import { discoverSpecialistPortfolio } from "../../src/core/specialists/index.ts";
+          import {
+            SPECIALIST_FIXTURE_TRACKED_FILES,
+            makeSpecialistFixtureMap,
+          } from "../fixtures/specialist-map.ts";
+
+          const COMMIT = "a".repeat(40);
+
+          test("every evidence-backed concern becomes a specialist without an arbitrary portfolio cap", () => {
+            const map = makeSpecialistFixtureMap();
+            const template = map.concern_evidence!.concerns[0]!;
+            map.concern_evidence!.concerns = Array.from({ length: 12 }, (_, index) => ({
+              ...structuredClone(template),
+              concern: `repository specialty ${index + 1}`,
+              one_line: `Owns repository specialty ${index + 1}.`,
+            }));
+
+            const portfolio = discoverSpecialistPortfolio(
+              map,
+              COMMIT,
+              SPECIALIST_FIXTURE_TRACKED_FILES,
+            );
+
+            assert.equal(portfolio.specialists.length, 12);
+            assert.deepEqual(
+              portfolio.specialists.map((specialist) => specialist.concern).sort(),
+              Array.from({ length: 12 }, (_, index) => `repository specialty ${index + 1}`).sort(),
+            );
+            assert.ok(!portfolio.warnings.some((warning) => /strongest .* retained/i.test(warning)));
+          });
+
+          test("the concern scout derives portfolio size from evidence rather than a target range", () => {
+            const prompt = fs.readFileSync(
+              new URL("../../src/core/audit/prompts/explorers/concern_scout.md", import.meta.url),
+              "utf8",
+            );
+            assert.doesNotMatch(prompt, /Aim for 3[–-]8 concerns/i);
+            assert.match(prompt, /Do not target a numeric range/i);
+          });
+          ''',
+          )
+
+          write(
+              "tests/audit/exclusion-aware-semantic-closure.test.ts",
+              r'''import assert from "node:assert/strict";
+          import { spawnSync } from "node:child_process";
+          import * as fs from "node:fs";
+          import * as os from "node:os";
+          import * as path from "node:path";
+          import test from "node:test";
+          import {
+            assessSpecialistEvidence,
+            type CodebaseMap,
+          } from "../../src/core/audit/schema.ts";
+          import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+
+          type Concern = NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
+
+          function git(cwd: string, ...args: string[]): void {
+            const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
+            assert.equal(result.status, 0, result.stderr);
+          }
+
+          function repository(files: readonly string[]): string {
+            const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-semantic-ownership-"));
+            for (const repositoryPath of ["README.md", "package.json", ...files]) {
+              const absolute = path.join(cwd, ...repositoryPath.split("/"));
+              fs.mkdirSync(path.dirname(absolute), { recursive: true });
+              fs.writeFileSync(absolute, `${repositoryPath}\n`);
+            }
+            git(cwd, "init", "-q");
+            git(cwd, "config", "user.name", "Agentify Test");
+            git(cwd, "config", "user.email", "agentify@example.invalid");
+            git(cwd, "add", ".");
+            git(cwd, "commit", "-qm", "semantic ownership fixture");
+            return cwd;
+          }
+
+          function concern(input: {
+            name: string;
+            covers: string;
+            excludes: string;
+            core: string;
+            test: string;
+            supporting?: readonly string[];
+          }): Concern {
+            const supporting = [...(input.supporting ?? [])];
+            return {
+              concern: input.name,
+              one_line: `Owns ${input.name}.`,
+              covers: input.covers,
+              excludes: input.excludes,
+              flows: [{
+                name: `${input.name} flow`,
+                description: `Traces ${input.name} behavior.`,
+                steps: [
+                  { path: input.core, what_happens: `Executes ${input.name}.` },
+                  ...supporting.map((repositoryPath) => ({
+                    path: repositoryPath,
+                    what_happens: `Consumes ${input.name} state.`,
+                  })),
+                  { path: input.test, what_happens: `Verifies ${input.name}.` },
+                ],
+              }],
+              touchpoints: [
+                {
+                  path: input.core,
+                  symbol: null,
+                  role: `Core ${input.name} behavior.`,
+                  line_range: null,
+                  centrality: "core",
+                },
+                {
+                  path: input.test,
+                  symbol: null,
+                  role: `Regression coverage for ${input.name}.`,
+                  line_range: null,
+                  centrality: "supporting",
+                },
+                ...supporting.map((repositoryPath) => ({
+                  path: repositoryPath,
+                  symbol: null,
+                  role: `Supporting dependency used by ${input.name}.`,
+                  line_range: null,
+                  centrality: "supporting" as const,
+                })),
+              ],
+              invariants: [],
+              pitfalls: [],
+              entry_questions: [`Does this alter ${input.name}?`],
+              validation: ["npm test"],
+              spans_subtrees: ["src"],
+              stability: "high",
+              recurrence: "high",
+              confidence: "high",
+              last_updated: "2026-08-27T00:00:00.000Z",
+            };
+          }
+
+          function mapWithConcerns(
+            entryPoints: readonly string[],
+            concerns: Concern[],
+          ): CodebaseMap {
+            const map = makeValidCodebaseMap();
+            delete map.expert_evidence;
+            map.meta.project_type = "semantic ownership fixture";
+            map.meta.languages = ["TypeScript"];
+            map.skeleton.entry_points = entryPoints.map((repositoryPath) => ({
+              path: repositoryPath,
+              role: "fixture entry point",
+              language: "TypeScript",
+              run_command: "npm test",
+            }));
+            map.skeleton.first_5_files_for_fresh_agent = entryPoints.map((repositoryPath) => ({
+              path: repositoryPath,
+              why: "fixture behavioral entry point",
+            }));
+            map.module_graph.edges = [];
+            map.module_graph.parallelizable_subtrees = [];
+            map.module_graph.shared_abstractions = [];
+            map.module_graph.shared_state = [];
+            map.pitfalls = [];
+            map.operational_surface.build.recipe_file = "package.json";
+            map.open_questions = [];
+            map.concern_evidence = { concerns, not_concerns: [] };
+            return map;
+          }
+
+          test("excluded behavior cannot be attached to a concern as positive semantic evidence", () => {
+            const cwd = repository([
+              "src/decoder.ts",
+              "src/decoder.test.ts",
+              "src/form-mapping.ts",
+              "src/form-mapping.test.ts",
+            ]);
+            try {
+              const decoding = concern({
+                name: "request decoding",
+                covers: "Decoder selection and decoded request values.",
+                excludes: "Form mapping internals are a separate specialty.",
+                core: "src/decoder.ts",
+                test: "src/decoder.test.ts",
+              });
+              const map = mapWithConcerns(["src/decoder.ts"], [decoding]);
+              const incomplete = assessSpecialistEvidence(map, { cwd });
+
+              assert.equal(incomplete.complete, false);
+              assert.ok(incomplete.uncovered_paths.includes("src/form-mapping.ts"));
+              assert.ok(incomplete.uncovered_paths.includes("src/form-mapping.test.ts"));
+              assert.ok(!incomplete.attachments.some((attachment) =>
+                attachment.concern === "request decoding"
+                && attachment.paths.some((repositoryPath) => repositoryPath.includes("form-mapping"))
+              ));
+
+              map.concern_evidence!.concerns.push(concern({
+                name: "form mapping",
+                covers: "Maps form fields into typed request destinations.",
+                excludes: "Decoder selection remains in request decoding.",
+                core: "src/form-mapping.ts",
+                test: "src/form-mapping.test.ts",
+              }));
+              const complete = assessSpecialistEvidence(map, { cwd });
+              assert.equal(complete.complete, true, complete.reasons.join("; "));
+            } finally {
+              fs.rmSync(cwd, { recursive: true, force: true });
+            }
+          });
+
+          test("a shared high-signal implementation needs explicit core behavioral ownership", () => {
+            const cwd = repository([
+              "src/auth.ts",
+              "src/auth.test.ts",
+              "src/render.ts",
+              "src/render.test.ts",
+              "src/context.ts",
+              "src/context.test.ts",
+            ]);
+            try {
+              const map = mapWithConcerns(
+                ["src/auth.ts", "src/render.ts"],
+                [
+                  concern({
+                    name: "authentication",
+                    covers: "Credential verification and authenticated request state.",
+                    excludes: "Response rendering and Context lifecycle mechanics.",
+                    core: "src/auth.ts",
+                    test: "src/auth.test.ts",
+                    supporting: ["src/context.ts"],
+                  }),
+                  concern({
+                    name: "response rendering",
+                    covers: "Serializes response bodies and commits output.",
+                    excludes: "Authentication and Context lifecycle mechanics.",
+                    core: "src/render.ts",
+                    test: "src/render.test.ts",
+                    supporting: ["src/context.ts"],
+                  }),
+                ],
+              );
+
+              const incomplete = assessSpecialistEvidence(map, { cwd });
+              assert.equal(incomplete.complete, false);
+              assert.ok(incomplete.uncovered_paths.includes("src/context.ts"));
+              assert.ok(incomplete.uncovered_clusters.some((cluster) =>
+                cluster.implementation_paths.includes("src/context.ts")
+              ));
+
+              map.concern_evidence!.concerns.push(concern({
+                name: "request Context lifecycle",
+                covers: "Handler progression, abort state, copies, errors, and request-local metadata.",
+                excludes: "Credential policy and response serialization.",
+                core: "src/context.ts",
+                test: "src/context.test.ts",
+              }));
+              const complete = assessSpecialistEvidence(map, { cwd });
+              assert.equal(complete.complete, true, complete.reasons.join("; "));
+            } finally {
+              fs.rmSync(cwd, { recursive: true, force: true });
+            }
+          });
+          ''',
+          )
+
+          write(
+              "tests/scaffold-readiness-docs.test.ts",
+              r'''import assert from "node:assert/strict";
+          import * as fs from "node:fs";
+          import * as os from "node:os";
+          import * as path from "node:path";
+          import test from "node:test";
+          import type { RepositoryTaskPolicyConfiguration } from "../src/core/installer/contracts.ts";
+          import { packageRoot } from "../src/core/pi-sdk-runtime.ts";
+          import { installScaffoldRuntime } from "../src/core/scaffold-installer.ts";
+
+          function configuration(configured: boolean): RepositoryTaskPolicyConfiguration {
+            return {
+              format: "agentify_task_policy_configuration",
+              schema_version: "2",
+              configured,
+              repository: null,
+              model_network_posture: "denied-by-default",
+              dependency_change_policy: "maintainer-approval-required",
+              application_merge: "disabled",
+              application_deployment: "disabled",
+              protected_path_policy_known: configured,
+              validation_services_attested: configured,
+              validation_execution: {
+                mode: "maintainer-approved-unsandboxed",
+                child_environment_credentials: "removed",
+                repository_mutation: "detected-and-rejected",
+                network_isolation: "not-provided",
+                os_sandbox: "not-provided",
+              },
+              validation_approval: null,
+              policy: configured ? ({} as never) : null,
+              instructions: configured ? "ready" : "blocked",
+            };
+          }
+
+          test("managed instructions reflect disabled issue execution and recover when policy becomes ready", () => {
+            const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-readiness-docs-"));
+            try {
+              installScaffoldRuntime({
+                cwd,
+                packageRoot: packageRoot(),
+                taskPolicyConfiguration: configuration(false),
+              });
+
+              const agentsPath = path.join(cwd, "AGENTS.md");
+              const setupPath = path.join(cwd, "SETUP.md");
+              const blockedAgents = fs.readFileSync(agentsPath, "utf8");
+              const blockedSetup = fs.readFileSync(setupPath, "utf8");
+              assert.match(blockedAgents, /Issue execution is disabled/);
+              assert.match(blockedAgents, /available only for analysis/);
+              assert.doesNotMatch(blockedSetup, /^## Queue work$/m);
+              assert.match(blockedSetup, /^## Issue execution disabled$/m);
+              assert.match(blockedSetup, /will not start authorized work/);
+
+              installScaffoldRuntime({
+                cwd,
+                packageRoot: packageRoot(),
+                taskPolicyConfiguration: configuration(true),
+              });
+              const readyAgents = fs.readFileSync(agentsPath, "utf8");
+              const readySetup = fs.readFileSync(setupPath, "utf8");
+              assert.match(readyAgents, /Use GitHub issues with the `agentify:queue` label/);
+              assert.match(readySetup, /^## Queue work$/m);
+              assert.doesNotMatch(readySetup, /^## Issue execution disabled$/m);
+            } finally {
+              fs.rmSync(cwd, { recursive: true, force: true });
+            }
+          });
+          ''',
+          )
+
+          for path in [
+              "src/core/specialists/contracts.ts",
+              "src/core/specialists/discovery.ts",
+              "src/core/specialists/validation.ts",
+          ]:
+              if "MAX_DISCOVERED_SPECIALISTS" in read(path):
+                  raise RuntimeError(f"arbitrary specialist cap remains in {path}")
+          PY
+          rm -f .github/workflows/materialize-behavioral-specialists.yml
+          test ! -e .github/workflows/materialize-behavioral-specialists.yml
+          git diff --check
+          git status --short
+      - name: Commit exact source candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Anirudh Sengar"
+          git config user.email "111981402+anirudhsengar@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: preserve semantic specialists and readiness guidance"
+      - run: npm ci
+      - name: Run focused semantic and scaffold regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npx tsx --test \
+            tests/specialists/unbounded-specialist-portfolio.test.ts \
+            tests/audit/exclusion-aware-semantic-closure.test.ts \
+            tests/audit/locality-aware-semantic-closure.test.ts \
+            tests/audit/repository-cluster-closure.test.ts \
+            tests/audit/specialist-completion.test.ts \
+            tests/audit/tracked-specialist-closure.test.ts \
+            tests/scaffold-readiness-docs.test.ts
+      - name: Run complete release qualification
+        run: npm run verify:release
+      - name: Prove the final branch contains implementation, not staging machinery
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          changed=$(git diff --name-only origin/main...HEAD)
+          printf '%s\n' "$changed"
+          printf '%s\n' "$changed" | grep -q '^src/'
+          printf '%s\n' "$changed" | grep -q '^tests/'
+          if printf '%s\n' "$changed" | grep -Eq '^\.github/implementation/|^\.github/workflows/(apply|materialize)-'; then
+            echo "temporary staging machinery remains in the final diff" >&2
+            exit 1
+          fi
+      - name: Push qualified source candidate
+        run: git push origin HEAD:fix/behavioral-specialists-readiness-guidance
