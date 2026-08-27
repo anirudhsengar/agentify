@@ -45,44 +45,37 @@ jobs:
 
           tracked_path = root / "tests/audit/tracked-specialist-closure.test.ts"
           tracked = tracked_path.read_text()
-          old = '''        fs.writeFileSync(destination, `${JSON.stringify(repaired, null, 2)}
-`);
-              }
-            } else {
-          '''
-          new = '''        fs.writeFileSync(destination, `${JSON.stringify(repaired, null, 2)}
-`);
-                options.onEvent?.({
-                  type: "tool_execution_end",
-                  toolName: "spawn_explorer",
-                  resultText: "Sub-agent (mode=concern_scout) explored . in 1ms.\\n\\n## Report\\n",
-                  details: {
-                    mode: "concern_scout",
-                    target_path: ".",
-                    focus: null,
-                    report_concern: null,
-                  },
-                } as never);
-                for (const concern of repaired.concern_evidence?.concerns ?? []) {
-                  options.onEvent?.({
-                    type: "tool_execution_end",
-                    toolName: "spawn_explorer",
-                    resultText: `Sub-agent (mode=concern_tracer) explored . in 1ms.\\n\\n## Report\\nconcern: ${concern.concern}\\n`,
-                    details: {
-                      mode: "concern_tracer",
-                      target_path: ".",
-                      focus: concern.concern,
-                      report_concern: concern.concern,
-                    },
-                  } as never);
-                }
-              }
-            } else {
-          '''
-          count = tracked.count(old)
-          if count != 1:
-              raise RuntimeError(f"tracked repair receipt patch expected once, found {count}")
-          tracked_path.write_text(tracked.replace(old, new, 1))
+          class_start = tracked.index("class ProgressiveRepairRuntime implements AgentRuntime")
+          write_start = tracked.index("        fs.writeFileSync(destination", class_start)
+          insert_at = tracked.index("      }\n    } else {", write_start)
+          insertion = "\n".join([
+              "        options.onEvent?.({",
+              "          type: \"tool_execution_end\",",
+              "          toolName: \"spawn_explorer\",",
+              "          resultText: \"Sub-agent (mode=concern_scout) explored . in 1ms.\\n\\n## Report\\n\",",
+              "          details: {",
+              "            mode: \"concern_scout\",",
+              "            target_path: \".\",",
+              "            focus: null,",
+              "            report_concern: null,",
+              "          },",
+              "        } as never);",
+              "        for (const concern of repaired.concern_evidence?.concerns ?? []) {",
+              "          options.onEvent?.({",
+              "            type: \"tool_execution_end\",",
+              "            toolName: \"spawn_explorer\",",
+              "            resultText: `Sub-agent (mode=concern_tracer) explored . in 1ms.\\n\\n## Report\\nconcern: ${concern.concern}\\n`,",
+              "            details: {",
+              "              mode: \"concern_tracer\",",
+              "              target_path: \".\",",
+              "              focus: concern.concern,",
+              "              report_concern: concern.concern,",
+              "            },",
+              "          } as never);",
+              "        }",
+              "",
+          ])
+          tracked_path.write_text(tracked[:insert_at] + insertion + tracked[insert_at:])
           PY
 
           rm -rf .github
