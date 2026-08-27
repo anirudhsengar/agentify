@@ -75,7 +75,52 @@ jobs:
               "        }",
               "",
           ])
-          tracked_path.write_text(tracked[:insert_at] + insertion + tracked[insert_at:])
+          tracked = tracked[:insert_at] + insertion + tracked[insert_at:]
+
+          else_old = "\n".join([
+              "    } else {",
+              "      this.baseCalls += 1;",
+              "    }",
+          ])
+          else_new = "\n".join([
+              "    } else {",
+              "      this.baseCalls += 1;",
+              "      const currentMapPath = path.join(",
+              "        options.cwd,",
+              "        options.spawnExplorerStateDir ?? \".agentify/runtime/audit\",",
+              "        \"codebase_map.json\",",
+              "      );",
+              "      const current = JSON.parse(fs.readFileSync(currentMapPath, \"utf8\")) as CodebaseMap;",
+              "      options.onEvent?.({",
+              "        type: \"tool_execution_end\",",
+              "        toolName: \"spawn_explorer\",",
+              "        resultText: \"Sub-agent (mode=concern_scout) explored . in 1ms.\\n\\n## Report\\n\",",
+              "        details: {",
+              "          mode: \"concern_scout\",",
+              "          target_path: \".\",",
+              "          focus: null,",
+              "          report_concern: null,",
+              "        },",
+              "      } as never);",
+              "      for (const concern of current.concern_evidence?.concerns ?? []) {",
+              "        options.onEvent?.({",
+              "          type: \"tool_execution_end\",",
+              "          toolName: \"spawn_explorer\",",
+              "          resultText: `Sub-agent (mode=concern_tracer) explored . in 1ms.\\n\\n## Report\\nconcern: ${concern.concern}\\n`,",
+              "          details: {",
+              "            mode: \"concern_tracer\",",
+              "            target_path: \".\",",
+              "            focus: concern.concern,",
+              "            report_concern: concern.concern,",
+              "          },",
+              "        } as never);",
+              "      }",
+              "    }",
+          ])
+          count = tracked.count(else_old)
+          if count != 1:
+              raise RuntimeError(f"tracked base receipt patch expected once, found {count}")
+          tracked_path.write_text(tracked.replace(else_old, else_new, 1))
           PY
 
           rm -rf .github
