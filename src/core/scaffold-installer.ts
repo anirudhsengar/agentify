@@ -12,6 +12,8 @@ import { AGENTIFY_INSTALLED_CONTROL_PATHS } from "./artifacts/managed-installati
 
 const TASK_POLICY_PORTABLE_PATH = ".github/agentify-task-policy.json";
 const RUNTIME_LOADER_PORTABLE_PATH = ".github/agentify/runtime-loader.mjs";
+const AGENTS_PORTABLE_PATH = "AGENTS.md";
+const SETUP_PORTABLE_PATH = "SETUP.md";
 const RUNTIME_VERSION_PLACEHOLDER = "__AGENTIFY_RUNTIME_VERSION__";
 
 export interface InstallScaffoldRuntimeOptions {
@@ -101,6 +103,80 @@ function packageVersion(packageRoot: string): string {
   return metadata.version;
 }
 
+function replaceDocumentationSection(
+  content: string,
+  startHeading: string,
+  endHeading: string,
+  replacement: string,
+): string {
+  const start = content.indexOf(`${startHeading}\n`);
+  const end = content.indexOf(`${endHeading}\n`, start + startHeading.length);
+  if (start < 0 || end < 0 || end <= start) {
+    throw new Error(`Agentify scaffold documentation is missing ${startHeading}`);
+  }
+  return `${content.slice(0, start)}${replacement.trimEnd()}\n\n${content.slice(end)}`;
+}
+
+function readinessAwareDocumentation(
+  source: string,
+  portableRelative: string,
+  configuration: RepositoryTaskPolicyConfiguration,
+): string {
+  const content = fs.readFileSync(source, "utf8");
+  if (configuration.configured) return content;
+
+  if (portableRelative === AGENTS_PORTABLE_PATH) {
+    const readyGuidance = [
+      "Use GitHub issues with the `agentify:queue` label to request implementation.",
+      "Agentify plans with a read-only planner and repository-specific read-only",
+      "specialists, grants exactly one builder bounded write authority, validates",
+      "deterministically, obtains an role-separated automated read-only review, and",
+      "stops at an unmerged draft pull request.",
+    ].join("\n");
+    const disabledGuidance = [
+      "Issue execution is disabled because the trusted repository task policy is not",
+      "configured. The orchestrator and specialists are available only for analysis.",
+      "Resolve the installer blockers and rerun Agentify verification before adding",
+      "the `agentify:queue` label or expecting a draft pull request.",
+    ].join("\n");
+    if (!content.includes(readyGuidance)) {
+      throw new Error("Agentify AGENTS.md scaffold is missing its managed work guidance");
+    }
+    return content.replace(readyGuidance, disabledGuidance);
+  }
+
+  if (portableRelative === SETUP_PORTABLE_PATH) {
+    const readyIntroduction = [
+      "Agentify is installed once for this repository. Authorized GitHub issues are",
+      "the normal work interface; do not rerun the CLI for ordinary tasks.",
+    ].join("\n");
+    const disabledIntroduction = [
+      "Agentify's repository analysis and specialist memory are installed, but issue",
+      "execution is disabled because the trusted repository task policy is not",
+      "configured. Do not queue work until the installer reports readiness `ready`.",
+    ].join("\n");
+    if (!content.includes(readyIntroduction)) {
+      throw new Error("Agentify SETUP.md scaffold is missing its managed introduction");
+    }
+    return replaceDocumentationSection(
+      content.replace(readyIntroduction, disabledIntroduction),
+      "## Queue work",
+      "## Credentials",
+      [
+        "## Issue execution disabled",
+        "",
+        "The `agentify:queue` label will not start authorized work in this state.",
+        "Resolve the installer blockers—typically a missing toolchain, failed repository",
+        "validation, or incomplete policy attestation—and rerun Agentify verification.",
+        "When `.github/agentify-task-policy.json` becomes configured, Agentify rewrites",
+        "this guide with the issue workflow and trusted maintainer commands.",
+      ].join("\n"),
+    );
+  }
+
+  return content;
+}
+
 function contentFor(
   source: string,
   portableRelative: string,
@@ -108,6 +184,16 @@ function contentFor(
 ): string | undefined {
   if (portableRelative === TASK_POLICY_PORTABLE_PATH && options.taskPolicyConfiguration) {
     return `${JSON.stringify(options.taskPolicyConfiguration, null, 2)}\n`;
+  }
+  if (
+    options.taskPolicyConfiguration
+    && (portableRelative === AGENTS_PORTABLE_PATH || portableRelative === SETUP_PORTABLE_PATH)
+  ) {
+    return readinessAwareDocumentation(
+      source,
+      portableRelative,
+      options.taskPolicyConfiguration,
+    );
   }
   if (portableRelative === RUNTIME_LOADER_PORTABLE_PATH) {
     const sourceContent = fs.readFileSync(source, "utf8");

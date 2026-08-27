@@ -1,0 +1,42 @@
+import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import test from "node:test";
+import { discoverSpecialistPortfolio } from "../../src/core/specialists/index.ts";
+import {
+  SPECIALIST_FIXTURE_TRACKED_FILES,
+  makeSpecialistFixtureMap,
+} from "../fixtures/specialist-map.ts";
+
+const COMMIT = "a".repeat(40);
+
+test("every evidence-backed concern becomes a specialist without an arbitrary portfolio cap", () => {
+  const map = makeSpecialistFixtureMap();
+  const template = map.concern_evidence!.concerns[0]!;
+  map.concern_evidence!.concerns = Array.from({ length: 12 }, (_, index) => ({
+    ...structuredClone(template),
+    concern: `repository specialty ${index + 1}`,
+    one_line: `Owns repository specialty ${index + 1}.`,
+  }));
+
+  const portfolio = discoverSpecialistPortfolio(
+    map,
+    COMMIT,
+    SPECIALIST_FIXTURE_TRACKED_FILES,
+  );
+
+  assert.equal(portfolio.specialists.length, 12);
+  assert.deepEqual(
+    portfolio.specialists.map((specialist) => specialist.concern).sort(),
+    Array.from({ length: 12 }, (_, index) => `repository specialty ${index + 1}`).sort(),
+  );
+  assert.ok(!portfolio.warnings.some((warning) => /strongest .* retained/i.test(warning)));
+});
+
+test("the concern scout derives portfolio size from evidence rather than a target range", () => {
+  const prompt = fs.readFileSync(
+    new URL("../../src/core/audit/prompts/explorers/concern_scout.md", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(prompt, /Aim for 3[–-]8 concerns/i);
+  assert.match(prompt, /Do not target a numeric range/i);
+});

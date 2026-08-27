@@ -11,7 +11,6 @@ import {
 } from "../memory/serialization.ts";
 import {
   MAX_DISCOVERED_PROCEDURES,
-  MAX_DISCOVERED_SPECIALISTS,
   SPECIALIST_PORTFOLIO_SCHEMA_VERSION,
   SPECIALIST_READ_ONLY_EXECUTION_POLICY,
   type ProcedureDefinition,
@@ -271,9 +270,6 @@ export function validateSpecialistPortfolio(
     fail(`unsupported specialist portfolio schema ${portfolio.schema_version}`);
   }
   assertCommit(portfolio.supporting_commit, "specialist portfolio supporting commit");
-  if (portfolio.specialists.length > MAX_DISCOVERED_SPECIALISTS) {
-    fail(`specialist portfolio exceeds ${MAX_DISCOVERED_SPECIALISTS} specialists`);
-  }
   if (portfolio.procedures.length > MAX_DISCOVERED_PROCEDURES) {
     fail(`specialist portfolio exceeds ${MAX_DISCOVERED_PROCEDURES} procedures`);
   }

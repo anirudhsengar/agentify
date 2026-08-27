@@ -5,7 +5,6 @@ import { normalizeMemoryRepositoryPath } from "../memory/paths.ts";
 import type { MemoryConfidence } from "../memory/schema.ts";
 import {
   MAX_DISCOVERED_PROCEDURES,
-  MAX_DISCOVERED_SPECIALISTS,
   SPECIALIST_PORTFOLIO_SCHEMA_VERSION,
   SPECIALIST_READ_ONLY_EXECUTION_POLICY,
   type ProcedureDefinition,
@@ -608,7 +607,6 @@ function buildSpecialistDefinitions(
   }
 
   const specialists = verified
-    .slice(0, MAX_DISCOVERED_SPECIALISTS)
     .map((entry): SpecialistDefinition => {
       const concern = entry.concern;
       const contextPaths = sortedUniqueStrings([
@@ -1009,11 +1007,6 @@ export function discoverSpecialistPortfolio(
   }
   for (const entry of rejected) {
     warnings.push(`Concern "${entry.concern}" did not become a specialist: ${entry.reason}.`);
-  }
-  if (concerns.length > MAX_DISCOVERED_SPECIALISTS) {
-    warnings.push(
-      `The audit recorded ${concerns.length} concerns and the strongest ${MAX_DISCOVERED_SPECIALISTS} were retained.`,
-    );
   }
   if (sourceKind === "legacy_expert_evidence" && specialists.length > 0) {
     warnings.push(
