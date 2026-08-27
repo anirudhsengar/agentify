@@ -45,43 +45,40 @@ jobs:
 
           installer_path = root / "tests/installer/one-time-installer.test.ts"
           installer = installer_path.read_text()
-          old = '''    const map = JSON.stringify(makeSpecialistFixtureMap(), null, 2)
-      .replaceAll(".pi/", ".agents/");
-    fs.writeFileSync(destination, `${map}\\n`);
-    return { turns: 1, costUsd: 0, aborted: false };'''
-          new = '''    const fixtureMap = makeSpecialistFixtureMap();
-    const map = JSON.stringify(fixtureMap, null, 2)
-      .replaceAll(".pi/", ".agents/");
-    fs.writeFileSync(destination, `${map}\\n`);
-    options.onEvent?.({
-      type: "tool_execution_end",
-      toolName: "spawn_explorer",
-      resultText: "Sub-agent (mode=concern_scout) explored . in 1ms.\\n\\n## Report\\n",
-      details: {
-        mode: "concern_scout",
-        target_path: ".",
-        focus: null,
-        report_concern: null,
-      },
-    } as never);
-    for (const concern of fixtureMap.concern_evidence?.concerns ?? []) {
-      options.onEvent?.({
-        type: "tool_execution_end",
-        toolName: "spawn_explorer",
-        resultText: `Sub-agent (mode=concern_tracer) explored . in 1ms.\\n\\n## Report\\nconcern: ${concern.concern}\\n`,
-        details: {
-          mode: "concern_tracer",
-          target_path: ".",
-          focus: concern.concern,
-          report_concern: concern.concern,
-        },
-      } as never);
-    }
-    return { turns: 1, costUsd: 0, aborted: false };'''
-          count = installer.count(old)
-          if count != 1:
-              raise RuntimeError(f"installer receipt fixture patch expected once, found {count}")
-          installer_path.write_text(installer.replace(old, new, 1))
+          class_start = installer.index("class InstallerAuditRuntime implements AgentRuntime")
+          map_line = "    const map = JSON.stringify(makeSpecialistFixtureMap(), null, 2)\n"
+          map_at = installer.index(map_line, class_start)
+          installer = installer[:map_at] + "    const fixtureMap = makeSpecialistFixtureMap();\n    const map = JSON.stringify(fixtureMap, null, 2)\n" + installer[map_at + len(map_line):]
+          write_line = "    fs.writeFileSync(destination, `${map}\\n`);\n"
+          write_at = installer.index(write_line, class_start) + len(write_line)
+          insertion = "\n".join([
+              "    options.onEvent?.({",
+              "      type: \"tool_execution_end\",",
+              "      toolName: \"spawn_explorer\",",
+              "      resultText: \"Sub-agent (mode=concern_scout) explored . in 1ms.\\n\\n## Report\\n\",",
+              "      details: {",
+              "        mode: \"concern_scout\",",
+              "        target_path: \".\",",
+              "        focus: null,",
+              "        report_concern: null,",
+              "      },",
+              "    } as never);",
+              "    for (const concern of fixtureMap.concern_evidence?.concerns ?? []) {",
+              "      options.onEvent?.({",
+              "        type: \"tool_execution_end\",",
+              "        toolName: \"spawn_explorer\",",
+              "        resultText: `Sub-agent (mode=concern_tracer) explored . in 1ms.\\n\\n## Report\\nconcern: ${concern.concern}\\n`,",
+              "        details: {",
+              "          mode: \"concern_tracer\",",
+              "          target_path: \".\",",
+              "          focus: concern.concern,",
+              "          report_concern: concern.concern,",
+              "        },",
+              "      } as never);",
+              "    }",
+              "",
+          ])
+          installer_path.write_text(installer[:write_at] + insertion + installer[write_at:])
           PY
 
           rm -rf .github
