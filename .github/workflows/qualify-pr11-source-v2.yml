@@ -1,0 +1,802 @@
+name: Qualify PR 11 source-only candidate
+
+on:
+  push:
+    branches: [fix/axum-discovery-receipts-public-surfaces]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: qualify-pr11-source-only
+  cancel-in-progress: false
+
+jobs:
+  qualify-publish:
+    if: "github.event.head_commit.message == 'ci: qualify pr11 source-only candidate'"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Restore source-only candidate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/pr11-artifact /tmp/pr11-candidate
+          mkdir -p /tmp/pr11-artifact /tmp/pr11-candidate
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/9649792179/zip" > /tmp/pr11-artifact.zip
+          unzip -q /tmp/pr11-artifact.zip -d /tmp/pr11-artifact
+          archive=$(find /tmp/pr11-artifact -type f \( -name '*.tar.gz' -o -name '*.tgz' \) -print -quit)
+          test -n "$archive"
+          tar -xzf "$archive" -C /tmp/pr11-candidate
+          core_dir=$(find /tmp/pr11-candidate -type d -path '*/src/core' -print -quit)
+          test -n "$core_dir"
+          candidate_root=$(dirname "$(dirname "$core_dir")")
+          test -f "$candidate_root/src/core/audit/explorer-receipts.ts"
+          rsync -a "$candidate_root/src/" src/
+          rsync -a "$candidate_root/tests/" tests/
+      - name: Apply durable current-HEAD receipt closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > src/core/audit/explorer-receipts.ts <<'TS'
+          import { spawnSync } from "node:child_process";
+          import * as fs from "node:fs";
+          import * as path from "node:path";
+          import type { CodebaseMap } from "./schema/index.ts";
+
+          type ExplorerMode = "concern_scout" | "concern_tracer";
+
+          interface ExplorerReceipt {
+            sequence: number;
+            mode: ExplorerMode;
+            success: boolean;
+            targetPath: string;
+            focus: string | null;
+            reportConcern: string | null;
+            failureKind: string | null;
+          }
+
+          interface ExplorerReceiptJournal {
+            schema_version: 1;
+            head_sha: string | null;
+            receipts: ExplorerReceipt[];
+          }
+
+          export interface ExplorerReceiptAssessment {
+            complete: boolean;
+            reasons: string[];
+            head_sha: string | null;
+            successful_scouts: number;
+            successful_tracers: string[];
+            unresolved_tracer_failures: string[];
+            missing_concern_tracers: string[];
+          }
+
+          export interface ExplorerReceiptAssessmentOptions {
+            requireScout?: boolean;
+            requiredConcerns?: ReadonlyArray<string>;
+          }
+
+          export interface ExplorerReceiptTrackerOptions {
+            cwd?: string;
+            stateDir?: string;
+            filename?: string;
+          }
+
+          const JOURNAL_SCHEMA_VERSION = 1 as const;
+          const DEFAULT_JOURNAL_FILENAME = "explorer-receipts.json";
+          const MAX_RECEIPTS = 4_096;
+          const SEMANTIC_STOP_WORDS = new Set([
+            "and",
+            "candidate",
+            "concern",
+            "for",
+            "from",
+            "implementation",
+            "paths",
+            "seed",
+            "specialist",
+            "subsystem",
+            "the",
+            "trace",
+            "tracer",
+            "with",
+          ]);
+
+          function isRecord(value: unknown): value is Record<string, unknown> {
+            return typeof value === "object" && value !== null;
+          }
+
+          function stringField(value: unknown): string | null {
+            return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+          }
+
+          function currentHeadSha(cwd: string): string | null {
+            const result = spawnSync("git", ["-C", cwd, "rev-parse", "--verify", "HEAD"], {
+              encoding: "utf8",
+              maxBuffer: 128 * 1_024,
+              windowsHide: true,
+            });
+            if (result.error || result.status !== 0 || typeof result.stdout !== "string") return null;
+            const value = result.stdout.trim();
+            return /^[0-9a-f]{40,64}$/i.test(value) ? value.toLowerCase() : null;
+          }
+
+          function journalPath(options: ExplorerReceiptTrackerOptions): string | null {
+            if (options.cwd === undefined || options.stateDir === undefined) return null;
+            const root = path.resolve(options.cwd);
+            const stateRoot = path.resolve(root, options.stateDir);
+            if (stateRoot !== root && !stateRoot.startsWith(`${root}${path.sep}`)) return null;
+            return path.join(stateRoot, options.filename ?? DEFAULT_JOURNAL_FILENAME);
+          }
+
+          function validReceipt(value: unknown): value is ExplorerReceipt {
+            if (!isRecord(value)) return false;
+            return Number.isSafeInteger(value.sequence)
+              && (value.sequence as number) > 0
+              && (value.mode === "concern_scout" || value.mode === "concern_tracer")
+              && typeof value.success === "boolean"
+              && typeof value.targetPath === "string"
+              && (value.focus === null || typeof value.focus === "string")
+              && (value.reportConcern === null || typeof value.reportConcern === "string")
+              && (value.failureKind === null || typeof value.failureKind === "string");
+          }
+
+          function readJournal(filename: string, expectedHead: string | null): ExplorerReceiptJournal | null {
+            try {
+              const parsed = JSON.parse(fs.readFileSync(filename, "utf8")) as unknown;
+              if (!isRecord(parsed) || parsed.schema_version !== JOURNAL_SCHEMA_VERSION) return null;
+              if (parsed.head_sha !== expectedHead || !Array.isArray(parsed.receipts)) return null;
+              const receipts = parsed.receipts.filter(validReceipt).slice(-MAX_RECEIPTS);
+              return { schema_version: JOURNAL_SCHEMA_VERSION, head_sha: expectedHead, receipts };
+            } catch {
+              return null;
+            }
+          }
+
+          function writeJournal(filename: string, journal: ExplorerReceiptJournal): void {
+            fs.mkdirSync(path.dirname(filename), { recursive: true });
+            const temporary = `${filename}.${process.pid}.${Date.now()}.tmp`;
+            fs.writeFileSync(temporary, `${JSON.stringify(journal, null, 2)}\n`, "utf8");
+            try {
+              fs.renameSync(temporary, filename);
+            } catch {
+              fs.copyFileSync(temporary, filename);
+              fs.rmSync(temporary, { force: true });
+            }
+          }
+
+          function resultText(result: unknown): string {
+            if (!isRecord(result)) return "";
+            if (typeof result.resultText === "string") return result.resultText;
+            if (!Array.isArray(result.content)) return "";
+            return result.content
+              .filter((block): block is Record<string, unknown> => isRecord(block))
+              .filter((block) => block.type === "text" && typeof block.text === "string")
+              .map((block) => block.text as string)
+              .join("\n");
+          }
+
+          function modeFromResult(result: unknown, text: string): ExplorerMode | null {
+            if (isRecord(result) && isRecord(result.details)) {
+              const mode = stringField(result.details.mode);
+              if (mode === "concern_scout" || mode === "concern_tracer") return mode;
+            }
+            const match = text.match(/\bmode=(concern_scout|concern_tracer)\b/i);
+            const mode = match?.[1]?.toLowerCase();
+            return mode === "concern_scout" || mode === "concern_tracer" ? mode : null;
+          }
+
+          function focusFromText(text: string): string | null {
+            const quoted = text.match(/\bfocus=(?:"([^"]+)"|'([^']+)')/i);
+            if (quoted !== null) return quoted[1]?.trim() || quoted[2]?.trim() || null;
+            const plain = text.match(/\bfocus=([^;\r\n]+)/i);
+            return plain?.[1]?.trim() || null;
+          }
+
+          function reportConcernFromText(text: string): string | null {
+            const match = text.match(/(?:^|\n)\s*concern:\s*([^\r\n]+)/i);
+            return match?.[1]?.trim() || null;
+          }
+
+          function semanticTokens(value: string): Set<string> {
+            const tokens = new Set<string>();
+            for (const raw of value.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
+              if (raw.length < 3 || SEMANTIC_STOP_WORDS.has(raw)) continue;
+              const normalized = raw.length > 4 && raw.endsWith("s") ? raw.slice(0, -1) : raw;
+              tokens.add(normalized);
+            }
+            return tokens;
+          }
+
+          function tokenRelated(left: string, right: string): boolean {
+            return left === right
+              || (Math.min(left.length, right.length) >= 5
+                && (left.startsWith(right) || right.startsWith(left)));
+          }
+
+          function semanticallyRelated(left: string, right: string): boolean {
+            const normalizedLeft = left.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+            const normalizedRight = right.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+            if (!normalizedLeft || !normalizedRight) return false;
+            if (
+              normalizedLeft === normalizedRight
+              || normalizedLeft.includes(normalizedRight)
+              || normalizedRight.includes(normalizedLeft)
+            ) {
+              return true;
+            }
+            const leftTokens = semanticTokens(left);
+            const rightTokens = semanticTokens(right);
+            if (leftTokens.size === 0 || rightTokens.size === 0) return false;
+            let matches = 0;
+            for (const token of leftTokens) {
+              if ([...rightTokens].some((other) => tokenRelated(token, other))) matches += 1;
+            }
+            const minimum = Math.min(leftTokens.size, rightTokens.size);
+            return matches >= 2 || (matches >= 1 && matches / minimum >= 0.6);
+          }
+
+          function receiptIdentity(receipt: ExplorerReceipt): string {
+            return receipt.reportConcern ?? receipt.focus ?? receipt.targetPath;
+          }
+
+          function failureDescription(receipt: ExplorerReceipt): string {
+            const identity = receiptIdentity(receipt);
+            return receipt.failureKind === "timeout" ? `${identity} (timed out)` : identity;
+          }
+
+          export class ExplorerReceiptTracker {
+            #receipts: ExplorerReceipt[] = [];
+            #sequence = 0;
+            #headSha: string | null;
+            readonly #cwd: string | null;
+            readonly #journalPath: string | null;
+
+            constructor(options: ExplorerReceiptTrackerOptions = {}) {
+              this.#cwd = options.cwd ?? null;
+              this.#headSha = this.#cwd === null ? null : currentHeadSha(this.#cwd);
+              this.#journalPath = journalPath(options);
+              this.#reload();
+            }
+
+            #refreshHead(): void {
+              if (this.#cwd === null) return;
+              const nextHead = currentHeadSha(this.#cwd);
+              if (nextHead === this.#headSha) return;
+              this.#headSha = nextHead;
+              this.#receipts = [];
+              this.#sequence = 0;
+              this.#persist();
+            }
+
+            #reload(): void {
+              if (this.#journalPath === null) return;
+              const journal = readJournal(this.#journalPath, this.#headSha);
+              if (journal === null) return;
+              this.#receipts = journal.receipts;
+              this.#sequence = this.#receipts.reduce(
+                (maximum, receipt) => Math.max(maximum, receipt.sequence),
+                0,
+              );
+            }
+
+            #persist(): void {
+              if (this.#journalPath === null) return;
+              writeJournal(this.#journalPath, {
+                schema_version: JOURNAL_SCHEMA_VERSION,
+                head_sha: this.#headSha,
+                receipts: this.#receipts.slice(-MAX_RECEIPTS),
+              });
+            }
+
+            observe(event: unknown): void {
+              if (!isRecord(event) || event.type !== "tool_execution_end") return;
+              const toolName = stringField(event.toolName) ?? stringField(event.tool_name);
+              if (toolName !== "spawn_explorer") return;
+              this.#refreshHead();
+              this.#reload();
+
+              const nestedResult = isRecord(event.result) ? event.result : null;
+              const result = nestedResult ?? event;
+              const text = resultText(result);
+              const mode = modeFromResult(result, text);
+              if (mode === null) return;
+              const details = isRecord(result.details)
+                ? result.details
+                : isRecord(event.details) ? event.details : {};
+              const targetPath = stringField(details.target_path)
+                ?? text.match(/\b(?:explored|for)\s+(.+?)\s+(?:in\s+\d+ms|failed:)/i)?.[1]?.trim()
+                ?? ".";
+              const focus = stringField(details.focus) ?? focusFromText(text);
+              const reportConcern = stringField(details.report_concern)
+                ?? (mode === "concern_tracer" ? reportConcernFromText(text) : null);
+              const success = event.isError !== true
+                && !(nestedResult !== null && nestedResult.isError === true);
+              const failureKind = success
+                ? null
+                : stringField(details.failure_kind)
+                  ?? (/timeout|timed out|exceeded timeout/i.test(text) ? "timeout" : "error");
+
+              this.#sequence += 1;
+              this.#receipts.push({
+                sequence: this.#sequence,
+                mode,
+                success,
+                targetPath,
+                focus,
+                reportConcern,
+                failureKind,
+              });
+              this.#receipts = this.#receipts.slice(-MAX_RECEIPTS);
+              this.#persist();
+            }
+
+            assess(
+              map: CodebaseMap | null,
+              options: ExplorerReceiptAssessmentOptions = {},
+            ): ExplorerReceiptAssessment {
+              this.#refreshHead();
+              this.#reload();
+              const requireScout = options.requireScout ?? true;
+              const requiredConcerns = options.requiredConcerns
+                ?? map?.concern_evidence?.concerns.map((concern) => concern.concern)
+                ?? [];
+              const scouts = this.#receipts.filter((receipt) => receipt.mode === "concern_scout");
+              const latestScout = scouts.at(-1) ?? null;
+              const successfulScouts = scouts.filter((receipt) => receipt.success);
+              const successfulTracers = this.#receipts.filter((receipt) =>
+                receipt.mode === "concern_tracer" && receipt.success
+              );
+              const failedTracers = this.#receipts.filter((receipt) =>
+                receipt.mode === "concern_tracer" && !receipt.success
+              );
+              const missingConcernTracers = requiredConcerns.filter((concern) =>
+                !successfulTracers.some((receipt) => semanticallyRelated(concern, receiptIdentity(receipt)))
+              );
+              const unresolvedFailures = failedTracers.filter((failure) =>
+                !successfulTracers.some((success) =>
+                  success.sequence > failure.sequence
+                  && semanticallyRelated(receiptIdentity(failure), receiptIdentity(success))
+                )
+              );
+
+              const reasons: string[] = [];
+              if (requireScout && latestScout === null) {
+                reasons.push("successful concern_scout receipt is missing");
+              } else if (requireScout && latestScout?.success !== true) {
+                reasons.push("latest concern_scout attempt failed and was not successfully retried");
+              }
+              for (const concern of missingConcernTracers) {
+                reasons.push(`accepted concern "${concern}" has no successful concern_tracer receipt`);
+              }
+              for (const failure of unresolvedFailures) {
+                reasons.push(
+                  `concern_tracer for "${failureDescription(failure)}" failed and was not successfully retraced`,
+                );
+              }
+
+              return {
+                complete: reasons.length === 0,
+                reasons,
+                head_sha: this.#headSha,
+                successful_scouts: successfulScouts.length,
+                successful_tracers: successfulTracers.map(receiptIdentity),
+                unresolved_tracer_failures: unresolvedFailures.map(failureDescription),
+                missing_concern_tracers: missingConcernTracers,
+              };
+            }
+          }
+          TS
+
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path.cwd()
+
+          def read(path: str) -> str:
+              return (root / path).read_text()
+
+          def write(path: str, text: str) -> None:
+              (root / path).write_text(text)
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              text = read(path)
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{path}: expected one occurrence, found {count}: {old[:120]!r}")
+              write(path, text.replace(old, new))
+
+          # Preserve structured failure identity for timeouts and provider errors.
+          spawn_path = "src/core/audit/spawn-explorer-tool.ts"
+          spawn = read(spawn_path)
+          catch_pattern = re.compile(
+              r'''        \} catch \(err\) \{\n'''
+              r'''            const msg = err instanceof Error \? err\.message : String\(err\);\n'''
+              r'''            return \{\n'''
+              r'''                content: \[\n'''
+              r'''                    \{\n'''
+              r'''                        type: "text",\n'''
+              r'''                        text: `Error: sub-agent \(mode=\$\{mode\}\) for \$\{params\.target_path\} failed: .*?`,\n'''
+              r'''                    \},\n'''
+              r'''                \],\n'''
+              r'''                isError: true,\n'''
+              r'''                details: undefined as unknown as Record<string, unknown>,\n'''
+              r'''            \};\n'''
+              r'''        \} finally \{''',
+              re.DOTALL,
+          )
+          replacement = '''        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            const failureKind = /timeout|timed out|exceeded timeout/i.test(msg) ? "timeout" : "error";
+            const focus = params.focus?.trim() || null;
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `Error: sub-agent (mode=${mode}) for ${params.target_path} failed: ${focus ? `focus=${JSON.stringify(focus)}; ` : ""}${msg}`,
+                    },
+                ],
+                isError: true,
+                details: {
+                    mode,
+                    target_path: params.target_path,
+                    resolved_target_path: resolvedTarget,
+                    focus,
+                    report_concern: null,
+                    failure_kind: failureKind,
+                },
+            };
+        } finally {'''
+          spawn, count = catch_pattern.subn(replacement, spawn, count=1)
+          if count != 1:
+              raise RuntimeError("spawn explorer failure return did not match exactly once")
+          write(spawn_path, spawn)
+
+          core_path = "src/core/runs/repository-audit-run-core.ts"
+          core = read(core_path)
+          if 'from "../audit/explorer-receipts.ts"' not in core:
+              anchor = 'import { AgentifyLog } from "../audit/log.ts";\n'
+              if anchor not in core:
+                  raise RuntimeError("repository audit core import anchor missing")
+              core = core.replace(anchor, anchor + 'import { ExplorerReceiptTracker } from "../audit/explorer-receipts.ts";\n', 1)
+          core = core.replace(
+              "new ExplorerReceiptTracker();",
+              "new ExplorerReceiptTracker({ cwd: context.cwd, stateDir });",
+          )
+          if "new ExplorerReceiptTracker({ cwd: context.cwd, stateDir })" not in core:
+              anchor = "  const mapTools = createWriteMapTools({ stateDir });\n"
+              if anchor not in core:
+                  raise RuntimeError("repository audit tracker insertion anchor missing")
+              core = core.replace(
+                  anchor,
+                  anchor + "  const explorerReceipts = new ExplorerReceiptTracker({ cwd: context.cwd, stateDir });\n",
+                  1,
+              )
+
+          helper = '''  const auditClosureReached = (
+    candidate = loadCanonicalMapAt(context.cwd, stateDir),
+  ): boolean => candidate !== null
+    && assessAuditCompletion(candidate, { cwd: context.cwd }).complete
+    && explorerReceipts.assess(candidate).complete;
+'''
+          if "const auditClosureReached" not in core:
+              anchor = "  let observedCost = 0;\n"
+              if anchor not in core:
+                  raise RuntimeError("repository audit closure-helper anchor missing")
+              core = core.replace(anchor, anchor + helper, 1)
+
+          lines = core.splitlines()
+          event_blocks = 0
+          index = 0
+          while index < len(lines):
+              if "onEvent: (event) => {" not in lines[index]:
+                  index += 1
+                  continue
+              event_blocks += 1
+              event_type_index = next(
+                  (candidate for candidate in range(index + 1, min(index + 12, len(lines)))
+                   if "const eventType" in lines[candidate]),
+                  None,
+              )
+              if event_type_index is None:
+                  raise RuntimeError("onEvent block has no eventType declaration")
+              if not any("explorerReceipts.observe(event);" in lines[candidate]
+                         for candidate in range(index + 1, min(index + 14, len(lines)))):
+                  indentation = lines[event_type_index][:len(lines[event_type_index]) - len(lines[event_type_index].lstrip())]
+                  lines.insert(event_type_index + 1, f"{indentation}explorerReceipts.observe(event);")
+              index = event_type_index + 2
+          if event_blocks < 2:
+              raise RuntimeError(f"expected at least two repository audit event blocks, found {event_blocks}")
+          core = "\n".join(lines) + "\n"
+
+          core = core.replace(
+              'if (currentMap && assessAuditCompletion(currentMap, { cwd: context.cwd }).complete) {',
+              'if (auditClosureReached(currentMap)) {',
+          )
+          write_map_pattern = re.compile(
+              r'''if \(\s*written\.covered\.length === written\.total.*?\) \{\s*'''
+              r'''controlledClosure = true;\s*(controller|recoveryController)\.abort\(\);\s*\}''',
+              re.DOTALL,
+          )
+          core, write_map_replacements = write_map_pattern.subn(
+              lambda match: f"if (auditClosureReached()) {{\n                    controlledClosure = true;\n                    {match.group(1)}.abort();\n                  }}",
+              core,
+          )
+          if write_map_replacements < 1:
+              raise RuntimeError("no intermediate write-map closure block was replaced")
+
+          recovery_line = "      const recoveryPrompt = buildAuditRecoveryPrompt(closure, { specialistEvidenceMissing });"
+          if recovery_line in core:
+              core = core.replace(
+                  recovery_line,
+                  '''      const receiptAssessment = explorerReceipts.assess(map);
+      const recoveryPrompt = [
+        buildAuditRecoveryPrompt(closure, { specialistEvidenceMissing }),
+        receiptAssessment.complete
+          ? ""
+          : `Explorer discovery is incomplete: ${receiptAssessment.reasons.join("; ")}. Run concern_scout when its receipt is missing or failed, then concern_tracer for every accepted concern and every failed or timed-out tracer. Do not convert an uninspected or failed candidate into not_concerns.`,
+      ].filter(Boolean).join(" ");''',
+                  1,
+              )
+
+          specialist_pattern = re.compile(
+              r'''(?P<indent>\s*)\|\| !specialistEvidenceRecorded\(map\)(?!\s*\n\s*\|\| !explorerReceipts\.assess\(map\)\.complete)'''
+          )
+          core = specialist_pattern.sub(
+              lambda match: f'{match.group("indent")}|| !specialistEvidenceRecorded(map)\n{match.group("indent")}|| !explorerReceipts.assess(map).complete',
+              core,
+          )
+
+          if "new ExplorerReceiptTracker();" in core:
+              raise RuntimeError("repository audit still constructs a session-local receipt tracker")
+          for match in re.finditer(r"controlledClosure = true;", core):
+              prefix = core[max(0, match.start() - 700):match.start()]
+              if "auditClosureReached" not in prefix:
+                  raise RuntimeError("controlled closure remains reachable without durable receipt closure")
+          if core.count("explorerReceipts.observe(event);") < event_blocks:
+              raise RuntimeError("not every repository audit session journals explorer receipts")
+          if "!explorerReceipts.assess(map).complete" not in core:
+              raise RuntimeError("repository audit final/recovery closure lacks receipt assessment")
+          write(core_path, core)
+
+          wrapper_path = "src/core/runs/repository-audit-run.ts"
+          wrapper = read(wrapper_path)
+          if 'from "../audit/explorer-receipts.ts"' not in wrapper:
+              anchor = 'import { AgentifyLog } from "../audit/log.ts";\n'
+              if anchor not in wrapper:
+                  raise RuntimeError("repository audit wrapper import anchor missing")
+              wrapper = wrapper.replace(anchor, anchor + 'import { ExplorerReceiptTracker } from "../audit/explorer-receipts.ts";\n', 1)
+
+          wrapper = wrapper.replace(
+              "function logRepairEvent(log: AgentifyLog, event: unknown): void {",
+              "function logRepairEvent(\n  log: AgentifyLog,\n  explorerReceipts: ExplorerReceiptTracker,\n  event: unknown,\n): void {\n  explorerReceipts.observe(event);",
+              1,
+          )
+          repair_anchor = '  const stateDir = AUDIT_STATE_RELATIVE_DIR;\n  const mapTools = createWriteMapTools({ stateDir });\n'
+          if repair_anchor in wrapper and "const explorerReceipts = new ExplorerReceiptTracker" not in wrapper.split("async function repairSpecialistPortfolio", 1)[1].split("export async function", 1)[0]:
+              wrapper = wrapper.replace(
+                  repair_anchor,
+                  repair_anchor + '  const explorerReceipts = new ExplorerReceiptTracker({ cwd: context.cwd, stateDir });\n',
+                  1,
+              )
+          wrapper = wrapper.replace(
+              "      onEvent: (event) => logRepairEvent(log, event),",
+              "      onEvent: (event) => logRepairEvent(log, explorerReceipts, event),",
+          )
+
+          prompt_signature = "function repairPrompt(assessment: SpecialistEvidenceAssessment, pass: number): string {"
+          if prompt_signature in wrapper:
+              wrapper = wrapper.replace(
+                  prompt_signature,
+                  "function repairPrompt(\n  assessment: SpecialistEvidenceAssessment,\n  pass: number,\n  receiptReasons: readonly string[] = [],\n): string {",
+                  1,
+              )
+              wrapper = wrapper.replace(
+                  '    `Current failures: ${assessment.reasons.slice(0, 12).join("; ")}.`,',
+                  '    `Current failures: ${assessment.reasons.slice(0, 12).join("; ") || "none"}.`,\n    `Explorer receipt failures: ${receiptReasons.slice(0, 12).join("; ") || "none"}.`,',
+                  1,
+              )
+          wrapper = wrapper.replace(
+              "      userPrompt: repairPrompt(assessment, pass),",
+              "      userPrompt: repairPrompt(assessment, pass, receiptAssessment.reasons),",
+          )
+
+          loop_pattern = re.compile(
+              r'''(    const assessment = assessSpecialistEvidence\(map, \{ cwd: context\.cwd \}\);\n)'''
+              r'''    if \(assessment\.complete\) \{''',
+          )
+          wrapper, loop_count = loop_pattern.subn(
+              r'''\1    const receiptAssessment = explorerReceipts.assess(map);
+    if (assessment.complete && receiptAssessment.complete) {''',
+              wrapper,
+              count=1,
+          )
+          if loop_count != 1:
+              raise RuntimeError("specialist repair loop receipt gate did not match")
+
+          final_repair_pattern = re.compile(
+              r'''  if \(finalMap !== null && finalAssessment !== null && finalAssessment\.complete\) \{'''
+          )
+          wrapper, final_repair_count = final_repair_pattern.subn(
+              '''  const finalReceiptAssessment = explorerReceipts.assess(finalMap);
+  if (
+    finalMap !== null
+    && finalAssessment !== null
+    && finalAssessment.complete
+    && finalReceiptAssessment.complete
+  ) {''',
+              wrapper,
+              count=1,
+          )
+          if final_repair_count != 1:
+              raise RuntimeError("specialist repair final receipt gate did not match")
+          wrapper = wrapper.replace(
+              '''      + (finalAssessment?.reasons.slice(0, 12).join("; ") ?? "canonical map is unavailable"),''',
+              '''      + [
+        ...(finalAssessment?.reasons.slice(0, 12) ?? ["canonical map is unavailable"]),
+        ...finalReceiptAssessment.reasons.slice(0, 12),
+      ].join("; "),''',
+              1,
+          )
+
+          exported_anchor = '''  const log = new AgentifyLog({ cwd: context.cwd, configDir: defaultConfigDir() });
+  const startedAt = Date.now();'''
+          if exported_anchor in wrapper:
+              wrapper = wrapper.replace(
+                  exported_anchor,
+                  exported_anchor + '\n  const explorerReceipts = new ExplorerReceiptTracker({\n    cwd: context.cwd,\n    stateDir: AUDIT_STATE_RELATIVE_DIR,\n  });',
+                  1,
+              )
+          outer_pattern = re.compile(
+              r'''(    const assessment = assessSpecialistEvidence\(map, \{ cwd: context\.cwd \}\);\n)'''
+              r'''    let repair = \{ turns: 0, cost_usd: null as number \| null \};\n'''
+              r'''    if \(assessment\.complete\) \{'''
+          )
+          wrapper, outer_count = outer_pattern.subn(
+              r'''\1    const receiptAssessment = explorerReceipts.assess(map);
+    let repair = { turns: 0, cost_usd: null as number | null };
+    if (assessment.complete && receiptAssessment.complete) {''',
+              wrapper,
+              count=1,
+          )
+          if outer_count != 1:
+              raise RuntimeError("outer repository audit receipt gate did not match")
+
+          outer_final = '''    const finalAssessment = assessSpecialistEvidence(finalMap, { cwd: context.cwd });
+    if (!finalAssessment.complete) {'''
+          if outer_final not in wrapper:
+              raise RuntimeError("outer final specialist gate anchor missing")
+          wrapper = wrapper.replace(
+              outer_final,
+              '''    const finalAssessment = assessSpecialistEvidence(finalMap, { cwd: context.cwd });
+    const finalReceiptAssessment = explorerReceipts.assess(finalMap);
+    if (!finalAssessment.complete || !finalReceiptAssessment.complete) {''',
+              1,
+          )
+          wrapper = wrapper.replace(
+              '''        `repository specialist discovery did not reach semantic closure: ${finalAssessment.reasons.join("; ")}`,''',
+              '''        `repository specialist discovery did not reach semantic closure: ${[
+          ...finalAssessment.reasons,
+          ...finalReceiptAssessment.reasons,
+        ].join("; ")}`,''',
+              1,
+          )
+          if "logRepairEvent(log, event)" in wrapper:
+              raise RuntimeError("specialist repair still drops explorer receipt events")
+          write(wrapper_path, wrapper)
+
+          test_path = "tests/audit/explorer-receipts.test.ts"
+          tests = read(test_path)
+          import_anchor = 'import test from "node:test";\n'
+          additional_imports = '''import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+'''
+          if 'from "node:child_process"' not in tests:
+              if import_anchor not in tests:
+                  raise RuntimeError("explorer receipt test import anchor missing")
+              tests = tests.replace(import_anchor, import_anchor + additional_imports, 1)
+          persistence_test = r'''
+
+test("receipt journals survive sessions and reset when repository HEAD changes", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-explorer-receipts-"));
+  const git = (...args: string[]): void => {
+    const result = spawnSync("git", args, { cwd, encoding: "utf8", windowsHide: true });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  };
+  try {
+    git("init");
+    git("config", "user.name", "Agentify Test");
+    git("config", "user.email", "agentify@example.invalid");
+    fs.writeFileSync(path.join(cwd, "README.md"), "first\n");
+    git("add", "README.md");
+    git("commit", "-m", "first");
+
+    const options = { cwd, stateDir: ".agentify/runtime/audit" };
+    const first = new ExplorerReceiptTracker(options);
+    first.observe(explorerEvent({ mode: "concern_scout", success: true }));
+    first.observe(explorerEvent({
+      mode: "concern_tracer",
+      success: true,
+      focus: "Routing and route composition",
+      reportConcern: "Routing and route composition",
+    }));
+    const restored = new ExplorerReceiptTracker(options).assess(
+      mapWithConcerns("Routing and route composition"),
+    );
+    assert.equal(restored.complete, true, restored.reasons.join("; "));
+    assert.match(restored.head_sha ?? "", /^[0-9a-f]{40}$/);
+
+    fs.writeFileSync(path.join(cwd, "README.md"), "second\n");
+    git("add", "README.md");
+    git("commit", "-m", "second");
+    const afterHeadChange = new ExplorerReceiptTracker(options).assess(
+      mapWithConcerns("Routing and route composition"),
+    );
+    assert.equal(afterHeadChange.complete, false);
+    assert.ok(afterHeadChange.reasons.some((reason) => reason.includes("concern_scout")));
+    assert.deepEqual(afterHeadChange.missing_concern_tracers, ["Routing and route composition"]);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+'''
+          if "receipt journals survive sessions" not in tests:
+              tests += persistence_test
+          write(test_path, tests)
+          PY
+
+          git diff --check
+          git status --short
+      - name: Install dependencies
+        run: npm ci
+      - name: Run focused discovery regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npx tsx tests/audit/explorer-receipts.test.ts
+          npx tsx tests/audit/workspace-public-surface-closure.test.ts
+          npx tsx tests/audit/spawn-explorer-budget.test.ts
+          npx tsx tests/audit/coverage-gate.test.ts
+          npx tsx tests/specialists/flow-preservation.test.ts
+          npx tsx tests/specialists/command-contracts.test.ts
+      - name: Run complete release qualification
+        run: npm run verify:release
+      - name: Commit and prove source-only delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Anirudh Sengar"
+          git config user.email "111981402+anirudhsengar@users.noreply.github.com"
+          git add src tests
+          git diff --cached --check
+          git commit -m "fix: require trusted specialist discovery closure"
+          git fetch origin main
+          node scripts/verify-implementation-diff.mjs origin/main HEAD
+          changed=$(git diff --name-only origin/main...HEAD)
+          test -n "$changed"
+          printf '%s\n' "$changed"
+          ! printf '%s\n' "$changed" | grep -E '^\.github/(implementation/|workflows/)|(^|/)(apply|export|materialize|qualify|retry)[^/]*\.(?:yml|yaml|json|txt|patch)$'
+          ! printf '%s\n' "$changed" | grep -Ev '^(src|tests)/'
+          git diff --check origin/main...HEAD
+      - name: Replace PR head with qualified source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push --force-with-lease=refs/heads/fix/trusted-specialist-discovery-workspace-closure:fc4f04d06746e70da463b4bf95211910a53b3b20 \
+            origin HEAD:refs/heads/fix/trusted-specialist-discovery-workspace-closure
