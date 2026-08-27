@@ -98,7 +98,8 @@ jobs:
 
           rm -rf .github
           git checkout origin/main -- .github
-          git diff --check
+          git add -A
+          git diff --cached --check
           git status --short
       - name: Install exact dependencies
         run: npm ci
