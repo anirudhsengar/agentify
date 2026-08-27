@@ -1,0 +1,180 @@
+name: Finalize PR 11 source-only merge v2
+
+on:
+  push:
+    branches: [fix/axum-discovery-receipts-public-surfaces]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: finalize-pr11-source-only-v2
+  cancel-in-progress: false
+
+jobs:
+  validate-and-merge:
+    if: "github.event.head_commit.message == 'ci: finalize pr11 source-only merge v2'"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: ${{ github.repository }}
+      PR_NUMBER: "11"
+      OLD_STAGING_HEAD: fc4f04d06746e70da463b4bf95211910a53b3b20
+      PR_BRANCH: fix/trusted-specialist-discovery-workspace-closure
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Select or construct exact source head
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr=$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")
+          if test "$(jq -r '.merged' <<<"$pr")" = "true"; then
+            echo "already_merged=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          test "$(jq -r '.state' <<<"$pr")" = "open"
+          test "$(jq -r '.draft' <<<"$pr")" = "false"
+          test "$(jq -r '.head.ref' <<<"$pr")" = "$PR_BRANCH"
+          test "$(jq -r '.base.ref' <<<"$pr")" = "main"
+          current_head=$(jq -r '.head.sha' <<<"$pr")
+
+          if test "$current_head" != "$OLD_STAGING_HEAD"; then
+            git fetch origin "$PR_BRANCH"
+            git checkout --detach "$current_head"
+            echo "candidate_head=$current_head" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          git fetch origin fix/axum-discovery-receipts-public-surfaces
+          git show origin/fix/axum-discovery-receipts-public-surfaces:.github/workflows/qualify-pr11-source-v2.yml > /tmp/pr11-v2.yml
+          python - <<'PY' > /tmp/apply-pr11.sh
+          from pathlib import Path
+          import re
+          import textwrap
+
+          source = Path('/tmp/pr11-v2.yml').read_text()
+          names = [
+              'Restore source-only candidate',
+              'Apply durable current-HEAD receipt closure',
+          ]
+          scripts = []
+          for name in names:
+              marker = f'      - name: {name}\n'
+              start = source.index(marker)
+              run_marker = '        run: |\n'
+              run_start = source.index(run_marker, start) + len(run_marker)
+              next_step = source.find('\n      - name:', run_start)
+              next_uses = source.find('\n      - uses:', run_start)
+              candidates = [position for position in (next_step, next_uses) if position >= 0]
+              end = min(candidates) if candidates else len(source)
+              scripts.append(textwrap.dedent(source[run_start:end]))
+          script = '\n'.join(scripts)
+          pattern = re.compile(
+              r'(?m)^(?P<indent>\s*)return Number\.isSafeInteger\(value\.sequence\)\n'
+              r'(?P=indent)  && \(value\.sequence as number\) > 0'
+          )
+          replacement = (
+              r'\g<indent>return typeof value.sequence === "number"\n'
+              r'\g<indent>  && Number.isSafeInteger(value.sequence)\n'
+              r'\g<indent>  && value.sequence > 0'
+          )
+          script, count = pattern.subn(replacement, script, count=1)
+          if count != 1:
+              raise RuntimeError(f'receipt validation correction count was {count}')
+          print(script)
+          PY
+          bash /tmp/apply-pr11.sh
+          git diff --check
+          echo "candidate_head=WORKTREE" >> "$GITHUB_ENV"
+      - name: Install dependencies
+        if: env.already_merged != 'true'
+        run: npm ci
+      - name: Run focused discovery regressions
+        if: env.already_merged != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npx tsx tests/audit/explorer-receipts.test.ts
+          npx tsx tests/audit/workspace-public-surface-closure.test.ts
+          npx tsx tests/audit/spawn-explorer-budget.test.ts
+          npx tsx tests/audit/coverage-gate.test.ts
+          npx tsx tests/specialists/flow-preservation.test.ts
+          npx tsx tests/specialists/command-contracts.test.ts
+      - name: Run complete release qualification
+        if: env.already_merged != 'true'
+        run: npm run verify:release
+      - name: Commit source candidate when reconstruction was required
+        if: env.already_merged != 'true' && env.candidate_head == 'WORKTREE'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Anirudh Sengar"
+          git config user.email "111981402+anirudhsengar@users.noreply.github.com"
+          git add src tests
+          git diff --cached --check
+          git commit -m "fix: require trusted specialist discovery closure"
+          head=$(git rev-parse HEAD)
+          git push --force-with-lease=refs/heads/${PR_BRANCH}:${OLD_STAGING_HEAD} \
+            origin HEAD:refs/heads/${PR_BRANCH}
+          echo "candidate_head=$head" >> "$GITHUB_ENV"
+      - name: Prove exact final PR diff is source-only
+        if: env.already_merged != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          head="$candidate_head"
+          test "$head" != "WORKTREE"
+          git fetch origin main "$PR_BRANCH"
+          test "$(git rev-parse origin/${PR_BRANCH})" = "$head"
+          node scripts/verify-implementation-diff.mjs origin/main "$head"
+          mapfile -t local_files < <(git diff --name-only origin/main..."$head")
+          test "${#local_files[@]}" -ge 8
+          printf '%s\n' "${local_files[@]}"
+          printf '%s\n' "${local_files[@]}" | grep -Fx 'src/core/audit/explorer-receipts.ts'
+          printf '%s\n' "${local_files[@]}" | grep -Fx 'tests/audit/explorer-receipts.test.ts'
+          printf '%s\n' "${local_files[@]}" | grep -Fx 'tests/audit/workspace-public-surface-closure.test.ts'
+          ! printf '%s\n' "${local_files[@]}" | grep -Ev '^(src|tests)/'
+          ! printf '%s\n' "${local_files[@]}" | grep -E '^\.github/|(^|/)(apply|export|materialize|qualify|retry)[^/]*\.(yml|yaml|json|txt|patch)$|\.patch$|\.diff$'
+          git diff --check origin/main..."$head"
+
+          pr=$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")
+          test "$(jq -r '.head.sha' <<<"$pr")" = "$head"
+          for attempt in $(seq 1 30); do
+            pr=$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")
+            mergeable=$(jq -r '.mergeable' <<<"$pr")
+            if test "$mergeable" != "null"; then break; fi
+            sleep 2
+          done
+          test "$(jq -r '.mergeable' <<<"$pr")" = "true"
+          test "$(jq -r '.mergeable_state' <<<"$pr")" != "dirty"
+          mapfile -t api_files < <(
+            gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" --jq '.[].filename'
+          )
+          test "${#api_files[@]}" = "${#local_files[@]}"
+          test "$(printf '%s\n' "${api_files[@]}" | sort | sha256sum | cut -d' ' -f1)" = \
+            "$(printf '%s\n' "${local_files[@]}" | sort | sha256sum | cut -d' ' -f1)"
+      - name: Squash merge exact qualified SHA
+        if: env.already_merged != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          result=$(gh api -X PUT "repos/${REPOSITORY}/pulls/${PR_NUMBER}/merge" \
+            -f sha="$candidate_head" \
+            -f merge_method=squash \
+            -f commit_title='fix: require trusted specialist discovery closure (#11)' \
+            -f commit_message='Require current-HEAD successful explorer receipts, close tracked workspace/public surfaces, preserve verified specialist flows, and reject prose masquerading as validation commands.')
+          test "$(jq -r '.merged' <<<"$result")" = "true"
+          jq -r '"merged commit: \(.sha)"' <<<"$result"
