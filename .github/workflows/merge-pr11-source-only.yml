@@ -1,0 +1,114 @@
+name: Gate and merge PR 11 source-only head
+
+on:
+  push:
+    branches: [fix/axum-discovery-receipts-public-surfaces]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: read
+  statuses: read
+
+concurrency:
+  group: merge-pr11-source-only
+  cancel-in-progress: false
+
+jobs:
+  gate-merge:
+    if: "github.event.head_commit.message == 'ci: gate and merge pr11 source-only head'"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: ${{ github.repository }}
+      PR_NUMBER: "11"
+      OLD_STAGING_HEAD: fc4f04d06746e70da463b4bf95211910a53b3b20
+    steps:
+      - name: Wait for qualified source-only head
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 120); do
+            pr=$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")
+            state=$(jq -r '.state' <<<"$pr")
+            merged=$(jq -r '.merged' <<<"$pr")
+            draft=$(jq -r '.draft' <<<"$pr")
+            head=$(jq -r '.head.sha' <<<"$pr")
+            head_ref=$(jq -r '.head.ref' <<<"$pr")
+            base_ref=$(jq -r '.base.ref' <<<"$pr")
+            test "$state" = "open"
+            test "$merged" = "false"
+            test "$draft" = "false"
+            test "$head_ref" = "fix/trusted-specialist-discovery-workspace-closure"
+            test "$base_ref" = "main"
+            if test "$head" != "$OLD_STAGING_HEAD"; then
+              printf '%s' "$head" > /tmp/pr11-head
+              break
+            fi
+            sleep 10
+          done
+          test -s /tmp/pr11-head
+      - name: Prove final PR diff contains source and tests only
+        shell: bash
+        run: |
+          set -euo pipefail
+          head=$(cat /tmp/pr11-head)
+          pr=$(gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}")
+          test "$(jq -r '.head.sha' <<<"$pr")" = "$head"
+          mergeable=$(jq -r '.mergeable' <<<"$pr")
+          mergeable_state=$(jq -r '.mergeable_state' <<<"$pr")
+          test "$mergeable" = "true"
+          test "$mergeable_state" != "dirty"
+
+          mapfile -t files < <(
+            gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" \
+              --jq '.[].filename'
+          )
+          test "${#files[@]}" -ge 8
+          printf '%s\n' "${files[@]}"
+          printf '%s\n' "${files[@]}" | grep -Fx 'src/core/audit/explorer-receipts.ts'
+          printf '%s\n' "${files[@]}" | grep -Fx 'tests/audit/explorer-receipts.test.ts'
+          printf '%s\n' "${files[@]}" | grep -Fx 'tests/audit/workspace-public-surface-closure.test.ts'
+          ! printf '%s\n' "${files[@]}" | grep -Ev '^(src|tests)/'
+          ! printf '%s\n' "${files[@]}" | grep -E '^\.github/|(^|/)(apply|export|materialize|qualify|retry)[^/]*\.(yml|yaml|json|txt|patch)$|\.patch$|\.diff$'
+
+          comparison=$(gh api "repos/${REPOSITORY}/compare/main...${head}")
+          test "$(jq -r '.status' <<<"$comparison")" = "ahead"
+          test "$(jq -r '.behind_by' <<<"$comparison")" = "0"
+          test "$(jq -r '.ahead_by' <<<"$comparison")" = "1"
+          test "$(jq -r '.files | length' <<<"$comparison")" = "${#files[@]}"
+      - name: Require successful checks when present
+        shell: bash
+        run: |
+          set -euo pipefail
+          head=$(cat /tmp/pr11-head)
+          for attempt in $(seq 1 120); do
+            checks=$(gh api -H 'Accept: application/vnd.github+json' "repos/${REPOSITORY}/commits/${head}/check-runs?per_page=100")
+            total=$(jq -r '.total_count' <<<"$checks")
+            incomplete=$(jq '[.check_runs[] | select(.status != "completed")] | length' <<<"$checks")
+            failed=$(jq '[.check_runs[] | select(.status == "completed" and (.conclusion | IN("success", "neutral", "skipped") | not))] | length' <<<"$checks")
+            if test "$failed" -gt 0; then
+              jq -r '.check_runs[] | select(.status == "completed" and (.conclusion | IN("success", "neutral", "skipped") | not)) | "failed check: \(.name): \(.conclusion)"' <<<"$checks"
+              exit 1
+            fi
+            if test "$incomplete" -eq 0; then
+              echo "completed checks: $total"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "checks did not settle"
+          exit 1
+      - name: Squash merge exact qualified head
+        shell: bash
+        run: |
+          set -euo pipefail
+          head=$(cat /tmp/pr11-head)
+          result=$(gh api -X PUT "repos/${REPOSITORY}/pulls/${PR_NUMBER}/merge" \
+            -f sha="$head" \
+            -f merge_method=squash \
+            -f commit_title='fix: require trusted specialist discovery closure (#11)' \
+            -f commit_message='Require current-HEAD successful explorer receipts, close tracked workspace/public surfaces, preserve verified specialist flows, and reject prose masquerading as validation commands.')
+          test "$(jq -r '.merged' <<<"$result")" = "true"
+          jq -r '"merged commit: \(.sha)"' <<<"$result"
