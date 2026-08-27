@@ -1,0 +1,1 @@
+Fresh source-only merge-gate trigger. This file exists only on the isolated staging branch and cannot enter PR #11.
