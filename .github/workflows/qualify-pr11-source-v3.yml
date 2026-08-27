@@ -1,0 +1,103 @@
+name: Qualify PR 11 source-only candidate v3
+
+on:
+  push:
+    branches: [fix/axum-discovery-receipts-public-surfaces]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: qualify-pr11-source-only-v3
+  cancel-in-progress: false
+
+jobs:
+  qualify-publish:
+    if: "github.event.head_commit.message == 'ci: qualify pr11 source-only candidate v3'"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Apply corrected source implementation
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin fix/axum-discovery-receipts-public-surfaces
+          git show origin/fix/axum-discovery-receipts-public-surfaces:.github/workflows/qualify-pr11-source-v2.yml > /tmp/pr11-v2.yml
+          ruby -ryaml -e '
+            document = YAML.load_file(ARGV.fetch(0))
+            names = ["Restore source-only candidate", "Apply durable current-HEAD receipt closure"]
+            steps = document.fetch("jobs").fetch("qualify-publish").fetch("steps")
+            scripts = names.map do |name|
+              step = steps.find { |candidate| candidate["name"] == name }
+              abort("missing step: #{name}") unless step && step["run"]
+              step["run"]
+            end
+            puts scripts.join("\n")
+          ' /tmp/pr11-v2.yml > /tmp/apply-pr11.sh
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('/tmp/apply-pr11.sh')
+          text = path.read_text()
+          old = '''            return Number.isSafeInteger(value.sequence)
+              && (value.sequence as number) > 0'''
+          new = '''            return typeof value.sequence === "number"
+              && Number.isSafeInteger(value.sequence)
+              && value.sequence > 0'''
+          if text.count(old) != 1:
+              raise RuntimeError(f"receipt validation correction count was {text.count(old)}")
+          path.write_text(text.replace(old, new))
+          PY
+          bash /tmp/apply-pr11.sh
+          git diff --check
+      - name: Install dependencies
+        run: npm ci
+      - name: Run focused discovery regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npx tsx tests/audit/explorer-receipts.test.ts
+          npx tsx tests/audit/workspace-public-surface-closure.test.ts
+          npx tsx tests/audit/spawn-explorer-budget.test.ts
+          npx tsx tests/audit/coverage-gate.test.ts
+          npx tsx tests/specialists/flow-preservation.test.ts
+          npx tsx tests/specialists/command-contracts.test.ts
+      - name: Run complete release qualification
+        run: npm run verify:release
+      - name: Commit and prove source-only delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Anirudh Sengar"
+          git config user.email "111981402+anirudhsengar@users.noreply.github.com"
+          git add src tests
+          git diff --cached --check
+          git commit -m "fix: require trusted specialist discovery closure"
+          git fetch origin main
+          node scripts/verify-implementation-diff.mjs origin/main HEAD
+          mapfile -t changed < <(git diff --name-only origin/main...HEAD)
+          test "${#changed[@]}" -ge 8
+          printf '%s\n' "${changed[@]}"
+          printf '%s\n' "${changed[@]}" | grep -Fx 'src/core/audit/explorer-receipts.ts'
+          printf '%s\n' "${changed[@]}" | grep -Fx 'tests/audit/explorer-receipts.test.ts'
+          printf '%s\n' "${changed[@]}" | grep -Fx 'tests/audit/workspace-public-surface-closure.test.ts'
+          ! printf '%s\n' "${changed[@]}" | grep -Ev '^(src|tests)/'
+          ! printf '%s\n' "${changed[@]}" | grep -E '^\.github/|(^|/)(apply|export|materialize|qualify|retry)[^/]*\.(yml|yaml|json|txt|patch)$|\.patch$|\.diff$'
+          git diff --check origin/main...HEAD
+      - name: Replace PR head with qualified source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push --force-with-lease=refs/heads/fix/trusted-specialist-discovery-workspace-closure:fc4f04d06746e70da463b4bf95211910a53b3b20 \
+            origin HEAD:refs/heads/fix/trusted-specialist-discovery-workspace-closure
