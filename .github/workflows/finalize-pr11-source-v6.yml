@@ -1,0 +1,115 @@
+name: Finalize PR 11 source-only v6
+
+on:
+  push:
+    branches: [fix/axum-discovery-receipts-public-surfaces]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-pr11-source-only-v6-exact
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    if: "github.event.head_commit.message == 'ci: finalize pr11 source-only v6'"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: fix/axum-discovery-receipts-public-surfaces
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Materialize and correct the source-only candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          root = Path.cwd()
+          source = (root / ".github/workflows/finalize-pr11-source-v5.yml").read_text()
+          start_marker = "          python - <<'PY'\n"
+          end_marker = "          PY\n"
+          start = source.index(start_marker) + len(start_marker)
+          end = source.index(end_marker, start)
+          script = textwrap.dedent(source[start:end])
+          exec(compile(script, "<finalize-v5-materialization>", "exec"))
+
+          installer_path = root / "tests/installer/one-time-installer.test.ts"
+          installer = installer_path.read_text()
+          marker = "    const fixtureMap = makeSpecialistFixtureMap();\n"
+          at = installer.index(marker) + len(marker)
+          insertion = "\n".join([
+              "    fixtureMap.concern_evidence?.concerns[0]?.touchpoints.push({",
+              "      path: \"src/lib.ts\",",
+              "      symbol: null,",
+              "      role: \"Public package entry point owned by authentication in this fixture.\",",
+              "      line_range: null,",
+              "      centrality: \"supporting\",",
+              "    });",
+              "",
+          ])
+          installer_path.write_text(installer[:at] + insertion + installer[at:])
+          PY
+
+          rm -rf .github
+          git checkout origin/main -- .github
+          git add -A
+          git diff --cached --check
+          git status --short
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Run focused discovery regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npx tsx tests/audit/explorer-receipts.test.ts
+          npx tsx tests/audit/workspace-public-surface-closure.test.ts
+          npx tsx tests/audit/spawn-explorer-budget.test.ts
+          npx tsx tests/audit/coverage-gate.test.ts
+          npx tsx tests/audit/tracked-specialist-closure.test.ts
+          npx tsx tests/installer/one-time-installer.test.ts
+          npx tsx tests/specialists/flow-preservation.test.ts
+          npx tsx tests/specialists/command-contracts.test.ts
+      - name: Run complete release qualification
+        run: npm run verify:release
+      - name: Publish a clean main-parented PR head
+        shell: bash
+        env:
+          EXPECTED_OLD_HEAD: fc4f04d06746e70da463b4bf95211910a53b3b20
+          TARGET_BRANCH: fix/trusted-specialist-discovery-workspace-closure
+        run: |
+          set -euo pipefail
+          git config user.name "Anirudh Sengar"
+          git config user.email "111981402+anirudhsengar@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          tree=$(git write-tree)
+          parent=$(git rev-parse origin/main)
+          commit=$(printf '%s\n\n%s\n' \
+            'fix: require trusted specialist discovery closure' \
+            'Require successful current-HEAD explorer receipts, workspace/public-surface ownership, complete verified flows, and strict command classification.' \
+            | git commit-tree "$tree" -p "$parent")
+
+          files=$(git diff --name-only "$parent" "$commit")
+          printf '%s\n' "$files"
+          test -n "$files"
+          ! printf '%s\n' "$files" | grep -Ev '^(src|tests)/'
+          printf '%s\n' "$files" | grep -Eq '^src/'
+          printf '%s\n' "$files" | grep -Eq '^tests/'
+          node scripts/verify-implementation-diff.mjs "$parent" "$commit"
+
+          remote_head=$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | awk '{print $1}')
+          test "$remote_head" = "$EXPECTED_OLD_HEAD"
+          git push origin "$commit:refs/heads/$TARGET_BRANCH" \
+            --force-with-lease="refs/heads/$TARGET_BRANCH:$EXPECTED_OLD_HEAD"
+          echo "Published clean PR head: $commit"
