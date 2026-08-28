@@ -264,10 +264,20 @@ async function repairSpecialistPortfolio(
   const initialMap = loadCanonicalMapAt(context.cwd, stateDir);
   if (initialMap === null) throw new Error("canonical codebase map disappeared before specialist repair");
   const trustedReceiptAttestation = initialMap.explorer_receipts;
+  const explorerReceipts = new ExplorerReceiptTracker();
+  if (trustedReceiptAttestation !== undefined) {
+    explorerReceipts.loadAttestation(trustedReceiptAttestation);
+  }
+  const combinedReceiptAttestation = () => {
+    const commit = currentRepositoryCommit(context.cwd);
+    if (commit === null) throw new Error("cannot bind repaired explorer receipts to current HEAD");
+    return explorerReceipts.attestation(commit, log.runId);
+  };
   const preserveReceiptAttestation = (map: CodebaseMap | null): CodebaseMap | null => {
-    if (map === null || trustedReceiptAttestation === undefined) return map;
-    if (map.explorer_receipts === trustedReceiptAttestation) return map;
-    const preserved = { ...map, explorer_receipts: trustedReceiptAttestation };
+    if (map === null) return map;
+    const attestation = combinedReceiptAttestation();
+    if (JSON.stringify(map.explorer_receipts) === JSON.stringify(attestation)) return map;
+    const preserved = { ...map, explorer_receipts: attestation };
     writeCanonicalMap(context.cwd, preserved, {
       stateDir: AUDIT_STATE_RELATIVE_DIR,
       mapFilename: DEFAULT_MAP_FILENAME,
@@ -283,16 +293,10 @@ async function repairSpecialistPortfolio(
   const requireScout = initialAssessment.accepted_concerns.length === 0
     || [...initialAssessment.reasons, ...initialCompilation.reasons]
       .some((reason) => /thin specialist portfolio/i.test(reason));
-  const explorerReceipts = new ExplorerReceiptTracker();
-  if (trustedReceiptAttestation !== undefined) {
-    explorerReceipts.loadAttestation(trustedReceiptAttestation);
-  }
   const persistCombinedReceiptAttestation = (map: CodebaseMap): void => {
-    const commit = currentRepositoryCommit(context.cwd);
-    if (commit === null) throw new Error("cannot bind repaired explorer receipts to current HEAD");
     writeCanonicalMap(context.cwd, {
       ...map,
-      explorer_receipts: explorerReceipts.attestation(commit, log.runId),
+      explorer_receipts: combinedReceiptAttestation(),
     }, {
       stateDir: AUDIT_STATE_RELATIVE_DIR,
       mapFilename: DEFAULT_MAP_FILENAME,
@@ -383,6 +387,14 @@ async function repairSpecialistPortfolio(
           repairController.abort();
         }
         explorerReceipts.observe(event);
+        const value = event as { type?: string; toolName?: string; tool_name?: string };
+        if (
+          value.type === "tool_execution_end"
+          && (value.toolName ?? value.tool_name) === "spawn_explorer"
+        ) {
+          const currentMap = loadCanonicalMapAt(context.cwd, stateDir);
+          if (currentMap !== null) persistCombinedReceiptAttestation(currentMap);
+        }
         logRepairEvent(log, event);
       },
       });
