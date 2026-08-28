@@ -161,6 +161,10 @@ Before creating a scout model session, the explorer tool checks the canonical
 application receipt ledger. A successful scout bound to current HEAD makes
 subsequent scout dispatches a deterministic error; stale and failed receipts
 remain retriable.
+Legacy diagnostic-only maps affected by the former scout-line parser are
+repairable only by normalizing `proposed_concerns`. Re-entry still requires the
+entire repaired map to satisfy the current schema and carry a nonempty receipt
+ledger bound to exact current HEAD; no other invalid field is repaired.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.

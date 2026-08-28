@@ -1,8 +1,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { currentRepositoryCommit } from "../audit/explorer-receipts.ts";
+import { Value } from "typebox/value";
+import {
+  currentRepositoryCommit,
+  normalizeScoutConcernProposal,
+} from "../audit/explorer-receipts.ts";
+import { MAX_MAP_FILE_BYTES } from "../audit/map-input.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
-import { loadCanonicalMapAt } from "../audit/write-map-tool.ts";
+import { CodebaseMapSchema, type CodebaseMap } from "../audit/schema.ts";
 import type { RepositoryInstallationPreflight } from "./contracts.ts";
 import {
   prepareOneTimeInstallationState as prepareBaseInstallationState,
@@ -29,6 +34,46 @@ function exactDirectoryEntries(
     && actual.every((entry, index) => entry === expected[index]);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseResumableDiagnosticMap(raw: Buffer): { map: CodebaseMap; bytes: Buffer } | null {
+  if (raw.byteLength > MAX_MAP_FILE_BYTES) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (Value.Check(CodebaseMapSchema, parsed)) {
+    return { map: parsed as CodebaseMap, bytes: raw };
+  }
+
+  if (!isRecord(parsed) || !isRecord(parsed.explorer_receipts)) return null;
+  const receipts = parsed.explorer_receipts.receipts;
+  if (!Array.isArray(receipts)) return null;
+  let repaired = false;
+  for (const receipt of receipts) {
+    if (!isRecord(receipt) || receipt.proposed_concerns === undefined) continue;
+    if (!Array.isArray(receipt.proposed_concerns)) return null;
+    const proposals: string[] = [];
+    for (const value of receipt.proposed_concerns) {
+      if (typeof value !== "string") return null;
+      const normalized = normalizeScoutConcernProposal(value);
+      if (normalized !== null && !proposals.includes(normalized)) proposals.push(normalized);
+      if (normalized !== value) repaired = true;
+    }
+    if (proposals.length !== receipt.proposed_concerns.length) repaired = true;
+    receipt.proposed_concerns = proposals;
+  }
+  if (!repaired || !Value.Check(CodebaseMapSchema, parsed)) return null;
+  const bytes = Buffer.from(JSON.stringify(parsed, null, 2), "utf8");
+  return bytes.byteLength <= MAX_MAP_FILE_BYTES
+    ? { map: parsed as CodebaseMap, bytes }
+    : null;
+}
+
 function resumableDiagnosticMapBytes(cwd: string): Buffer | null {
   const root = path.join(cwd, ".agentify");
   const runtime = path.join(root, "runtime");
@@ -48,17 +93,17 @@ function resumableDiagnosticMapBytes(cwd: string): Buffer | null {
     return null;
   }
   if (mapStat.isSymbolicLink() || !mapStat.isFile()) return null;
-  const map = loadCanonicalMapAt(cwd, AUDIT_STATE_RELATIVE_DIR);
+  const diagnostic = parseResumableDiagnosticMap(fs.readFileSync(mapPath));
   const currentCommit = currentRepositoryCommit(cwd);
   if (
-    map?.explorer_receipts === undefined
+    diagnostic?.map.explorer_receipts === undefined
     || currentCommit === null
-    || map.explorer_receipts.repository_commit !== currentCommit
-    || map.explorer_receipts.receipts.length === 0
+    || diagnostic.map.explorer_receipts.repository_commit !== currentCommit
+    || diagnostic.map.explorer_receipts.receipts.length === 0
   ) {
     return null;
   }
-  return fs.readFileSync(mapPath);
+  return diagnostic.bytes;
 }
 
 /**

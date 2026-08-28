@@ -94,7 +94,9 @@ All notable changes to Agentify are documented here.
   process-identity evidence before closure is assessed. A successful attested
   concern scout on current HEAD now blocks duplicate scout model execution;
   its proposal names are separated from structured report fields and rejected
-  if they exceed the persisted receipt bound.
+  if they exceed the persisted receipt bound. Diagnostic re-entry narrowly
+  repairs legacy proposal-only receipt violations before validating the whole
+  map; unrelated schema violations remain unrecognized state.
 
 - Explorer success is now persisted as an application-authored receipt ledger
   bound to the audited repository commit. Model map writes cannot create or
