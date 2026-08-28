@@ -1,13 +1,21 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { Model, Api } from "@earendil-works/pi-ai";
 import { AuditResourceBudget } from "../../src/core/audit/resource-budget.ts";
 import { createSpawnExplorerTool } from "../../src/core/audit/spawn-explorer-tool.ts";
+import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
 function tempDir(name: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `agentify-${name}-`));
+}
+
+function git(cwd: string, ...args: string[]): string {
+  const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
 }
 
 function textFrom(result: { content?: Array<{ type?: string; text?: string }> }): string {
@@ -80,6 +88,54 @@ async function testRejectsWhenTotalSpawnBudgetIsExhausted(): Promise<void> {
       max_total_spawns: 0,
     });
     assertBudgetResume(result);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testRefusesDuplicateCurrentHeadConcernScout(): Promise<void> {
+  const cwd = tempDir("spawn-budget-duplicate-scout");
+  let sessionCreated = false;
+  try {
+    fs.writeFileSync(path.join(cwd, "README.md"), "# fixture\n");
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "fixture");
+    const head = git(cwd, "rev-parse", "HEAD");
+    const auditDir = path.join(cwd, ".agentify", "runtime", "audit");
+    fs.mkdirSync(auditDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(auditDir, "codebase_map.json"),
+      JSON.stringify(attestCodebaseMap(makeValidCodebaseMap(), head)),
+    );
+
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      stateDir: ".agentify/runtime/audit",
+      ...stubExplorerArgs(),
+      createSession: async () => {
+        sessionCreated = true;
+        return {
+          session: {
+            messages: [{ role: "assistant", content: "## Report\nconcerns:\n- concern: duplicate" }],
+            async prompt(): Promise<void> {},
+            dispose(): void {},
+          },
+        };
+      },
+    });
+    const result = await tool.execute(
+      "test-duplicate-current-head-scout",
+      { mode: "concern_scout", target_path: "." } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((result as { isError?: boolean }).isError, true);
+    assert.match(textFrom(result), /successful current-HEAD concern_scout already exists/i);
+    assert.equal(sessionCreated, false, "duplicate scout must be refused before model execution");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -572,6 +628,7 @@ async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
 }
 
 await testRejectsWhenTotalSpawnBudgetIsExhausted();
+await testRefusesDuplicateCurrentHeadConcernScout();
 await testRejectsWhenConcurrentSpawnBudgetIsExhausted();
 await testRejectsWhenCostBudgetIsExhausted();
 await testHardProviderCallCapAbortsContinuation();
