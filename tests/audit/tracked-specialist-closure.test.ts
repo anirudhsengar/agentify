@@ -16,6 +16,7 @@ import type {
   AgentRuntime,
   AgentRuntimeResult,
   AgentRuntimeSessionOptions,
+  AgentifyConfig,
   AgentifyUi,
 } from "../../src/core/types.ts";
 import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
@@ -523,6 +524,43 @@ test("progressive semantic repair may exceed two passes while each pass closes t
     const runEnds = events.filter((event) => event.event === "agentify.run_end");
     assert.equal(runEnds.length, 1, "coverage and semantic repair must share one terminal outcome");
     assert.equal((JSON.parse(runEnds[0]!.payload) as { status: string }).status, "success");
+  } finally {
+    if (previousHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previousHome;
+    fs.rmSync(temporaryHome, { recursive: true, force: true });
+    fs.rmSync(repository.cwd, { recursive: true, force: true });
+  }
+});
+
+test("configured semantic repair pass budgets fail closed with an obligation fingerprint", async () => {
+  const repository = createRepository();
+  const previousHome = process.env["HOME"];
+  const temporaryHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-repair-budget-home-"));
+  process.env["HOME"] = temporaryHome;
+  try {
+    const initial = aqaShapedMap();
+    initial.concern_evidence = {
+      concerns: [initial.concern_evidence!.concerns.at(-1)!],
+      not_concerns: initial.concern_evidence!.not_concerns,
+    };
+    const mapPath = path.join(repository.cwd, ".agentify", "runtime", "audit", "codebase_map.json");
+    fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+    fs.writeFileSync(mapPath, `${JSON.stringify(initial, null, 2)}\n`);
+
+    const runtime = new ProgressiveRepairRuntime();
+    const config = {
+      schemaVersion: 1,
+      provider: "openai",
+      thinkingLevel: "high",
+      models: {},
+      auditBudgets: { maxSemanticRepairPasses: 2 },
+    } as AgentifyConfig;
+    await assert.rejects(
+      runRepositoryAudit({ cwd: repository.cwd, ui: new RepairUi(), runtime, config }),
+      /unresolved-obligation fingerprint [0-9a-f]{64}/i,
+    );
+    assert.equal(runtime.baseCalls, 1);
+    assert.equal(runtime.repairCalls, 2, "configured semantic repair pass cap must be enforced");
   } finally {
     if (previousHome === undefined) delete process.env["HOME"];
     else process.env["HOME"] = previousHome;
