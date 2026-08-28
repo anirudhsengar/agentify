@@ -89,7 +89,9 @@ All notable changes to Agentify are documented here.
   matching concern body is persisted. Provider-turn budgets reconcile against
   provider requests rather than transport-level message counts. Incremental
   concern-evidence deltas default to recursive append, preventing a later
-  bounded checkpoint from discarding previously traced bodies.
+  bounded checkpoint from discarding previously traced bodies. Map writes also
+  remove and report Agentify-managed paths from repository topography and
+  process-identity evidence before closure is assessed.
 
 - Explorer success is now persisted as an application-authored receipt ledger
   bound to the audited repository commit. Model map writes cannot create or

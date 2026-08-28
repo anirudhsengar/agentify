@@ -1388,6 +1388,28 @@ async function testStripsAgentifyManagedRepositoryEvidence(): Promise<void> {
     JSON.stringify(persisted.meta.lifecycle.agent_definitions.paths),
     /\.agentify/,
   );
+
+  const deltaResult = await executeTool(
+    tools.writeMapDeltaTool,
+    {
+      delta: {
+        skeleton: {
+          top_level_tree: ["src", ".github/agentify/runtime-loader.mjs"],
+        },
+      },
+    },
+    cwd,
+  );
+  assert.equal(isToolError(deltaResult), false);
+  assert.match(
+    resultText(deltaResult),
+    /Removed Agentify-managed paths from repository evidence: \.github\/agentify\/runtime-loader\.mjs/,
+  );
+  assert.deepEqual(
+    readJson(tools.canonicalMapPath(cwd)).skeleton.top_level_tree,
+    ["src"],
+    "delta normalization must run before closure and persistence",
+  );
 }
 
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [

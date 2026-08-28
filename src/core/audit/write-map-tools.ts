@@ -87,6 +87,42 @@ const MAP_TOP_LEVEL_KEYS = new Set([
 ]);
 
 type CoverageDimensionName = (typeof COVERAGE_DIMENSIONS)[number];
+const AGENTIFY_MANAGED_EVIDENCE_PATH = /^(?:\.agentify(?:\/|$)|\.github\/agentify(?:\/|$))/;
+
+function stripAgentifyManagedRepositoryEvidence(map: CodebaseMap): string[] {
+    const removed = new Set<string>();
+    const keepPath = (value: string): boolean => {
+        const normalized = value.trim().replaceAll("\\", "/").replace(/^\.\//, "");
+        if (!AGENTIFY_MANAGED_EVIDENCE_PATH.test(normalized)) return true;
+        removed.add(normalized);
+        return false;
+    };
+
+    map.skeleton.top_level_tree = map.skeleton.top_level_tree.filter(keepPath);
+    map.skeleton.entry_points = map.skeleton.entry_points.filter((entry) => keepPath(entry.path));
+    map.skeleton.first_5_files_for_fresh_agent =
+        map.skeleton.first_5_files_for_fresh_agent.filter((entry) => keepPath(entry.path));
+    map.skeleton.app_vs_agentic_layer.bleed_risk_paths =
+        map.skeleton.app_vs_agentic_layer.bleed_risk_paths.filter(keepPath);
+    if (
+        map.skeleton.app_vs_agentic_layer.agentic_layer !== null
+        && !keepPath(map.skeleton.app_vs_agentic_layer.agentic_layer)
+    ) {
+        map.skeleton.app_vs_agentic_layer.agentic_layer = null;
+    }
+    map.meta.lifecycle.agent_definitions.paths =
+        map.meta.lifecycle.agent_definitions.paths.filter(keepPath);
+    map.meta.lifecycle.agent_definitions.count =
+        map.meta.lifecycle.agent_definitions.paths.length;
+
+    return [...removed].sort((left, right) => left.localeCompare(right));
+}
+
+function formatManagedEvidenceNormalization(removed: ReadonlyArray<string>): string {
+    return removed.length === 0
+        ? ""
+        : ` Removed Agentify-managed paths from repository evidence: ${removed.join(", ")}.`;
+}
 
 export const COVERAGE_REPAIR_HINTS: Record<CoverageDimensionName, string> = {
     D1_topography:
@@ -1129,6 +1165,7 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
 
             const validMap = validation.value;
             const existingMap = readCanonicalMap(ctx.cwd, context);
+            const removedManagedPaths = stripAgentifyManagedRepositoryEvidence(validMap);
             const closure = formatCoverageClosure(validMap, ctx.cwd);
             if (existingMap !== null && isBootstrapDraft(existingMap)) {
                 const existingClosure = formatCoverageClosure(existingMap, ctx.cwd);
@@ -1187,6 +1224,7 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                 (downgradedDimensions.length > 0
                     ? ` Unsupported covered claims persisted as gap: ${downgradedDimensions.join(", ")}.`
                     : "") +
+                formatManagedEvidenceNormalization(removedManagedPaths) +
                 formatCoverageRepairGuidance(closure) +
                 formatSpecialistEvidenceGuidance(closure, validMap);
 
@@ -1210,6 +1248,7 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                         reasons: closure.reasons,
                     },
                     downgraded_dimensions: downgradedDimensions,
+                    removed_managed_evidence_paths: removedManagedPaths,
                     gap_warning: closure.warnings,
                     specialist_evidence_recorded: specialistEvidenceRecorded(validMap),
                 },
@@ -1431,6 +1470,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             }
 
             const validMap = mergedValidation.value;
+            const removedManagedPaths = stripAgentifyManagedRepositoryEvidence(validMap);
             const needsTopographyEvidence =
                 dimension === "D1_topography"
                 && (
@@ -1470,6 +1510,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 (downgradedDimensions.length > 0
                     ? ` Unsupported covered claims persisted as gap: ${downgradedDimensions.join(", ")}.`
                     : "") +
+                formatManagedEvidenceNormalization(removedManagedPaths) +
                 formatCoverageRepairGuidance(closure, dimension) +
                 formatSpecialistEvidenceGuidance(closure, validMap) +
                 (needsTopographyEvidence
@@ -1497,6 +1538,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                         reasons: closure.reasons,
                     },
                     downgraded_dimensions: downgradedDimensions,
+                    removed_managed_evidence_paths: removedManagedPaths,
                     gap_warning: closure.warnings,
                     specialist_evidence_recorded: specialistEvidenceRecorded(validMap),
                 },

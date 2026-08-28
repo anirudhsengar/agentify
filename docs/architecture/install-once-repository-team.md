@@ -152,6 +152,11 @@ retrace obligation. Aggregate provider turns are counted from assistant
 provider responses, not user or tool-result transport messages. Concern deltas
 default to recursive append with structural deduplication; an explicit merge
 strategy remains available for an intentional repair.
+Before either a full map or delta is assessed, the write boundary removes
+Agentify-managed paths from skeleton topography, entry/read-first lists,
+agentic-layer bleed paths, and repository process identities. The tool reports
+every removed path, preventing in-transaction installation state from becoming
+repository evidence.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.

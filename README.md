@@ -159,6 +159,8 @@ diagnostic checkpoint on failure, while operational installation state is
 rolled back. A successful tracer is reusable only after its complete concern
 body has also been checkpointed. Concern checkpoints append and deduplicate by
 default so later bounded invocations cannot erase earlier tracer evidence.
+Agentify-managed paths observed during the transaction are normalized out of
+repository topography and process evidence before the map can close.
 
 ### 2. Run the one-time installer
 
