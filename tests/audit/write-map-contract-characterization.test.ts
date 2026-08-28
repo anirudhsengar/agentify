@@ -671,6 +671,24 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
     "resending the full cumulative checkpoint must be idempotent",
   );
 
+  const implicitCheckpoint = makeValidConcern({
+    concern: "help rendering and formatting",
+    one_line: "Owns how command metadata becomes rendered help output.",
+    covers: "Help layout, grouping, and terminal-width formatting.",
+    excludes: "Command dispatch and argument parsing.",
+  });
+  const implicitResult = await executeTool(
+    appendTools.writeMapDeltaTool,
+    { delta: { concern_evidence: { concerns: [implicitCheckpoint] } } },
+    appendCwd,
+  );
+  assert.equal(resultDetails(implicitResult).merge_strategy, "append");
+  assert.deepEqual(
+    readJson(appendTools.canonicalMapPath(appendCwd)).concern_evidence?.concerns.map((concern) => concern.concern),
+    [...existingConcernNames, "response delivery", "help rendering and formatting"],
+    "the default concern checkpoint must be monotonic across bounded invocations",
+  );
+
   const deepCwd = tempDir("merge-deep");
   const deepTools = createWriteMapTools({ stateDir: ".agentify/runtime/audit-b" });
   const deepBase = cloneMap();
