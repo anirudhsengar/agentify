@@ -6,6 +6,7 @@ import * as path from "node:path";
 import test from "node:test";
 import {
   assessSpecialistEvidence,
+  compileSpecialistEvidence,
   type CodebaseMap,
 } from "../../src/core/audit/schema.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
@@ -265,6 +266,73 @@ test("a shared high-signal implementation needs explicit core behavioral ownersh
       ),
       ambiguous.reasons.join("; "),
     );
+    const ambiguousCompilation = compileSpecialistEvidence(map, { cwd });
+    assert.equal(ambiguousCompilation.complete, false);
+    assert.ok(ambiguousCompilation.reasons.some((reason) =>
+      /src\/context\.ts/i.test(reason) && /multiple core owners/i.test(reason)
+    ));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("normalization gives a shared core path to the sole concern that depends on it", () => {
+  const cwd = repository([
+    "src/auth.ts",
+    "src/auth.test.ts",
+    "src/render.ts",
+    "src/render.test.ts",
+    "src/context.ts",
+    "src/context.test.ts",
+  ]);
+  try {
+    const authentication = concern({
+      name: "authentication",
+      covers: "Credential verification through shared request context.",
+      excludes: "Response rendering and Context lifecycle mechanics.",
+      core: "src/auth.ts",
+      test: "src/auth.test.ts",
+      supporting: ["src/context.ts"],
+    });
+    authentication.touchpoints.find((entry) => entry.path === "src/context.ts")!.centrality = "core";
+    const rendering = concern({
+      name: "response rendering",
+      covers: "Response serialization through shared request context.",
+      excludes: "Authentication and Context lifecycle mechanics.",
+      core: "src/render.ts",
+      test: "src/render.test.ts",
+      supporting: ["src/context.ts"],
+    });
+    rendering.touchpoints.find((entry) => entry.path === "src/context.ts")!.centrality = "core";
+    const contextLifecycle = concern({
+      name: "request Context lifecycle",
+      covers: "Handler progression, abort state, copies, errors, and request-local metadata.",
+      excludes: "Credential policy and response serialization.",
+      core: "src/context.ts",
+      test: "src/context.test.ts",
+    });
+    const map = mapWithConcerns(
+      ["src/auth.ts", "src/render.ts", "src/context.ts"],
+      [authentication, rendering, contextLifecycle],
+    );
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.complete, true, compiled.reasons.join("; "));
+    const owners = compiled.map.concern_evidence!.concerns.filter((candidate) =>
+      candidate.touchpoints.some((entry) =>
+        entry.path === "src/context.ts" && entry.centrality === "core"
+      )
+    );
+    assert.deepEqual(owners.map((entry) => entry.concern), ["request Context lifecycle"]);
+    assert.ok(compiled.map.concern_evidence!.concerns
+      .filter((entry) => entry.concern !== "request Context lifecycle")
+      .every((entry) => entry.touchpoints.some((touchpoint) =>
+        touchpoint.path === "src/context.ts" && touchpoint.centrality === "supporting"
+      )));
+
+    const repeated = compileSpecialistEvidence(compiled.map, { cwd });
+    assert.equal(repeated.complete, true, repeated.reasons.join("; "));
+    assert.strictEqual(repeated.map, compiled.map);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
