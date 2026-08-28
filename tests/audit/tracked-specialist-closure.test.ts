@@ -749,7 +749,12 @@ test("same-HEAD audit continuation cannot reset an exhausted aggregate model-cal
             usage: { input: 1, output: 1, cost: { total: 0 } },
           },
         } as never);
-        return { turns: 1, costUsd: 0, aborted: true, diagnostics: { provider_requests: 1 } };
+        return {
+          turns: 1,
+          costUsd: 0,
+          aborted: true,
+          diagnostics: { provider_requests: 1 },
+        } as AgentRuntimeResult;
       },
     };
     const config = {

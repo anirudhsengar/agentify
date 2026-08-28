@@ -84,7 +84,10 @@ All notable changes to Agentify are documented here.
   writes also reject output above the one-megabyte cap before filesystem
   mutation. Tool-use continuations reserve one just-observed input context
   before another request, and terminal turn metrics count provider responses
-  rather than user or tool-result transport messages.
+  rather than user or tool-result transport messages. Same-HEAD diagnostic
+  continuations now retain an application-authored cumulative usage checkpoint,
+  so restarting the CLI cannot reset elapsed-time, call, turn, token, cost, or
+  explorer-spawn limits.
 
 - Explorer sessions now run serially with hard mode-specific repository-read
   and provider-call limits. Aggregate exhaustion reports the exact unresolved

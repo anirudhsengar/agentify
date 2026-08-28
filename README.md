@@ -135,6 +135,10 @@ Overrides are strictly validated and remain subject to finite safety ceilings.
 Parent audit requests and explorer sub-sessions consume the same aggregate call,
 turn, token, cost, and elapsed-time budget. A tool-use continuation must leave
 enough input capacity for another request at the just-observed context size.
+Diagnostic-only continuation at the same repository commit consumes the same
+persisted aggregate usage; restarting the CLI does not reset the budget. A new
+commit starts a new evidence lineage, while explicit overrides can raise the
+finite limits for an unusually large repository without erasing prior usage.
 Explorer work is serialized, and each mode has hard repository-read and
 provider-call caps that are reduced to the aggregate calls still available. A
 complete report at the exact call limit is retained; a request for another turn

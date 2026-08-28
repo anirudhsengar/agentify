@@ -14,6 +14,14 @@ export type {
   FeatureAgentIntent,
 } from "./artifact-intents.ts";
 export {
+  AuditBudgetCheckpointSchema,
+  AuditBudgetUsageSchema,
+} from "./audit-budget.ts";
+export type {
+  AuditBudgetCheckpoint,
+  AuditBudgetUsage,
+} from "./audit-budget.ts";
+export {
   CodebaseMapSchema,
   PartialCodebaseMapSchema,
 } from "./codebase-map.ts";

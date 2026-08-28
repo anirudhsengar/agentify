@@ -465,6 +465,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       && !context.signal?.aborted
       && !providerAuthFailure(runtimeResult.diagnostics)
     ) {
+      resourceBudget.reserveCoverageRecoveryPass();
       recoveryPass += 1;
       const specialistEvidenceMissing = !specialistEvidenceRecorded(map);
       spinner.update(

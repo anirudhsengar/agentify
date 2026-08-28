@@ -193,6 +193,33 @@ test("explorer usage contributes to the same call, token, and cost counters", ()
   assert.equal(budget.snapshot().model_calls, 1);
 });
 
+test("persisted usage bounds same-commit continuation passes and counters", () => {
+  const budget = new AuditResourceBudget({
+    maxModelCalls: 4,
+    maxTurns: 4,
+    maxCoverageRecoveryPasses: 1,
+    maxSemanticRepairPasses: 2,
+  }, Date.now(), {
+    elapsed_ms: 10,
+    model_calls: 3,
+    turns: 3,
+    input_tokens: 20,
+    output_tokens: 5,
+    cost_usd: 0.25,
+    explorer_spawns: 1,
+    coverage_recovery_passes: 1,
+    semantic_repair_passes: 2,
+  });
+  assert.equal(budget.remainingModelCalls(10), 1);
+  assert.throws(() => budget.reserveSemanticRepairPass(), /semantic repair passes reached 2/i);
+  assert.equal(budget.snapshot().model_calls, 3);
+  const fingerprint = "a".repeat(64);
+  assert.equal(budget.recordUnresolvedFingerprint(fingerprint), true);
+  assert.equal(budget.recordUnresolvedFingerprint(fingerprint), true);
+  assert.equal(budget.recordUnresolvedFingerprint(fingerprint), false);
+  assert.deepEqual(budget.unresolvedFingerprints(), [fingerprint, fingerprint, fingerprint]);
+});
+
 test("unresolved-obligation fingerprints are canonical and sensitive", () => {
   const first = unresolvedObligationFingerprint({ paths: ["a", "b"], reasons: { z: 1, a: 2 } });
   const reordered = unresolvedObligationFingerprint({ reasons: { a: 2, z: 1 }, paths: ["a", "b"] });

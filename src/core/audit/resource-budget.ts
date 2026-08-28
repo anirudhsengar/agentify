@@ -41,6 +41,18 @@ export interface ResolvedAuditBudgets {
   maxExplorerSpawns: number;
 }
 
+export interface AuditResourceUsage {
+  elapsed_ms: number;
+  model_calls: number;
+  turns: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  explorer_spawns: number;
+  coverage_recovery_passes: number;
+  semantic_repair_passes: number;
+}
+
 export const DEFAULT_AUDIT_BUDGETS: Readonly<ResolvedAuditBudgets> = Object.freeze({
   maxTotalDurationMs: 30 * 60 * 1000,
   maxSessionDurationMs: 12 * 60 * 1000,
@@ -140,22 +152,59 @@ export class AuditBudgetExceededError extends Error {
 export class AuditResourceBudget {
   readonly limits: ResolvedAuditBudgets;
   readonly #startedAt: number;
+  readonly #priorElapsedMs: number;
   #modelCalls = 0;
   #turns = 0;
   #inputTokens = 0;
   #outputTokens = 0;
   #costUsd = 0;
   #explorerSpawns = 0;
+  #coverageRecoveryPasses = 0;
+  #semanticRepairPasses = 0;
+  readonly #unresolvedFingerprints: string[];
   #failure: string | null = null;
 
-  constructor(overrides?: AuditBudgetOverrides, startedAt = Date.now()) {
+  constructor(
+    overrides?: AuditBudgetOverrides,
+    startedAt = Date.now(),
+    initialUsage?: Readonly<AuditResourceUsage>,
+    initialUnresolvedFingerprints: ReadonlyArray<string> = [],
+  ) {
     this.limits = resolveAuditBudgets(overrides);
     this.#startedAt = startedAt;
+    const usage = initialUsage ?? {
+      elapsed_ms: 0,
+      model_calls: 0,
+      turns: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      cost_usd: 0,
+      explorer_spawns: 0,
+      coverage_recovery_passes: 0,
+      semantic_repair_passes: 0,
+    };
+    for (const [name, value] of Object.entries(usage)) {
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error(`initial audit resource usage ${name} must be finite and non-negative`);
+      }
+    }
+    this.#priorElapsedMs = Math.floor(usage.elapsed_ms);
+    this.#modelCalls = Math.floor(usage.model_calls);
+    this.#turns = Math.floor(usage.turns);
+    this.#inputTokens = Math.floor(usage.input_tokens);
+    this.#outputTokens = Math.floor(usage.output_tokens);
+    this.#costUsd = usage.cost_usd;
+    this.#explorerSpawns = Math.floor(usage.explorer_spawns);
+    this.#coverageRecoveryPasses = Math.floor(usage.coverage_recovery_passes);
+    this.#semanticRepairPasses = Math.floor(usage.semantic_repair_passes);
+    this.#unresolvedFingerprints = [...initialUnresolvedFingerprints];
   }
 
   remainingDurationMs(sessionLimitMs = this.limits.maxSessionDurationMs): number {
     this.assertWithinBudget();
-    const remaining = this.limits.maxTotalDurationMs - (Date.now() - this.#startedAt);
+    const remaining = this.limits.maxTotalDurationMs
+      - this.#priorElapsedMs
+      - (Date.now() - this.#startedAt);
     if (remaining <= 0) this.fail(`elapsed time reached ${this.limits.maxTotalDurationMs}ms`);
     return Math.max(1, Math.min(sessionLimitMs, remaining));
   }
@@ -178,6 +227,16 @@ export class AuditResourceBudget {
     this.assertWithinBudget();
     if (this.#modelCalls >= this.limits.maxModelCalls) {
       this.fail(`model calls reached ${this.limits.maxModelCalls}`);
+    }
+    if (this.#turns >= this.limits.maxTurns) this.fail(`turns reached ${this.limits.maxTurns}`);
+    if (this.#inputTokens >= this.limits.maxInputTokens) {
+      this.fail(`input tokens reached ${this.limits.maxInputTokens}`);
+    }
+    if (this.#outputTokens >= this.limits.maxOutputTokens) {
+      this.fail(`output tokens reached ${this.limits.maxOutputTokens}`);
+    }
+    if (this.#costUsd >= this.limits.maxTotalCostUsd) {
+      this.fail(`provider-reported cost reached $${this.limits.maxTotalCostUsd.toFixed(2)}`);
     }
     return { calls: 0, turns: 0, costUsd: 0, startedAt: Date.now(), maxDurationMs };
   }
@@ -275,6 +334,35 @@ export class AuditResourceBudget {
     return this.remainingDurationMs(modeLimit);
   }
 
+  reserveCoverageRecoveryPass(): void {
+    this.assertWithinBudget();
+    if (this.#coverageRecoveryPasses >= this.limits.maxCoverageRecoveryPasses) {
+      this.fail(`coverage recovery passes reached ${this.limits.maxCoverageRecoveryPasses}`);
+    }
+    this.#coverageRecoveryPasses += 1;
+  }
+
+  reserveSemanticRepairPass(): void {
+    this.assertWithinBudget();
+    if (this.#semanticRepairPasses >= this.limits.maxSemanticRepairPasses) {
+      this.fail(`semantic repair passes reached ${this.limits.maxSemanticRepairPasses}`);
+    }
+    this.#semanticRepairPasses += 1;
+  }
+
+  recordUnresolvedFingerprint(fingerprint: string): boolean {
+    if (!/^[0-9a-f]{64}$/.test(fingerprint)) {
+      throw new Error("unresolved-obligation fingerprint must be a lowercase SHA-256 digest");
+    }
+    this.#unresolvedFingerprints.push(fingerprint);
+    const count = this.#unresolvedFingerprints.filter((value) => value === fingerprint).length;
+    return count <= this.limits.maxRepeatedFingerprintStates;
+  }
+
+  unresolvedFingerprints(): string[] {
+    return [...this.#unresolvedFingerprints];
+  }
+
   recordExplorerMessages(messages: ReadonlyArray<unknown>): void {
     for (const message of messages) {
       if (typeof message !== "object" || message === null || Array.isArray(message)) continue;
@@ -299,15 +387,17 @@ export class AuditResourceBudget {
     this.checkCounters();
   }
 
-  snapshot(): Record<string, number> {
+  snapshot(): AuditResourceUsage & Record<string, number> {
     return {
-      elapsed_ms: Date.now() - this.#startedAt,
+      elapsed_ms: this.#priorElapsedMs + (Date.now() - this.#startedAt),
       model_calls: this.#modelCalls,
       turns: this.#turns,
       input_tokens: this.#inputTokens,
       output_tokens: this.#outputTokens,
       cost_usd: Number(this.#costUsd.toFixed(12)),
       explorer_spawns: this.#explorerSpawns,
+      coverage_recovery_passes: this.#coverageRecoveryPasses,
+      semantic_repair_passes: this.#semanticRepairPasses,
     };
   }
 

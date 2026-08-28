@@ -1193,9 +1193,14 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                 const bootstrapEntry = existingMap.exploration_log.find((entry) => entry.action === "draft_bootstrap");
                 if (bootstrapEntry) validMap.exploration_log.unshift(bootstrapEntry);
             }
-            // Explorer receipts are application-authored runtime evidence. A
-            // model may submit the complete persisted-map shape, so strip any
-            // claimed ledger before restoring only the trusted existing one.
+            // Explorer receipts and cumulative budget usage are
+            // application-authored runtime evidence. A model may submit the
+            // complete persisted-map shape, so strip claimed state before
+            // restoring only the trusted existing values.
+            delete validMap.audit_budget_checkpoint;
+            if (existingMap?.audit_budget_checkpoint !== undefined) {
+                validMap.audit_budget_checkpoint = structuredClone(existingMap.audit_budget_checkpoint);
+            }
             delete validMap.explorer_receipts;
             if (existingMap?.explorer_receipts !== undefined) {
                 validMap.explorer_receipts = structuredClone(existingMap.explorer_receipts);

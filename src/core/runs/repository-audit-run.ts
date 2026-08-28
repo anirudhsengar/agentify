@@ -259,7 +259,6 @@ async function repairSpecialistPortfolio(
   const systemPrompt = loadBuilderPrompt(stateDir);
   let turns = 0;
   let costUsd: number | null = null;
-  const fingerprintCounts = new Map<string, number>();
   let lastFingerprint = "unavailable";
   const initialMap = loadCanonicalMapAt(context.cwd, stateDir);
   if (initialMap === null) throw new Error("canonical codebase map disappeared before specialist repair");
@@ -314,6 +313,7 @@ async function repairSpecialistPortfolio(
 
   const maxRepairPasses = resourceBudget.limits.maxSemanticRepairPasses;
   for (let pass = 1; pass <= maxRepairPasses; pass += 1) {
+    resourceBudget.reserveSemanticRepairPass();
     const sourceMap = preserveReceiptAttestation(loadCanonicalMapAt(context.cwd, stateDir));
     if (sourceMap === null) throw new Error("canonical codebase map disappeared before specialist repair");
     const compilation = compileSpecialistEvidence(sourceMap, { cwd: context.cwd });
@@ -328,9 +328,7 @@ async function repairSpecialistPortfolio(
     }
 
     lastFingerprint = repairObligationFingerprint(compilation, receiptAssessment.reasons);
-    const repeatedCount = (fingerprintCounts.get(lastFingerprint) ?? 0) + 1;
-    fingerprintCounts.set(lastFingerprint, repeatedCount);
-    if (repeatedCount > resourceBudget.limits.maxRepeatedFingerprintStates) break;
+    if (!resourceBudget.recordUnresolvedFingerprint(lastFingerprint)) break;
 
     context.ui.status(
       `agentify: repairing incomplete specialist discovery (${pass}/${maxRepairPasses}; unresolved ${lastFingerprint.slice(0, 12)})`,
@@ -457,8 +455,40 @@ async function repairSpecialistPortfolio(
 export async function runRepositoryAudit(context: RunContext): Promise<FocusedAuditResult> {
   const log = new AgentifyLog({ cwd: context.cwd, configDir: defaultConfigDir() });
   const startedAt = Date.now();
+  const initialMap = loadCanonicalMapAt(context.cwd, AUDIT_STATE_RELATIVE_DIR);
+  const initialCommit = currentRepositoryCommit(context.cwd);
+  const priorCheckpoint = initialCommit !== null
+    && initialMap?.audit_budget_checkpoint?.repository_commit === initialCommit
+    ? initialMap.audit_budget_checkpoint
+    : undefined;
   const resourceBudget = context.auditResourceBudget
-    ?? new AuditResourceBudget(context.config.auditBudgets, startedAt);
+    ?? new AuditResourceBudget(
+      context.config.auditBudgets,
+      startedAt,
+      priorCheckpoint?.usage,
+      priorCheckpoint?.unresolved_fingerprints,
+    );
+  const checkpointRunCount = (priorCheckpoint?.run_count ?? 0) + 1;
+  let budgetCheckpointPersisted = false;
+  const persistBudgetCheckpoint = (): void => {
+    if (budgetCheckpointPersisted) return;
+    const map = loadCanonicalMapAt(context.cwd, AUDIT_STATE_RELATIVE_DIR);
+    const repositoryCommit = currentRepositoryCommit(context.cwd);
+    if (map === null || repositoryCommit === null) return;
+    writeCanonicalMap(context.cwd, {
+      ...map,
+      audit_budget_checkpoint: {
+        repository_commit: repositoryCommit,
+        run_count: checkpointRunCount,
+        usage: resourceBudget.snapshot(),
+        unresolved_fingerprints: resourceBudget.unresolvedFingerprints(),
+      },
+    }, {
+      stateDir: AUDIT_STATE_RELATIVE_DIR,
+      mapFilename: DEFAULT_MAP_FILENAME,
+    });
+    budgetCheckpointPersisted = true;
+  };
   let terminalWritten = false;
   try {
     const result = await runBaseRepositoryAudit({
@@ -503,6 +533,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     }
     const coverage = assessCoverageClosure(finalCompilation.map, { cwd: context.cwd });
     resourceBudget.assertWithinBudget();
+    persistBudgetCheckpoint();
     log.auditBudget({
       status: "within",
       limits: { ...resourceBudget.limits },
@@ -537,6 +568,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       const reportedError = error instanceof AuditBudgetExceededError
         ? actionableBudgetError(error, map, context.cwd)
         : error;
+      persistBudgetCheckpoint();
       log.sessionEnd({
         duration_ms: Date.now() - startedAt,
         was_aborted: context.signal?.aborted === true,

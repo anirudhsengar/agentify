@@ -11,6 +11,7 @@ const SCHEMA_ROOT = path.join(AUDIT_ROOT, "schema");
 
 const EXPECTED_SCHEMA_FILES = [
   "artifact-intents.ts",
+  "audit-budget.ts",
   "codebase-map.ts",
   "concerns.ts",
   "conventions.ts",
@@ -39,8 +40,10 @@ interface PackageJson {
 
 const ALLOWED_SCHEMA_IMPORTS: ReadonlyMap<SchemaFile, readonly SchemaFile[]> = new Map([
   ["artifact-intents.ts", ["primitives.ts"]],
+  ["audit-budget.ts", []],
   ["codebase-map.ts", [
     "artifact-intents.ts",
+    "audit-budget.ts",
     "concerns.ts",
     "conventions.ts",
     "coverage.ts",
@@ -63,6 +66,7 @@ const ALLOWED_SCHEMA_IMPORTS: ReadonlyMap<SchemaFile, readonly SchemaFile[]> = n
   ["explorer-receipts.ts", ["primitives.ts"]],
   ["index.ts", [
     "artifact-intents.ts",
+    "audit-budget.ts",
     "codebase-map.ts",
     "evidence.ts",
     "explorer-receipts.ts",

@@ -1340,7 +1340,7 @@ async function testPreventsPrototypePollutionInDottedKeyExpansion(): Promise<voi
   assert.equal((Object.prototype as unknown as Record<string, unknown>).polluted2, undefined);
 }
 
-async function testStripsModelAuthoredExplorerReceiptAttestation(): Promise<void> {
+async function testStripsModelAuthoredRuntimeAttestations(): Promise<void> {
   const cwd = tempDir("forged-explorer-receipts");
   const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
   const map = cloneMap();
@@ -1357,6 +1357,22 @@ async function testStripsModelAuthoredExplorerReceiptAttestation(): Promise<void
       failure_kind: null,
     }],
   };
+  map.audit_budget_checkpoint = {
+    repository_commit: "a".repeat(40),
+    run_count: 1,
+    usage: {
+      elapsed_ms: 0,
+      model_calls: 0,
+      turns: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      cost_usd: 0,
+      explorer_spawns: 0,
+      coverage_recovery_passes: 0,
+      semantic_repair_passes: 0,
+    },
+    unresolved_fingerprints: [],
+  };
 
   const result = await executeTool(tools.writeMapTool, { map }, cwd);
   assert.equal(isToolError(result), false, resultText(result));
@@ -1364,6 +1380,11 @@ async function testStripsModelAuthoredExplorerReceiptAttestation(): Promise<void
     readJson(tools.canonicalMapPath(cwd)).explorer_receipts,
     undefined,
     "write_map must not accept a model-authored explorer attestation",
+  );
+  assert.equal(
+    readJson(tools.canonicalMapPath(cwd)).audit_budget_checkpoint,
+    undefined,
+    "write_map must not accept a model-authored cumulative budget checkpoint",
   );
 }
 
@@ -1437,7 +1458,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "specialist_evidence dimension alias merges concern evidence", fn: testSpecialistEvidenceDimensionAlias },
   { name: "substance failures persist as gaps with repair guidance", fn: testSubstanceFailuresPersistAsGapsWithRepairGuidance },
   { name: "prevents prototype pollution in dotted key expansion", fn: testPreventsPrototypePollutionInDottedKeyExpansion },
-  { name: "model-authored explorer receipt attestations are stripped", fn: testStripsModelAuthoredExplorerReceiptAttestation },
+  { name: "model-authored runtime attestations are stripped", fn: testStripsModelAuthoredRuntimeAttestations },
   { name: "Agentify-managed paths are stripped from repository evidence", fn: testStripsAgentifyManagedRepositoryEvidence },
 ];
 
