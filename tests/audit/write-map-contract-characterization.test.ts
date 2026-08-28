@@ -618,6 +618,10 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   const appendCwd = tempDir("merge-append");
   const appendTools = createWriteMapTools({ stateDir: ".agentify/runtime/audit-a" });
   const appendBase = cloneMap();
+  appendBase.concern_evidence = {
+    concerns: [makeValidConcern() as never],
+    not_concerns: [],
+  };
   await executeTool(appendTools.writeMapTool, { map: appendBase }, appendCwd);
   await executeTool(
     appendTools.writeMapDeltaTool,
@@ -628,6 +632,26 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
     ...appendBase.pitfalls,
     newPitfall,
   ]);
+  const existingConcernNames = appendBase.concern_evidence?.concerns.map((concern) => concern.concern) ?? [];
+  const checkpointedConcern = makeValidConcern({
+    concern: "response delivery",
+    one_line: "Owns how a validated request becomes a response.",
+    covers: "Response construction and delivery.",
+    excludes: "Request extraction and rejection.",
+  });
+  await executeTool(
+    appendTools.writeMapDeltaTool,
+    {
+      delta: { concern_evidence: { concerns: [checkpointedConcern] } },
+      merge_strategy: "append",
+    },
+    appendCwd,
+  );
+  assert.deepEqual(
+    readJson(appendTools.canonicalMapPath(appendCwd)).concern_evidence?.concerns.map((concern) => concern.concern),
+    [...existingConcernNames, "response delivery"],
+    "nested append checkpoints must retain previously traced concern bodies",
+  );
 
   const deepCwd = tempDir("merge-deep");
   const deepTools = createWriteMapTools({ stateDir: ".agentify/runtime/audit-b" });
