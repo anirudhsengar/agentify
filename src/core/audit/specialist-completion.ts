@@ -1168,6 +1168,20 @@ export function assessSpecialistEvidence(
       `tracked file ${repositoryPath} has multiple core owners: ${owners.sort((left, right) => left.localeCompare(right)).join(", ")}; retain exactly one defensible core owner and mark adjacent touchpoints supporting`,
     );
   }
+  for (const assessment of accepted) {
+    const implementationContext = assessment.contextPaths.filter((repositoryPath) =>
+      !isTestRepositoryPath(repositoryPath) && eligibleImplementationPath(repositoryPath)
+    );
+    if (
+      assessment.corePaths.length > 0
+      && assessment.corePaths.every(isTestRepositoryPath)
+      && implementationContext.length > 0
+    ) {
+      reasons.push(
+        `accepted concern "${assessment.concern}" has test-only core ownership despite tracked implementation context: ${implementationContext.join(", ")}; assign core ownership to the implementing behavior, merge the duplicate concern, or reject it substantively`,
+      );
+    }
+  }
   const explicitOwnersByPath = new Map<string, Set<string>>();
   for (const assessment of accepted) {
     for (const repositoryPath of assessment.contextPaths) {

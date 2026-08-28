@@ -58,7 +58,9 @@ All notable changes to Agentify are documented here.
   before any normalized-map write, so compiler, output-cap, materialization,
   and canary failures restore the same pre-installation state. Every tracked
   file must have exactly one accepted core owner; adjacent specialists may keep
-  it only as supporting context until ownership is resolved.
+  it only as supporting context until ownership is resolved. A concern cannot
+  assign only tests as core while citing tracked implementation behavior as
+  supporting; repositories whose executable product is test-only remain valid.
 
 - Repository audit now enforces one configurable aggregate resource budget
   across coverage, recovery, semantic repair, and explorer sub-sessions. Finite

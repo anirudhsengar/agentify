@@ -106,7 +106,9 @@ point before it changes identities, memory, or procedures. Compiler write,
 materialization, portfolio-count, structural-canary, and later readiness
 failures therefore share the same rollback boundary. Each tracked file must
 have exactly one accepted core owner; other specialists may retain it only as a
-supporting touchpoint until deterministic ownership is resolved.
+supporting touchpoint until deterministic ownership is resolved. Test-only core
+ownership is refused when the same concern cites tracked implementation
+behavior, without rejecting repositories whose product is itself a test suite.
 
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30
