@@ -58,5 +58,11 @@ export type {
   RepositoryBehaviorCluster,
   SpecialistEvidenceAssessment,
 } from "./specialist-completion.ts";
+export { compileSpecialistEvidence } from "./specialist-compiler.ts";
+export type {
+  SpecialistCompilationPhase,
+  SpecialistCompilationResult,
+  SpecialistCompilationStatus,
+} from "./specialist-compiler.ts";
 export { applyMapDefaults } from "./map-defaults.ts";
 export type { AppliedMapDefaults } from "./map-defaults.ts";

@@ -1,7 +1,12 @@
 export * from "./agent-validation-discovery.ts";
 export * from "./command-discovery.ts";
 export * from "./contracts.ts";
-export * from "./finalization.ts";
+export {
+  finalizeOneTimeInstallation,
+  formatOneTimeInstallationReport,
+  type FinalizeOneTimeInstallationInput,
+} from "./compiled-finalization.ts";
+export { prepareOneTimeInstallationState } from "./preparation.ts";
 export * from "./github-configuration.ts";
 export * from "./process-runner.ts";
 export * from "./repository-inspection.ts";

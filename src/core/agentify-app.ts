@@ -6,10 +6,10 @@ import { NoAuthForProviderError } from "./models/resolver.ts";
 import { loadCanonicalMapAt } from "./audit/write-map-tool.ts";
 import {
   assessAuditCompletion,
-  assessSpecialistEvidence,
-  reconcileSpecialistEvidence,
+  compileSpecialistEvidence,
 } from "./audit/schema.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "./audit/paths.ts";
+import { rollbackPendingInstallation } from "./installer/installation-transaction.ts";
 import type {
   AgentifyConfig,
   AgentifyUi,
@@ -93,44 +93,58 @@ async function runAuditWithCredentialRecovery(
 
 /** Run the single focused model-backed operation: a read-only repository map. */
 export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<FocusedAuditResult> {
-  if (options.args.length > 0) {
-    throw new Error(
-      `agentify does not accept '${options.args[0]}'. Known subcommands: login, logout, models. Run \`agentify --help\` for usage.`,
-    );
-  }
-  const config = options.configOverride
-    ?? await ensureAgentifyConfig(defaultConfigDir(), options.ui);
-  const existingMap = loadCanonicalMapAt(options.cwd, AUDIT_STATE_RELATIVE_DIR);
-  if (existingMap !== null) {
-    const completion = assessAuditCompletion(existingMap, { cwd: options.cwd });
-    if (completion.complete) {
-      const specialistAssessment = assessSpecialistEvidence(existingMap, { cwd: options.cwd });
-      const reconciled = reconcileSpecialistEvidence(existingMap, specialistAssessment);
-      if (reconciled !== existingMap) {
-        writeCanonicalMap(options.cwd, reconciled, {
-          stateDir: AUDIT_STATE_RELATIVE_DIR,
-          mapFilename: DEFAULT_MAP_FILENAME,
-        });
-        options.ui.info(
-          `agentify: retained ${specialistAssessment.accepted_concerns.length} tracked specialist concern(s) and recorded ${specialistAssessment.rejected_concerns.length} ungrounded candidate(s) as rejected`,
-        );
-      }
-      options.ui.status("agentify: attached to the existing persistent repository team");
-      options.ui.info("agentify: verified the existing structured codebase map; no model audit was rerun");
-      return {
-        map_path: `${AUDIT_STATE_RELATIVE_DIR}/codebase_map.json`,
-        covered_dimensions: completion.coverage.closed.length,
-        total_dimensions: completion.coverage.closed.length,
-        turns: 0,
-        cost_usd: null,
-      };
-    }
-    if (completion.coverage.unresolved.length === 0 && !completion.specialistEvidenceRecorded) {
-      options.ui.info(
-        "agentify: the existing codebase map predates specialist evidence; running a bounded top-up audit",
+  try {
+    if (options.args.length > 0) {
+      throw new Error(
+        `agentify does not accept '${options.args[0]}'. Known subcommands: login, logout, models. Run \`agentify --help\` for usage.`,
       );
     }
+    const config = options.configOverride
+      ?? await ensureAgentifyConfig(defaultConfigDir(), options.ui);
+    const existingMap = loadCanonicalMapAt(options.cwd, AUDIT_STATE_RELATIVE_DIR);
+    if (existingMap !== null) {
+      const completion = assessAuditCompletion(existingMap, { cwd: options.cwd });
+      if (
+        completion.coverage.unresolved.length === 0
+        && completion.specialistEvidenceRecorded
+      ) {
+        const compilation = compileSpecialistEvidence(existingMap, { cwd: options.cwd });
+        if (compilation.map !== existingMap) {
+          writeCanonicalMap(options.cwd, compilation.map, {
+            stateDir: AUDIT_STATE_RELATIVE_DIR,
+            mapFilename: DEFAULT_MAP_FILENAME,
+          });
+        }
+        if (compilation.complete) {
+          options.ui.info(
+            `agentify: retained ${compilation.assessment.accepted_concerns.length} tracked specialist concern(s) and recorded ${compilation.assessment.rejected_concerns.length} ungrounded candidate(s) as rejected`,
+          );
+          options.ui.status("agentify: attached to the existing persistent repository team");
+          options.ui.info("agentify: verified the existing structured codebase map; no model audit was rerun");
+          return {
+            map_path: `${AUDIT_STATE_RELATIVE_DIR}/codebase_map.json`,
+            covered_dimensions: completion.coverage.closed.length,
+            total_dimensions: completion.coverage.closed.length,
+            turns: 0,
+            cost_usd: null,
+          };
+        }
+        options.ui.info(
+          "agentify: deterministic specialist compilation reopened unresolved ownership; running a bounded repair audit",
+        );
+      } else if (
+        completion.coverage.unresolved.length === 0
+        && !completion.specialistEvidenceRecorded
+      ) {
+        options.ui.info(
+          "agentify: the existing codebase map predates specialist evidence; running a bounded top-up audit",
+        );
+      }
+    }
+    const verifiedConfig = await ensureProviderReachable(options, config);
+    return await runAuditWithCredentialRecovery(options, verifiedConfig);
+  } catch (error) {
+    rollbackPendingInstallation(options.cwd);
+    throw error;
   }
-  const verifiedConfig = await ensureProviderReachable(options, config);
-  return runAuditWithCredentialRecovery(options, verifiedConfig);
 }

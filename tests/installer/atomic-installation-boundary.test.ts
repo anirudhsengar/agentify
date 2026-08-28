@@ -1,0 +1,138 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import test from "node:test";
+import { runAgentifyApp } from "../../src/core/agentify-app.ts";
+import {
+  finalizeOneTimeInstallation,
+  prepareOneTimeInstallationState,
+  type RepositoryInstallationPreflight,
+} from "../../src/core/installer/index.ts";
+import type {
+  AgentRuntime,
+  AgentRuntimeResult,
+  AgentifyUi,
+} from "../../src/core/types.ts";
+import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+
+function git(cwd: string, ...args: string[]): string {
+  const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
+function createRepository(): { cwd: string; preflight: RepositoryInstallationPreflight } {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-atomic-install-"));
+  fs.mkdirSync(path.join(cwd, "src"), { recursive: true });
+  fs.mkdirSync(path.join(cwd, "tests"), { recursive: true });
+  fs.writeFileSync(path.join(cwd, "README.md"), "# Fixture\n");
+  fs.writeFileSync(path.join(cwd, "src", "index.ts"), "export const value = 1;\n");
+  fs.writeFileSync(path.join(cwd, "tests", "index.test.ts"), "// test\n");
+  git(cwd, "init", "-q");
+  git(cwd, "config", "user.name", "Agentify Test");
+  git(cwd, "config", "user.email", "agentify@example.invalid");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "fixture");
+  const head = git(cwd, "rev-parse", "HEAD");
+
+  const preflight = {
+    analysis_allowed: true,
+    disposition: "ready",
+    blockers: [],
+    identity: {
+      repository_id: "123",
+      full_name: "owner/repo",
+      default_branch: "main",
+      current_commit: head,
+      actor_login: "maintainer",
+    },
+    allowed_write_paths: ["src", "tests"],
+    commands: [],
+  } as unknown as RepositoryInstallationPreflight;
+  return { cwd, preflight };
+}
+
+class SilentUi implements AgentifyUi {
+  status(): void {}
+  info(): void {}
+  error(): void {}
+  async promptSelect(): Promise<string> { throw new Error("must not prompt"); }
+  async promptMultiSelect(): Promise<ReadonlyArray<string>> { throw new Error("must not prompt"); }
+  async promptCheckboxList(): Promise<ReadonlyArray<string>> { throw new Error("must not prompt"); }
+  async promptSecret(): Promise<string> { throw new Error("must not prompt"); }
+  async promptText(): Promise<string> { throw new Error("must not prompt"); }
+}
+
+class NeverRuns implements AgentRuntime {
+  async runSession(): Promise<AgentRuntimeResult> {
+    throw new Error("runtime must not run");
+  }
+}
+
+test("failed specialist compilation rolls back every persistent team artifact but retains the diagnostic map", () => {
+  const { cwd, preflight } = createRepository();
+  try {
+    prepareOneTimeInstallationState(cwd, preflight);
+    assert.ok(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")));
+    assert.ok(fs.existsSync(path.join(cwd, ".agentify", "agents", "orchestrator.json")));
+
+    const map = makeValidCodebaseMap();
+    delete map.expert_evidence;
+    delete map.concern_evidence;
+    const mapPath = path.join(cwd, ".agentify", "runtime", "audit", "codebase_map.json");
+    fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+    const diagnostic = `${JSON.stringify(map, null, 2)}\n`;
+    fs.writeFileSync(mapPath, diagnostic);
+
+    assert.throws(
+      () => finalizeOneTimeInstallation({
+        cwd,
+        preflight,
+        agentifyVersion: "1.1.0",
+        provider: "openai",
+        model: "gpt-5",
+        providerVerified: true,
+      }),
+      /specialist compilation failed before installation/i,
+    );
+
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), false);
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "agents")), false);
+    assert.equal(fs.existsSync(path.join(cwd, "AGENTS.md")), false);
+    assert.equal(fs.existsSync(path.join(cwd, ".github", "workflows", "agentify-issue.yml")), false);
+    assert.equal(fs.readFileSync(mapPath, "utf8"), diagnostic);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("any audit exception aborts the pending installation transaction", async () => {
+  const { cwd, preflight } = createRepository();
+  try {
+    prepareOneTimeInstallationState(cwd, preflight);
+    assert.ok(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")));
+
+    await assert.rejects(
+      runAgentifyApp({
+        args: ["unexpected"],
+        cwd,
+        ui: new SilentUi(),
+        runtime: new NeverRuns(),
+        configOverride: {
+          schemaVersion: 1,
+          provider: "openai",
+          thinkingLevel: "high",
+          models: {},
+        },
+      }),
+      /does not accept/i,
+    );
+
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), false);
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "agents")), false);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
