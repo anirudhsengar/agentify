@@ -1367,6 +1367,29 @@ async function testStripsModelAuthoredExplorerReceiptAttestation(): Promise<void
   );
 }
 
+async function testStripsAgentifyManagedRepositoryEvidence(): Promise<void> {
+  const cwd = tempDir("managed-evidence-contamination");
+  const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+  const contaminated = cloneMap();
+  contaminated.skeleton.top_level_tree.push(".agentify");
+  contaminated.meta.lifecycle.agent_definitions.paths.push(
+    ".agentify/agents/orchestrator.json",
+  );
+
+  const result = await executeTool(tools.writeMapTool, { map: contaminated }, cwd);
+  assert.equal(isToolError(result), false);
+  assert.match(
+    resultText(result),
+    /Removed Agentify-managed paths from repository evidence: \.agentify, \.agentify\/agents\/orchestrator\.json/,
+  );
+  const persisted = readJson(tools.canonicalMapPath(cwd));
+  assert.doesNotMatch(JSON.stringify(persisted.skeleton.top_level_tree), /\.agentify/);
+  assert.doesNotMatch(
+    JSON.stringify(persisted.meta.lifecycle.agent_definitions.paths),
+    /\.agentify/,
+  );
+}
+
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "tool definition contract", fn: testToolDefinitionContract },
   { name: "nullable object transport normalization", fn: testNullableObjectTransportNormalization },
@@ -1393,6 +1416,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "substance failures persist as gaps with repair guidance", fn: testSubstanceFailuresPersistAsGapsWithRepairGuidance },
   { name: "prevents prototype pollution in dotted key expansion", fn: testPreventsPrototypePollutionInDottedKeyExpansion },
   { name: "model-authored explorer receipt attestations are stripped", fn: testStripsModelAuthoredExplorerReceiptAttestation },
+  { name: "Agentify-managed paths are stripped from repository evidence", fn: testStripsAgentifyManagedRepositoryEvidence },
 ];
 
 let passed = 0;
