@@ -158,6 +158,44 @@ test("excluded behavior cannot be attached to a concern as positive semantic evi
     const complete = assessSpecialistEvidence(map, { cwd });
     assert.equal(complete.complete, true, complete.reasons.join("; "));
 
+    map.concern_evidence!.concerns.push(concern({
+      name: "form mapping test suite as a specialist",
+      covers: "Duplicates form-mapping behavior while assigning its tests as core ownership.",
+      excludes: "Decoder selection remains in request decoding.",
+      core: "src/form-mapping.test.ts",
+      test: "src/decoder.test.ts",
+      supporting: ["src/form-mapping.ts"],
+    }));
+    const testCore = assessSpecialistEvidence(map, { cwd });
+    assert.equal(testCore.complete, false);
+    assert.ok(
+      testCore.reasons.some((reason) => /test-only core ownership.*implementation context/i.test(reason)),
+      testCore.reasons.join("; "),
+    );
+
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("test-only repositories may own their executable test behavior as core", () => {
+  const cwd = repository([
+    "tests/orchestration",
+    "tests/orchestration.spec",
+  ]);
+  try {
+    const map = mapWithConcerns(
+      ["tests/orchestration"],
+      [concern({
+        name: "executable conformance orchestration",
+        covers: "Runs the repository's conformance product and verifies its result contract.",
+        excludes: "Package metadata and documentation.",
+        core: "tests/orchestration",
+        test: "tests/orchestration.spec",
+      })],
+    );
+    const assessment = assessSpecialistEvidence(map, { cwd });
+    assert.equal(assessment.complete, true, assessment.reasons.join("; "));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
