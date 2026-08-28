@@ -6,6 +6,7 @@ import * as path from "node:path";
 import test from "node:test";
 import {
   inspectRepositoryForInstallation,
+  prepareOneTimeInstallationState,
   type InstallerProcessRequest,
   type InstallerProcessResult,
   type InstallerProcessRunner,
@@ -15,7 +16,7 @@ function result(status: number, stdout = "", stderr = ""): InstallerProcessResul
   return { status, stdout, stderr, timedOut: false, errorMessage: null };
 }
 
-function createRepository(): string {
+function createRepository(policy: string): string {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-restrictive-policy-"));
   fs.mkdirSync(path.join(cwd, "app"), { recursive: true });
   fs.writeFileSync(path.join(cwd, "README.md"), "# Community application\n");
@@ -24,7 +25,7 @@ function createRepository(): string {
   fs.writeFileSync(path.join(cwd, "Gemfile.lock"), "GEM\n\nBUNDLED WITH\n   2.6.0\n");
   fs.writeFileSync(
     path.join(cwd, "CONTRIBUTING.md"),
-    "Do not submit code written by LLM-powered coding tools because of uncertainty around their output's copyright.\n",
+    `${policy}\n`,
   );
   const git = (...args: string[]): void => {
     const execution = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
@@ -58,7 +59,7 @@ class PolicyRunner implements InstallerProcessRunner {
 }
 
 test("restrictive repository policy blocks analysis and installation before any persistent write", () => {
-  const cwd = createRepository();
+  const cwd = createRepository("Do not submit code written by LLM-powered coding tools because of uncertainty around their output's copyright.");
   try {
     const status = (): string => {
       const execution = spawnSync("git", ["-C", cwd, "status", "--porcelain=v1", "--untracked-files=all"], { encoding: "utf8" });
@@ -74,6 +75,10 @@ test("restrictive repository policy blocks analysis and installation before any 
       && blocker.message.includes("CONTRIBUTING.md")
       && blocker.remediation.includes("maintainer")
     )));
+    assert.throws(
+      () => prepareOneTimeInstallationState(cwd, preflight),
+      /preflight forbids analysis/i,
+    );
     assert.equal(status(), before);
     assert.equal(fs.existsSync(path.join(cwd, ".agentify")), false);
     assert.equal(fs.existsSync(path.join(cwd, "AGENTS.md")), false);
@@ -82,3 +87,19 @@ test("restrictive repository policy blocks analysis and installation before any 
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+for (const policy of [
+  "AI-assisted contributions are welcome when contributors review and test them.",
+  "Do not commit credentials, including credentials suggested by AI tools.",
+]) {
+  test(`non-prohibitive policy remains analyzable: ${policy}`, () => {
+    const cwd = createRepository(policy);
+    try {
+      const preflight = inspectRepositoryForInstallation({ cwd, runner: new PolicyRunner() });
+      assert.equal(preflight.analysis_allowed, true);
+      assert.ok(!preflight.blockers.some((blocker) => String(blocker.code) === "repository_policy_prohibits_ai"));
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+}

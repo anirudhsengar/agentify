@@ -51,27 +51,30 @@ The local installer performs these steps in order:
 
 1. resolve the physical repository root and verify Git history;
 2. resolve the canonical GitHub repository and authenticated actor;
-3. verify maintainer permission and default-branch policy;
-4. discover validation commands without executing them and require a committed
+3. inspect bounded tracked agent and contribution policy files and stop before
+   any repository mutation when they explicitly prohibit AI/LLM-authored
+   persistent work;
+4. verify maintainer permission and default-branch policy;
+5. discover validation commands without executing them and require a committed
    npm lockfile when validation has package dependencies;
-5. screen discovered commands for obvious production credentials and mutation,
+6. screen discovered commands for obvious production credentials and mutation,
    then execute passing required validation without an OS sandbox or network
    isolation; running `agentify` in the target repository is the attestation
    that records maintainer-approved unsandboxed validation;
-6. initialize persistent identity and self-update policy;
-7. run a read-only structured repository audit;
-8. if discovery did not verify a required command, refine validation from the
+7. initialize persistent identity and self-update policy;
+8. run a read-only structured repository audit;
+9. if discovery did not verify a required command, refine validation from the
    audited validation surface and re-verify; when no repository command can be
    verified at all, install the Agentify-owned validation smoke
    (`.github/agentify/validation-smoke.mjs`: tracked-JSON validity, JavaScript
    syntax, committed-secret scan) and record
    the verified smoke command in the task policy;
-9. derive and persist specialists and procedures from repository evidence;
-10. install the issue and learning workflows plus their trusted runtimes;
-11. write a repository-bound task policy with the attested manifest, command,
+10. derive and persist specialists and procedures from repository evidence;
+11. install the issue and learning workflows plus their trusted runtimes;
+12. write a repository-bound task policy with the attested manifest, command,
     and lockfile hashes;
-12. run deterministic installation canaries;
-13. configure required GitHub labels, non-secret variables, and the repository
+13. run deterministic installation canaries;
+14. configure required GitHub labels, non-secret variables, and the repository
     Actions permission needed to create unmerged draft pull requests; with
     interactive consent, upload the stored provider credentials (API keys and
     OAuth subscription sign-ins) to the `PI_AUTH_JSON` Actions secret — or copy
@@ -80,7 +83,13 @@ The local installer performs these steps in order:
     interactive consent when the maintainer wants those pull requests to
     trigger ordinary repository workflows and rotated OAuth credentials to be
     written back to `PI_AUTH_JSON`;
-14. enable issue intake only when every required check passes.
+15. enable issue intake only when every required check passes.
+
+Policy inspection is deterministic, bounded to tracked regular policy files,
+and occurs before memory recovery, runtime repair, diagnostic map creation, or
+transaction setup. Repository text can reduce Agentify's authority but cannot
+expand it. A permissive policy or an unrelated warning that merely mentions AI
+does not trigger the blocker.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.

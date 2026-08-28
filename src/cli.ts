@@ -126,13 +126,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
-  const memoryRecovery = recoverTeamMemoryStore(process.cwd());
-  if (memoryRecovery.status === "recovered") {
-    ui.info(
-      `agentify: recovered persistent agent memory (${memoryRecovery.repaired.join(", ")}).`,
-    );
-  }
-
   let installerPreflight = inspectRepositoryForInstallation({
     cwd: process.cwd(),
     runValidation: false,
@@ -142,6 +135,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       ui.error(`agentify: blocker [${blocker.code}]: ${blocker.message} ${blocker.remediation}`);
     }
     throw new Error("repository is not safe to analyze or install; no Agentify files were changed");
+  }
+  const memoryRecovery = recoverTeamMemoryStore(process.cwd());
+  if (memoryRecovery.status === "recovered") {
+    ui.info(
+      `agentify: recovered persistent agent memory (${memoryRecovery.repaired.join(", ")}).`,
+    );
   }
   let validationApproval: RepositoryValidationApproval | null = null;
   const existingPolicy = readRepositoryTaskPolicyConfiguration(process.cwd());

@@ -46,6 +46,13 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Installation now honors explicit tracked repository policies that prohibit
+  AI/LLM-authored persistent work. A bounded preflight scan runs before memory
+  recovery, runtime repair, audit diagnostics, or transaction setup; it reports
+  the exact policy path and an actionable maintainer remediation while leaving
+  the repository byte-for-byte unchanged. Permissive policy and unrelated AI
+  mentions are covered as negative controls.
+
 - ChatGPT-subscription (openai-codex) sessions no longer fail every request.
   Agentify's per-request output cap injected `max_output_tokens` into the raw
   provider payload, but the ChatGPT Codex backend rejects that parameter

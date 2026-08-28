@@ -16,6 +16,9 @@ export function prepareOneTimeInstallationState(
   cwd: string,
   preflight: RepositoryInstallationPreflight,
 ): void {
+  if (!preflight.analysis_allowed) {
+    throw new Error("repository preflight forbids analysis; no installation transaction was started");
+  }
   beginPendingInstallation(cwd);
   try {
     prepareBaseInstallationState(cwd, preflight);

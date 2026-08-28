@@ -14,6 +14,7 @@ export type InstallerBlockerCode =
   | "github_cli_unavailable"
   | "github_auth_unavailable"
   | "repository_identity_mismatch"
+  | "repository_policy_prohibits_ai"
   | "missing_github_permission"
   | "unknown_branch_policy"
   | "unsupported_build_system"

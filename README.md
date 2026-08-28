@@ -122,7 +122,7 @@ agentify
 
 The installer:
 
-- verifies the repository root, GitHub identity, maintainer authority, and default-branch policy;
+- verifies the repository root, tracked contribution/agent policies, GitHub identity, maintainer authority, and default-branch policy; an explicit ban on AI/LLM-authored repository work stops before any Agentify write;
 - discovers validation commands, screens them for obvious production credentials and mutation, and records installer attestation for unsandboxed execution;
 - audits the repository and creates persistent specialists, procedures, and knowledge;
 - refines missing validation from the audited validation surface when discovery did not verify a required command;

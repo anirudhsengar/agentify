@@ -31,7 +31,7 @@ paths, state transitions, and evidence before performing bounded mutations.
 | Assurance | Agentify provides |
 | --- | --- |
 | Enforced | Model tool allowlists, path and branch boundaries, typed state transitions, and GitHub credential separation |
-| Detected and rejected | Repository mutation during validation, validation-policy hash drift, and covered audit claims that lack verifiable repository-path evidence |
+| Detected and rejected | Explicit tracked repository policy prohibiting AI/LLM-authored persistent work (before any Agentify write), repository mutation during validation, validation-policy hash drift, and covered audit claims that lack verifiable repository-path evidence |
 | Mitigated | Common credential variables are removed from validation child environments |
 | Not provided | OS-level sandboxing or network isolation for repository validation |
 
