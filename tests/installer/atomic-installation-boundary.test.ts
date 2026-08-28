@@ -62,9 +62,10 @@ function createRepository(): { cwd: string; preflight: RepositoryInstallationPre
 }
 
 class SilentUi implements AgentifyUi {
-  status(): void {}
-  info(): void {}
-  error(): void {}
+  readonly messages: string[] = [];
+  status(message: string): void { this.messages.push(message); }
+  info(message: string): void { this.messages.push(message); }
+  error(message: string): void { this.messages.push(message); }
   async promptSelect(): Promise<string> { throw new Error("must not prompt"); }
   async promptMultiSelect(): Promise<ReadonlyArray<string>> { throw new Error("must not prompt"); }
   async promptCheckboxList(): Promise<ReadonlyArray<string>> { throw new Error("must not prompt"); }
@@ -77,6 +78,37 @@ class NeverRuns implements AgentRuntime {
     throw new Error("runtime must not run");
   }
 }
+
+test("diagnostic map reuse never claims that a persistent team already exists", async () => {
+  const { cwd } = createRepository();
+  try {
+    const head = git(cwd, "rev-parse", "HEAD");
+    const mapPath = path.join(cwd, ".agentify", "runtime", "audit", "codebase_map.json");
+    fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+    fs.writeFileSync(
+      mapPath,
+      JSON.stringify(attestCodebaseMap(makeValidCodebaseMap(), head), null, 2),
+    );
+    const ui = new SilentUi();
+    await runAgentifyApp({
+      args: [],
+      cwd,
+      ui,
+      runtime: new NeverRuns(),
+      configOverride: {
+        schemaVersion: 1,
+        provider: "openai",
+        thinkingLevel: "high",
+        models: {},
+      },
+    });
+    assert.ok(ui.messages.includes("agentify: verified existing repository audit evidence"));
+    assert.ok(!ui.messages.some((message) => /existing persistent repository team/i.test(message)));
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), false);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
 
 test("failed specialist compilation rolls back every persistent team artifact but retains the diagnostic map", () => {
   const { cwd, preflight } = createRepository();

@@ -34,7 +34,7 @@ function atomicBlocker(message: string): InstallerBlocker {
     code: "installation_canary_failed",
     message: `${ATOMIC_ROLLBACK_PREFIX}: ${message}`,
     remediation:
-      "Repair the compiled specialist evidence or Agentify-owned installation conflict, then rerun Agentify. No partial repository team was retained.",
+      "Repair the readiness blocker(s) reported above, then rerun Agentify. No partial repository team was retained.",
   };
 }
 

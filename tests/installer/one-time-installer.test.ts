@@ -236,7 +236,9 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
       entry.code === "validation_failed" && /after Agentify installed/.test(entry.message)
     )));
     assert.ok(report.blockers.some((entry) => (
-      entry.code === "installation_canary_failed" && /Atomic installation rolled back/.test(entry.message)
+      entry.code === "installation_canary_failed"
+      && /Atomic installation rolled back/.test(entry.message)
+      && /readiness blocker\(s\) reported above/.test(entry.remediation)
     )));
     assert.equal(report.specialists_installed, 0);
     assert.equal(report.github_issue_intake_enabled, false);

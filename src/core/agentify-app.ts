@@ -124,7 +124,7 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<Fo
           options.ui.info(
             `agentify: retained ${compilation.assessment.accepted_concerns.length} tracked specialist concern(s) and recorded ${compilation.assessment.rejected_concerns.length} ungrounded candidate(s) as rejected`,
           );
-          options.ui.status("agentify: attached to the existing persistent repository team");
+          options.ui.status("agentify: verified existing repository audit evidence");
           options.ui.info("agentify: verified the existing structured codebase map; no model audit was rerun");
           return {
             map_path: `${AUDIT_STATE_RELATIVE_DIR}/codebase_map.json`,
