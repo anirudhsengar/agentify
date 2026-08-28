@@ -251,6 +251,9 @@ test("normalization assigns a mirrored cluster to its unique complete claimant",
       );
       assert.deepEqual(owners.map((entry) => entry.concern), [optionContract.concern]);
     }
+    const repeated = compileSpecialistEvidence(compiled.map, { cwd });
+    assert.equal(repeated.complete, true, repeated.reasons.join("; "));
+    assert.strictEqual(repeated.map, compiled.map);
 
     errorContract.touchpoints.push({
       path: "examples/options-required.js",

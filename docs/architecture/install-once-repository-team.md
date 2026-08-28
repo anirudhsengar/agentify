@@ -114,6 +114,11 @@ one concern has no other core implementation path while every adjacent concern
 does. That sole-dependent concern keeps core ownership and the other mentions
 become supporting. If zero or multiple owners depend exclusively on the shared
 path, the compiler preserves the ambiguity as an unresolved obligation.
+For a mirrored implementation/test cluster, normalization may promote both
+paths to core for one concern only when that concern explicitly cites the
+complete pair and every competing concern cites a strict subset. The rule uses
+exact tracked evidence rather than repository names or filename semantics;
+complete-claim ties and absent claims remain unresolved.
 
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30

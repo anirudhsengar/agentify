@@ -64,7 +64,10 @@ All notable changes to Agentify are documented here.
   When exactly one concern depends on a shared implementation file for its only
   core path, deterministic normalization retains that concern as owner and
   downgrades adjacent mentions to supporting; genuinely ambiguous ownership
-  still fails closed.
+  still fails closed. Mirrored implementation/test clusters are promoted to
+  core only for a unique concern that explicitly cites every tracked cluster
+  path; partial consumers remain supporting and tied complete claims remain
+  unresolved.
 
 - Repository audit now enforces one configurable aggregate resource budget
   across coverage, recovery, semantic repair, and explorer sub-sessions. Finite

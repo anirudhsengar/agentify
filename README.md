@@ -169,7 +169,10 @@ file. Adjacent specialists may share it only as a supporting touchpoint until
 the portfolio resolves ownership. Normalization resolves a shared
 implementation file without another model call only when exactly one concern
 would otherwise lose all core ownership and every adjacent concern retains an
-independent core path; ambiguous shared files remain unresolved.
+independent core path. A mirrored implementation/test cluster is assigned only
+when one accepted concern explicitly cites the complete pair and every competing
+concern cites a strict subset. Ambiguous shared files and tied cluster claims
+remain unresolved.
 
 ### 2. Run the one-time installer
 

@@ -1171,6 +1171,12 @@ export function assessSpecialistEvidence(
     }
   }
   const coreOwnershipResolutions: RepositoryCoreOwnershipResolution[] = [];
+  const ownershipResolutionByPath = new Map<string, RepositoryCoreOwnershipResolution>();
+  const addOwnershipResolution = (resolution: RepositoryCoreOwnershipResolution): void => {
+    if (ownershipResolutionByPath.has(resolution.path)) return;
+    ownershipResolutionByPath.set(resolution.path, resolution);
+    coreOwnershipResolutions.push(resolution);
+  };
   for (const [repositoryPath, owners] of coreOwnersByPath) {
     if (owners.length <= 1) continue;
     const soleDependentOwners = accepted.filter((assessment) =>
@@ -1182,18 +1188,63 @@ export function assessSpecialistEvidence(
       eligibleImplementationPath(repositoryPath)
       && soleDependentOwners.length === 1
     ) {
-      coreOwnershipResolutions.push({
+      addOwnershipResolution({
         concern: soleDependentOwners[0]!.concern,
         path: repositoryPath,
         reason:
           "the selected concern has no other core implementation path while every adjacent concern retains independent core ownership",
       });
-      continue;
     }
+  }
+  const concernByName = new Map(
+    map.concern_evidence.concerns.map((concern) => [concern.concern, concern]),
+  );
+  const explicitTouchpointsByConcern = new Map(accepted.map((assessment) => {
+    const concern = concernByName.get(assessment.concern);
+    const paths = new Set((concern?.touchpoints ?? []).flatMap((touchpoint) => {
+      const repositoryPath = resolvePath(touchpoint.path);
+      return repositoryPath === null ? [] : [repositoryPath];
+    }));
+    return [assessment.concern, paths] as const;
+  }));
+  for (const cluster of repositoryClusters) {
+    const clusterPaths = [...cluster.implementation_paths, ...cluster.test_paths];
+    if (clusterPaths.length < 2) continue;
+    const completeClaimants = accepted.filter((assessment) => {
+      const explicitPaths = explicitTouchpointsByConcern.get(assessment.concern);
+      const concern = concernByName.get(assessment.concern);
+      return explicitPaths !== undefined
+        && concern !== undefined
+        && clusterPaths.every((repositoryPath) => explicitPaths.has(repositoryPath))
+        && matchingTokenCount(
+          pathSemanticTokens(cluster.implementation_paths, cluster.cluster_key),
+          semanticTokens(concern.excludes),
+        ) === 0;
+    });
+    if (completeClaimants.length !== 1) continue;
+    const claimant = completeClaimants[0]!;
+    const hasConflictingCoreOwner = clusterPaths.some((repositoryPath) =>
+      (coreOwnersByPath.get(repositoryPath) ?? [])
+        .some((owner) => owner !== claimant.concern)
+      && ownershipResolutionByPath.get(repositoryPath)?.concern !== claimant.concern
+    );
+    if (hasConflictingCoreOwner) continue;
+    for (const repositoryPath of clusterPaths) {
+      addOwnershipResolution({
+        concern: claimant.concern,
+        path: repositoryPath,
+        reason:
+          `the selected concern is the only accepted concern that explicitly cites every tracked path in mirrored cluster ${cluster.cluster_key}`,
+      });
+    }
+  }
+  for (const [repositoryPath, owners] of coreOwnersByPath) {
+    if (owners.length <= 1 || ownershipResolutionByPath.has(repositoryPath)) continue;
     reasons.push(
       `tracked file ${repositoryPath} has multiple core owners: ${owners.sort((left, right) => left.localeCompare(right)).join(", ")}; retain exactly one defensible core owner and mark adjacent touchpoints supporting`,
     );
   }
+  for (const resolution of coreOwnershipResolutions) coreOwnedPaths.add(resolution.path);
   for (const assessment of accepted) {
     const implementationContext = assessment.contextPaths.filter((repositoryPath) =>
       !isTestRepositoryPath(repositoryPath) && eligibleImplementationPath(repositoryPath)
@@ -1389,12 +1440,21 @@ export function reconcileSpecialistEvidence(
     .filter((concern) => accepted.has(concern.concern))
     .map((concern) => {
       const touchpoints = concern.touchpoints.map((touchpoint) => {
-        if (touchpoint.centrality !== "core") return touchpoint;
         const repositoryPath = normalizeRepositoryPathSyntax(touchpoint.path);
         const resolution = repositoryPath === null
           ? undefined
           : ownershipByPath.get(repositoryPath);
-        if (resolution === undefined || resolution.concern === concern.concern) return touchpoint;
+        if (resolution === undefined) return touchpoint;
+        if (resolution.concern === concern.concern) {
+          if (touchpoint.centrality === "core") return touchpoint;
+          ownershipChanged = true;
+          return {
+            ...touchpoint,
+            centrality: "core" as const,
+            role: `${touchpoint.role} Trusted ownership normalization selects this concern as the sole core owner because ${resolution.reason}.`,
+          };
+        }
+        if (touchpoint.centrality !== "core") return touchpoint;
         ownershipChanged = true;
         return {
           ...touchpoint,
