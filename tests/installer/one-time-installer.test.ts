@@ -263,6 +263,44 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
   }
 }
 
+async function testValidationRunsInDisposableCheckout(): Promise<void> {
+  const cwd = tempRepo("agentify-installer-validation-isolation-");
+  try {
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "fixture");
+    const commit = git(cwd, "rev-parse", "HEAD");
+    const delegate = fakeRunner(cwd, { head: commit });
+    const validationCwds: string[] = [];
+    const runner: InstallerProcessRunner = {
+      run(request): InstallerProcessResult {
+        if (request.program === "npm" && request.args[0] === "run") {
+          validationCwds.push(request.cwd);
+          fs.mkdirSync(path.join(request.cwd, ".venv"), { recursive: true });
+          fs.writeFileSync(path.join(request.cwd, ".venv", "validation-cache"), "generated\n");
+        }
+        return delegate.run(request);
+      },
+    };
+
+    const preflight = inspectRepositoryForInstallation({ cwd, runner, runValidation: true });
+
+    assert.equal(preflight.disposition, "ready");
+    assert.ok(validationCwds.length > 0);
+    assert.ok(validationCwds.every((validationCwd) => validationCwd !== cwd));
+    assert.equal(
+      fs.existsSync(path.join(cwd, ".venv")),
+      false,
+      "validation-generated ignored files must never enter the installation target",
+    );
+    assert.ok(validationCwds.every((validationCwd) => !fs.existsSync(validationCwd)));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function testEligibleRepositoryAndPolicy(): Promise<void> {
   const cwd = tempRepo("agentify-installer-eligible-");
   try {
@@ -934,6 +972,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "eligible repository and policy", fn: testEligibleRepositoryAndPolicy },
   { name: "validation approval binding", fn: testValidationApprovalBinding },
   { name: "validation environment removes credentials", fn: testValidationEnvironmentRemovesCredentials },
+  { name: "validation runs in disposable checkout", fn: testValidationRunsInDisposableCheckout },
   { name: "installed files preserve repository validation", fn: testInstalledFilesMustPreserveValidation },
   { name: "no history blocks analysis", fn: testNoHistoryBlocksAnalysis },
   { name: "non-GitHub remote blocks analysis", fn: testNonGitHubRemoteBlocksAnalysis },
