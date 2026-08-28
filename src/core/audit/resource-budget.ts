@@ -212,6 +212,19 @@ export class AuditResourceBudget {
     this.#outputTokens += recordUsageValue(usage?.output);
     this.#costUsd += cost;
     this.checkCounters();
+    const observedInput = recordUsageValue(usage?.input)
+      + recordUsageValue(usage?.cacheRead)
+      + recordUsageValue(usage?.cacheWrite);
+    const remainingInput = this.limits.maxInputTokens - this.#inputTokens;
+    if (
+      value.message.stopReason === "toolUse"
+      && observedInput > 0
+      && remainingInput < observedInput
+    ) {
+      this.fail(
+        `input token reserve ${remainingInput} is below the estimated next provider request of ${observedInput}`,
+      );
+    }
     if (
       this.#modelCalls >= this.limits.maxModelCalls
       && value.message?.role === "assistant"

@@ -56,7 +56,9 @@ All notable changes to Agentify are documented here.
   incomplete or not already at the compiler's idempotent fixed point, before
   changing persistent memory. Installation transaction capture also begins
   before any normalized-map write, so compiler, output-cap, materialization,
-  and canary failures restore the same pre-installation state.
+  and canary failures restore the same pre-installation state. Every tracked
+  file must have exactly one accepted core owner; adjacent specialists may keep
+  it only as supporting context until ownership is resolved.
 
 - Repository audit now enforces one configurable aggregate resource budget
   across coverage, recovery, semantic repair, and explorer sub-sessions. Finite
@@ -64,7 +66,9 @@ All notable changes to Agentify are documented here.
   explorer dispatches, and scout/tracer duration; repeated canonical
   unresolved-obligation fingerprints stop no-progress repair. Application map
   writes also reject output above the one-megabyte cap before filesystem
-  mutation.
+  mutation. Tool-use continuations reserve one just-observed input context
+  before another request, and terminal turn metrics count provider responses
+  rather than user or tool-result transport messages.
 
 - Explorer sessions now run serially with hard mode-specific repository-read
   and provider-call limits. Aggregate exhaustion reports the exact unresolved

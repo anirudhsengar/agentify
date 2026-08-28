@@ -351,6 +351,21 @@ export class AgentifyLog {
     this.turns += 1;
   }
 
+  recordMessageEnd(
+    role: string | undefined,
+    usage?: {
+      input?: number;
+      output?: number;
+      cacheRead?: number;
+      cacheWrite?: number;
+      cost?: { total?: number };
+    },
+  ): void {
+    if (role !== "assistant") return;
+    this.incrementTurns();
+    this.recordTurnEnd(usage);
+  }
+
   /**
    * Record a turn's start timestamp. Called on user message_start.
    * If a previous turn was open, its duration is finalized first.

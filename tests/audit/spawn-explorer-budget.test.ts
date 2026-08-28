@@ -576,9 +576,14 @@ async function testLiveExplorerUsageAbortsAtAggregateTokenLimit(): Promise<void>
       { cwd } as never,
     );
     assert.equal((result as { isError?: boolean }).isError, true);
-    assert.match(textFrom(result), /input tokens exceeded 15/i);
+    assert.match(textFrom(result), /input token reserve.*next provider request/i);
     assert.equal(abortCount, 1, "aggregate token exhaustion must abort the explorer immediately");
-    assert.equal((result.details as { provider_calls?: number } | undefined)?.provider_calls, 2);
+    assert.equal((result.details as { provider_calls?: number } | undefined)?.provider_calls, 1);
+    assert.equal(
+      budget.snapshot().input_tokens,
+      10,
+      "explorer admission must stop before aggregate input usage crosses the configured cap",
+    );
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

@@ -104,7 +104,9 @@ a normalized map. The specialist synchronizer then independently requires that
 the canonical map is complete and already recompiles to an idempotent fixed
 point before it changes identities, memory, or procedures. Compiler write,
 materialization, portfolio-count, structural-canary, and later readiness
-failures therefore share the same rollback boundary.
+failures therefore share the same rollback boundary. Each tracked file must
+have exactly one accepted core owner; other specialists may retain it only as a
+supporting touchpoint until deterministic ownership is resolved.
 
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30
@@ -134,6 +136,8 @@ completed concern through the map tools. Append semantics preserve nested prior
 evidence and deduplicate exact cumulative resends, keeping receipt and concern
 checkpoints aligned. Only provider-generated assistant messages consume the
 aggregate call and turn counters; local tool-result delivery does not.
+Before a tool-use continuation, the same boundary reserves enough aggregate
+input capacity for another request at the just-observed input/cache size.
 The compiler and receipt gate both refuse `not_concerns` explanations that
 explicitly accept the named candidate. Parent sessions are terminated by an
 application-owned timer at the configured session deadline. SIGINT and SIGTERM

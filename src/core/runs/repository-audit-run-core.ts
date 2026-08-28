@@ -390,11 +390,13 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         if (eventType === "message_start" && (event as { message?: { role?: string } }).message?.role === "user") {
           log.recordTurnStart();
         } else if (eventType === "message_end") {
-          log.incrementTurns();
           const usage = extractUsage(event);
-          log.recordTurnEnd(usage);
-          observedTurns += 1;
-          if (typeof usage?.cost?.total === "number") observedCost += usage.cost.total;
+          const role = (event as { message?: { role?: string } }).message?.role;
+          log.recordMessageEnd(role, usage);
+          if (role === "assistant") {
+            observedTurns += 1;
+            if (typeof usage?.cost?.total === "number") observedCost += usage.cost.total;
+          }
           const currentMap = loadCanonicalMapAt(context.cwd, stateDir);
           if (
             currentMap
@@ -524,11 +526,13 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
             if (eventType === "message_start" && (event as { message?: { role?: string } }).message?.role === "user") {
               log.recordTurnStart();
             } else if (eventType === "message_end") {
-              log.incrementTurns();
               const usage = extractUsage(event);
-              log.recordTurnEnd(usage);
-              observedTurns += 1;
-              if (typeof usage?.cost?.total === "number") observedCost += usage.cost.total;
+              const role = (event as { message?: { role?: string } }).message?.role;
+              log.recordMessageEnd(role, usage);
+              if (role === "assistant") {
+                observedTurns += 1;
+                if (typeof usage?.cost?.total === "number") observedCost += usage.cost.total;
+              }
               const currentMap = loadCanonicalMapAt(context.cwd, stateDir);
               if (
                 currentMap

@@ -203,8 +203,7 @@ function logRepairEvent(log: AgentifyLog, event: unknown): void {
   if (eventType === "message_start" && value.message?.role === "user") {
     log.recordTurnStart();
   } else if (eventType === "message_end") {
-    log.incrementTurns();
-    log.recordTurnEnd(value.message?.usage);
+    log.recordMessageEnd(value.message?.role, value.message?.usage);
   } else if (
     eventType === "tool_execution_end"
     && (value.toolName === "write_map" || value.toolName === "write_map_delta")

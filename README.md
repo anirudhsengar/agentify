@@ -133,7 +133,8 @@ large repository through the optional `auditBudgets` object in
 
 Overrides are strictly validated and remain subject to finite safety ceilings.
 Parent audit requests and explorer sub-sessions consume the same aggregate call,
-turn, token, cost, and elapsed-time budget.
+turn, token, cost, and elapsed-time budget. A tool-use continuation must leave
+enough input capacity for another request at the just-observed context size.
 Explorer work is serialized, and each mode has hard repository-read and
 provider-call caps that are reduced to the aggregate calls still available. A
 complete report at the exact call limit is retained; a request for another turn
@@ -163,6 +164,9 @@ Agentify-managed paths observed during the transaction are normalized out of
 repository topography and process evidence before the map can close.
 The explorer runtime permits only one successful concern scout per repository
 commit; resumed and repair sessions reuse its attested proposal set.
+Semantic closure requires exactly one accepted core owner for each tracked
+file. Adjacent specialists may share it only as a supporting touchpoint until
+the portfolio resolves ownership.
 
 ### 2. Run the one-time installer
 

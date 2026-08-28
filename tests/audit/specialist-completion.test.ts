@@ -110,7 +110,7 @@ test("complete overlapping concerns close only after high-signal paths are accou
       }),
       concern({
         name: "Help and output rendering",
-        paths: ["lib/command.js", "lib/help.js", "Readme.md"],
+        paths: ["lib/help.js", "lib/command.js", "Readme.md"],
       }),
     ],
     not_concerns: [

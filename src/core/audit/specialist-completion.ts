@@ -1154,6 +1154,20 @@ export function assessSpecialistEvidence(
   const coreOwnedPaths = new Set(
     accepted.flatMap((assessment) => assessment.corePaths),
   );
+  const coreOwnersByPath = new Map<string, string[]>();
+  for (const assessment of accepted) {
+    for (const repositoryPath of assessment.corePaths) {
+      const owners = coreOwnersByPath.get(repositoryPath) ?? [];
+      owners.push(assessment.concern);
+      coreOwnersByPath.set(repositoryPath, owners);
+    }
+  }
+  for (const [repositoryPath, owners] of coreOwnersByPath) {
+    if (owners.length <= 1) continue;
+    reasons.push(
+      `tracked file ${repositoryPath} has multiple core owners: ${owners.sort((left, right) => left.localeCompare(right)).join(", ")}; retain exactly one defensible core owner and mark adjacent touchpoints supporting`,
+    );
+  }
   const explicitOwnersByPath = new Map<string, Set<string>>();
   for (const assessment of accepted) {
     for (const repositoryPath of assessment.contextPaths) {
