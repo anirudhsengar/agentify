@@ -143,3 +143,23 @@ test("unknown language metadata cannot silently complete concern discovery", () 
   assert.ok(assessment.reasons.some((reason) => /project_type/i.test(reason)));
   assert.ok(assessment.reasons.some((reason) => /languages\/formats/i.test(reason)));
 });
+
+test("accepted candidates cannot masquerade as compiler rejection evidence", () => {
+  const map = commanderLikeMap();
+  map.concern_evidence = {
+    concerns: [concern({
+      name: "CLI argument parsing",
+      paths: ["index.js", "lib/command.js", "lib/option.js", "lib/argument.js", "lib/error.js", "lib/help.js"],
+    })],
+    not_concerns: [{
+      candidate: "Type declaration maintenance",
+      why_rejected: "Not rejected; accepted for tracing because it protects compatibility.",
+    }],
+  };
+  const assessment = assessSpecialistEvidence(map);
+  assert.equal(assessment.complete, false);
+  assert.ok(
+    assessment.reasons.some((reason) => /does not contain a substantive rejection/i.test(reason)),
+    assessment.reasons.join("; "),
+  );
+});

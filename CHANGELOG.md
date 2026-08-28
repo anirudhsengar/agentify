@@ -78,6 +78,10 @@ All notable changes to Agentify are documented here.
   Nested append checkpoints preserve earlier evidence and deduplicate an exact
   cumulative resend. Aggregate call/turn accounting ignores non-provider tool
   result messages, so a hard terminal limit cannot be reported as exceeded.
+  Explanations that explicitly accept a candidate cannot masquerade as
+  `not_concerns` evidence. Parent-session duration is enforced by an
+  application-owned abort timer, and SIGINT/SIGTERM synchronously roll pending
+  installation state back before the CLI exits.
 
 - Explorer success is now persisted as an application-authored receipt ledger
   bound to the audited repository commit. Model map writes cannot create or

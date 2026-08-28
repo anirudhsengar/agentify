@@ -183,9 +183,20 @@ export function pendingInstallationActive(cwd: string): boolean {
   return pendingInstallations.has(normalizedRoot(cwd));
 }
 
-process.once("exit", () => {
+function removePendingSnapshots(): void {
   for (const pending of pendingInstallations.values()) {
     removeSnapshot(pending.snapshotRoot);
   }
   pendingInstallations.clear();
-});
+}
+
+function rollbackPendingForSignal(exitCode: number): void {
+  for (const cwd of [...pendingInstallations.keys()]) {
+    rollbackPendingInstallation(cwd);
+  }
+  process.exit(exitCode);
+}
+
+process.once("SIGINT", () => rollbackPendingForSignal(130));
+process.once("SIGTERM", () => rollbackPendingForSignal(143));
+process.once("exit", removePendingSnapshots);

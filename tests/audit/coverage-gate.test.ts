@@ -624,6 +624,8 @@ class ReceiptCheckpointRuntime implements AgentRuntime {
 }
 
 class DeadlineRuntime implements AgentRuntime {
+  abortedBySignal = false;
+
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
     return new Promise((resolve) => {
@@ -632,6 +634,7 @@ class DeadlineRuntime implements AgentRuntime {
         250,
       );
       options.signal?.addEventListener("abort", () => {
+        this.abortedBySignal = true;
         clearTimeout(fallback);
         resolve({ turns: 0, costUsd: null, aborted: true });
       }, { once: true });
@@ -642,12 +645,12 @@ class DeadlineRuntime implements AgentRuntime {
 async function testParentAuditSessionHasApplicationOwnedDeadline(): Promise<void> {
   const cwd = tempDir("gate-parent-deadline");
   try {
-    const startedAt = Date.now();
+    const runtime = new DeadlineRuntime();
     await assert.rejects(
-      runWithRuntime(cwd, new DeadlineRuntime(), { maxSessionDurationMs: 25 }),
+      runWithRuntime(cwd, runtime, { maxSessionDurationMs: 25 }),
       /session elapsed time.*25ms/i,
     );
-    assert.ok(Date.now() - startedAt < 200, "application deadline must abort the hung runtime");
+    assert.equal(runtime.abortedBySignal, true, "application deadline must abort the hung runtime");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

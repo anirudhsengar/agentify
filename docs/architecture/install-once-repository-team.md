@@ -134,6 +134,11 @@ completed concern through the map tools. Append semantics preserve nested prior
 evidence and deduplicate exact cumulative resends, keeping receipt and concern
 checkpoints aligned. Only provider-generated assistant messages consume the
 aggregate call and turn counters; local tool-result delivery does not.
+The compiler and receipt gate both refuse `not_concerns` explanations that
+explicitly accept the named candidate. Parent sessions are terminated by an
+application-owned timer at the configured session deadline. SIGINT and SIGTERM
+run the same synchronous pending-installation rollback before process exit, so
+only the permitted diagnostic map can survive an interrupted fresh install.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.

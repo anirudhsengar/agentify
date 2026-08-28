@@ -4,6 +4,7 @@ import type {
   ExplorerReceiptAttestation,
   ExplorerReceiptRecord,
 } from "./schema/index.ts";
+import { isSubstantiveConcernRejection } from "./concern-rejection.ts";
 
 type ExplorerMode = "concern_scout" | "concern_tracer";
 
@@ -265,6 +266,7 @@ export class ExplorerReceiptTracker {
       )
     );
     const rejectedCandidates = map?.concern_evidence?.not_concerns
+      .filter((candidate) => isSubstantiveConcernRejection(candidate.why_rejected))
       .map((candidate) => candidate.candidate) ?? [];
     const unresolvedScoutProposals = [...new Set(
       scouts.flatMap((scout) => scout.proposedConcerns),

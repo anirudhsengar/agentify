@@ -40,11 +40,9 @@ const AUDIT_TOOL_ALLOWLIST = [
   "spawn_explorer",
 ];
 
-// Reasonable audit guardrails. The output cap prevents providers from
-// truncating a large tool-call payload, and the wall-clock timeout stops a
-// runaway session before it racks up thousands of fruitless turns.
+// The output cap prevents providers from truncating a large tool-call payload.
+// Wall-clock limits come from the application-owned aggregate budget.
 const AUDIT_MAX_OUTPUT_TOKENS = 65_536;
-const AUDIT_TIMEOUT_MS = 30 * 60 * 1000;
 
 type AssistantUsage = {
   input?: number;
@@ -332,8 +330,18 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
   context.ui.status("agentify: auditing existing repository");
 
   try {
-    const baseSessionBudget = resourceBudget.beginSession();
-    const runtimeResult = await context.runtime.runSession({
+    const baseSessionDurationMs = resourceBudget.remainingDurationMs();
+    const baseSessionBudget = resourceBudget.beginSession(baseSessionDurationMs);
+    const baseDeadline = setTimeout(() => {
+      try {
+        resourceBudget.exhaustSession(baseSessionBudget);
+      } catch {
+        controller.abort();
+      }
+    }, baseSessionDurationMs);
+    let runtimeResult: AgentRuntimeResult;
+    try {
+      runtimeResult = await context.runtime.runSession({
       cwd: context.cwd,
       configDir: defaultConfigDir(),
       config: context.config,
@@ -358,7 +366,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       auditResourceBudget: resourceBudget,
       signal: controller.signal,
       inactivityTimeoutMs: 5 * 60 * 1000,
-      timeoutMs: resourceBudget.remainingDurationMs(AUDIT_TIMEOUT_MS),
+      timeoutMs: baseSessionDurationMs,
       maxOutputTokens: resourceBudget.remainingOutputTokens(AUDIT_MAX_OUTPUT_TOKENS),
       recoveryPromptIfToolNotCalled: {
         requiredToolName: bootstrappedGapDraft || specialistEvidenceTopUp ? "write_map_delta" : "write_map",
@@ -429,7 +437,10 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
           }
         }
       },
-    });
+      });
+    } finally {
+      clearTimeout(baseDeadline);
+    }
     resourceBudget.finishParentSession(baseSessionBudget, runtimeResult);
     resourceBudget.assertWithinBudget();
 
@@ -468,8 +479,18 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         explorerReceiptReasons: receiptAssessment.reasons,
       });
       try {
-        const recoverySessionBudget = resourceBudget.beginSession();
-        const recoveryResult = await context.runtime.runSession({
+        const recoverySessionDurationMs = resourceBudget.remainingDurationMs();
+        const recoverySessionBudget = resourceBudget.beginSession(recoverySessionDurationMs);
+        const recoveryDeadline = setTimeout(() => {
+          try {
+            resourceBudget.exhaustSession(recoverySessionBudget);
+          } catch {
+            recoveryController.abort();
+          }
+        }, recoverySessionDurationMs);
+        let recoveryResult: AgentRuntimeResult;
+        try {
+          recoveryResult = await context.runtime.runSession({
           cwd: context.cwd,
           configDir: defaultConfigDir(),
           config: context.config,
@@ -488,7 +509,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
           auditResourceBudget: resourceBudget,
           signal: recoveryController.signal,
           inactivityTimeoutMs: 5 * 60 * 1000,
-          timeoutMs: resourceBudget.remainingDurationMs(AUDIT_TIMEOUT_MS),
+          timeoutMs: recoverySessionDurationMs,
           maxOutputTokens: resourceBudget.remainingOutputTokens(AUDIT_MAX_OUTPUT_TOKENS),
           onEvent: (event) => {
             try {
@@ -554,7 +575,10 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
               }
             }
           },
-        });
+          });
+        } finally {
+          clearTimeout(recoveryDeadline);
+        }
         resourceBudget.finishParentSession(recoverySessionBudget, recoveryResult);
         resourceBudget.assertWithinBudget();
       } finally {

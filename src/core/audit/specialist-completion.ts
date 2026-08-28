@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CodebaseMap } from "./schema/index.ts";
+import { isSubstantiveConcernRejection } from "./concern-rejection.ts";
 import {
   assessCoverageClosure,
   type CoverageClosureOptions,
@@ -1049,7 +1050,8 @@ function rejectionCoversPath(
 
 function pathsMentionedByRejections(map: CodebaseMap, candidates: readonly string[]): string[] {
   const mentioned = new Set<string>();
-  const rejections = map.concern_evidence?.not_concerns ?? [];
+  const rejections = (map.concern_evidence?.not_concerns ?? [])
+    .filter((entry) => isSubstantiveConcernRejection(entry.why_rejected));
   for (const candidate of candidates) {
     if (rejections.some((entry) => rejectionCoversPath(entry, candidate))) mentioned.add(candidate);
   }
@@ -1219,6 +1221,13 @@ export function assessSpecialistEvidence(
     if (seen.has(key)) reasons.push(`duplicate concern name: ${concern.concern}`);
     seen.add(key);
   }
+  for (const rejection of map.concern_evidence.not_concerns) {
+    if (!isSubstantiveConcernRejection(rejection.why_rejected)) {
+      reasons.push(
+        `not_concerns candidate "${rejection.candidate}" does not contain a substantive rejection`,
+      );
+    }
+  }
 
   const concerns = map.concern_evidence.concerns;
   if (concerns.length === 0) {
@@ -1242,7 +1251,8 @@ export function assessSpecialistEvidence(
 
   const areas = topLevelAreas(highSignal);
   const pathBackedRejections = map.concern_evidence.not_concerns.filter((entry) =>
-    highSignal.some((candidate) => rejectionCoversPath(entry, candidate))
+    isSubstantiveConcernRejection(entry.why_rejected)
+    && highSignal.some((candidate) => rejectionCoversPath(entry, candidate))
   ).length;
   if (
     accepted.length === 1

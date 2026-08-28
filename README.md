@@ -149,7 +149,10 @@ checkpoints receipts after every explorer and the builder checkpoints each
 completed concern, so a bounded retry on the same HEAD resumes verified work.
 Nested append checkpoints retain earlier concern bodies and deduplicate exact
 cumulative resends. Tool-result delivery is not counted as a provider call or
-turn.
+turn. `not_concerns` entries must actually reject their candidate; acceptance
+wording cannot close an obligation. Application timers enforce parent-session
+deadlines, and an interrupted CLI rolls its pending installation back before
+exiting.
 
 ### 2. Run the one-time installer
 

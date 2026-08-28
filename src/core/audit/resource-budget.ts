@@ -116,6 +116,8 @@ interface SessionObservation {
   calls: number;
   turns: number;
   costUsd: number;
+  startedAt: number;
+  maxDurationMs: number;
 }
 
 function recordUsageValue(value: number | undefined): number {
@@ -172,15 +174,26 @@ export class AuditResourceBudget {
     return Math.max(1, Math.min(perExplorerLimit, remaining));
   }
 
-  beginSession(): SessionObservation {
+  beginSession(maxDurationMs = this.limits.maxSessionDurationMs): SessionObservation {
     this.assertWithinBudget();
     if (this.#modelCalls >= this.limits.maxModelCalls) {
       this.fail(`model calls reached ${this.limits.maxModelCalls}`);
     }
-    return { calls: 0, turns: 0, costUsd: 0 };
+    return { calls: 0, turns: 0, costUsd: 0, startedAt: Date.now(), maxDurationMs };
+  }
+
+  expireSession(session: SessionObservation): void {
+    if (Date.now() - session.startedAt >= session.maxDurationMs) {
+      this.exhaustSession(session);
+    }
+  }
+
+  exhaustSession(session: SessionObservation): never {
+    this.fail(`session elapsed time reached ${session.maxDurationMs}ms`);
   }
 
   observeParentEvent(event: AgentSessionEvent, session: SessionObservation): void {
+    this.expireSession(session);
     const value = event as {
       type?: string;
       message?: { role?: string; stopReason?: string; usage?: UsageShape };
@@ -217,6 +230,7 @@ export class AuditResourceBudget {
 
   finishParentSession(session: SessionObservation, result: RuntimeResultShape): void {
     this.assertWithinBudget();
+    this.expireSession(session);
     const reportedCalls = result.diagnostics?.provider_requests ?? result.turns;
     const additionalCalls = Math.max(0, reportedCalls - session.calls);
     const additionalTurns = Math.max(0, result.turns - session.turns);
