@@ -82,6 +82,9 @@ All notable changes to Agentify are documented here.
   `not_concerns` evidence. Parent-session duration is enforced by an
   application-owned abort timer, and SIGINT/SIGTERM synchronously roll pending
   installation state back before the CLI exits.
+  A subsequent invocation can resume the exact diagnostic-only map when its
+  receipt ledger is bound to current HEAD; unattested or extra state remains
+  user-owned and blocked.
 
 - Explorer success is now persisted as an application-authored receipt ledger
   bound to the audited repository commit. Model map writes cannot create or

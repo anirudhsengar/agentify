@@ -152,7 +152,9 @@ cumulative resends. Tool-result delivery is not counted as a provider call or
 turn. `not_concerns` entries must actually reject their candidate; acceptance
 wording cannot close an obligation. Application timers enforce parent-session
 deadlines, and an interrupted CLI rolls its pending installation back before
-exiting.
+exiting. A later invocation may resume only the exact diagnostic-map-only
+topology with a current-HEAD application receipt ledger; extra, stale, or
+unattested state is never claimed.
 
 ### 2. Run the one-time installer
 

@@ -139,6 +139,12 @@ explicitly accept the named candidate. Parent sessions are terminated by an
 application-owned timer at the configured session deadline. SIGINT and SIGTERM
 run the same synchronous pending-installation rollback before process exit, so
 only the permitted diagnostic map can survive an interrupted fresh install.
+On re-entry, installation preparation captures the transaction first, then
+temporarily lifts only the exact non-symlink diagnostic-map topology whose
+application receipt ledger matches current HEAD. Memory initialization occurs
+against an empty root and the exact map bytes are restored inside the same
+transaction. Any extra path, stale commit, or missing attestation remains
+unrecognized user state and fails closed.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.
