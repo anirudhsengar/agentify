@@ -149,7 +149,9 @@ If a bounded continuation fails, rollback retains the newest map from that
 transaction rather than restoring its older diagnostic snapshot. A successful
 tracer receipt without a matching persisted concern body remains an explicit
 retrace obligation. Aggregate provider turns are counted from assistant
-provider responses, not user or tool-result transport messages.
+provider responses, not user or tool-result transport messages. Concern deltas
+default to recursive append with structural deduplication; an explicit merge
+strategy remains available for an intentional repair.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.

@@ -87,7 +87,9 @@ All notable changes to Agentify are documented here.
   user-owned and blocked. Failed bounded continuations retain their newest
   diagnostic checkpoint, and a tracer receipt cannot satisfy closure until its
   matching concern body is persisted. Provider-turn budgets reconcile against
-  provider requests rather than transport-level message counts.
+  provider requests rather than transport-level message counts. Incremental
+  concern-evidence deltas default to recursive append, preventing a later
+  bounded checkpoint from discarding previously traced bodies.
 
 - Explorer success is now persisted as an application-authored receipt ledger
   bound to the audited repository commit. Model map writes cannot create or

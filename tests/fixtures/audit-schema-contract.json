@@ -13,8 +13,8 @@
       "bytes": 1533
     },
     "write_map_delta_params": {
-      "sha256": "49e572b90f4e8f72f6fe58b7271a0a9fad5ab2555c2a2d28472f55fb8685308e",
-      "bytes": 3702
+      "sha256": "e00f55cf4d8435286aeddd9b46b40dbd6ae8cda70161ea67eca87a1aad38233f",
+      "bytes": 3817
     }
   },
   "required": {
@@ -159,7 +159,7 @@
   "defaults": {
     "schema_version": "1",
     "write_mode": "auto",
-    "merge_strategy": "shallow_overwrite"
+    "write_mode": "auto"
   },
   "bounds": {
     "agent_guide_sections": {
@@ -172,6 +172,6 @@
     },
     "write_map_file_description": "Path (absolute or cwd-relative) to an already-existing JSON file containing the codebase map. Audit sessions cannot create this file; normally submit `map` inline with mode `auto`, which safely creates a private draft when needed. The tool reads, validates, and writes the canonical map to the explicitly configured audit state directory (currently .agentify/runtime/audit/codebase_map.json).",
     "write_mode_description": "Persist mode. `inline` (strict) errors if the inline map exceeds 100KB. `file` (strict) requires explicit `map_file`. `auto` (default and recommended) safely creates a private draft when an inline map exceeds the cap.",
-    "merge_strategy_description": "How to merge the delta into the canonical map. `shallow_overwrite` (default) replaces matching top-level keys. `deep_merge` recursively merges objects. `append` pushes onto existing arrays."
+    "merge_strategy_description": "How to merge the delta into the canonical map. When omitted, ordinary deltas use `shallow_overwrite` while deltas containing concern_evidence use `append` so bounded checkpoints are monotonic. `deep_merge` recursively merges objects; explicit `shallow_overwrite` replaces matching top-level keys; `append` pushes onto existing arrays."
   }
 }

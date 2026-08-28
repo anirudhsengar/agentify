@@ -157,7 +157,8 @@ topology with a current-HEAD application receipt ledger; extra, stale, or
 unattested state is never claimed. Each bounded continuation retains its newest
 diagnostic checkpoint on failure, while operational installation state is
 rolled back. A successful tracer is reusable only after its complete concern
-body has also been checkpointed.
+body has also been checkpointed. Concern checkpoints append and deduplicate by
+default so later bounded invocations cannot erase earlier tracer evidence.
 
 ### 2. Run the one-time installer
 

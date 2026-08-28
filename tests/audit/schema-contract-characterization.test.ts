@@ -114,7 +114,11 @@ function testSerializedSchemaContract(): void {
 
   assert.equal(completeProps.schema_version?.const, FIXTURE.defaults.schema_version);
   assert.equal(writeProps.mode?.default, FIXTURE.defaults.write_mode);
-  assert.equal(deltaProps.merge_strategy?.default, FIXTURE.defaults.merge_strategy);
+  assert.equal(
+    deltaProps.merge_strategy?.default,
+    undefined,
+    "the merge default is conditional on whether the delta contains concern evidence",
+  );
 
   assert.deepEqual(
     {

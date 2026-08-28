@@ -1228,8 +1228,9 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             "Merging does not silently strip or invent arrays: the arrays and objects you provide " +
             "overwrite the matching fields in the map. If a field is still empty after the merge, " +
             "your delta did not include it. " +
-            "Use `shallow_overwrite` (default) for a clean top-level replacement, `deep_merge` to " +
-            "merge nested objects recursively, or `append` to concatenate arrays. " +
+            "Use `shallow_overwrite` (the ordinary default) for a clean top-level replacement, `deep_merge` to " +
+            "merge nested objects recursively, or `append` to concatenate arrays. Concern-evidence " +
+            "deltas default to `append` so incremental tracer checkpoints cannot discard prior bodies. " +
             "When `dimension` is provided, the coverage entry is proposed as `covered`; " +
             "Agentify downgrades it to `gap` only if the evidence or substance check fails. " +
             "Every `covered` claim must include `evidence`: an array of `{ path, excerpt, kind }` " +
@@ -1312,7 +1313,10 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 reserveWarning = consumeReserve(dimension).reason;
             }
 
-            const strategy = (params.merge_strategy ?? "shallow_overwrite") as MapMergeStrategy;
+            const strategy = (
+                params.merge_strategy
+                ?? (delta.concern_evidence === undefined ? "shallow_overwrite" : "append")
+            ) as MapMergeStrategy;
             const mergeAndAnnotate = (mergeStrategy: MapMergeStrategy): Record<string, unknown> => {
                 const merged = applyMapDelta(
                     existing as unknown as Record<string, unknown>,

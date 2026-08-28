@@ -99,9 +99,8 @@ export const WriteMapDeltaParamsSchema = Type.Object({
   delta: Type.Union([DeltaTransportSchema, SerializedMapTransportSchema]),
   merge_strategy: Type.Optional(
     StringEnum(["shallow_overwrite", "deep_merge", "append"] as const, {
-      default: "shallow_overwrite",
       description:
-        "How to merge the delta into the canonical map. `shallow_overwrite` (default) replaces matching top-level keys. `deep_merge` recursively merges objects. `append` pushes onto existing arrays.",
+        "How to merge the delta into the canonical map. When omitted, ordinary deltas use `shallow_overwrite` while deltas containing concern_evidence use `append` so bounded checkpoints are monotonic. `deep_merge` recursively merges objects; explicit `shallow_overwrite` replaces matching top-level keys; `append` pushes onto existing arrays.",
     }),
   ),
 });
