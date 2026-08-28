@@ -1,0 +1,123 @@
+{
+  "schema_version": "1",
+  "captured_at": "2026-08-28T00:00:00.000Z",
+  "cases": [
+    {
+      "repository": "commander.js",
+      "target_commit": "ba6d13ddb4243e5913367734f8c159089ffe7834",
+      "fixture_kind": "reduced-deterministic",
+      "replay_modules": ["tests/audit/specialist-completion.test.ts", "tests/specialists/unbounded-specialist-portfolio.test.ts"],
+      "audit_events": ["thin-portfolio-rejected", "evidence-backed-portfolio-compiled"],
+      "expected_core_ownership": ["command parsing and option lifecycle", "help rendering and output contracts"],
+      "expected_rejected_candidates": ["single generic parser concern for the entire repository"],
+      "expected_unresolved_obligations": [],
+      "expected_readiness": "ready-after-closure",
+      "expected_installation_disposition": "install",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "aqa-tests",
+      "target_commit": "19b1fd94ec2b2c8b17adb20d28c75f4d17891eb8",
+      "fixture_kind": "reduced-deterministic",
+      "replay_modules": ["tests/audit/tracked-specialist-closure.test.ts"],
+      "audit_events": ["generated-evidence-rejected", "tracked-extensionless-orchestration-accepted"],
+      "expected_core_ownership": ["SDK/JDK acquisition and CI test-job integration", "OpenJDK jtreg execution", "Disabled-test metadata lifecycle"],
+      "expected_rejected_candidates": ["untracked TKG generator", "generated Make output", "runtime process labels"],
+      "expected_unresolved_obligations": [],
+      "expected_readiness": "ready-after-closure",
+      "expected_installation_disposition": "install",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "click",
+      "target_commit": "36baa15ff831b939a22bc527cd76ce653ef6f66d",
+      "fixture_kind": "reduced-deterministic",
+      "replay_modules": ["tests/audit/repository-cluster-closure.test.ts", "tests/specialists/command-contracts.test.ts"],
+      "audit_events": ["local-clusters-discovered", "command-contract-classified"],
+      "expected_core_ownership": ["command invocation and parameter contracts", "help formatting", "shell completion"],
+      "expected_rejected_candidates": ["prose validation command"],
+      "expected_unresolved_obligations": [],
+      "expected_readiness": "ready-after-closure",
+      "expected_installation_disposition": "install",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "cobra",
+      "target_commit": "adbc8813901bba65827259daa8e22ff94ec1f30e",
+      "fixture_kind": "reduced-deterministic",
+      "replay_modules": ["tests/audit/exclusion-aware-semantic-closure.test.ts", "tests/specialists/command-contracts.test.ts"],
+      "audit_events": ["negative-evidence-applied", "shared-core-owner-resolved"],
+      "expected_core_ownership": ["command validation and execution contracts", "help and completion behavior"],
+      "expected_rejected_candidates": ["validation commands represented only as prose"],
+      "expected_unresolved_obligations": [],
+      "expected_readiness": "ready-after-closure",
+      "expected_installation_disposition": "install",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "hono",
+      "target_commit": "e2740d5a1bd0b4254e517e3af8b60789284bc7bd",
+      "fixture_kind": "reduced-deterministic",
+      "replay_modules": ["tests/audit/locality-aware-semantic-closure.test.ts", "tests/audit/explorer-receipts.test.ts"],
+      "audit_events": ["same-stem-locality-separated", "failed-tracer-remains-unresolved"],
+      "expected_core_ownership": ["request lifecycle and middleware composition", "JSX rendering and DOM runtime", "route matching and router selection"],
+      "expected_rejected_candidates": [],
+      "expected_unresolved_obligations": ["timed-out tracer until successful retry"],
+      "expected_readiness": "ready-only-after-receipts",
+      "expected_installation_disposition": "install-or-fail-closed",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "gin",
+      "target_commit": "dcaa4296d111981ffb31ac3eba90bb63e1eb5ab9",
+      "fixture_kind": "reduced-deterministic",
+      "replay_modules": ["tests/specialists/unbounded-specialist-portfolio.test.ts", "tests/audit/exclusion-aware-semantic-closure.test.ts", "tests/specialists/flow-preservation.test.ts"],
+      "audit_events": ["portfolio-derived-from-evidence", "verified-flows-preserved"],
+      "expected_core_ownership": ["context lifecycle", "rendering", "path and routing behavior"],
+      "expected_rejected_candidates": ["directory-shaped generic specialist"],
+      "expected_unresolved_obligations": [],
+      "expected_readiness": "ready-after-closure",
+      "expected_installation_disposition": "install",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "axum",
+      "target_commit": "3d78036dcac289d6c1d54934708acb6a5bd73686",
+      "fixture_kind": "reduced-deterministic",
+      "replay_modules": ["tests/audit/workspace-public-surface-closure.test.ts", "tests/audit/explorer-receipts.test.ts", "tests/specialists/flow-preservation.test.ts"],
+      "audit_events": ["workspace-public-surface-obligation", "tracer-timeout-unresolved", "flow-materialized"],
+      "expected_core_ownership": ["routing", "response extensions", "procedural macro derives and diagnostics"],
+      "expected_rejected_candidates": [],
+      "expected_unresolved_obligations": ["timed-out procedural macro tracer until successful retry"],
+      "expected_readiness": "ready-only-after-receipts",
+      "expected_installation_disposition": "install-or-fail-closed",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "spring-petclinic",
+      "target_commit": "818c4136ea971c21674525f9053de0d9c7ad8cfe",
+      "fixture_kind": "reduced-deterministic",
+      "replay_modules": ["tests/audit/specialist-compiler.test.ts", "tests/installer/atomic-installation-boundary.test.ts"],
+      "audit_events": ["normalization-created-obligation", "post-normalization-rejected", "rollback-complete"],
+      "expected_core_ownership": ["owner and pet lifecycle", "visit lifecycle"],
+      "expected_rejected_candidates": [],
+      "expected_unresolved_obligations": ["shared owner created by reconciliation until explicitly resolved"],
+      "expected_readiness": "ready-only-at-fixed-point",
+      "expected_installation_disposition": "install-or-rollback",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "lobsters",
+      "target_commit": "2f385d149e67f5ff78643dcf6d3cab0b24c0117c",
+      "fixture_kind": "captured-policy-and-audit-replay",
+      "replay_modules": ["tests/installer/repository-policy-preflight.test.ts", "tests/audit/spawn-explorer-budget.test.ts", "tests/audit/explorer-receipts.test.ts"],
+      "audit_events": ["43 map mutations over 10250 seconds", "policy prohibition observed", "no scout or tracer receipts", "diagnostic map persisted"],
+      "expected_core_ownership": [],
+      "expected_rejected_candidates": ["all specialist proposals because repository policy prohibits LLM-authored persistent output"],
+      "expected_unresolved_obligations": ["repository policy prohibits installation", "missing attested explorer receipts"],
+      "expected_readiness": "blocked-before-mutation",
+      "expected_installation_disposition": "no-installation",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 0 }
+    }
+  ]
+}
