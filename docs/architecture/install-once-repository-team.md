@@ -58,9 +58,10 @@ The local installer performs these steps in order:
 5. discover validation commands without executing them and require a committed
    npm lockfile when validation has package dependencies;
 6. screen discovered commands for obvious production credentials and mutation,
-   then execute passing required validation without an OS sandbox or network
-   isolation; running `agentify` in the target repository is the attestation
-   that records maintainer-approved unsandboxed validation;
+   then execute required validation in a disposable local checkout of the exact
+   committed HEAD; post-install validation overlays only the Agentify-managed
+   output into another disposable checkout. Validation still has no OS sandbox
+   or network isolation, and running `agentify` records that remaining posture;
 7. initialize persistent identity and self-update policy;
 8. run a read-only structured repository audit and persist application-authored
    scout/tracer receipts bound to the exact audited commit;
@@ -126,6 +127,9 @@ and structural failures retain their precise blockers but restore the complete
 pre-installation snapshot. Fresh attempts keep only permitted diagnostic audit
 evidence and remove managed parent directories created by the failed attempt;
 an existing installation is restored rather than deleted.
+Repository validation residue is confined to disposable system-temporary
+checkouts and removed after success, failure, timeout, or validator exception;
+it never enters the installation target or its rollback surface.
 
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30
@@ -196,7 +200,9 @@ The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.
 Common credential variables are removed from validation child environments.
 Visible deployment, publication, cloud mutation, or infrastructure mutation is
-rejected as a guardrail, not as an isolation guarantee. The installed issue
+rejected as a guardrail. Installer validation receives filesystem isolation
+through a disposable exact-HEAD checkout, but this is not an OS or network
+isolation guarantee. The installed issue
 workflow pins the supported npm runtime and
 restores lockfile-pinned npm dependencies with lifecycle scripts disabled before
 approved validation. A dependency-bearing repository without `package-lock.json`

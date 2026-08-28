@@ -8,6 +8,10 @@ import type {
   InstallerProcessRunner,
 } from "../contracts.ts";
 import { conciseProcessFailure } from "../process-runner.ts";
+import {
+  hasCommittedGitCheckout,
+  runInDisposableValidationCheckout,
+} from "../validation-isolation.ts";
 
 export const COMMAND_TIMEOUTS: Readonly<Record<InstallerCommandKind, number>> = {
   install: 15 * 60_000,
@@ -106,12 +110,13 @@ export function runCommand(
     timeoutMs: command.timeout_ms,
   });
   const output = `${result.stdout}\n${result.stderr}`;
+  const passed = result.status === 0 && !result.timedOut && result.errorMessage === null;
   return {
     ...command,
-    assessment: result.status === 0 ? "verified" : "failed",
+    assessment: passed ? "verified" : "failed",
     exit_code: result.status,
     output_digest: crypto.createHash("sha256").update(output).digest("hex"),
-    detail: result.status === 0
+    detail: passed
       ? "completed successfully under the configured timeout and sanitized environment"
       : conciseProcessFailure(result),
   };
@@ -123,11 +128,42 @@ export function runDiscoveredCommands(
   commands: InstallerCommand[],
   runValidation: boolean,
 ): InstallerCommand[] {
-  return commands.map((command) => (
-    runValidation && command.assessment === "characterized" && command.kind !== "install"
-      ? runCommand(cwd, runner, command)
-      : command
+  if (!runValidation) return commands;
+  const runnable = commands.some((command) => (
+    command.assessment === "characterized" && command.kind !== "install"
   ));
+  if (!runnable) return commands;
+
+  if (!hasCommittedGitCheckout(cwd)) {
+    // Direct callers use command discovery against synthetic non-Git fixtures.
+    // Installer preflight has already established a real repository before it
+    // reaches this boundary, so production validation always takes this branch
+    // with a disposable checkout.
+    return commands.map((command) => (
+      command.assessment === "characterized" && command.kind !== "install"
+        ? runCommand(cwd, runner, command)
+        : command
+    ));
+  }
+  const isolated = runInDisposableValidationCheckout({
+    cwd,
+    operation: (checkoutCwd) => commands.map((command) => (
+      command.assessment === "characterized" && command.kind !== "install"
+        ? runCommand(checkoutCwd, runner, command)
+        : command
+    )),
+  });
+  if (isolated.ok) return isolated.value;
+  return commands.map((command) => {
+    if (command.assessment !== "characterized" || command.kind === "install") return command;
+    return {
+      ...command,
+      assessment: "failed",
+      exit_code: null,
+      output_digest: crypto.createHash("sha256").update(isolated.error).digest("hex"),
+      detail: isolated.error,
+    };
+  });
 }
 
 export function makefileTargets(cwd: string): Set<string> {

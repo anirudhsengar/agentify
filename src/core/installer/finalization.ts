@@ -36,6 +36,7 @@ import type {
 } from "./contracts.ts";
 import { configureGitHubInstallation } from "./github-configuration.ts";
 import { DEFAULT_INSTALLER_PROCESS_RUNNER } from "./process-runner.ts";
+import { MANAGED_INSTALLATION_PATHS } from "./installation-transaction.ts";
 import {
   buildRepositoryTaskPolicyConfiguration,
   readRepositoryTaskPolicyConfiguration,
@@ -46,6 +47,7 @@ import {
   isVerifiedValidationCommand,
   trustedValidationArgv,
 } from "./validation-contract.ts";
+import { runInDisposableValidationCheckout } from "./validation-isolation.ts";
 
 export interface FinalizeOneTimeInstallationInput {
   cwd: string;
@@ -440,14 +442,29 @@ export function finalizeOneTimeInstallation(
 
   if (effectivePreflight.disposition === "ready") {
     const verified = effectivePreflight.commands.filter(isVerifiedValidationCommand);
-    for (const cmd of verified) {
-      const res = (input.runner ?? DEFAULT_INSTALLER_PROCESS_RUNNER).run({
-        program: cmd.argv[0]!,
-        args: cmd.argv.slice(1),
-        cwd: path.resolve(input.cwd, cmd.cwd),
-        timeoutMs: cmd.timeout_ms,
-      });
-      if (res.status !== 0 || res.timedOut) {
+    const runner = input.runner ?? DEFAULT_INSTALLER_PROCESS_RUNNER;
+    const isolated = runInDisposableValidationCheckout({
+      cwd: input.cwd,
+      overlayPaths: MANAGED_INSTALLATION_PATHS,
+      operation: (checkoutCwd) => verified.map((cmd) => ({
+        cmd,
+        result: runner.run({
+          program: cmd.argv[0]!,
+          args: cmd.argv.slice(1),
+          cwd: path.resolve(checkoutCwd, cmd.cwd),
+          timeoutMs: cmd.timeout_ms,
+        }),
+      })),
+    });
+    if (!isolated.ok) {
+      withBlocker(
+        blockers,
+        "validation_failed",
+        `Post-install repository validation could not run in a disposable checkout: ${isolated.error}`,
+        "Ensure local Git can clone and materialize the committed HEAD in the system temporary directory, then rerun installation.",
+      );
+    } else for (const { cmd, result } of isolated.value) {
+      if (result.status !== 0 || result.timedOut || result.errorMessage !== null) {
         withBlocker(
           blockers,
           "validation_failed",

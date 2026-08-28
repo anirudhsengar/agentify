@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
 
-const MANAGED_INSTALLATION_PATHS = [
+export const MANAGED_INSTALLATION_PATHS = [
   ".agentify",
   ".github/agentify",
   ".github/agentify-task-policy.json",

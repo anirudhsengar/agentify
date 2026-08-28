@@ -22,7 +22,7 @@ function configuration(configured: boolean): RepositoryTaskPolicyConfiguration {
     validation_execution: {
       mode: "maintainer-approved-unsandboxed",
       child_environment_credentials: "removed",
-      repository_mutation: "detected-and-rejected",
+      repository_mutation: "disposable-checkout",
       network_isolation: "not-provided",
       os_sandbox: "not-provided",
     },

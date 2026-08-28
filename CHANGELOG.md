@@ -46,6 +46,15 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Installer readiness commands no longer execute in the installation target.
+  Preflight validation runs in a disposable checkout of the exact committed
+  HEAD, and post-install validation overlays only Agentify-managed output into
+  a fresh disposable checkout. Generated virtual environments, language-tool
+  caches, build output, and validator crashes therefore cannot contaminate a
+  successful or failed installation target; checkout setup and cleanup failures
+  remain fail-closed diagnostics. Network and OS isolation remain unavailable
+  and explicitly attested.
+
 - Restrictive-policy matching now requires lexical AI/LLM subject boundaries.
   Ordinary contribution prose such as “do not follow the Code of Conduct in
   good faith” no longer treats the `ai` inside `faith` as an AI ban, while

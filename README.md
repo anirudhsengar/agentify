@@ -190,7 +190,7 @@ agentify
 The installer:
 
 - verifies the repository root, tracked contribution/agent policies, GitHub identity, maintainer authority, and default-branch policy; an explicit ban on AI/LLM-authored repository work stops before any Agentify write;
-- discovers validation commands, screens them for obvious production credentials and mutation, and records installer attestation for unsandboxed execution;
+- discovers validation commands, screens them for obvious production credentials and mutation, and executes them in a disposable checkout of the exact committed HEAD; post-install checks overlay only Agentify-managed output, while network and OS execution remain explicitly unsandboxed;
 - audits the repository and creates persistent specialists, procedures, and knowledge;
 - refines missing validation from the audited validation surface when discovery did not verify a required command;
 - installs the issue and accepted-merge learning workflows;
