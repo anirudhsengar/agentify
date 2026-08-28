@@ -120,6 +120,13 @@ complete pair and every competing concern cites a strict subset. The rule uses
 exact tracked evidence rather than repository names or filename semantics;
 complete-claim ties and absent claims remain unresolved.
 
+The transaction commits only when the final installation report is `ready`.
+Failed required repository validation, unavailable readiness prerequisites,
+and structural failures retain their precise blockers but restore the complete
+pre-installation snapshot. Fresh attempts keep only permitted diagnostic audit
+evidence and remove managed parent directories created by the failed attempt;
+an existing installation is restored rather than deleted.
+
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30
 minutes, three semantic repair passes, one coverage recovery, 96 model calls and

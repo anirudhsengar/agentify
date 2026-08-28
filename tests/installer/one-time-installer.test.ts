@@ -250,6 +250,7 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
     assert.equal(fs.existsSync(path.join(cwd, ".github", "workflows", "agentify-learn.yml")), false);
     assert.equal(fs.existsSync(path.join(cwd, "AGENTS.md")), false);
     assert.equal(fs.existsSync(path.join(cwd, "SETUP.md")), false);
+    assert.equal(fs.existsSync(path.join(cwd, ".github")), false);
     assert.equal(fs.existsSync(mapPath), true, "the externally permitted diagnostic map survives rollback");
     assert.equal(
       requests.some((request) => request.program === "gh" && request.args[0] === "label"),

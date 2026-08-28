@@ -69,6 +69,13 @@ All notable changes to Agentify are documented here.
   path; partial consumers remain supporting and tied complete claims remain
   unresolved.
 
+- Compiled finalization now commits repository-side installation state only for
+  a fully ready report. Failed required validation and every other non-ready
+  disposition preserve their actionable blockers but roll back identities,
+  policies, workflows, instructions, and empty managed parent directories;
+  pre-existing installations are restored exactly and fresh runs retain only
+  permitted diagnostic evidence.
+
 - Repository audit now enforces one configurable aggregate resource budget
   across coverage, recovery, semantic repair, and explorer sub-sessions. Finite
   defaults bound elapsed time, calls, turns, tokens, provider-reported cost,

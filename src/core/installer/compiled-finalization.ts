@@ -60,14 +60,14 @@ function reportAfterRollback(
   };
 }
 
-function structuralFailure(report: OneTimeInstallationReport): string | null {
-  const critical = report.blockers.filter((blocker) =>
-    blocker.code === "installation_canary_failed"
-    || blocker.code === "ambiguous_agentify_state"
-    || blocker.code === "user_owned_workflow_conflict"
-  );
-  if (critical.length === 0) return null;
-  return critical.map((blocker) => `[${blocker.code}] ${blocker.message}`).join("; ");
+function installationFailure(report: OneTimeInstallationReport): string | null {
+  if (report.disposition === "ready") return null;
+  const blockers = report.blockers
+    .map((blocker) => `[${blocker.code}] ${blocker.message}`)
+    .join("; ");
+  return blockers.length > 0
+    ? `readiness disposition ${report.disposition}: ${blockers}`
+    : `readiness disposition ${report.disposition} did not authorize persistent installation`;
 }
 
 /**
@@ -121,7 +121,7 @@ export function finalizeOneTimeInstallation(
     const report = finalizeBaseInstallation(input);
     const mismatch = expectedSpecialists !== null
       && report.specialists_installed !== expectedSpecialists;
-    const failure = structuralFailure(report);
+    const failure = installationFailure(report);
 
     if (mismatch || failure !== null) {
       rollbackPendingInstallation(input.cwd);

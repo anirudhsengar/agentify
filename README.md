@@ -157,7 +157,10 @@ exiting. A later invocation may resume only the exact diagnostic-map-only
 topology with a current-HEAD application receipt ledger; extra, stale, or
 unattested state is never claimed. Each bounded continuation retains its newest
 diagnostic checkpoint on failure, while operational installation state is
-rolled back. A successful tracer is reusable only after its complete concern
+rolled back. A non-ready final report—including a failed required repository
+validation—also restores the exact prior state; a fresh run retains only its
+permitted diagnostic map and no empty managed directories. A successful tracer
+is reusable only after its complete concern
 body has also been checkpointed. Concern checkpoints append and deduplicate by
 default so later bounded invocations cannot erase earlier tracer evidence.
 Agentify-managed paths observed during the transaction are normalized out of

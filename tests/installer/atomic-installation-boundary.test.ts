@@ -13,7 +13,10 @@ import {
   prepareOneTimeInstallationState,
   type RepositoryInstallationPreflight,
 } from "../../src/core/installer/index.ts";
-import { rollbackPendingInstallation } from "../../src/core/installer/installation-transaction.ts";
+import {
+  beginPendingInstallation,
+  rollbackPendingInstallation,
+} from "../../src/core/installer/installation-transaction.ts";
 import type {
   AgentRuntime,
   AgentRuntimeResult,
@@ -137,6 +140,39 @@ test("any audit exception aborts the pending installation transaction", async ()
     assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), false);
     assert.equal(fs.existsSync(path.join(cwd, ".agentify", "agents")), false);
   } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("rollback restores a pre-existing managed installation instead of deleting it", () => {
+  const { cwd } = createRepository();
+  try {
+    const manifestPath = path.join(cwd, ".agentify", "manifest.json");
+    const scriptPath = path.join(cwd, ".github", "scripts", "run-task-lifecycle.mjs");
+    const instructionsPath = path.join(cwd, "AGENTS.md");
+    fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+    fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
+    fs.writeFileSync(manifestPath, "prior manifest\n");
+    fs.writeFileSync(scriptPath, "prior runtime\n");
+    fs.writeFileSync(instructionsPath, "prior instructions\n");
+
+    beginPendingInstallation(cwd);
+    fs.writeFileSync(manifestPath, "replacement manifest\n");
+    fs.writeFileSync(scriptPath, "replacement runtime\n");
+    fs.writeFileSync(instructionsPath, "replacement instructions\n");
+    const newWorkflow = path.join(cwd, ".github", "workflows", "agentify-issue.yml");
+    fs.mkdirSync(path.dirname(newWorkflow), { recursive: true });
+    fs.writeFileSync(newWorkflow, "new workflow\n");
+
+    assert.equal(rollbackPendingInstallation(cwd), true);
+    assert.equal(fs.readFileSync(manifestPath, "utf8"), "prior manifest\n");
+    assert.equal(fs.readFileSync(scriptPath, "utf8"), "prior runtime\n");
+    assert.equal(fs.readFileSync(instructionsPath, "utf8"), "prior instructions\n");
+    assert.equal(fs.existsSync(newWorkflow), false);
+    assert.equal(fs.existsSync(path.dirname(newWorkflow)), false);
+    assert.equal(fs.existsSync(path.dirname(scriptPath)), true);
+  } finally {
+    rollbackPendingInstallation(cwd);
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });

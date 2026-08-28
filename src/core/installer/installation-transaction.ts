@@ -17,6 +17,12 @@ const MANAGED_INSTALLATION_PATHS = [
   "SETUP.md",
 ] as const;
 
+const MANAGED_PARENT_DIRECTORIES = [
+  ".github/scripts",
+  ".github/workflows",
+  ".github",
+] as const;
+
 interface SnapshotEntry {
   relativePath: string;
   kind: "file" | "directory" | "symlink";
@@ -28,6 +34,7 @@ interface PendingInstallation {
   snapshotRoot: string;
   entries: SnapshotEntry[];
   freshAgentifyRoot: boolean;
+  freshManagedParentDirectories: string[];
   retainDiagnosticProgress: boolean;
 }
 
@@ -105,6 +112,8 @@ export function beginPendingInstallation(cwd: string): void {
       snapshotRoot,
       entries,
       freshAgentifyRoot: !fs.existsSync(path.join(root, ".agentify")),
+      freshManagedParentDirectories: MANAGED_PARENT_DIRECTORIES
+        .filter((relativePath) => !fs.existsSync(path.join(root, ...relativePath.split("/")))),
       retainDiagnosticProgress: false,
     });
   } catch (error) {
@@ -147,6 +156,21 @@ function restoreEntry(pending: PendingInstallation, entry: SnapshotEntry): void 
   }
 }
 
+function removeFreshEmptyParentDirectories(pending: PendingInstallation): void {
+  for (const relativePath of pending.freshManagedParentDirectories) {
+    const directory = path.join(pending.cwd, ...relativePath.split("/"));
+    try {
+      const stat = fs.lstatSync(directory);
+      if (!stat.isSymbolicLink() && stat.isDirectory() && fs.readdirSync(directory).length === 0) {
+        fs.rmdirSync(directory);
+      }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") throw error;
+    }
+  }
+}
+
 /**
  * Restore the repository to its exact pre-installation state. A fresh failed
  * audit retains only its canonical diagnostic map; no identities, policies,
@@ -185,6 +209,7 @@ export function rollbackPendingInstallation(cwd: string): boolean {
       fs.mkdirSync(path.dirname(diagnosticMapPath), { recursive: true });
       fs.writeFileSync(diagnosticMapPath, diagnosticMap);
     }
+    removeFreshEmptyParentDirectories(pending);
     return true;
   } finally {
     removeSnapshot(pending.snapshotRoot);
