@@ -174,6 +174,36 @@ test("a new session rejects a provider payload that can overshoot persisted inpu
   assert.doesNotThrow(() => admissible.assertProviderInputCapacity({ input: "x".repeat(7_141) }));
 });
 
+test("a new model session reserves its maximum input window before the initial request", () => {
+  const persistedUsage = {
+    elapsed_ms: 1_048_060,
+    model_calls: 85,
+    turns: 85,
+    input_tokens: 1_995_420,
+    output_tokens: 72_797,
+    cost_usd: 0.18641548,
+    explorer_spawns: 8,
+    coverage_recovery_passes: 0,
+    semantic_repair_passes: 0,
+  };
+  const budget = new AuditResourceBudget(
+    { maxInputTokens: 2_000_000 },
+    Date.now(),
+    persistedUsage,
+  ) as unknown as { assertProviderSessionCapacity(contextWindow: number): void };
+  assert.throws(
+    () => budget.assertProviderSessionCapacity(272_000),
+    /input token reserve 4580.*model context window of 272000/i,
+  );
+
+  const admissible = new AuditResourceBudget(
+    { maxInputTokens: 2_000_000 },
+    Date.now(),
+    { ...persistedUsage, input_tokens: 1_700_000 },
+  ) as unknown as { assertProviderSessionCapacity(contextWindow: number): void };
+  assert.doesNotThrow(() => admissible.assertProviderSessionCapacity(272_000));
+});
+
 test("tool-result message events cannot consume provider-call or turn budgets", () => {
   const budget = new AuditResourceBudget({ maxModelCalls: 1, maxTurns: 1 });
   const session = budget.beginSession();
