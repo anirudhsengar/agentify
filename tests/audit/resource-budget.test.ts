@@ -42,6 +42,33 @@ test("parent provider calls, turns, tokens, and cost share one hard budget", () 
   );
 });
 
+test("a continuation at the exact aggregate call limit fails before another request", () => {
+  const budget = new AuditResourceBudget({ maxModelCalls: 1 });
+  const session = budget.beginSession();
+  assert.throws(
+    () => budget.observeParentEvent({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        stopReason: "toolUse",
+        usage: { input: 1, output: 1, cost: { total: 0 } },
+      },
+    } as never, session),
+    /model calls reached 1 while requesting continuation/i,
+  );
+
+  const finalBudget = new AuditResourceBudget({ maxModelCalls: 1 });
+  const finalSession = finalBudget.beginSession();
+  assert.doesNotThrow(() => finalBudget.observeParentEvent({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      stopReason: "stop",
+      usage: { input: 1, output: 1, cost: { total: 0 } },
+    },
+  } as never, finalSession));
+});
+
 test("explorer spawns share aggregate limits and receive mode-specific timeouts", () => {
   const budget = new AuditResourceBudget({
     maxExplorerSpawns: 2,

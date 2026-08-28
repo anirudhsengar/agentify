@@ -406,6 +406,125 @@ async function testAggregateRemainingCallsReduceExplorerCap(): Promise<void> {
   }
 }
 
+async function testModelOverridesMayOnlyNarrowTrustedModeCaps(): Promise<void> {
+  const cwd = tempDir("spawn-budget-narrow-only");
+  try {
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      stateDir: ".agentify/runtime/audit",
+      ...stubExplorerArgs(),
+      createSession: async () => ({
+        session: {
+          messages: [{ role: "assistant", content: "## Report\n\nComplete." }],
+          async prompt(): Promise<void> {},
+          dispose(): void {},
+        },
+      }),
+    });
+    const result = await tool.execute(
+      "test-narrow-only",
+      { mode: "topography", target_path: ".", max_reads: 32, max_total_steps: 40 } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    const details = result.details as { max_reads?: number; max_provider_calls?: number } | undefined;
+    assert.equal(details?.max_reads, 8, "model input cannot raise the trusted topography read cap");
+    assert.equal(details?.max_provider_calls, 12, "model input cannot raise the trusted topography call cap");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testLiveExplorerUsageAbortsAtAggregateTokenLimit(): Promise<void> {
+  const cwd = tempDir("spawn-budget-live-token-cap");
+  let abortCount = 0;
+  let aborted = false;
+  try {
+    const budget = new AuditResourceBudget({ maxInputTokens: 15, maxModelCalls: 10 });
+    const listeners = new Set<(event: unknown) => void>();
+    const messages: FakeExplorerEvent["message"][] = [];
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      stateDir: ".agentify/runtime/audit",
+      resourceBudget: budget,
+      ...stubExplorerArgs(),
+      createSession: async () => ({
+        session: {
+          messages,
+          subscribe(listener: (event: unknown) => void): () => void {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+          clearQueue(): void {},
+          async abort(): Promise<void> {
+            abortCount += 1;
+            aborted = true;
+          },
+          async prompt(): Promise<void> {
+            for (let index = 0; index < 3; index += 1) {
+              if (aborted) break;
+              const message: FakeExplorerEvent["message"] = {
+                role: "assistant",
+                content: "",
+                stopReason: "toolUse",
+                usage: { input: 10, output: 1, cost: { total: 0 } },
+              };
+              messages.push(message);
+              for (const listener of listeners) listener({ type: "message_end", message });
+              await Promise.resolve();
+            }
+          },
+          dispose(): void {},
+        },
+      }),
+    });
+    const result = await tool.execute(
+      "test-live-token-cap",
+      { mode: "topography", target_path: ".", max_total_steps: 5 } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((result as { isError?: boolean }).isError, true);
+    assert.match(textFrom(result), /input tokens exceeded 15/i);
+    assert.equal(abortCount, 1, "aggregate token exhaustion must abort the explorer immediately");
+    assert.equal((result.details as { provider_calls?: number } | undefined)?.provider_calls, 2);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testOversizedReportsFailInsteadOfBecomingReceipts(): Promise<void> {
+  const cwd = tempDir("spawn-budget-report-cap");
+  try {
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      stateDir: ".agentify/runtime/audit",
+      ...stubExplorerArgs(),
+      createSession: async () => ({
+        session: {
+          messages: [{ role: "assistant", content: `## Report\n\n${"x".repeat(40_000)}` }],
+          async prompt(): Promise<void> {},
+          dispose(): void {},
+        },
+      }),
+    });
+    const result = await tool.execute(
+      "test-report-cap",
+      { mode: "concern_tracer", target_path: ".", focus: "argument parsing" } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((result as { isError?: boolean }).isError, true);
+    assert.match(textFrom(result), /report exceeded hard output cap/i);
+    assert.equal((result.details as { failure_kind?: string } | undefined)?.failure_kind, "output_limit");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
   const cwd = tempDir("spawn-budget-timeout");
   try {
@@ -458,6 +577,9 @@ await testRejectsWhenCostBudgetIsExhausted();
 await testHardProviderCallCapAbortsContinuation();
 await testFinalReportAtProviderCallCapSucceeds();
 await testAggregateRemainingCallsReduceExplorerCap();
+await testModelOverridesMayOnlyNarrowTrustedModeCaps();
+await testLiveExplorerUsageAbortsAtAggregateTokenLimit();
+await testOversizedReportsFailInsteadOfBecomingReceipts();
 await testDefaultsBoundSmallRepositoryAudits();
 await testSubagentTimeoutReturnsControlToAudit();
 
