@@ -109,6 +109,11 @@ have exactly one accepted core owner; other specialists may retain it only as a
 supporting touchpoint until deterministic ownership is resolved. Test-only core
 ownership is refused when the same concern cites tracked implementation
 behavior, without rejecting repositories whose product is itself a test suite.
+The compiler resolves one narrow shared-file case deterministically: exactly
+one concern has no other core implementation path while every adjacent concern
+does. That sole-dependent concern keeps core ownership and the other mentions
+become supporting. If zero or multiple owners depend exclusively on the shared
+path, the compiler preserves the ambiguity as an unresolved obligation.
 
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30

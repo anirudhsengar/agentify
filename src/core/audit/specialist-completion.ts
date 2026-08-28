@@ -110,6 +110,12 @@ export interface RepositoryConcernAttachment {
   reason: string;
 }
 
+export interface RepositoryCoreOwnershipResolution {
+  concern: string;
+  path: string;
+  reason: string;
+}
+
 export interface SpecialistEvidenceAssessment {
   complete: boolean;
   source: "concern_evidence" | "legacy_expert_evidence" | "absent";
@@ -123,6 +129,7 @@ export interface SpecialistEvidenceAssessment {
   repository_clusters: RepositoryBehaviorCluster[];
   uncovered_clusters: RepositoryBehaviorCluster[];
   attachments: RepositoryConcernAttachment[];
+  core_ownership_resolutions: RepositoryCoreOwnershipResolution[];
 }
 
 export interface AuditCompletionResult {
@@ -1104,6 +1111,7 @@ export function assessSpecialistEvidence(
       repository_clusters: [],
       uncovered_clusters: [],
       attachments: [],
+      core_ownership_resolutions: [],
     };
   }
 
@@ -1162,8 +1170,26 @@ export function assessSpecialistEvidence(
       coreOwnersByPath.set(repositoryPath, owners);
     }
   }
+  const coreOwnershipResolutions: RepositoryCoreOwnershipResolution[] = [];
   for (const [repositoryPath, owners] of coreOwnersByPath) {
     if (owners.length <= 1) continue;
+    const soleDependentOwners = accepted.filter((assessment) =>
+      owners.includes(assessment.concern)
+      && assessment.corePaths.length === 1
+      && assessment.corePaths[0] === repositoryPath
+    );
+    if (
+      eligibleImplementationPath(repositoryPath)
+      && soleDependentOwners.length === 1
+    ) {
+      coreOwnershipResolutions.push({
+        concern: soleDependentOwners[0]!.concern,
+        path: repositoryPath,
+        reason:
+          "the selected concern has no other core implementation path while every adjacent concern retains independent core ownership",
+      });
+      continue;
+    }
     reasons.push(
       `tracked file ${repositoryPath} has multiple core owners: ${owners.sort((left, right) => left.localeCompare(right)).join(", ")}; retain exactly one defensible core owner and mark adjacent touchpoints supporting`,
     );
@@ -1325,6 +1351,7 @@ export function assessSpecialistEvidence(
     repository_clusters: repositoryClusters,
     uncovered_clusters: uncoveredClusters,
     attachments,
+    core_ownership_resolutions: coreOwnershipResolutions,
   };
 }
 
@@ -1353,22 +1380,44 @@ export function reconcileSpecialistEvidence(
   const attachmentsByConcern = new Map(
     assessment.attachments.map((attachment) => [attachment.concern, attachment]),
   );
+  const ownershipByPath = new Map(
+    assessment.core_ownership_resolutions.map((resolution) => [resolution.path, resolution]),
+  );
   let attachmentsChanged = false;
+  let ownershipChanged = false;
   const concerns = map.concern_evidence.concerns
     .filter((concern) => accepted.has(concern.concern))
     .map((concern) => {
+      const touchpoints = concern.touchpoints.map((touchpoint) => {
+        if (touchpoint.centrality !== "core") return touchpoint;
+        const repositoryPath = normalizeRepositoryPathSyntax(touchpoint.path);
+        const resolution = repositoryPath === null
+          ? undefined
+          : ownershipByPath.get(repositoryPath);
+        if (resolution === undefined || resolution.concern === concern.concern) return touchpoint;
+        ownershipChanged = true;
+        return {
+          ...touchpoint,
+          centrality: "supporting" as const,
+          role: `${touchpoint.role} Trusted ownership normalization retains ${resolution.concern} as the sole core owner because ${resolution.reason}.`,
+        };
+      });
       const attachment = attachmentsByConcern.get(concern.concern);
-      if (attachment === undefined) return concern;
-      const existing = new Set(concern.touchpoints.map((touchpoint) =>
+      if (attachment === undefined) {
+        return touchpoints === concern.touchpoints ? concern : { ...concern, touchpoints };
+      }
+      const existing = new Set(touchpoints.map((touchpoint) =>
         normalizeRepositoryPathSyntax(touchpoint.path) ?? touchpoint.path
       ));
       const additions = attachment.paths.filter((repositoryPath) => !existing.has(repositoryPath));
-      if (additions.length === 0) return concern;
+      if (additions.length === 0) {
+        return touchpoints === concern.touchpoints ? concern : { ...concern, touchpoints };
+      }
       attachmentsChanged = true;
       return {
         ...concern,
         touchpoints: [
-          ...concern.touchpoints,
+          ...touchpoints,
           ...additions.map((repositoryPath) => ({
             path: repositoryPath,
             symbol: null,
@@ -1394,7 +1443,9 @@ export function reconcileSpecialistEvidence(
   const openQuestions = map.open_questions.filter((question) =>
     !PLACEHOLDER_QUESTION.test(question.trim())
   );
-  const concernsChanged = concerns.length !== map.concern_evidence.concerns.length || attachmentsChanged;
+  const concernsChanged = concerns.length !== map.concern_evidence.concerns.length
+    || attachmentsChanged
+    || ownershipChanged;
   const rejectionsChanged = notConcerns.length !== map.concern_evidence.not_concerns.length;
   const questionsChanged = openQuestions.length !== map.open_questions.length;
   if (!concernsChanged && !rejectionsChanged && !questionsChanged) return map;

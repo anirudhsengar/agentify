@@ -166,7 +166,10 @@ The explorer runtime permits only one successful concern scout per repository
 commit; resumed and repair sessions reuse its attested proposal set.
 Semantic closure requires exactly one accepted core owner for each tracked
 file. Adjacent specialists may share it only as a supporting touchpoint until
-the portfolio resolves ownership.
+the portfolio resolves ownership. Normalization resolves a shared
+implementation file without another model call only when exactly one concern
+would otherwise lose all core ownership and every adjacent concern retains an
+independent core path; ambiguous shared files remain unresolved.
 
 ### 2. Run the one-time installer
 
