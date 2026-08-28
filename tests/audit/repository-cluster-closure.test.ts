@@ -6,6 +6,7 @@ import * as path from "node:path";
 import test from "node:test";
 import {
   assessSpecialistEvidence,
+  compileSpecialistEvidence,
   reconcileSpecialistEvidence,
   type CodebaseMap,
 } from "../../src/core/audit/schema.ts";
@@ -163,6 +164,104 @@ test("repository-wide implementation/test mirrors prevent false specialist closu
     const reconciled = reconcileSpecialistEvidence(map, complete);
     assert.notStrictEqual(reconciled, map);
     assert.deepEqual(reconciled.open_questions, []);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("normalization assigns a mirrored cluster to its unique complete claimant", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-cluster-owner-"));
+  for (const repositoryPath of [
+    "README.md",
+    "package.json",
+    "src/options.ts",
+    "tests/options-core.test.ts",
+    "src/error.ts",
+    "tests/error.test.ts",
+    "examples/options-required.js",
+    "tests/options-required.test.js",
+  ]) write(cwd, repositoryPath);
+  git(cwd, "init", "-q");
+  git(cwd, "config", "user.name", "Agentify Test");
+  git(cwd, "config", "user.email", "agentify@example.invalid");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "cluster owner fixture");
+  try {
+    const optionContract = concern(
+      "option declaration and required-value contract",
+      "src/options.ts",
+      "tests/options-core.test.ts",
+    );
+    optionContract.covers += " Required options are demonstrated and regression-tested as a mirrored public behavior.";
+    optionContract.touchpoints.push(
+      {
+        path: "examples/options-required.js",
+        symbol: "requiredOption",
+        role: "Public required-option implementation example.",
+        line_range: null,
+        centrality: "supporting",
+      },
+      {
+        path: "tests/options-required.test.js",
+        symbol: "required option cases",
+        role: "Mirrored required-option regression contract.",
+        line_range: null,
+        centrality: "supporting",
+      },
+    );
+    const errorContract = concern(
+      "error and exit behavior",
+      "src/error.ts",
+      "tests/error.test.ts",
+    );
+    errorContract.touchpoints.push({
+      path: "tests/options-required.test.js",
+      symbol: "missing required value error",
+      role: "Downstream error consumer for a required-option failure.",
+      line_range: null,
+      centrality: "supporting",
+    });
+
+    const map = clickShapedMap();
+    map.meta.project_type = "TypeScript CLI library";
+    map.meta.languages = ["TypeScript", "JavaScript"];
+    map.skeleton.entry_points = ["src/options.ts", "src/error.ts"].map((repositoryPath) => ({
+      path: repositoryPath,
+      role: "fixture entry point",
+      language: "TypeScript",
+      run_command: "npm test",
+    }));
+    map.skeleton.first_5_files_for_fresh_agent = map.skeleton.entry_points.map((entry) => ({
+      path: entry.path,
+      why: entry.role,
+    }));
+    map.pitfalls = [];
+    map.concern_evidence = { concerns: [optionContract, errorContract], not_concerns: [] };
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.complete, true, compiled.reasons.join("; "));
+    for (const repositoryPath of [
+      "examples/options-required.js",
+      "tests/options-required.test.js",
+    ]) {
+      const owners = compiled.map.concern_evidence!.concerns.filter((candidate) =>
+        candidate.touchpoints.some((touchpoint) =>
+          touchpoint.path === repositoryPath && touchpoint.centrality === "core"
+        )
+      );
+      assert.deepEqual(owners.map((entry) => entry.concern), [optionContract.concern]);
+    }
+
+    errorContract.touchpoints.push({
+      path: "examples/options-required.js",
+      symbol: "requiredOption",
+      role: "Competing complete claim to the public required-option example.",
+      line_range: null,
+      centrality: "supporting",
+    });
+    const ambiguous = compileSpecialistEvidence(map, { cwd });
+    assert.equal(ambiguous.complete, false);
+    assert.ok(ambiguous.reasons.some((reason) => /options-required/i.test(reason)));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
