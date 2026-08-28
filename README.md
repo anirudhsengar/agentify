@@ -139,6 +139,10 @@ provider-call caps that are reduced to the aggregate calls still available. A
 complete report at the exact call limit is retained; a request for another turn
 is aborted and remains unresolved. Budget failures name the current semantic
 obligations and their deterministic fingerprint.
+Model-supplied explorer limits may only narrow trusted mode defaults. Explorer
+usage is charged to the aggregate budget after every provider response, and a
+report over 16 KB is rejected as incomplete evidence rather than truncated into
+a successful receipt.
 
 ### 2. Run the one-time installer
 

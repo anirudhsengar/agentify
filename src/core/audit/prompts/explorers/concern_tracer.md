@@ -51,8 +51,12 @@ and stop.
  `blocker_reason` rather than citing it.
 - Every path you cite `MUST` be one you actually opened or grepped a
  match in. Do not infer a file's contents from its name.
-- 15–25 file reads is the sweet spot. A concern you traced shallowly
- produces a specialist that gives shallow answers.
+- Use at most 9 repository-read tool calls. Start with the scout's seed paths,
+ batch related searches, and select the strongest source, test, and public
+ surface evidence instead of reading every matching file.
+- Keep the complete report below 14 KB. Preserve every distinct verified flow,
+ invariant, failure mode, and boundary, but omit redundant peripheral matches
+ and keep each field concise.
 - `STOP` after emitting the structured `## Report`.
 
 <untrackedPathsNote>

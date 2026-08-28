@@ -69,6 +69,8 @@ All notable changes to Agentify are documented here.
 - Explorer sessions now run serially with hard mode-specific repository-read
   and provider-call limits. Aggregate exhaustion reports the exact unresolved
   semantic obligations and fingerprint; complete reports at the limit survive.
+  Model arguments cannot raise trusted mode defaults, usage is charged live per
+  response, and oversized reports fail rather than becoming truncated receipts.
 
 - Explorer success is now persisted as an application-authored receipt ledger
   bound to the audited repository commit. Model map writes cannot create or

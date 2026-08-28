@@ -121,6 +121,10 @@ Agentify retains a final report completed at the exact limit, but aborts an
 explorer that requests continuation there. Aggregate exhaustion reports the
 unresolved coverage, specialist-compiler, and receipt obligations with a
 deterministic fingerprint.
+Model tool arguments can narrow but cannot raise trusted per-mode quotas.
+Explorer calls, turns, tokens, and provider cost are reconciled live after each
+response. Reports over 16 KB fail the explorer receipt instead of letting a
+truncated behavioral trace establish semantic closure.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.

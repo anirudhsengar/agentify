@@ -181,7 +181,10 @@ export class AuditResourceBudget {
   }
 
   observeParentEvent(event: AgentSessionEvent, session: SessionObservation): void {
-    const value = event as { type?: string; message?: { usage?: UsageShape } };
+    const value = event as {
+      type?: string;
+      message?: { role?: string; stopReason?: string; usage?: UsageShape };
+    };
     if (value.type !== "message_end") return;
     const usage = value.message?.usage;
     session.calls += 1;
@@ -196,6 +199,20 @@ export class AuditResourceBudget {
     this.#outputTokens += recordUsageValue(usage?.output);
     this.#costUsd += cost;
     this.checkCounters();
+    if (
+      this.#modelCalls >= this.limits.maxModelCalls
+      && value.message?.role === "assistant"
+      && value.message.stopReason === "toolUse"
+    ) {
+      this.fail(`model calls reached ${this.limits.maxModelCalls} while requesting continuation`);
+    }
+    if (
+      this.#turns >= this.limits.maxTurns
+      && value.message?.role === "assistant"
+      && value.message.stopReason === "toolUse"
+    ) {
+      this.fail(`turns reached ${this.limits.maxTurns} while requesting continuation`);
+    }
   }
 
   finishParentSession(session: SessionObservation, result: RuntimeResultShape): void {

@@ -46,8 +46,11 @@ FOCUS: $2 # dynamic: optional focus hint (may be empty)
 - `MUST NOT` cite any path listed as untracked below. Untracked
  directories are fetched, generated, or vendored: they are not part of
  this repository and a specialist cannot be grounded in them.
-- 12–20 file reads is the sweet spot. This is the widest sweep in the
- audit; use the budget.
+- Use at most 10 repository-read tool calls. Prefer manifests, public entry
+ points, test indexes, and targeted grep results that expose multiple behaviors.
+ Do not read every candidate file during the scout; tracers verify candidates.
+- Keep the complete report below 14 KB. Make `why` concise and cite 2-5 seed
+ paths rather than copying implementation detail.
 - `STOP` after emitting the structured `## Report`.
 
 <untrackedPathsNote>

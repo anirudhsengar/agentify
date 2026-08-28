@@ -398,7 +398,7 @@ async function testAggregateRemainingCallsReduceExplorerCap(): Promise<void> {
       { cwd } as never,
     );
     assert.equal((result as { isError?: boolean }).isError, true);
-    assert.match(textFrom(result), /provider call cap of 1/i);
+    assert.match(textFrom(result), /model calls reached 3 while requesting continuation/i);
     assert.equal(abortCount, 1);
     assert.equal((result.details as { max_provider_calls?: number } | undefined)?.max_provider_calls, 1);
   } finally {

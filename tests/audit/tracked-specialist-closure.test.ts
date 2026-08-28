@@ -617,7 +617,7 @@ test("aggregate model-call exhaustion reports the unresolved semantic obligation
     await assert.rejects(
       runRepositoryAudit({ cwd: repository.cwd, ui: new RepairUi(), runtime, config }),
       (error: unknown) => {
-        assert.match(String(error), /model calls exceeded 1/i);
+        assert.match(String(error), /model calls reached 1 while requesting continuation/i);
         assert.match(String(error), /unresolved-obligation fingerprint [0-9a-f]{64}/i);
         assert.match(String(error), /D2_module_boundaries/i);
         return true;

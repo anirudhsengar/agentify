@@ -48,6 +48,7 @@ import {
     createAgentSession,
     DefaultResourceLoader,
     defineTool,
+    type AgentSessionEvent,
     type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
@@ -67,7 +68,7 @@ const EXPLORERS_DIR = path.join(HERE, "prompts", "explorers");
 // A 32 KB report cap is enough
 // for a structured ## Report; anything larger is truncated to
 // prevent context overflow.
-const MAX_REPORT_BYTES = 32_000;
+const MAX_REPORT_BYTES = 16_000;
 // A repository audit must finish in a useful amount of time even when a
 // provider stalls. These are deliberately conservative defaults: the parent
 // can synthesize from its own scouts and honest gaps after bounded attempts.
@@ -127,13 +128,11 @@ const MODE_STEP_DEFAULTS: Record<string, { reads: number; bash: number; steps: n
     pitfalls: { reads: 5, bash: 0, steps: 10 },
     validation: { reads: 10, bash: 0, steps: 15 },
     gap_filler: { reads: 8, bash: 0, steps: 12 },
-    // Concern discovery is the widest and deepest exploration in the audit: the
-    // scout sweeps the whole repository for specialties, and each tracer must
-    // follow one concern end to end through every subtree it reaches. A
-    // shallow trace produces a specialist that gives shallow answers, so these
-    // modes get the largest read budgets.
-    concern_scout: { reads: 20, bash: 0, steps: 28 },
-    concern_tracer: { reads: 25, bash: 0, steps: 34 },
+    // Concern modes receive enough reads to verify behavior across source,
+    // tests, and public surfaces, but must summarize instead of repeatedly
+    // re-ingesting the repository.
+    concern_scout: { reads: 10, bash: 0, steps: 14 },
+    concern_tracer: { reads: 9, bash: 0, steps: 12 },
     // The builder specifies custom exploration limits per call.
     custom: { reads: 8, bash: 0, steps: 12 },
 };
@@ -162,14 +161,14 @@ const SpawnExplorerParams = Type.Object({
         Type.Integer({
             minimum: 1,
             maximum: MAX_EXPLORER_READS,
-            description: `Override the per-mode default repository-read cap (1-${MAX_EXPLORER_READS}).`,
+            description: `Optionally narrow the trusted per-mode repository-read cap (1-${MAX_EXPLORER_READS}); values above the mode default do not raise it.`,
         }),
     ),
     max_total_steps: Type.Optional(
         Type.Integer({
             minimum: 1,
             maximum: MAX_EXPLORER_PROVIDER_CALLS,
-            description: `Override the hard provider-call cap (1-${MAX_EXPLORER_PROVIDER_CALLS}).`,
+            description: `Optionally narrow the trusted hard provider-call cap (1-${MAX_EXPLORER_PROVIDER_CALLS}); values above the mode default do not raise it.`,
         }),
     ),
     // Custom mode accepts a self-contained inline prompt from the parent.
@@ -567,23 +566,25 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
 
         // Resolve step caps.
         const stepDefaults = MODE_STEP_DEFAULTS[mode] ?? { reads: 10, bash: 0, steps: 15 };
-        const maxReads = params.max_reads ?? stepDefaults.reads;
+        const requestedMaxReads = params.max_reads ?? stepDefaults.reads;
         const maxBash = stepDefaults.bash;
-        const maxSteps = params.max_total_steps ?? stepDefaults.steps;
-        if (!Number.isSafeInteger(maxReads) || maxReads < 1 || maxReads > MAX_EXPLORER_READS) {
+        const requestedMaxSteps = params.max_total_steps ?? stepDefaults.steps;
+        if (!Number.isSafeInteger(requestedMaxReads) || requestedMaxReads < 1 || requestedMaxReads > MAX_EXPLORER_READS) {
             return makeBudgetError(
                 `Error: max_reads must be an integer between 1 and ${MAX_EXPLORER_READS}.`,
                 { max_reads_limit: MAX_EXPLORER_READS },
                 stateDir,
             );
         }
-        if (!Number.isSafeInteger(maxSteps) || maxSteps < 1 || maxSteps > MAX_EXPLORER_PROVIDER_CALLS) {
+        if (!Number.isSafeInteger(requestedMaxSteps) || requestedMaxSteps < 1 || requestedMaxSteps > MAX_EXPLORER_PROVIDER_CALLS) {
             return makeBudgetError(
                 `Error: max_total_steps must be an integer between 1 and ${MAX_EXPLORER_PROVIDER_CALLS}.`,
                 { max_provider_calls_limit: MAX_EXPLORER_PROVIDER_CALLS },
                 stateDir,
             );
         }
+        const maxReads = Math.min(requestedMaxReads, stepDefaults.reads);
+        const maxSteps = Math.min(requestedMaxSteps, stepDefaults.steps);
 
         // Resolve the sub-agent's system prompt. For fixed modes,
         // it's loaded from prompts/explorers/. For custom mode, the
@@ -680,6 +681,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         let session: ExplorerSubSession | undefined;
         let resourceUsageRecorded = false;
         let providerCalls = 0;
+        let oversizedReportPath: string | null = null;
 
         try {
             const toolsForMode: ReadonlyArray<string> = params.tools ?? READ_ONLY_TOOLS;
@@ -758,6 +760,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             // a hard wall-clock timeout. The session is disposed in the
             // finally block, including after timeout.
             if (!session) throw new Error("session not initialized");
+            const explorerBudgetSession = toolOptions.resourceBudget?.beginSession();
             let timeout: ReturnType<typeof setTimeout> | undefined;
             let unsubscribe: (() => void) | undefined;
             let rejectCallCap: ((error: Error) => void) | undefined;
@@ -771,6 +774,21 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     if (event.message.role !== "assistant") return;
                     if (callCapReached) return;
                     providerCalls += 1;
+                    if (toolOptions.resourceBudget && explorerBudgetSession) {
+                        resourceUsageRecorded = true;
+                        try {
+                            toolOptions.resourceBudget.observeParentEvent(
+                                event as unknown as AgentSessionEvent,
+                                explorerBudgetSession,
+                            );
+                        } catch (error) {
+                            callCapReached = true;
+                            session?.clearQueue?.();
+                            void session?.abort?.().catch(() => undefined);
+                            rejectCallCap?.(error instanceof Error ? error : new Error(String(error)));
+                            return;
+                        }
+                    }
                     if (
                         providerCalls >= maxProviderCalls
                         && event.message.stopReason !== "stop"
@@ -824,6 +842,14 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const rawReport = extractFinalAssistantText(
                 session.messages as ReadonlyArray<{ role?: string; content?: unknown }>,
             );
+            const rawReportBytes = Buffer.byteLength(rawReport, "utf8");
+            if (rawReportBytes > MAX_REPORT_BYTES) {
+                oversizedReportPath = persistTruncatedReport(ctx.cwd, mode, runId, rawReport, stateDir);
+                throw new Error(
+                    `sub-agent report exceeded hard output cap of ${MAX_REPORT_BYTES} bytes: ${rawReportBytes} bytes; ` +
+                    "retry with a narrower focus and a concise report",
+                );
+            }
 
             // Truncate the report if it exceeds the cap.
             const { report, truncated, report_length } = truncateReport(rawReport);
@@ -836,8 +862,10 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const subagentMessages =
                 session.messages as ReadonlyArray<{ role?: string; content?: unknown }>;
             const sessionCostUsd = extractSessionCostUsd(session.messages);
-            resourceUsageRecorded = true;
-            toolOptions.resourceBudget?.recordExplorerMessages(session.messages);
+            if (!resourceUsageRecorded) {
+                resourceUsageRecorded = true;
+                toolOptions.resourceBudget?.recordExplorerMessages(session.messages);
+            }
             if (sessionCostUsd !== null) {
                 totalCostUsd = roundCost(totalCostUsd + sessionCostUsd);
             }
@@ -849,7 +877,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 for (const block of m.content) {
                     if (!block || typeof block !== "object") continue;
                     const b = block as { type?: string; name?: string };
-                    if (b.type === "tool_use") {
+                    if (b.type === "toolCall") {
                         if (readOnlySet.has(b.name ?? "")) readCount += 1;
                         else if (b.name === "bash") bashCount += 1;
                     }
@@ -939,7 +967,14 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     focus: params.focus ?? null,
                     summary: params.summary ?? null,
                     error_message: msg,
-                    failure_kind: /timeout|timed out/i.test(msg) ? "timeout" : "error",
+                    failure_kind: /timeout|timed out/i.test(msg)
+                        ? "timeout"
+                        : /report exceeded hard output cap/i.test(msg)
+                        ? "output_limit"
+                        : /resource budget exhausted/i.test(msg)
+                        ? "resource_budget"
+                        : "error",
+                    report_truncated_path: oversizedReportPath,
                     provider_calls: providerCalls,
                     max_provider_calls: maxProviderCalls,
                     duration_ms: Date.now() - start,
