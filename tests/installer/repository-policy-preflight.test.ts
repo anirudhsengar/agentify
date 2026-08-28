@@ -91,6 +91,7 @@ test("restrictive repository policy blocks analysis and installation before any 
 for (const policy of [
   "AI-assisted contributions are welcome when contributors review and test them.",
   "Do not commit credentials, including credentials suggested by AI tools.",
+  "Project maintainers who do not follow or enforce the Code of Conduct in good faith may face temporary or permanent repercussions.",
 ]) {
   test(`non-prohibitive policy remains analyzable: ${policy}`, () => {
     const cwd = createRepository(policy);
