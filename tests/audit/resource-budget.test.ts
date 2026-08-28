@@ -108,6 +108,23 @@ test("tool-result message events cannot consume provider-call or turn budgets", 
   );
 });
 
+test("a parent session cannot continue past its application-owned duration", async () => {
+  const budget = new AuditResourceBudget({ maxSessionDurationMs: 1 });
+  const session = budget.beginSession();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.throws(
+    () => budget.observeParentEvent({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        stopReason: "stop",
+        usage: { input: 1, output: 1, cost: { total: 0 } },
+      },
+    } as never, session),
+    /session elapsed time.*1ms/i,
+  );
+});
+
 test("explorer spawns share aggregate limits and receive mode-specific timeouts", () => {
   const budget = new AuditResourceBudget({
     maxExplorerSpawns: 2,

@@ -77,8 +77,19 @@ test("every scout proposal remains an obligation until traced or substantively r
 
   map.concern_evidence!.not_concerns.push({
     candidate: "TypeScript declaration surface",
-    why_rejected: "A public surface owned across behavioral specialists, not an independent body of knowledge.",
+    why_rejected: "Not rejected; accepted for tracing because it is a public compatibility contract.",
   });
+  assessment = tracker.assess(map);
+  assert.equal(
+    assessment.complete,
+    false,
+    "a statement that explicitly accepts the candidate is not substantive negative evidence",
+  );
+
+  map.concern_evidence!.not_concerns[0] = {
+    candidate: "TypeScript declaration surface",
+    why_rejected: "A public surface owned across behavioral specialists, not an independent body of knowledge.",
+  };
   assessment = tracker.assess(map);
   assert.equal(assessment.complete, true, assessment.reasons.join("; "));
 });

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { runAgentifyApp } from "../../src/core/agentify-app.ts";
 import {
@@ -132,6 +133,69 @@ test("any audit exception aborts the pending installation transaction", async ()
 
     assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), false);
     assert.equal(fs.existsSync(path.join(cwd, ".agentify", "agents")), false);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("SIGTERM rolls a pending installation back to diagnostic-map-only state", async () => {
+  const { cwd } = createRepository();
+  try {
+    const transactionModule = pathToFileURL(
+      path.resolve("src/core/installer/installation-transaction.ts"),
+    ).href;
+    const diagnostic = JSON.stringify({ status: "partial", reason: "signal fixture" });
+    const script = `
+      import fs from "node:fs";
+      import path from "node:path";
+      import { beginPendingInstallation } from ${JSON.stringify(transactionModule)};
+      const cwd = process.argv[1];
+      beginPendingInstallation(cwd);
+      const auditDir = path.join(cwd, ".agentify", "runtime", "audit");
+      fs.mkdirSync(auditDir, { recursive: true });
+      fs.writeFileSync(path.join(auditDir, "codebase_map.json"), ${JSON.stringify(diagnostic)});
+      fs.writeFileSync(path.join(cwd, ".agentify", "manifest.json"), "partial install");
+      process.stdout.write("READY\\n");
+      setInterval(() => {}, 1_000);
+    `;
+    const child = spawn(process.execPath, [
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "-e",
+      script,
+      cwd,
+    ], {
+      cwd: path.resolve("."),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stderr = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => { stderr += chunk; });
+    await new Promise<void>((resolve, reject) => {
+      let stdout = "";
+      const timeout = setTimeout(() => reject(new Error(`signal fixture did not become ready: ${stderr}`)), 5_000);
+      child.stdout.setEncoding("utf8");
+      child.stdout.on("data", (chunk: string) => {
+        stdout += chunk;
+        if (!stdout.includes("READY")) return;
+        clearTimeout(timeout);
+        resolve();
+      });
+      child.once("error", reject);
+    });
+    child.kill("SIGTERM");
+    const outcome = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+      child.once("close", (code, signal) => resolve({ code, signal }));
+    });
+    assert.deepEqual(outcome, { code: 143, signal: null }, stderr);
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), false);
+    assert.equal(
+      fs.readFileSync(path.join(cwd, ".agentify", "runtime", "audit", "codebase_map.json"), "utf8"),
+      diagnostic,
+    );
+    const retainedFiles = fs.readdirSync(path.join(cwd, ".agentify", "runtime", "audit"));
+    assert.deepEqual(retainedFiles, ["codebase_map.json"]);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

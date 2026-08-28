@@ -145,7 +145,11 @@ function ensureGitRepository(cwd: string): string {
   return head.stdout.trim();
 }
 
-async function runWithRuntime(cwd: string, runtime: AgentRuntime): Promise<SilentUi> {
+async function runWithRuntime(
+  cwd: string,
+  runtime: AgentRuntime,
+  auditBudgets?: { maxSessionDurationMs: number },
+): Promise<SilentUi> {
   ensureGitRepository(cwd);
   const previousHome = process.env["HOME"];
   const tempHome = tempDir("gate-run-home");
@@ -157,7 +161,13 @@ async function runWithRuntime(cwd: string, runtime: AgentRuntime): Promise<Silen
       cwd,
       ui,
       runtime,
-      configOverride: { schemaVersion: 1, provider: "openai", thinkingLevel: "high", models: {} },
+      configOverride: {
+        schemaVersion: 1,
+        provider: "openai",
+        thinkingLevel: "high",
+        models: {},
+        ...(auditBudgets ? { auditBudgets } : {}),
+      },
     });
     return ui;
   } finally {
@@ -613,6 +623,36 @@ class ReceiptCheckpointRuntime implements AgentRuntime {
   }
 }
 
+class DeadlineRuntime implements AgentRuntime {
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
+    return new Promise((resolve) => {
+      const fallback = setTimeout(
+        () => resolve({ turns: 0, costUsd: null, aborted: false }),
+        250,
+      );
+      options.signal?.addEventListener("abort", () => {
+        clearTimeout(fallback);
+        resolve({ turns: 0, costUsd: null, aborted: true });
+      }, { once: true });
+    });
+  }
+}
+
+async function testParentAuditSessionHasApplicationOwnedDeadline(): Promise<void> {
+  const cwd = tempDir("gate-parent-deadline");
+  try {
+    const startedAt = Date.now();
+    await assert.rejects(
+      runWithRuntime(cwd, new DeadlineRuntime(), { maxSessionDurationMs: 25 }),
+      /session elapsed time.*25ms/i,
+    );
+    assert.ok(Date.now() - startedAt < 200, "application deadline must abort the hung runtime");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function testFailedAuditRetainsApplicationAttestedExplorerCheckpoint(): Promise<void> {
   const cwd = tempDir("gate-receipt-checkpoint");
   try {
@@ -694,6 +734,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "attachSkipsAuditOnlyWhenSpecialistEvidenceRecorded", fn: testAttachSkipsAuditOnlyWhenSpecialistEvidenceRecorded },
   { name: "auditFailsWhenSpecialistEvidenceNeverRecorded", fn: testAuditFailsWhenSpecialistEvidenceNeverRecorded },
   { name: "failedAuditRetainsApplicationAttestedExplorerCheckpoint", fn: testFailedAuditRetainsApplicationAttestedExplorerCheckpoint },
+  { name: "parentAuditSessionHasApplicationOwnedDeadline", fn: testParentAuditSessionHasApplicationOwnedDeadline },
 ];
 
 let passed = 0;
