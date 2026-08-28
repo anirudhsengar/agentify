@@ -30,10 +30,13 @@ function explorerEvent(input: {
   reportConcern?: string;
   targetPath?: string;
   failureKind?: string;
+  scoutConcerns?: string[];
 }): unknown {
   const text = input.success
     ? `Sub-agent (mode=${input.mode}) explored ${input.targetPath ?? "."} in 10ms.\n\n`
-      + (input.reportConcern ? `## Report\nconcern: ${input.reportConcern}\n` : "## Report\n")
+      + (input.reportConcern
+        ? `## Report\nconcern: ${input.reportConcern}\n`
+        : `## Report\nconcerns:\n${(input.scoutConcerns ?? []).map((concern) => ` - concern: ${concern}`).join("\n")}\n`)
     : `Error: sub-agent (mode=${input.mode}) for ${input.targetPath ?? "."} failed: timeout`;
   return {
     type: "tool_execution_end",
@@ -49,6 +52,36 @@ function explorerEvent(input: {
     },
   };
 }
+
+test("every scout proposal remains an obligation until traced or substantively rejected", () => {
+  const tracker = new ExplorerReceiptTracker();
+  tracker.observe(explorerEvent({
+    mode: "concern_scout",
+    success: true,
+    scoutConcerns: ["CLI argument parsing", "TypeScript declaration surface"],
+  }));
+  tracker.observe(explorerEvent({
+    mode: "concern_tracer",
+    success: true,
+    focus: "CLI argument parsing",
+    reportConcern: "CLI argument parsing and value coercion",
+  }));
+
+  const map = mapWithConcerns("CLI argument parsing and value coercion");
+  let assessment = tracker.assess(map);
+  assert.equal(assessment.complete, false);
+  assert.ok(
+    assessment.reasons.some((reason) => reason.includes("TypeScript declaration surface")),
+    assessment.reasons.join("; "),
+  );
+
+  map.concern_evidence!.not_concerns.push({
+    candidate: "TypeScript declaration surface",
+    why_rejected: "A public surface owned across behavioral specialists, not an independent body of knowledge.",
+  });
+  assessment = tracker.assess(map);
+  assert.equal(assessment.complete, true, assessment.reasons.join("; "));
+});
 
 test("semantic closure requires successful scout and per-concern tracer receipts", () => {
   const tracker = new ExplorerReceiptTracker();

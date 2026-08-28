@@ -56,6 +56,19 @@ test("a continuation at the exact aggregate call limit fails before another requ
     } as never, session),
     /model calls reached 1 while requesting continuation/i,
   );
+  assert.throws(
+    () => budget.finishParentSession(session, {
+      turns: 2,
+      costUsd: 0,
+      diagnostics: { provider_requests: 2 },
+    }),
+    /model calls reached 1 while requesting continuation/i,
+  );
+  assert.equal(
+    budget.snapshot().model_calls,
+    1,
+    "reconciliation after a recorded failure must not mutate counters past the limit",
+  );
 
   const finalBudget = new AuditResourceBudget({ maxModelCalls: 1 });
   const finalSession = finalBudget.beginSession();

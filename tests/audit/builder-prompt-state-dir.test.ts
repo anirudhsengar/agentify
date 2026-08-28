@@ -123,6 +123,16 @@ async function testPromptKeepsExplorerDispatchBounded(): Promise<void> {
   );
   assert.match(
     raw,
+    /After the scout.*write_map_delta.*After each successful tracer.*write_map_delta/s,
+    "builder prompt must checkpoint scout decisions and every completed trace incrementally",
+  );
+  assert.match(
+    raw,
+    /subsumed.*public type surface.*release or contribution process/s,
+    "builder prompt must screen overlapping, surface-only, and process-only candidates before tracing",
+  );
+  assert.match(
+    raw,
     /A concern is a body of knowledge, not a folder/,
     "builder prompt must state that concerns are not directories",
   );
