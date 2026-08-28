@@ -99,6 +99,10 @@ async function testPromptUsesConfiguredExplorerModelByDefault(): Promise<void> {
 
 async function testPromptKeepsExplorerDispatchBounded(): Promise<void> {
   const raw = readRawBuilderPrompt();
+  assert.ok(
+    raw.indexOf("### Concern discovery") < raw.indexOf("### Cross-cutting evidence"),
+    "required concern discovery must precede optional cross-cutting explorer work",
+  );
   assert.match(
     raw,
     /dispatch one\nhigh-value feature explorer\. Read and merge its report before dispatching the\nnext one/,
@@ -123,7 +127,7 @@ async function testPromptKeepsExplorerDispatchBounded(): Promise<void> {
     "builder prompt must state that concerns are not directories",
   );
   const budget = raw.match(
-    /at most 16 explorers per\n+audit, two active at once, and ([a-z]+) minutes per explorer/,
+    /at most 16 explorers per\n+audit, one active at once, and ([a-z]+) minutes per explorer/,
   );
   assert.ok(budget, "builder prompt must disclose the finite explorer budget");
   const timeoutWord = budget[1]?.toLowerCase();

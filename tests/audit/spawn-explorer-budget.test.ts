@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { Model, Api } from "@earendil-works/pi-ai";
+import { AuditResourceBudget } from "../../src/core/audit/resource-budget.ts";
 import { createSpawnExplorerTool } from "../../src/core/audit/spawn-explorer-tool.ts";
 
 function tempDir(name: string): string {
@@ -200,10 +201,200 @@ async function testDefaultsBoundSmallRepositoryAudits(): Promise<void> {
     assert.deepEqual(details, {
       ...details,
       max_total_spawns: 16,
-      max_concurrent_spawns: 2,
+      max_concurrent_spawns: 1,
       max_subagent_duration_ms: 180_000,
       max_total_cost_usd: 5,
     });
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+interface FakeExplorerEvent {
+  type: "message_end";
+  message: {
+    role: "assistant";
+    content: string;
+    stopReason: "toolUse" | "stop";
+    usage: { input: number; output: number; cost: { total: number } };
+  };
+}
+
+async function testHardProviderCallCapAbortsContinuation(): Promise<void> {
+  const cwd = tempDir("spawn-budget-hard-call-cap");
+  let abortCount = 0;
+  try {
+    const listeners = new Set<(event: FakeExplorerEvent) => void>();
+    const messages: FakeExplorerEvent["message"][] = [];
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      stateDir: ".agentify/runtime/audit",
+      ...stubExplorerArgs(),
+      createSession: async () => ({
+        session: {
+          messages,
+          subscribe(listener: (event: FakeExplorerEvent) => void): () => void {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+          clearQueue(): void {},
+          async abort(): Promise<void> {
+            abortCount += 1;
+          },
+          async prompt(): Promise<void> {
+            for (let index = 0; index < 3; index += 1) {
+              const message: FakeExplorerEvent["message"] = {
+                role: "assistant",
+                content: index === 1 ? "## Report\n\nPartial evidence." : "",
+                stopReason: "toolUse",
+                usage: { input: 10, output: 5, cost: { total: 0.001 } },
+              };
+              messages.push(message);
+              for (const listener of listeners) listener({ type: "message_end", message });
+              await Promise.resolve();
+            }
+          },
+          dispose(): void {},
+        },
+      }),
+    });
+
+    const result = await tool.execute(
+      "test-hard-provider-call-cap",
+      { mode: "topography", target_path: ".", max_total_steps: 2 } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((result as { isError?: boolean }).isError, true);
+    assert.match(textFrom(result), /provider call cap of 2/i);
+    assert.equal(abortCount, 1, "runtime must abort an explorer that requests another turn at the cap");
+    const details = result.details as { provider_calls?: number; max_provider_calls?: number } | undefined;
+    assert.equal(details?.provider_calls, 2);
+    assert.equal(details?.max_provider_calls, 2);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testFinalReportAtProviderCallCapSucceeds(): Promise<void> {
+  const cwd = tempDir("spawn-budget-final-at-call-cap");
+  let abortCount = 0;
+  try {
+    const listeners = new Set<(event: FakeExplorerEvent) => void>();
+    const messages: FakeExplorerEvent["message"][] = [];
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      stateDir: ".agentify/runtime/audit",
+      ...stubExplorerArgs(),
+      createSession: async () => ({
+        session: {
+          messages,
+          subscribe(listener: (event: FakeExplorerEvent) => void): () => void {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+          clearQueue(): void {},
+          async abort(): Promise<void> {
+            abortCount += 1;
+          },
+          async prompt(): Promise<void> {
+            for (const [content, stopReason] of [
+              ["", "toolUse"],
+              ["## Report\n\nComplete evidence.", "stop"],
+            ] as const) {
+              const message: FakeExplorerEvent["message"] = {
+                role: "assistant",
+                content,
+                stopReason,
+                usage: { input: 10, output: 5, cost: { total: 0.001 } },
+              };
+              messages.push(message);
+              for (const listener of listeners) listener({ type: "message_end", message });
+              await Promise.resolve();
+            }
+          },
+          dispose(): void {},
+        },
+      }),
+    });
+
+    const result = await tool.execute(
+      "test-final-at-provider-call-cap",
+      { mode: "topography", target_path: ".", max_total_steps: 2 } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((result as { isError?: boolean }).isError, undefined);
+    assert.match(textFrom(result), /Complete evidence/);
+    assert.equal(abortCount, 0, "a complete final report at the cap must not be aborted");
+    const details = result.details as { provider_calls?: number; max_provider_calls?: number } | undefined;
+    assert.equal(details?.provider_calls, 2);
+    assert.equal(details?.max_provider_calls, 2);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testAggregateRemainingCallsReduceExplorerCap(): Promise<void> {
+  const cwd = tempDir("spawn-budget-aggregate-call-cap");
+  let abortCount = 0;
+  try {
+    const budget = new AuditResourceBudget({ maxModelCalls: 3 });
+    const parent = budget.beginSession();
+    for (let index = 0; index < 2; index += 1) {
+      budget.observeParentEvent({
+        type: "message_end",
+        message: { usage: { input: 1, output: 1, cost: { total: 0 } } },
+      } as never, parent);
+    }
+    const listeners = new Set<(event: FakeExplorerEvent) => void>();
+    const messages: FakeExplorerEvent["message"][] = [];
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      stateDir: ".agentify/runtime/audit",
+      resourceBudget: budget,
+      ...stubExplorerArgs(),
+      createSession: async () => ({
+        session: {
+          messages,
+          subscribe(listener: (event: FakeExplorerEvent) => void): () => void {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+          clearQueue(): void {},
+          async abort(): Promise<void> {
+            abortCount += 1;
+          },
+          async prompt(): Promise<void> {
+            for (let index = 0; index < 2; index += 1) {
+              const message: FakeExplorerEvent["message"] = {
+                role: "assistant",
+                content: "",
+                stopReason: "toolUse",
+                usage: { input: 1, output: 1, cost: { total: 0 } },
+              };
+              messages.push(message);
+              for (const listener of listeners) listener({ type: "message_end", message });
+              await Promise.resolve();
+            }
+          },
+          dispose(): void {},
+        },
+      }),
+    });
+    const result = await tool.execute(
+      "test-aggregate-remaining-call-cap",
+      { mode: "concern_scout", target_path: "." } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((result as { isError?: boolean }).isError, true);
+    assert.match(textFrom(result), /provider call cap of 1/i);
+    assert.equal(abortCount, 1);
+    assert.equal((result.details as { max_provider_calls?: number } | undefined)?.max_provider_calls, 1);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -258,6 +449,9 @@ async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
 await testRejectsWhenTotalSpawnBudgetIsExhausted();
 await testRejectsWhenConcurrentSpawnBudgetIsExhausted();
 await testRejectsWhenCostBudgetIsExhausted();
+await testHardProviderCallCapAbortsContinuation();
+await testFinalReportAtProviderCallCapSucceeds();
+await testAggregateRemainingCallsReduceExplorerCap();
 await testDefaultsBoundSmallRepositoryAudits();
 await testSubagentTimeoutReturnsControlToAudit();
 
