@@ -129,11 +129,16 @@ large repository through the optional `auditBudgets` object in
 | `maxTotalCostUsd` | 20 (provider-reported) |
 | `maxCoverageRecoveryPasses` / `maxSemanticRepairPasses` | 1 / 3 |
 | `maxRepeatedFingerprintStates` | 2 |
-| `maxExplorerSpawns` | 64 |
+| `maxExplorerSpawns` | 16 |
 
 Overrides are strictly validated and remain subject to finite safety ceilings.
 Parent audit requests and explorer sub-sessions consume the same aggregate call,
 turn, token, cost, and elapsed-time budget.
+Explorer work is serialized, and each mode has hard repository-read and
+provider-call caps that are reduced to the aggregate calls still available. A
+complete report at the exact call limit is retained; a request for another turn
+is aborted and remains unresolved. Budget failures name the current semantic
+obligations and their deterministic fingerprint.
 
 ### 2. Run the one-time installer
 

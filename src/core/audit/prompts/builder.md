@@ -76,22 +76,6 @@ After the four direct scout reads,
 The runtime has already created an honest gap-marked map. Your first delta must
 add real evidence; do not replace the map with an empty or placeholder object.
 
-### Cross-cutting evidence
-
-Before broad feature exploration, gather focused evidence for the dimensions that
-cannot be justified by a generic feature summary:
-
-1. Run `module_graph` against the primary source root, never `.`. Record at least
-   one real import, state, RPC, or process boundary.
-2. Run `type_tracer` against the directory that owns one high-leverage observed
-   interface, model, or schema. Supply the exact type name as the focus.
-3. Use focused `conventions`, `pitfalls`, `validation`, `operational`, and
-   `security` exploration where direct evidence is not already sufficient.
-4. Use repository documentation and process files to close D9 and D10 honestly.
-
-Persist supported findings incrementally through `write_map_delta`. A custom
-feature report supplements cross-cutting evidence; it is not a substitute for it.
-
 ### Concern discovery
 
 This is the part of the audit the whole installation exists for. Everything
@@ -122,6 +106,22 @@ Every touchpoint path must be a file tracked in git. Code that is fetched,
 generated, or vendored at build time is not part of this repository: describe
 how the tracked code invokes it and cite the tracked files instead.
 
+### Cross-cutting evidence
+
+After concern discovery, gather only the focused evidence still needed for
+dimensions that the direct scout and concern traces did not support:
+
+1. Run `module_graph` against the primary source root, never `.`. Record at least
+   one real import, state, RPC, or process boundary.
+2. Run `type_tracer` against the directory that owns one high-leverage observed
+   interface, model, or schema. Supply the exact type name as the focus.
+3. Use focused `conventions`, `pitfalls`, `validation`, `operational`, and
+   `security` exploration only where direct or concern evidence is insufficient.
+4. Use repository documentation and process files to close D9 and D10 honestly.
+
+Persist supported findings incrementally through `write_map_delta`. A custom
+feature report supplements cross-cutting evidence; it is not a substitute for it.
+
 ### Bounded feature exploration
 
 If concern tracing left a gap that another angle would close, dispatch one
@@ -131,7 +131,8 @@ concern or procedure evidence.
 
 Every explorer uses the configured explorer model slot. The trusted runtime
 permits at most 16 explorers per
-audit, two active at once, and three minutes per explorer. Treat tool-reported
+audit, one active at once, and three minutes per explorer. Each explorer also has
+a hard provider-call cap reported in its result. Treat tool-reported
 budget exhaustion as final: preserve gathered evidence, narrow only when a real
 budget remains, and leave unsupported claims as gaps.
 

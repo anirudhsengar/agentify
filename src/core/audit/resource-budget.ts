@@ -55,7 +55,7 @@ export const DEFAULT_AUDIT_BUDGETS: Readonly<ResolvedAuditBudgets> = Object.free
   maxCoverageRecoveryPasses: 1,
   maxSemanticRepairPasses: 3,
   maxRepeatedFingerprintStates: 2,
-  maxExplorerSpawns: 64,
+  maxExplorerSpawns: 16,
 });
 
 const AUDIT_BUDGET_MAXIMUMS: Readonly<ResolvedAuditBudgets> = Object.freeze({
@@ -163,6 +163,13 @@ export class AuditResourceBudget {
     const remaining = this.limits.maxOutputTokens - this.#outputTokens;
     if (remaining <= 0) this.fail(`output tokens reached ${this.limits.maxOutputTokens}`);
     return Math.max(1, Math.min(perRequestLimit, remaining));
+  }
+
+  remainingModelCalls(perExplorerLimit: number): number {
+    this.assertWithinBudget();
+    const remaining = this.limits.maxModelCalls - this.#modelCalls;
+    if (remaining <= 0) this.fail(`model calls reached ${this.limits.maxModelCalls}`);
+    return Math.max(1, Math.min(perExplorerLimit, remaining));
   }
 
   beginSession(): SessionObservation {

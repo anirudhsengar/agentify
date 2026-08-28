@@ -580,3 +580,53 @@ test("configured semantic repair pass budgets fail closed with an obligation fin
     fs.rmSync(repository.cwd, { recursive: true, force: true });
   }
 });
+
+test("aggregate model-call exhaustion reports the unresolved semantic obligations", async () => {
+  const repository = createRepository();
+  const previousHome = process.env["HOME"];
+  const temporaryHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-call-budget-home-"));
+  process.env["HOME"] = temporaryHome;
+  try {
+    const runtime: AgentRuntime = {
+      async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+        for (let index = 0; index < 2; index += 1) {
+          options.onEvent?.({
+            type: "message_end",
+            message: {
+              role: "assistant",
+              stopReason: "toolUse",
+              usage: { input: 1, output: 1, cost: { total: 0 } },
+            },
+          } as never);
+        }
+        return {
+          turns: 2,
+          costUsd: 0,
+          aborted: true,
+          diagnostics: { provider_requests: 2 },
+        } as AgentRuntimeResult;
+      },
+    };
+    const config = {
+      schemaVersion: 1,
+      provider: "openai",
+      thinkingLevel: "high",
+      models: {},
+      auditBudgets: { maxModelCalls: 1 },
+    } as AgentifyConfig;
+    await assert.rejects(
+      runRepositoryAudit({ cwd: repository.cwd, ui: new RepairUi(), runtime, config }),
+      (error: unknown) => {
+        assert.match(String(error), /model calls exceeded 1/i);
+        assert.match(String(error), /unresolved-obligation fingerprint [0-9a-f]{64}/i);
+        assert.match(String(error), /D2_module_boundaries/i);
+        return true;
+      },
+    );
+  } finally {
+    if (previousHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previousHome;
+    fs.rmSync(temporaryHome, { recursive: true, force: true });
+    fs.rmSync(repository.cwd, { recursive: true, force: true });
+  }
+});

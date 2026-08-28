@@ -223,8 +223,9 @@ interface FakeExplorerEvent {
 async function testHardProviderCallCapAbortsContinuation(): Promise<void> {
   const cwd = tempDir("spawn-budget-hard-call-cap");
   let abortCount = 0;
+  let aborted = false;
   try {
-    const listeners = new Set<(event: FakeExplorerEvent) => void>();
+    const listeners = new Set<(event: unknown) => void>();
     const messages: FakeExplorerEvent["message"][] = [];
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
@@ -233,16 +234,18 @@ async function testHardProviderCallCapAbortsContinuation(): Promise<void> {
       createSession: async () => ({
         session: {
           messages,
-          subscribe(listener: (event: FakeExplorerEvent) => void): () => void {
+          subscribe(listener: (event: unknown) => void): () => void {
             listeners.add(listener);
             return () => listeners.delete(listener);
           },
           clearQueue(): void {},
           async abort(): Promise<void> {
             abortCount += 1;
+            aborted = true;
           },
           async prompt(): Promise<void> {
             for (let index = 0; index < 3; index += 1) {
+              if (aborted) break;
               const message: FakeExplorerEvent["message"] = {
                 role: "assistant",
                 content: index === 1 ? "## Report\n\nPartial evidence." : "",
@@ -281,7 +284,7 @@ async function testFinalReportAtProviderCallCapSucceeds(): Promise<void> {
   const cwd = tempDir("spawn-budget-final-at-call-cap");
   let abortCount = 0;
   try {
-    const listeners = new Set<(event: FakeExplorerEvent) => void>();
+    const listeners = new Set<(event: unknown) => void>();
     const messages: FakeExplorerEvent["message"][] = [];
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
@@ -290,7 +293,7 @@ async function testFinalReportAtProviderCallCapSucceeds(): Promise<void> {
       createSession: async () => ({
         session: {
           messages,
-          subscribe(listener: (event: FakeExplorerEvent) => void): () => void {
+          subscribe(listener: (event: unknown) => void): () => void {
             listeners.add(listener);
             return () => listeners.delete(listener);
           },
@@ -340,6 +343,7 @@ async function testFinalReportAtProviderCallCapSucceeds(): Promise<void> {
 async function testAggregateRemainingCallsReduceExplorerCap(): Promise<void> {
   const cwd = tempDir("spawn-budget-aggregate-call-cap");
   let abortCount = 0;
+  let aborted = false;
   try {
     const budget = new AuditResourceBudget({ maxModelCalls: 3 });
     const parent = budget.beginSession();
@@ -349,7 +353,7 @@ async function testAggregateRemainingCallsReduceExplorerCap(): Promise<void> {
         message: { usage: { input: 1, output: 1, cost: { total: 0 } } },
       } as never, parent);
     }
-    const listeners = new Set<(event: FakeExplorerEvent) => void>();
+    const listeners = new Set<(event: unknown) => void>();
     const messages: FakeExplorerEvent["message"][] = [];
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
@@ -359,16 +363,18 @@ async function testAggregateRemainingCallsReduceExplorerCap(): Promise<void> {
       createSession: async () => ({
         session: {
           messages,
-          subscribe(listener: (event: FakeExplorerEvent) => void): () => void {
+          subscribe(listener: (event: unknown) => void): () => void {
             listeners.add(listener);
             return () => listeners.delete(listener);
           },
           clearQueue(): void {},
           async abort(): Promise<void> {
             abortCount += 1;
+            aborted = true;
           },
           async prompt(): Promise<void> {
             for (let index = 0; index < 2; index += 1) {
+              if (aborted) break;
               const message: FakeExplorerEvent["message"] = {
                 role: "assistant",
                 content: "",

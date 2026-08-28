@@ -139,6 +139,38 @@ function repairObligationFingerprint(
   });
 }
 
+function actionableBudgetError(
+  error: AuditBudgetExceededError,
+  map: CodebaseMap | null,
+  cwd: string,
+): AuditBudgetExceededError {
+  const obligations: string[] = [];
+  if (map === null) {
+    obligations.push("canonical codebase map is unavailable");
+  } else {
+    const coverage = assessCoverageClosure(map, { cwd });
+    for (const dimension of coverage.unresolved) {
+      obligations.push(`${dimension}: ${coverage.reasons[dimension] ?? "coverage is unresolved"}`);
+    }
+    try {
+      const compilation = compileSpecialistEvidence(map, { cwd });
+      obligations.push(...compilation.reasons);
+    } catch (compilationError) {
+      obligations.push(
+        `specialist evidence could not be compiled: ${compilationError instanceof Error ? compilationError.message : String(compilationError)}`,
+      );
+    }
+    obligations.push(...assessExplorerReceiptAttestation(map, cwd).reasons);
+  }
+  const uniqueObligations = [...new Set(obligations)].sort();
+  const fingerprint = unresolvedObligationFingerprint({ obligations: uniqueObligations });
+  const budgetReason = error.message.replace(/^repository audit resource budget exhausted:\s*/i, "");
+  return new AuditBudgetExceededError(
+    `${budgetReason}; semantic closure remains unresolved; unresolved-obligation fingerprint ${fingerprint}: `
+      + uniqueObligations.slice(0, 12).join("; "),
+  );
+}
+
 type RepairWriteMapResult = {
   details?: {
     path?: string;
@@ -491,6 +523,9 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     if (!terminalWritten) {
       const map = loadCanonicalMapAt(context.cwd, AUDIT_STATE_RELATIVE_DIR);
       const coverage = map === null ? null : assessCoverageClosure(map, { cwd: context.cwd });
+      const reportedError = error instanceof AuditBudgetExceededError
+        ? actionableBudgetError(error, map, context.cwd)
+        : error;
       log.sessionEnd({
         duration_ms: Date.now() - startedAt,
         was_aborted: context.signal?.aborted === true,
@@ -504,7 +539,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       log.runEnd({
         exit_code: -1,
         status: "error",
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: reportedError instanceof Error ? reportedError.message : String(reportedError),
         coverage: coverage === null ? undefined : {
           covered: coverage.closed.length,
           gap: coverage.unresolved.length,
@@ -513,6 +548,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         agents_md_path: null,
       });
       context.ui.info(`agentify: audit log written to ${log.logPath}`);
+      throw reportedError;
     }
     throw error;
   } finally {

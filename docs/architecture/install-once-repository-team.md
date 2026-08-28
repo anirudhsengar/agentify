@@ -114,6 +114,13 @@ cost. Per-scout and per-tracer deadlines are three minutes. Repair state is
 measured by a canonical unresolved-obligation fingerprint and terminates after
 repeated no-progress states. Strict optional `auditBudgets` config overrides
 support unusually large repositories without permitting unbounded values.
+Explorer sessions run one at a time so completed usage is reconciled before the
+next dispatch. Mode-specific repository-read and provider-call quotas are hard
+runtime limits and the call quota is reduced to the aggregate calls remaining.
+Agentify retains a final report completed at the exact limit, but aborts an
+explorer that requests continuation there. Aggregate exhaustion reports the
+unresolved coverage, specialist-compiler, and receipt obligations with a
+deterministic fingerprint.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.
