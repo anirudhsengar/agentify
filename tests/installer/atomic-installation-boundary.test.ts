@@ -213,12 +213,27 @@ test("a current-HEAD attested diagnostic-only map can resume installation withou
       JSON.stringify(attestCodebaseMap(makeValidCodebaseMap(), head), null, 2),
     );
 
+    const resumedMap = attestCodebaseMap(makeValidCodebaseMap(), head);
+    resumedMap.concern_evidence = {
+      concerns: [{ concern: "New bounded diagnostic progress" }],
+      not_concerns: [],
+    } as never;
+
     assert.doesNotThrow(() => prepareOneTimeInstallationState(cwd, preflight));
     assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), true);
     assert.equal(fs.existsSync(path.join(auditDir, "codebase_map.json")), true);
+    fs.writeFileSync(
+      path.join(auditDir, "codebase_map.json"),
+      JSON.stringify(resumedMap, null, 2),
+    );
     rollbackPendingInstallation(cwd);
     assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), false);
     assert.equal(fs.existsSync(path.join(auditDir, "codebase_map.json")), true);
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(path.join(auditDir, "codebase_map.json"), "utf8")),
+      resumedMap,
+      "a failed bounded continuation must retain its newest attested diagnostic checkpoint",
+    );
   } finally {
     rollbackPendingInstallation(cwd);
     fs.rmSync(cwd, { recursive: true, force: true });

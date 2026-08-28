@@ -124,6 +124,31 @@ test("semantic closure requires successful scout and per-concern tracer receipts
   assert.equal(assessment.complete, true, assessment.reasons.join("; "));
 });
 
+test("a successful tracer receipt without its persisted concern body remains unresolved", () => {
+  const tracker = new ExplorerReceiptTracker();
+  tracker.observe(explorerEvent({
+    mode: "concern_scout",
+    success: true,
+    scoutConcerns: ["Help rendering and formatting"],
+  }));
+  tracker.observe(explorerEvent({
+    mode: "concern_tracer",
+    success: true,
+    focus: "Help rendering and formatting",
+    reportConcern: "Help rendering and formatting",
+  }));
+
+  const assessment = tracker.assess(mapWithConcerns());
+  assert.equal(assessment.complete, false);
+  assert.ok(
+    assessment.reasons.some((reason) =>
+      /help rendering and formatting/i.test(reason)
+      && /persisted concern/i.test(reason)
+    ),
+    assessment.reasons.join("; "),
+  );
+});
+
 test("a timed-out tracer remains unresolved instead of becoming a rejection", () => {
   const tracker = new ExplorerReceiptTracker();
   tracker.observe(explorerEvent({ mode: "concern_scout", success: true }));

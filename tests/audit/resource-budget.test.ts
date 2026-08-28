@@ -108,6 +108,30 @@ test("tool-result message events cannot consume provider-call or turn budgets", 
   );
 });
 
+test("runtime message counts cannot inflate provider-turn reconciliation", () => {
+  const budget = new AuditResourceBudget({ maxModelCalls: 1, maxTurns: 1 });
+  const session = budget.beginSession();
+  budget.observeParentEvent({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      stopReason: "stop",
+      usage: { input: 1, output: 1, cost: { total: 0 } },
+    },
+  } as never, session);
+
+  assert.doesNotThrow(() => budget.finishParentSession(session, {
+    turns: 4,
+    costUsd: 0,
+    diagnostics: { provider_requests: 1 },
+  }));
+  assert.deepEqual(
+    { model_calls: budget.snapshot().model_calls, turns: budget.snapshot().turns },
+    { model_calls: 1, turns: 1 },
+    "runtime message totals include user/tool-result delivery and are not provider turns",
+  );
+});
+
 test("a parent session cannot continue past its application-owned duration", async () => {
   const budget = new AuditResourceBudget({ maxSessionDurationMs: 1 });
   const session = budget.beginSession();
