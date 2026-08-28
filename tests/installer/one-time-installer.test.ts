@@ -209,11 +209,26 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
     git(cwd, "commit", "-qm", "fixture");
     const commit = git(cwd, "rev-parse", "HEAD");
     const requests: InstallerProcessRequest[] = [];
-    const runner = fakeRunner(cwd, {
+    const delegate = fakeRunner(cwd, {
       head: commit,
       validationFailsAfterInstall: true,
       requests,
     });
+    const postInstallValidationCwds: string[] = [];
+    const runner: InstallerProcessRunner = {
+      run(request): InstallerProcessResult {
+        if (
+          request.program === "npm"
+          && request.args[0] === "run"
+          && fs.existsSync(path.join(cwd, ".github", "agentify", "task-runtime.mjs"))
+        ) {
+          postInstallValidationCwds.push(request.cwd);
+          fs.mkdirSync(path.join(request.cwd, ".pytest_cache"), { recursive: true });
+          fs.writeFileSync(path.join(request.cwd, ".pytest_cache", "validation-cache"), "generated\n");
+        }
+        return delegate.run(request);
+      },
+    };
     const preflight = inspectRepositoryForInstallation({ cwd, runner, runValidation: true });
     assert.equal(preflight.disposition, "ready");
     prepareOneTimeInstallationState(cwd, preflight);
@@ -253,6 +268,10 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
     assert.equal(fs.existsSync(path.join(cwd, "AGENTS.md")), false);
     assert.equal(fs.existsSync(path.join(cwd, "SETUP.md")), false);
     assert.equal(fs.existsSync(path.join(cwd, ".github")), false);
+    assert.ok(postInstallValidationCwds.length > 0);
+    assert.ok(postInstallValidationCwds.every((validationCwd) => validationCwd !== cwd));
+    assert.ok(postInstallValidationCwds.every((validationCwd) => !fs.existsSync(validationCwd)));
+    assert.equal(fs.existsSync(path.join(cwd, ".pytest_cache")), false);
     assert.equal(fs.existsSync(mapPath), true, "the externally permitted diagnostic map survives rollback");
     assert.equal(
       requests.some((request) => request.program === "gh" && request.args[0] === "label"),
