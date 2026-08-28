@@ -237,42 +237,57 @@ export class PiSdkRuntime implements AgentRuntime {
       extensionFactories: [
         (pi) => {
           pi.on("tool_call", makeDefenseHook({ executionPolicy: options.executionPolicy }));
+          const admitProviderRequest = (payload: unknown): unknown => {
+            options.auditResourceBudget?.assertProviderInputCapacity(payload);
+            providerRequests += 1;
+            return payload;
+          };
           if (recovery && options.forceRequiredToolChoice === true) {
             pi.on("before_provider_request", (event) => {
-              providerRequests += 1;
               const api = selectedModel?.api ?? "";
               const boundedPayload = options.maxOutputTokens === undefined
                 ? event.payload
                 : capProviderOutputTokens(event.payload, api, options.maxOutputTokens);
               if (options.maxOutputTokens !== undefined) cappedOutputRequests += 1;
-              if (sawRequiredRecoveryTool || recovery.shouldRecover?.() === false) return boundedPayload;
+              if (sawRequiredRecoveryTool || recovery.shouldRecover?.() === false) {
+                return admitProviderRequest(boundedPayload);
+              }
               forcedToolChoiceRequests += 1;
-              return forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName);
+              return admitProviderRequest(
+                forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName),
+              );
             });
           } else if (recovery && options.forceRequiredToolChoiceAfterTurns !== undefined) {
             const turnBudget = options.forceRequiredToolChoiceAfterTurns;
             pi.on("before_provider_request", (event) => {
-              providerRequests += 1;
               const api = selectedModel?.api ?? "";
               const boundedPayload = options.maxOutputTokens === undefined
                 ? event.payload
                 : capProviderOutputTokens(event.payload, api, options.maxOutputTokens);
               if (options.maxOutputTokens !== undefined) cappedOutputRequests += 1;
-              if (sawRequiredRecoveryTool || recovery.shouldRecover?.() === false) return boundedPayload;
-              if (providerRequests < turnBudget) return boundedPayload;
+              if (sawRequiredRecoveryTool || recovery.shouldRecover?.() === false) {
+                return admitProviderRequest(boundedPayload);
+              }
+              if (providerRequests + 1 < turnBudget) return admitProviderRequest(boundedPayload);
               forcedToolChoiceRequests += 1;
-              return forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName);
+              return admitProviderRequest(
+                forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName),
+              );
             });
           } else if (options.maxOutputTokens !== undefined) {
             pi.on("before_provider_request", (event) => {
-              providerRequests += 1;
               cappedOutputRequests += 1;
-              return capProviderOutputTokens(event.payload, selectedModel?.api ?? "", options.maxOutputTokens ?? 1);
+              return admitProviderRequest(
+                capProviderOutputTokens(
+                  event.payload,
+                  selectedModel?.api ?? "",
+                  options.maxOutputTokens ?? 1,
+                ),
+              );
             });
           } else {
             pi.on("before_provider_request", (event) => {
-              providerRequests += 1;
-              return event.payload;
+              return admitProviderRequest(event.payload);
             });
           }
         },

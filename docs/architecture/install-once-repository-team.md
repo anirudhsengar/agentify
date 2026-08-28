@@ -142,6 +142,11 @@ support unusually large repositories without permitting unbounded values.
 The application checkpoints cumulative usage in the diagnostic map, bound to
 the audited commit. Same-HEAD CLI continuations resume the remaining budget
 rather than resetting counters; a new commit begins a new evidence lineage.
+Parent and explorer provider hooks reject an exact serialized request before
+network dispatch when its conservative byte upper bound exceeds the remaining
+input-token reserve. Post-response accounting remains authoritative for actual
+usage, while pre-dispatch admission prevents an exhausted continuation from
+crossing the configured aggregate cap.
 Explorer sessions run one at a time so completed usage is reconciled before the
 next dispatch. Mode-specific repository-read and provider-call quotas are hard
 runtime limits and the call quota is reduced to the aggregate calls remaining.

@@ -227,6 +227,33 @@ export class AuditResourceBudget {
     return Math.max(1, Math.min(perExplorerLimit, remainingAfterParentReservation));
   }
 
+  /**
+   * Refuse a provider request before dispatch when its serialized byte length
+   * cannot fit in the remaining aggregate input-token budget. Provider token
+   * usage is reported only after a response; UTF-8 bytes are therefore used as
+   * a conservative application-owned upper bound for the tokenized request.
+   */
+  assertProviderInputCapacity(payload: unknown): number {
+    this.assertWithinBudget();
+    let serialized: string | undefined;
+    try {
+      serialized = JSON.stringify(payload);
+    } catch {
+      this.fail("provider request cannot be serialized for input-budget admission");
+    }
+    if (serialized === undefined) {
+      this.fail("provider request cannot be serialized for input-budget admission");
+    }
+    const requestBound = Buffer.byteLength(serialized, "utf8");
+    const remainingInput = this.limits.maxInputTokens - this.#inputTokens;
+    if (remainingInput < requestBound) {
+      this.fail(
+        `input token reserve ${remainingInput} is below the serialized provider request bound of ${requestBound}`,
+      );
+    }
+    return requestBound;
+  }
+
   beginSession(maxDurationMs = this.limits.maxSessionDurationMs): SessionObservation {
     this.assertWithinBudget();
     if (this.#modelCalls >= this.limits.maxModelCalls) {

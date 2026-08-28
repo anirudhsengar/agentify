@@ -749,6 +749,10 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 // repository-root policy as the parent audit.
                 extensionFactories: [
                     (pi) => {
+                        pi.on("before_provider_request", (event) => {
+                            toolOptions.resourceBudget?.assertProviderInputCapacity(event.payload);
+                            return event.payload;
+                        });
                         pi.on("tool_call", async (event) => {
                             const defenseResult = await defenseHook(event);
                             if (defenseResult) return defenseResult;
