@@ -13,7 +13,7 @@ const POLICY_BASENAMES = new Set([
   "copilot-instructions.md",
 ]);
 
-const AI_SUBJECT = String.raw`(?:ai|a\.i\.|llm|large language model|language model|generative ai|coding agent|agentic tool)`;
+const AI_SUBJECT = String.raw`(?:\bai\b|a\.i\.|\bllms?\b|\blarge language models?\b|\blanguage models?\b|\bgenerative (?:ai|artificial intelligence)\b|\bcoding agents?\b|\bagentic tools?\b)`;
 const PERSISTENT_WORK = String.raw`(?:contribution|code|documentation|test(?: data)?|patch|pull request|repository (?:change|write)|generated (?:content|output)|authored (?:content|work))`;
 const PROHIBITION = String.raw`(?:do not|don't|must not|never|forbid(?:s|den)?|prohibit(?:s|ed)?|not (?:allow|accept)(?:ed)?|refuse(?:s|d)?|no)`;
 const PROHIBITED_STATE = String.raw`(?:forbidden|prohibited|not allowed|not accepted|must be refused|strictly forbidden)`;

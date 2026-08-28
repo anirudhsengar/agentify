@@ -46,6 +46,12 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Restrictive-policy matching now requires lexical AI/LLM subject boundaries.
+  Ordinary contribution prose such as “do not follow the Code of Conduct in
+  good faith” no longer treats the `ai` inside `faith` as an AI ban, while
+  explicit AI-, LLM-, coding-agent-, and generative-AI prohibitions still stop
+  before mutation.
+
 - Specialist/procedure synchronization now refuses canonical evidence that is
   incomplete or not already at the compiler's idempotent fixed point, before
   changing persistent memory. Installation transaction capture also begins
