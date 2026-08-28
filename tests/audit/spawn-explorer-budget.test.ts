@@ -229,13 +229,27 @@ async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
     });
     const result = await tool.execute(
       "test-spawn-budget-timeout",
-      { target_path: "." } as never,
+      {
+        mode: "concern_tracer",
+        target_path: ".",
+        focus: "procedural macro derives and diagnostics",
+      } as never,
       undefined,
       undefined,
       { cwd } as never,
     );
     assert.equal((result as { isError?: boolean }).isError, true);
     assert.match(textFrom(result), /exceeded timeout of 20ms/i);
+    const details = result.details as {
+      mode?: string;
+      target_path?: string;
+      focus?: string;
+      failure_kind?: string;
+    } | undefined;
+    assert.equal(details?.mode, "concern_tracer");
+    assert.equal(details?.target_path, ".");
+    assert.equal(details?.focus, "procedural macro derives and diagnostics");
+    assert.equal(details?.failure_kind, "timeout");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

@@ -91,6 +91,13 @@ initializeTeamMemoryStore({
   options: { now: () => new Date(observedAt) },
 });
 const map = makeSpecialistFixtureMap();
+map.concern_evidence?.concerns[0]?.touchpoints.push({
+  path: "src/lib.ts",
+  symbol: null,
+  role: "Public package entry point owned by authentication in this fixture.",
+  line_range: null,
+  centrality: "supporting",
+});
 if (profile === "small") {
   map.concern_evidence?.not_concerns.push(
     {

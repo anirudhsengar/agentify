@@ -8,6 +8,10 @@ const DIRECTIVE_VERBS = new Set([
   "create",
   "document",
   "ensure",
+  "extend",
+  "fix",
+  "record",
+  "rerun",
   "review",
   "update",
   "write",
@@ -15,14 +19,23 @@ const DIRECTIVE_VERBS = new Set([
 const DIRECTIVE_OBJECTS = new Set([
   "a",
   "an",
+  "case",
+  "cases",
+  "coverage",
+  "crate",
   "documentation",
+  "fixture",
+  "fixtures",
   "lockfile",
   "regression",
+  "snapshot",
+  "snapshots",
   "test",
   "tests",
   "the",
   "unit",
 ]);
+const DIRECTIVE_CONNECTORS = new Set(["and", "or", "then", "to"]);
 const CONDITIONAL_MARKERS = new Set(["if", "unless", "when"]);
 const QUALIFIER_MARKERS = new Set([
   "affected",
@@ -109,14 +122,18 @@ function tokenizeCommand(value: string): CommandToken[] | null {
 
 function containsDirectiveProse(tokens: ReadonlyArray<CommandToken>, executableIndex: number): boolean {
   const executable = tokens[executableIndex]?.value.toLowerCase() ?? "";
-  const next = tokens[executableIndex + 1];
-  if (
-    DIRECTIVE_VERBS.has(executable)
-    && next !== undefined
-    && !next.quoted
-    && DIRECTIVE_OBJECTS.has(next.value.toLowerCase())
-  ) {
-    return true;
+  if (DIRECTIVE_VERBS.has(executable)) {
+    const lookahead = tokens
+      .slice(executableIndex + 1, executableIndex + 7)
+      .filter((token) => !token.quoted)
+      .map((token) => token.value.toLowerCase());
+    if (lookahead.some((token) =>
+      DIRECTIVE_OBJECTS.has(token)
+      || DIRECTIVE_CONNECTORS.has(token)
+      || DIRECTIVE_VERBS.has(token)
+    )) {
+      return true;
+    }
   }
 
   for (let index = executableIndex + 1; index < tokens.length; index += 1) {
