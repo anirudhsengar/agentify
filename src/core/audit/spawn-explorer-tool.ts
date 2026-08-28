@@ -52,6 +52,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { Model, Api } from "@earendil-works/pi-ai";
+import type { AuditResourceBudget } from "./resource-budget.ts";
 import { Type } from "typebox";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
@@ -459,6 +460,8 @@ export interface SpawnExplorerToolOptions {
     maxSubagentDurationMs?: number;
     /** Hard cap for cumulative provider-reported sub-agent cost. Pass null to disable. */
     maxTotalCostUsd?: number | null;
+    /** Aggregate budget shared across every parent audit/repair session. */
+    resourceBudget?: AuditResourceBudget;
     /** Test seam for running a fake sub-agent without contacting a model provider. */
     createSession?: CreateExplorerSession;
 }
@@ -614,6 +617,19 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             );
         }
 
+        let effectiveSubagentDurationMs = maxSubagentDurationMs;
+        try {
+            if (toolOptions.resourceBudget) {
+                effectiveSubagentDurationMs = Math.min(
+                    effectiveSubagentDurationMs,
+                    toolOptions.resourceBudget.reserveExplorer(mode),
+                );
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return makeBudgetError(`Error: ${message}.`, {}, stateDir);
+        }
+
         activeSpawnCount += 1;
         totalSpawnCount += 1;
         const start = Date.now();
@@ -636,6 +652,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             : `${params.target_path} ${params.focus ?? ""}${summarySuffix}${constraintsBlock}`;
 
         let session: ExplorerSubSession | undefined;
+        let resourceUsageRecorded = false;
 
         try {
             const toolsForMode: ReadonlyArray<string> = params.tools ?? READ_ONLY_TOOLS;
@@ -707,11 +724,11 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                         timeout = setTimeout(() => {
                             reject(
                                 new Error(
-                                    `sub-agent exceeded timeout of ${maxSubagentDurationMs}ms; ` +
+                                    `sub-agent exceeded timeout of ${effectiveSubagentDurationMs}ms; ` +
                                     "split the exploration into a narrower target or mark the gap honestly",
                                 ),
                             );
-                        }, maxSubagentDurationMs);
+                        }, effectiveSubagentDurationMs);
                     }),
                 ]);
             } finally {
@@ -735,6 +752,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const subagentMessages =
                 session.messages as ReadonlyArray<{ role?: string; content?: unknown }>;
             const sessionCostUsd = extractSessionCostUsd(session.messages);
+            resourceUsageRecorded = true;
+            toolOptions.resourceBudget?.recordExplorerMessages(session.messages);
             if (sessionCostUsd !== null) {
                 totalCostUsd = roundCost(totalCostUsd + sessionCostUsd);
             }
@@ -807,12 +826,16 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     total_spawns_used: totalSpawnCount,
                     max_concurrent_spawns: maxConcurrentSpawns,
                     active_spawns: activeSpawnCount,
-                    max_subagent_duration_ms: maxSubagentDurationMs,
+                    max_subagent_duration_ms: effectiveSubagentDurationMs,
                     domain_locked: insideCwd,
                     run_id: runId,
                 },
             };
         } catch (err) {
+            if (session && !resourceUsageRecorded) {
+                resourceUsageRecorded = true;
+                toolOptions.resourceBudget?.recordExplorerMessages(session.messages);
+            }
             const msg = err instanceof Error ? err.message : String(err);
             return {
                 content: [

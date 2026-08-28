@@ -98,6 +98,8 @@ for (const malformed of [
   { schemaVersion: 1, thinkingLevel: "high", models: { primary: { provider: "unknown", model: "x" } } },
   { schemaVersion: 1, thinkingLevel: "high", models: {}, unexpected: true },
   { schemaVersion: 1, thinkingLevel: "high", models: {}, auditBudgets: { maxSemanticRepairPasses: 0 } },
+  { schemaVersion: 1, thinkingLevel: "high", models: {}, auditBudgets: { maxModelCalls: 1_025 } },
+  { schemaVersion: 1, thinkingLevel: "high", models: {}, auditBudgets: { maxTotalDurationMs: 1_000, maxSessionDurationMs: 2_000 } },
   { schemaVersion: 1, thinkingLevel: "high", models: {}, auditBudgets: { unknownBudget: 1 } },
   { thinkingLevel: "high", modelsByRole: {}, unexpected: true },
 ]) {

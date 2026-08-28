@@ -35,6 +35,16 @@ this attestation. A missing ledger, a failed tracer, an untraced accepted
 concern, or a ledger from another commit keeps semantic closure unresolved.
 Receiptless legacy maps are re-audited rather than attached as trusted output.
 
+Discovery and repair share one aggregate resource budget. The controller bounds
+total elapsed time, parent and explorer model calls, turns, input/output tokens,
+provider-reported cost, explorer dispatches, coverage recovery, and semantic
+repair. Scout and tracer prompts also receive explicit per-session deadlines.
+Every unresolved state has a canonical SHA-256 obligation fingerprint; repeated
+fingerprints terminate repair rather than consuming more broad model turns.
+Overrides for unusually large repositories are explicit, strictly parsed, and
+finite. Canonical map writes enforce the one-megabyte output cap before creating
+or archiving repository state.
+
 Specialist discovery does not re-decide any of this. The model reads the
 repository and names its concerns; trusted code verifies that what it named
 resolves to real bytes tracked at the supporting commit. Touchpoints that are

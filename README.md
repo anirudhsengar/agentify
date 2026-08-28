@@ -114,6 +114,27 @@ agentify models set "anthropic/<model-id>"
 
 `agentify login` offers exactly the authentication methods the Pi model runtime supports for each provider: OAuth subscription sign-in where available (browser or device-code flow), otherwise an API key. Credentials are read from provider environment variables, the stored OAuth/API-key credentials from login, or a masked interactive prompt. They are never accepted as command-line values or written to the repository.
 
+Audit resource limits are finite by default and may be raised for an unusually
+large repository through the optional `auditBudgets` object in
+`~/.agentify/config.json`. Omitted fields retain these defaults:
+
+| Field | Default |
+| --- | ---: |
+| `maxTotalDurationMs` | 1,800,000 (30 minutes) |
+| `maxSessionDurationMs` | 720,000 (12 minutes) |
+| `maxScoutDurationMs` / `maxTracerDurationMs` | 180,000 each |
+| `maxExplorerDurationMs` | 120,000 |
+| `maxModelCalls` / `maxTurns` | 96 each |
+| `maxInputTokens` / `maxOutputTokens` | 2,000,000 / 200,000 |
+| `maxTotalCostUsd` | 20 (provider-reported) |
+| `maxCoverageRecoveryPasses` / `maxSemanticRepairPasses` | 1 / 3 |
+| `maxRepeatedFingerprintStates` | 2 |
+| `maxExplorerSpawns` | 64 |
+
+Overrides are strictly validated and remain subject to finite safety ceilings.
+Parent audit requests and explorer sub-sessions consume the same aggregate call,
+turn, token, cost, and elapsed-time budget.
+
 ### 2. Run the one-time installer
 
 ```bash

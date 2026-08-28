@@ -46,6 +46,14 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Repository audit now enforces one configurable aggregate resource budget
+  across coverage, recovery, semantic repair, and explorer sub-sessions. Finite
+  defaults bound elapsed time, calls, turns, tokens, provider-reported cost,
+  explorer dispatches, and scout/tracer duration; repeated canonical
+  unresolved-obligation fingerprints stop no-progress repair. Application map
+  writes also reject output above the one-megabyte cap before filesystem
+  mutation.
+
 - Explorer success is now persisted as an application-authored receipt ledger
   bound to the audited repository commit. Model map writes cannot create or
   replace the ledger, existing receiptless or stale maps are re-audited, and

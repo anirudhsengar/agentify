@@ -1,6 +1,10 @@
 import type { AgentSessionEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { AgentifyProvider } from "./provider-auth.ts";
 import type { AgentExecutionPolicy } from "./security/execution-policy.ts";
+import type {
+  AuditBudgetOverrides,
+  AuditResourceBudget,
+} from "./audit/resource-budget.ts";
 
 export type { AgentifyProvider } from "./provider-auth.ts";
 export type { AgentExecutionPolicy } from "./security/execution-policy.ts";
@@ -26,6 +30,8 @@ export interface AgentifyConfig {
   thinkingLevel: ThinkingLevel;
   /** Explicit role assignments. Secondary roles inherit `primary` when unset. */
   models: Partial<Record<ModelRole, ModelSlot>>;
+  /** Optional bounded audit overrides; omitted fields use documented defaults. */
+  auditBudgets?: AuditBudgetOverrides;
 }
 
 export interface AgentifyUi {
@@ -110,6 +116,8 @@ export interface AgentRuntimeSessionOptions {
    * Vendor-neutral audit state dir for the `spawn_explorer` tool.
    */
   spawnExplorerStateDir?: string;
+  /** Internal aggregate budget shared across audit and explorer sessions. */
+  auditResourceBudget?: AuditResourceBudget;
 }
 
 export interface AgentRuntimeResult {

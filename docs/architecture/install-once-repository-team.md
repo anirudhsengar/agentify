@@ -99,6 +99,15 @@ Missing or stale receipts, failed tracers, and accepted concerns without a
 successful tracer abort the transaction and remove Agentify-managed persistent
 artifacts instead of leaving a partial team.
 
+The structured audit, recovery sessions, semantic repair sessions, and explorer
+sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30
+minutes, three semantic repair passes, one coverage recovery, 96 model calls and
+turns, bounded tokens and explorer dispatches, and USD 20 of provider-reported
+cost. Per-scout and per-tracer deadlines are three minutes. Repair state is
+measured by a canonical unresolved-obligation fingerprint and terminates after
+repeated no-progress states. Strict optional `auditBudgets` config overrides
+support unusually large repositories without permitting unbounded values.
+
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.
 Common credential variables are removed from validation child environments.

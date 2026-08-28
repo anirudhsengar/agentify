@@ -2,6 +2,11 @@ import * as path from "node:path";
 import { defaultConfigDir } from "../agentify-config.ts";
 import { AgentifyLog } from "../audit/log.ts";
 import {
+  AuditBudgetExceededError,
+  AuditResourceBudget,
+  unresolvedObligationFingerprint,
+} from "../audit/resource-budget.ts";
+import {
   assessExplorerReceiptAttestation,
   currentRepositoryCommit,
   ExplorerReceiptTracker,
@@ -18,6 +23,7 @@ import {
 } from "../audit/schema.ts";
 import { createWriteMapTools, loadCanonicalMapAt } from "../audit/write-map-tool.ts";
 import { createReadOnlyExecutionPolicy } from "../security/execution-policy.ts";
+import type { AgentRuntimeResult } from "../types.ts";
 import type { RunContext } from "./run-context.ts";
 import {
   ProviderAuthFailedError,
@@ -37,8 +43,6 @@ const REPAIR_TOOL_ALLOWLIST = [
   "write_map_delta",
   "spawn_explorer",
 ];
-const MAX_REPAIR_PASSES = 6;
-const MAX_STALLED_REPAIR_PASSES = 2;
 const REPAIR_PATH_BATCH_SIZE = 48;
 const REPAIR_CLUSTER_BATCH_SIZE = 24;
 const REPAIR_TIMEOUT_MS = 20 * 60 * 1000;
@@ -57,6 +61,7 @@ function rotatingWindow<T>(values: readonly T[], limit: number, pass: number): T
 function repairPrompt(
   assessment: SpecialistEvidenceAssessment,
   pass: number,
+  maxRepairPasses: number,
   explorerReceiptReasons: ReadonlyArray<string> = [],
   compilationReasons: ReadonlyArray<string> = [],
 ): string {
@@ -90,7 +95,7 @@ function repairPrompt(
 
   return [
     "The repository's coverage map is complete, but its specialist portfolio failed the trusted semantic-quality gate.",
-    `Repair pass ${pass}/${MAX_REPAIR_PASSES}; ${assessment.uncovered_paths.length} tracked paths and ${assessment.uncovered_clusters.length} local implementation/test clusters remain in total.`,
+    `Repair pass ${pass}/${maxRepairPasses}; ${assessment.uncovered_paths.length} tracked paths and ${assessment.uncovered_clusters.length} local implementation/test clusters remain in total.`,
     `Current failures: ${currentFailures.slice(0, 12).join("; ")}.`,
     `Accepted concerns to preserve: ${assessment.accepted_concerns.join(", ") || "none"}.`,
     `Current tracked-path batch: ${uncovered}.`,
@@ -115,15 +120,23 @@ function repairPrompt(
   ].join(" ");
 }
 
-function repairImproved(
-  before: SpecialistEvidenceAssessment,
-  after: SpecialistEvidenceAssessment,
-): boolean {
-  return after.complete
-    || after.uncovered_paths.length < before.uncovered_paths.length
-    || after.uncovered_clusters.length < before.uncovered_clusters.length
-    || after.accepted_concerns.length > before.accepted_concerns.length
-    || after.rejected_concerns.length < before.rejected_concerns.length;
+function repairObligationFingerprint(
+  compilation: SpecialistCompilationResult,
+  receiptReasons: ReadonlyArray<string>,
+): string {
+  return unresolvedObligationFingerprint({
+    compilation_reasons: [...compilation.reasons].sort(),
+    assessment_reasons: [...compilation.assessment.reasons].sort(),
+    uncovered_paths: [...compilation.assessment.uncovered_paths].sort(),
+    uncovered_clusters: compilation.assessment.uncovered_clusters
+      .map((cluster) => ({
+        cluster_key: cluster.cluster_key,
+        implementation_paths: [...cluster.implementation_paths].sort(),
+        test_paths: [...cluster.test_paths].sort(),
+      }))
+      .sort((left, right) => left.cluster_key.localeCompare(right.cluster_key)),
+    explorer_receipt_reasons: [...receiptReasons].sort(),
+  });
 }
 
 type RepairWriteMapResult = {
@@ -208,13 +221,15 @@ function announceCompiledPortfolio(
 async function repairSpecialistPortfolio(
   context: RunContext,
   log: AgentifyLog,
+  resourceBudget: AuditResourceBudget,
 ): Promise<{ turns: number; cost_usd: number | null }> {
   const stateDir = AUDIT_STATE_RELATIVE_DIR;
   const mapTools = createWriteMapTools({ stateDir });
   const systemPrompt = loadBuilderPrompt(stateDir);
   let turns = 0;
   let costUsd: number | null = null;
-  let stalledPasses = 0;
+  const fingerprintCounts = new Map<string, number>();
+  let lastFingerprint = "unavailable";
   const initialMap = loadCanonicalMapAt(context.cwd, stateDir);
   if (initialMap === null) throw new Error("canonical codebase map disappeared before specialist repair");
   const trustedReceiptAttestation = initialMap.explorer_receipts;
@@ -262,7 +277,8 @@ async function repairSpecialistPortfolio(
     ),
   });
 
-  for (let pass = 1; pass <= MAX_REPAIR_PASSES; pass += 1) {
+  const maxRepairPasses = resourceBudget.limits.maxSemanticRepairPasses;
+  for (let pass = 1; pass <= maxRepairPasses; pass += 1) {
     const sourceMap = preserveReceiptAttestation(loadCanonicalMapAt(context.cwd, stateDir));
     if (sourceMap === null) throw new Error("canonical codebase map disappeared before specialist repair");
     const compilation = compileSpecialistEvidence(sourceMap, { cwd: context.cwd });
@@ -276,10 +292,22 @@ async function repairSpecialistPortfolio(
       return { turns, cost_usd: costUsd };
     }
 
+    lastFingerprint = repairObligationFingerprint(compilation, receiptAssessment.reasons);
+    const repeatedCount = (fingerprintCounts.get(lastFingerprint) ?? 0) + 1;
+    fingerprintCounts.set(lastFingerprint, repeatedCount);
+    if (repeatedCount > resourceBudget.limits.maxRepeatedFingerprintStates) break;
+
     context.ui.status(
-      `agentify: repairing incomplete specialist discovery (${pass}/${MAX_REPAIR_PASSES})`,
+      `agentify: repairing incomplete specialist discovery (${pass}/${maxRepairPasses}; unresolved ${lastFingerprint.slice(0, 12)})`,
     );
-    const result = await context.runtime.runSession({
+    const repairController = new AbortController();
+    const forwardAbort = (): void => repairController.abort();
+    if (context.signal?.aborted) forwardAbort();
+    else context.signal?.addEventListener("abort", forwardAbort, { once: true });
+    const repairSessionBudget = resourceBudget.beginSession();
+    let result: AgentRuntimeResult;
+    try {
+      result = await context.runtime.runSession({
       cwd: context.cwd,
       configDir: defaultConfigDir(),
       config: context.config,
@@ -287,6 +315,7 @@ async function repairSpecialistPortfolio(
       userPrompt: repairPrompt(
         assessment,
         pass,
+        maxRepairPasses,
         receiptAssessment.reasons,
         compilation.reasons,
       ),
@@ -300,10 +329,11 @@ async function repairSpecialistPortfolio(
       customTools: [mapTools.writeMapTool, mapTools.writeMapDeltaTool],
       spawnExplorerAgentDir: defaultConfigDir(),
       spawnExplorerStateDir: stateDir,
-      signal: context.signal,
+      auditResourceBudget: resourceBudget,
+      signal: repairController.signal,
       inactivityTimeoutMs: 5 * 60 * 1000,
-      timeoutMs: REPAIR_TIMEOUT_MS,
-      maxOutputTokens: REPAIR_MAX_OUTPUT_TOKENS,
+      timeoutMs: resourceBudget.remainingDurationMs(REPAIR_TIMEOUT_MS),
+      maxOutputTokens: resourceBudget.remainingOutputTokens(REPAIR_MAX_OUTPUT_TOKENS),
       recoveryPromptIfToolNotCalled: {
         requiredToolName: "write_map_delta",
         maxAttempts: 2,
@@ -316,10 +346,20 @@ async function repairSpecialistPortfolio(
         },
       },
       onEvent: (event) => {
+        try {
+          resourceBudget.observeParentEvent(event, repairSessionBudget);
+        } catch {
+          repairController.abort();
+        }
         explorerReceipts.observe(event);
         logRepairEvent(log, event);
       },
-    });
+      });
+    } finally {
+      context.signal?.removeEventListener("abort", forwardAbort);
+    }
+    resourceBudget.finishParentSession(repairSessionBudget, result);
+    resourceBudget.assertWithinBudget();
     turns += result.turns;
     costUsd = addCost(costUsd, result.costUsd);
 
@@ -339,19 +379,6 @@ async function repairSpecialistPortfolio(
       announceCompiledPortfolio(context, updatedCompilation);
       return { turns, cost_usd: costUsd };
     }
-    if (
-      updatedAssessment !== null
-      && (
-        repairImproved(assessment, updatedAssessment)
-        || (updatedReceiptAssessment?.reasons.length ?? Number.POSITIVE_INFINITY)
-          < receiptAssessment.reasons.length
-      )
-    ) {
-      stalledPasses = 0;
-    } else {
-      stalledPasses += 1;
-      if (stalledPasses >= MAX_STALLED_REPAIR_PASSES) break;
-    }
   }
 
   const finalSourceMap = preserveReceiptAttestation(loadCanonicalMapAt(context.cwd, stateDir));
@@ -369,8 +396,14 @@ async function repairSpecialistPortfolio(
     announceCompiledPortfolio(context, finalCompilation);
     return { turns, cost_usd: costUsd };
   }
-  throw new Error(
-    "repository specialist discovery did not reach semantic closure: "
+  if (finalCompilation !== null) {
+    lastFingerprint = repairObligationFingerprint(
+      finalCompilation,
+      finalReceiptAssessment?.reasons ?? [],
+    );
+  }
+  throw new AuditBudgetExceededError(
+    `repository specialist discovery did not reach semantic closure; unresolved-obligation fingerprint ${lastFingerprint}: `
       + [
         ...(finalCompilation?.reasons.slice(0, 12) ?? ["canonical map is unavailable"]),
         ...(finalReceiptAssessment?.reasons ?? []),
@@ -381,10 +414,13 @@ async function repairSpecialistPortfolio(
 export async function runRepositoryAudit(context: RunContext): Promise<FocusedAuditResult> {
   const log = new AgentifyLog({ cwd: context.cwd, configDir: defaultConfigDir() });
   const startedAt = Date.now();
+  const resourceBudget = context.auditResourceBudget
+    ?? new AuditResourceBudget(context.config.auditBudgets, startedAt);
   let terminalWritten = false;
   try {
     const result = await runBaseRepositoryAudit({
       ...context,
+      auditResourceBudget: resourceBudget,
       auditLog: log,
       deferAuditLogCompletion: true,
     });
@@ -399,7 +435,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       context.ui.info(
         "agentify: coverage closed, but specialist discovery was incomplete; running a bounded semantic repair",
       );
-      repair = await repairSpecialistPortfolio(context, log);
+      repair = await repairSpecialistPortfolio(context, log, resourceBudget);
     }
 
     const finalSourceMap = loadCanonicalMapAt(context.cwd, AUDIT_STATE_RELATIVE_DIR);
@@ -423,6 +459,12 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       );
     }
     const coverage = assessCoverageClosure(finalCompilation.map, { cwd: context.cwd });
+    resourceBudget.assertWithinBudget();
+    log.auditBudget({
+      status: "within",
+      limits: { ...resourceBudget.limits },
+      usage: resourceBudget.snapshot(),
+    });
     log.sessionEnd({
       duration_ms: Date.now() - startedAt,
       was_aborted: false,
@@ -453,6 +495,11 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         duration_ms: Date.now() - startedAt,
         was_aborted: context.signal?.aborted === true,
         status: "error",
+      });
+      log.auditBudget({
+        status: error instanceof AuditBudgetExceededError ? "exhausted" : "failed",
+        limits: { ...resourceBudget.limits },
+        usage: resourceBudget.snapshot(),
       });
       log.runEnd({
         exit_code: -1,

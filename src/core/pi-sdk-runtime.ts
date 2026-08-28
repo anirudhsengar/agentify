@@ -199,6 +199,16 @@ export class PiSdkRuntime implements AgentRuntime {
           agentDir: options.spawnExplorerAgentDir,
           stateDir: options.spawnExplorerStateDir,
           explorerModel: explorerModelForSpawn,
+          resourceBudget: options.auditResourceBudget,
+          maxTotalSpawns: options.auditResourceBudget?.limits.maxExplorerSpawns,
+          maxTotalCostUsd: options.auditResourceBudget?.limits.maxTotalCostUsd,
+          maxSubagentDurationMs: options.auditResourceBudget
+            ? Math.max(
+              options.auditResourceBudget.limits.maxScoutDurationMs,
+              options.auditResourceBudget.limits.maxTracerDurationMs,
+              options.auditResourceBudget.limits.maxExplorerDurationMs,
+            )
+            : undefined,
         }),
       );
     }

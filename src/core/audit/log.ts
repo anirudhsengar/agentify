@@ -60,6 +60,7 @@ export type AgentifyEventType =
   | "agentify.gap_detected"
   | "agentify.gap_closed"
   | "agentify.subagent_spawned"
+  | "agentify.audit_budget"
   | "agentify.session_end"
   | "agentify.user_abort"
   | "agentify.run_end"
@@ -113,6 +114,12 @@ export type SubagentSpawnedPayload = {
   tool_name: string;
   details: unknown;
   is_error: boolean;
+};
+
+export type AuditBudgetPayload = {
+  status: "within" | "exhausted" | "failed";
+  limits: Record<string, number>;
+  usage: Record<string, number>;
 };
 
 export type SessionEndPayload = {
@@ -397,6 +404,10 @@ export class AgentifyLog {
   gapTransition(payload: { dimension: string; from: "covered" | "gap"; to: "covered" | "gap"; source: string }): void {
     const event: AgentifyEventType = payload.to === "covered" ? "agentify.gap_closed" : "agentify.gap_detected";
     this.write(event, payload);
+  }
+
+  auditBudget(payload: AuditBudgetPayload): void {
+    this.write("agentify.audit_budget", payload);
   }
 
   runEnd(

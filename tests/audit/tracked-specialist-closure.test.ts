@@ -524,6 +524,9 @@ test("progressive semantic repair may exceed two passes while each pass closes t
     const runEnds = events.filter((event) => event.event === "agentify.run_end");
     assert.equal(runEnds.length, 1, "coverage and semantic repair must share one terminal outcome");
     assert.equal((JSON.parse(runEnds[0]!.payload) as { status: string }).status, "success");
+    const budgetEvents = events.filter((event) => event.event === "agentify.audit_budget");
+    assert.equal(budgetEvents.length, 1, "one aggregate budget result must accompany the terminal outcome");
+    assert.equal((JSON.parse(budgetEvents[0]!.payload) as { status: string }).status, "within");
   } finally {
     if (previousHome === undefined) delete process.env["HOME"];
     else process.env["HOME"] = previousHome;
@@ -561,6 +564,15 @@ test("configured semantic repair pass budgets fail closed with an obligation fin
     );
     assert.equal(runtime.baseCalls, 1);
     assert.equal(runtime.repairCalls, 2, "configured semantic repair pass cap must be enforced");
+    const logDirectory = path.join(temporaryHome, ".agentify", "logs", "agentify");
+    const logFile = fs.readdirSync(logDirectory).find((name) => name.endsWith(".jsonl"));
+    assert.ok(logFile);
+    const events = fs.readFileSync(path.join(logDirectory, logFile), "utf8")
+      .trim().split("\n").map((line) => JSON.parse(line) as { event: string; payload: string });
+    assert.equal(events.filter((event) => event.event === "agentify.run_end").length, 1);
+    const budgetEvents = events.filter((event) => event.event === "agentify.audit_budget");
+    assert.equal(budgetEvents.length, 1);
+    assert.equal((JSON.parse(budgetEvents[0]!.payload) as { status: string }).status, "exhausted");
   } finally {
     if (previousHome === undefined) delete process.env["HOME"];
     else process.env["HOME"] = previousHome;

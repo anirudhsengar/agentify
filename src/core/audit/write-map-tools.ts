@@ -1298,7 +1298,12 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             const delta = params.observed_type_contract
                 ? injectObservedTypeContract(
                     prepared.delta as UnknownRecord,
-                    params.observed_type_contract,
+                    params.observed_type_contract as {
+                        kind: "typescript_interface" | "pydantic_model";
+                        path: string;
+                        name: string;
+                        fields: string[];
+                    },
                 )
                 : prepared.delta as UnknownRecord;
 

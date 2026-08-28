@@ -5,6 +5,7 @@ import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { AgentRuntimeResult } from "../types.ts";
 import { defaultConfigDir } from "../agentify-config.ts";
 import { AgentifyLog } from "../audit/log.ts";
+import { AuditResourceBudget } from "../audit/resource-budget.ts";
 import {
   currentRepositoryCommit,
   ExplorerReceiptTracker,
@@ -285,9 +286,12 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
   let observedTurns = 0;
   let observedCost = 0;
   const explorerReceipts = new ExplorerReceiptTracker();
+  const resourceBudget = context.auditResourceBudget
+    ?? new AuditResourceBudget(context.config.auditBudgets);
   context.ui.status("agentify: auditing existing repository");
 
   try {
+    const baseSessionBudget = resourceBudget.beginSession();
     const runtimeResult = await context.runtime.runSession({
       cwd: context.cwd,
       configDir: defaultConfigDir(),
@@ -304,10 +308,11 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       customTools: [mapTools.writeMapTool, mapTools.writeMapDeltaTool],
       spawnExplorerAgentDir: defaultConfigDir(),
       spawnExplorerStateDir: stateDir,
+      auditResourceBudget: resourceBudget,
       signal: controller.signal,
       inactivityTimeoutMs: 5 * 60 * 1000,
-      timeoutMs: AUDIT_TIMEOUT_MS,
-      maxOutputTokens: AUDIT_MAX_OUTPUT_TOKENS,
+      timeoutMs: resourceBudget.remainingDurationMs(AUDIT_TIMEOUT_MS),
+      maxOutputTokens: resourceBudget.remainingOutputTokens(AUDIT_MAX_OUTPUT_TOKENS),
       recoveryPromptIfToolNotCalled: {
         requiredToolName: bootstrappedGapDraft || specialistEvidenceTopUp ? "write_map_delta" : "write_map",
         maxAttempts: 2,
@@ -318,6 +323,11 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         },
       },
       onEvent: (event) => {
+        try {
+          resourceBudget.observeParentEvent(event, baseSessionBudget);
+        } catch {
+          controller.abort();
+        }
         const eventType = (event as { type?: string }).type ?? "unknown";
         explorerReceipts.observe(event);
         log.sessionEvent({ pi_event_type: eventType, event });
@@ -372,6 +382,8 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         }
       },
     });
+    resourceBudget.finishParentSession(baseSessionBudget, runtimeResult);
+    resourceBudget.assertWithinBudget();
 
     let map = loadCanonicalMapAt(context.cwd, stateDir);
     let closure = map === null
@@ -379,7 +391,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       : assessCoverageClosure(map, { cwd: context.cwd });
     let receiptAssessment = explorerReceipts.assess(map);
 
-    const maxRecoveryPasses = 2;
+    const maxRecoveryPasses = resourceBudget.limits.maxCoverageRecoveryPasses;
     let recoveryPass = 0;
     while (
       map !== null
@@ -408,7 +420,8 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         explorerReceiptReasons: receiptAssessment.reasons,
       });
       try {
-        await context.runtime.runSession({
+        const recoverySessionBudget = resourceBudget.beginSession();
+        const recoveryResult = await context.runtime.runSession({
           cwd: context.cwd,
           configDir: defaultConfigDir(),
           config: context.config,
@@ -424,11 +437,17 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
           customTools: [mapTools.writeMapTool, mapTools.writeMapDeltaTool],
           spawnExplorerAgentDir: defaultConfigDir(),
           spawnExplorerStateDir: stateDir,
+          auditResourceBudget: resourceBudget,
           signal: recoveryController.signal,
           inactivityTimeoutMs: 5 * 60 * 1000,
-          timeoutMs: AUDIT_TIMEOUT_MS,
-          maxOutputTokens: AUDIT_MAX_OUTPUT_TOKENS,
+          timeoutMs: resourceBudget.remainingDurationMs(AUDIT_TIMEOUT_MS),
+          maxOutputTokens: resourceBudget.remainingOutputTokens(AUDIT_MAX_OUTPUT_TOKENS),
           onEvent: (event) => {
+            try {
+              resourceBudget.observeParentEvent(event, recoverySessionBudget);
+            } catch {
+              recoveryController.abort();
+            }
             const eventType = (event as { type?: string }).type ?? "unknown";
             explorerReceipts.observe(event);
             log.sessionEvent({ pi_event_type: eventType, event });
@@ -487,6 +506,8 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
             }
           },
         });
+        resourceBudget.finishParentSession(recoverySessionBudget, recoveryResult);
+        resourceBudget.assertWithinBudget();
       } finally {
         context.signal?.removeEventListener("abort", recoveryForwardAbort);
       }
