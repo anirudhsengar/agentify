@@ -218,9 +218,13 @@ export class AuditResourceBudget {
 
   remainingModelCalls(perExplorerLimit: number): number {
     this.assertWithinBudget();
-    const remaining = this.limits.maxModelCalls - this.#modelCalls;
-    if (remaining <= 0) this.fail(`model calls reached ${this.limits.maxModelCalls}`);
-    return Math.max(1, Math.min(perExplorerLimit, remaining));
+    const remainingAfterParentReservation = this.limits.maxModelCalls - this.#modelCalls - 1;
+    if (remainingAfterParentReservation <= 0) {
+      this.fail(
+        `model-call capacity cannot reserve one parent continuation within ${this.limits.maxModelCalls} calls`,
+      );
+    }
+    return Math.max(1, Math.min(perExplorerLimit, remainingAfterParentReservation));
   }
 
   beginSession(maxDurationMs = this.limits.maxSessionDurationMs): SessionObservation {

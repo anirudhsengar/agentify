@@ -436,7 +436,7 @@ async function testAggregateRemainingCallsReduceExplorerCap(): Promise<void> {
   try {
     const budget = new AuditResourceBudget({ maxModelCalls: 3 });
     const parent = budget.beginSession();
-    for (let index = 0; index < 2; index += 1) {
+    for (let index = 0; index < 1; index += 1) {
       budget.observeParentEvent({
         type: "message_end",
         message: { role: "assistant", usage: { input: 1, output: 1, cost: { total: 0 } } },
@@ -462,12 +462,12 @@ async function testAggregateRemainingCallsReduceExplorerCap(): Promise<void> {
             aborted = true;
           },
           async prompt(): Promise<void> {
-            for (let index = 0; index < 2; index += 1) {
+            for (let index = 0; index < 1; index += 1) {
               if (aborted) break;
               const message: FakeExplorerEvent["message"] = {
                 role: "assistant",
-                content: "",
-                stopReason: "toolUse",
+                content: "## Report\n\nComplete bounded evidence.",
+                stopReason: "stop",
                 usage: { input: 1, output: 1, cost: { total: 0 } },
               };
               messages.push(message);
@@ -486,10 +486,11 @@ async function testAggregateRemainingCallsReduceExplorerCap(): Promise<void> {
       undefined,
       { cwd } as never,
     );
-    assert.equal((result as { isError?: boolean }).isError, true);
-    assert.match(textFrom(result), /model calls reached 3 while requesting continuation/i);
-    assert.equal(abortCount, 1);
+    assert.equal((result as { isError?: boolean }).isError, undefined);
+    assert.match(textFrom(result), /Complete bounded evidence/i);
+    assert.equal(abortCount, 0);
     assert.equal((result.details as { max_provider_calls?: number } | undefined)?.max_provider_calls, 1);
+    assert.equal(budget.snapshot().model_calls, 2, "one aggregate call must remain for the parent");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
