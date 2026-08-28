@@ -1,0 +1,159 @@
+name: Finalize PR 11 source-only v8
+
+on:
+  push:
+    branches: [fix/axum-discovery-receipts-public-surfaces]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-pr11-source-only-v8-exact
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    if: "github.event.head_commit.message == 'ci: finalize pr11 source-only v8'"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: fix/axum-discovery-receipts-public-surfaces
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Build one exact clean main-parented candidate commit
+        shell: bash
+        env:
+          EXPECTED_BASE: 4e0a0f1a1d66e0b5e47c770e63d5b18d5f3e5180
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$EXPECTED_BASE"
+
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          root = Path.cwd()
+          source = (root / ".github/workflows/finalize-pr11-source-v7.yml").read_text()
+          start_marker = "          python - <<'PY'\n"
+          end_marker = "          PY\n"
+          start = source.index(start_marker) + len(start_marker)
+          end = source.index(end_marker, start)
+          script = textwrap.dedent(source[start:end])
+          exec(compile(script, "<finalize-v7-materialization>", "exec"))
+
+          fixture_path = root / "tests/package/seed-installed-installer-fixture.ts"
+          fixture = fixture_path.read_text()
+          marker = "const map = makeSpecialistFixtureMap();\n"
+          if fixture.count(marker) != 1:
+              raise RuntimeError("installed-package fixture map marker is not unique")
+          insertion = "\n".join([
+              "map.concern_evidence?.concerns[0]?.touchpoints.push({",
+              "  path: \"src/lib.ts\",",
+              "  symbol: null,",
+              "  role: \"Public package entry point owned by authentication in this fixture.\",",
+              "  line_range: null,",
+              "  centrality: \"supporting\",",
+              "});",
+              "",
+          ])
+          at = fixture.index(marker) + len(marker)
+          fixture_path.write_text(fixture[:at] + insertion + fixture[at:])
+          PY
+
+          rm -rf .github
+          git checkout origin/main -- .github
+          git add -A
+          git diff --cached --check
+
+          git config user.name "Anirudh Sengar"
+          git config user.email "111981402+anirudhsengar@users.noreply.github.com"
+          parent=$(git rev-parse origin/main)
+          tree=$(git write-tree)
+          commit=$(printf '%s\n\n%s\n' \
+            'fix: require trusted specialist discovery closure' \
+            'Require successful current-HEAD explorer receipts, workspace/public-surface ownership, complete verified flows, and strict command classification.' \
+            | git commit-tree "$tree" -p "$parent")
+
+          git reset --hard "$commit"
+          git clean -fdx
+          test -z "$(git status --porcelain --untracked-files=all)"
+          test "$(git rev-parse "$commit^")" = "$EXPECTED_BASE"
+
+          cat > /tmp/expected-pr11-files <<'EOF'
+          src/core/audit/explorer-receipts.ts
+          src/core/audit/prompts/explorers/concern_scout.md
+          src/core/audit/spawn-explorer-tool.ts
+          src/core/audit/specialist-completion.ts
+          src/core/runs/repository-audit-run-core.ts
+          src/core/runs/repository-audit-run.ts
+          src/core/specialists/commands.ts
+          src/core/specialists/discovery.ts
+          tests/audit/coverage-gate.test.ts
+          tests/audit/explorer-receipts.test.ts
+          tests/audit/spawn-explorer-budget.test.ts
+          tests/audit/tracked-specialist-closure.test.ts
+          tests/audit/workspace-public-surface-closure.test.ts
+          tests/installer/one-time-installer.test.ts
+          tests/package/seed-installed-installer-fixture.ts
+          tests/specialists/command-contracts.test.ts
+          tests/specialists/flow-preservation.test.ts
+          EOF
+          sed -i 's/^          //' /tmp/expected-pr11-files
+          git diff --name-only "$parent" "$commit" | sort > /tmp/actual-pr11-files
+          diff -u /tmp/expected-pr11-files /tmp/actual-pr11-files
+          node scripts/verify-implementation-diff.mjs "$parent" "$commit"
+
+          echo "CANDIDATE_COMMIT=$commit" >> "$GITHUB_ENV"
+          echo "CANDIDATE_PARENT=$parent" >> "$GITHUB_ENV"
+      - name: Install exact dependencies on the clean candidate
+        run: npm ci
+      - name: Run focused discovery regressions on the exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_COMMIT"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          npm run typecheck
+          npx tsx tests/audit/explorer-receipts.test.ts
+          npx tsx tests/audit/workspace-public-surface-closure.test.ts
+          npx tsx tests/audit/spawn-explorer-budget.test.ts
+          npx tsx tests/audit/coverage-gate.test.ts
+          npx tsx tests/audit/tracked-specialist-closure.test.ts
+          npx tsx tests/installer/one-time-installer.test.ts
+          npx tsx tests/specialists/flow-preservation.test.ts
+          npx tsx tests/specialists/command-contracts.test.ts
+      - name: Run complete release qualification on the exact candidate
+        run: |
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_COMMIT"
+          npm run verify:release
+      - name: Publish the same qualified commit as the PR head
+        shell: bash
+        env:
+          EXPECTED_BASE: 4e0a0f1a1d66e0b5e47c770e63d5b18d5f3e5180
+          EXPECTED_OLD_HEAD: fc4f04d06746e70da463b4bf95211910a53b3b20
+          TARGET_BRANCH: fix/trusted-specialist-discovery-workspace-closure
+        run: |
+          set -euo pipefail
+          test -n "$CANDIDATE_COMMIT"
+          test "$CANDIDATE_PARENT" = "$EXPECTED_BASE"
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_COMMIT"
+          test "$(git rev-parse "$CANDIDATE_COMMIT^")" = "$EXPECTED_BASE"
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$EXPECTED_BASE"
+          git diff --name-only "$EXPECTED_BASE" "$CANDIDATE_COMMIT" | sort > /tmp/actual-pr11-files
+          diff -u /tmp/expected-pr11-files /tmp/actual-pr11-files
+          node scripts/verify-implementation-diff.mjs "$EXPECTED_BASE" "$CANDIDATE_COMMIT"
+
+          remote_head=$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | awk '{print $1}')
+          test "$remote_head" = "$EXPECTED_OLD_HEAD"
+          git push origin "$CANDIDATE_COMMIT:refs/heads/$TARGET_BRANCH" \
+            --force-with-lease="refs/heads/$TARGET_BRANCH:$EXPECTED_OLD_HEAD"
+          echo "Published exact qualified PR head: $CANDIDATE_COMMIT"
