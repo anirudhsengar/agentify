@@ -157,6 +157,7 @@ test("excluded behavior cannot be attached to a concern as positive semantic evi
     }));
     const complete = assessSpecialistEvidence(map, { cwd });
     assert.equal(complete.complete, true, complete.reasons.join("; "));
+
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -210,6 +211,22 @@ test("a shared high-signal implementation needs explicit core behavioral ownersh
     }));
     const complete = assessSpecialistEvidence(map, { cwd });
     assert.equal(complete.complete, true, complete.reasons.join("; "));
+
+    map.concern_evidence!.concerns.push(concern({
+      name: "Context lifecycle implementation detail",
+      covers: "Duplicates the same request Context core implementation under a location-oriented label.",
+      excludes: "Credential policy and response serialization.",
+      core: "src/context.ts",
+      test: "src/context.test.ts",
+    }));
+    const ambiguous = assessSpecialistEvidence(map, { cwd });
+    assert.equal(ambiguous.complete, false);
+    assert.ok(
+      ambiguous.reasons.some((reason) =>
+        /src\/context\.ts/i.test(reason) && /multiple core owners/i.test(reason)
+      ),
+      ambiguous.reasons.join("; "),
+    );
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

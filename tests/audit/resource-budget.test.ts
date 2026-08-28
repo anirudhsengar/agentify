@@ -82,6 +82,27 @@ test("a continuation at the exact aggregate call limit fails before another requ
   } as never, finalSession));
 });
 
+test("a continuation reserves enough aggregate input budget for the next observed context", () => {
+  const budget = new AuditResourceBudget({ maxInputTokens: 15 });
+  const session = budget.beginSession();
+  assert.throws(
+    () => budget.observeParentEvent({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        stopReason: "toolUse",
+        usage: { input: 4, cacheRead: 6, output: 1, cost: { total: 0 } },
+      },
+    } as never, session),
+    /input token reserve.*next provider request/i,
+  );
+  assert.equal(
+    budget.snapshot().input_tokens,
+    10,
+    "request admission must stop before aggregate input usage crosses the configured cap",
+  );
+});
+
 test("tool-result message events cannot consume provider-call or turn budgets", () => {
   const budget = new AuditResourceBudget({ maxModelCalls: 1, maxTurns: 1 });
   const session = budget.beginSession();

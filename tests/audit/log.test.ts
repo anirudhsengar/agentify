@@ -36,5 +36,43 @@ async function testStreamingUpdatesAreNotPersisted(): Promise<void> {
   }
 }
 
+async function testOnlyProviderResponsesCountAsTurns(): Promise<void> {
+  const configDir = tempDir("agentify-log-provider-turns-");
+  try {
+    const log = new AgentifyLog({ cwd: configDir, configDir });
+    const recordMessageEnd = (log as unknown as {
+      recordMessageEnd?: (role: string, usage?: { input?: number; output?: number }) => void;
+    }).recordMessageEnd;
+    assert.equal(typeof recordMessageEnd, "function", "the log must own provider-response classification");
+    recordMessageEnd!.call(log, "user");
+    recordMessageEnd!.call(log, "toolResult");
+    recordMessageEnd!.call(log, "assistant", { input: 3, output: 2 });
+    log.runEnd({ exit_code: 0, status: "success" });
+    const logPath = log.logPath;
+    await log.close();
+
+    const lines = fs.readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as {
+      event: string;
+      payload: string;
+    });
+    const terminal = lines.find((entry) => entry.event === "agentify.run_end");
+    assert.ok(terminal);
+    const payload = JSON.parse(terminal.payload) as {
+      total_turns: number;
+      total_input_tokens: number;
+      total_output_tokens: number;
+    };
+    assert.deepEqual(payload, {
+      ...payload,
+      total_turns: 1,
+      total_input_tokens: 3,
+      total_output_tokens: 2,
+    });
+  } finally {
+    fs.rmSync(configDir, { recursive: true, force: true });
+  }
+}
+
 await testStreamingUpdatesAreNotPersisted();
-console.log("audit log tests passed (1/1).");
+await testOnlyProviderResponsesCountAsTurns();
+console.log("audit log tests passed (2/2).");
