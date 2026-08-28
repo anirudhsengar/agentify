@@ -7,9 +7,9 @@ import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
 import { loadBuilderPrompt } from "../audit/prompt.ts";
 import {
   assessCoverageClosure,
-  assessSpecialistEvidence,
-  reconcileSpecialistEvidence,
+  compileSpecialistEvidence,
   type CodebaseMap,
+  type SpecialistCompilationResult,
   type SpecialistEvidenceAssessment,
 } from "../audit/schema.ts";
 import { createWriteMapTools, loadCanonicalMapAt } from "../audit/write-map-tool.ts";
@@ -54,10 +54,12 @@ function repairPrompt(
   assessment: SpecialistEvidenceAssessment,
   pass: number,
   explorerReceiptReasons: ReadonlyArray<string> = [],
+  compilationReasons: ReadonlyArray<string> = [],
 ): string {
+  const currentFailures = [...assessment.reasons, ...compilationReasons];
   const needsBroadDiscovery = pass === 1 && (
     assessment.accepted_concerns.length === 0
-    || assessment.reasons.some((reason) => /thin specialist portfolio/i.test(reason))
+    || currentFailures.some((reason) => /thin specialist portfolio/i.test(reason))
   );
   const uncoveredBatch = rotatingWindow(
     assessment.uncovered_paths,
@@ -85,7 +87,7 @@ function repairPrompt(
   return [
     "The repository's coverage map is complete, but its specialist portfolio failed the trusted semantic-quality gate.",
     `Repair pass ${pass}/${MAX_REPAIR_PASSES}; ${assessment.uncovered_paths.length} tracked paths and ${assessment.uncovered_clusters.length} local implementation/test clusters remain in total.`,
-    `Current failures: ${assessment.reasons.slice(0, 12).join("; ")}.`,
+    `Current failures: ${currentFailures.slice(0, 12).join("; ")}.`,
     `Accepted concerns to preserve: ${assessment.accepted_concerns.join(", ") || "none"}.`,
     `Current tracked-path batch: ${uncovered}.`,
     `Current local implementation/test-cluster batch: ${uncoveredClusters}.`,
@@ -178,19 +180,24 @@ function addCost(left: number | null, right: number | null): number | null {
   return Number(((left ?? 0) + (right ?? 0)).toFixed(12));
 }
 
-function persistTrustedConcernProjection(
+function persistSpecialistCompilation(
   context: RunContext,
-  map: CodebaseMap,
-  assessment: SpecialistEvidenceAssessment,
+  sourceMap: CodebaseMap,
+  compilation: SpecialistCompilationResult,
 ): void {
-  const reconciled = reconcileSpecialistEvidence(map, assessment);
-  if (reconciled === map) return;
-  writeCanonicalMap(context.cwd, reconciled, {
+  if (compilation.map === sourceMap) return;
+  writeCanonicalMap(context.cwd, compilation.map, {
     stateDir: AUDIT_STATE_RELATIVE_DIR,
     mapFilename: DEFAULT_MAP_FILENAME,
   });
+}
+
+function announceCompiledPortfolio(
+  context: RunContext,
+  compilation: SpecialistCompilationResult,
+): void {
   context.ui.info(
-    `agentify: retained ${assessment.accepted_concerns.length} tracked specialist concern(s) and recorded ${assessment.rejected_concerns.length} ungrounded candidate(s) as rejected`,
+    `agentify: retained ${compilation.assessment.accepted_concerns.length} tracked specialist concern(s) and recorded ${compilation.assessment.rejected_concerns.length} ungrounded candidate(s) as rejected`,
   );
 }
 
@@ -206,12 +213,15 @@ async function repairSpecialistPortfolio(
   let stalledPasses = 0;
   const initialMap = loadCanonicalMapAt(context.cwd, stateDir);
   if (initialMap === null) throw new Error("canonical codebase map disappeared before specialist repair");
-  const initialAssessment = assessSpecialistEvidence(initialMap, { cwd: context.cwd });
+  const initialCompilation = compileSpecialistEvidence(initialMap, { cwd: context.cwd });
+  persistSpecialistCompilation(context, initialMap, initialCompilation);
+  const initialAssessment = initialCompilation.assessment;
   const baselineConcerns = new Set(
     initialAssessment.accepted_concerns.map((concern) => concern.trim().toLowerCase()),
   );
   const requireScout = initialAssessment.accepted_concerns.length === 0
-    || initialAssessment.reasons.some((reason) => /thin specialist portfolio/i.test(reason));
+    || [...initialAssessment.reasons, ...initialCompilation.reasons]
+      .some((reason) => /thin specialist portfolio/i.test(reason));
   const explorerReceipts = new ExplorerReceiptTracker();
   const receiptAssessmentFor = (
     map: CodebaseMap,
@@ -224,12 +234,15 @@ async function repairSpecialistPortfolio(
   });
 
   for (let pass = 1; pass <= MAX_REPAIR_PASSES; pass += 1) {
-    const map = loadCanonicalMapAt(context.cwd, stateDir);
-    if (map === null) throw new Error("canonical codebase map disappeared before specialist repair");
-    const assessment = assessSpecialistEvidence(map, { cwd: context.cwd });
+    const sourceMap = loadCanonicalMapAt(context.cwd, stateDir);
+    if (sourceMap === null) throw new Error("canonical codebase map disappeared before specialist repair");
+    const compilation = compileSpecialistEvidence(sourceMap, { cwd: context.cwd });
+    persistSpecialistCompilation(context, sourceMap, compilation);
+    const map = compilation.map;
+    const assessment = compilation.assessment;
     const receiptAssessment = receiptAssessmentFor(map, assessment);
-    if (assessment.complete && receiptAssessment.complete) {
-      persistTrustedConcernProjection(context, map, assessment);
+    if (compilation.complete && receiptAssessment.complete) {
+      announceCompiledPortfolio(context, compilation);
       return { turns, cost_usd: costUsd };
     }
 
@@ -241,7 +254,12 @@ async function repairSpecialistPortfolio(
       configDir: defaultConfigDir(),
       config: context.config,
       systemPrompt,
-      userPrompt: repairPrompt(assessment, pass, receiptAssessment.reasons),
+      userPrompt: repairPrompt(
+        assessment,
+        pass,
+        receiptAssessment.reasons,
+        compilation.reasons,
+      ),
       tools: [...REPAIR_TOOL_ALLOWLIST],
       executionPolicy: createReadOnlyExecutionPolicy({
         cwd: context.cwd,
@@ -264,7 +282,7 @@ async function repairSpecialistPortfolio(
         shouldRecover: () => {
           const current = loadCanonicalMapAt(context.cwd, stateDir);
           return current !== null
-            && !assessSpecialistEvidence(current, { cwd: context.cwd }).complete;
+            && !compileSpecialistEvidence(current, { cwd: context.cwd }).complete;
         },
       },
       onEvent: (event) => {
@@ -275,15 +293,19 @@ async function repairSpecialistPortfolio(
     turns += result.turns;
     costUsd = addCost(costUsd, result.costUsd);
 
-    const updatedMap = loadCanonicalMapAt(context.cwd, stateDir);
-    const updatedAssessment = updatedMap === null
+    const updatedSourceMap = loadCanonicalMapAt(context.cwd, stateDir);
+    const updatedCompilation = updatedSourceMap === null
       ? null
-      : assessSpecialistEvidence(updatedMap, { cwd: context.cwd });
-    const updatedReceiptAssessment = updatedMap === null || updatedAssessment === null
+      : compileSpecialistEvidence(updatedSourceMap, { cwd: context.cwd });
+    if (updatedSourceMap !== null && updatedCompilation !== null) {
+      persistSpecialistCompilation(context, updatedSourceMap, updatedCompilation);
+    }
+    const updatedAssessment = updatedCompilation?.assessment ?? null;
+    const updatedReceiptAssessment = updatedCompilation === null || updatedAssessment === null
       ? null
-      : receiptAssessmentFor(updatedMap, updatedAssessment);
-    if (updatedAssessment?.complete && updatedReceiptAssessment?.complete) {
-      persistTrustedConcernProjection(context, updatedMap!, updatedAssessment);
+      : receiptAssessmentFor(updatedCompilation.map, updatedAssessment);
+    if (updatedCompilation?.complete && updatedReceiptAssessment?.complete) {
+      announceCompiledPortfolio(context, updatedCompilation);
       return { turns, cost_usd: costUsd };
     }
     if (
@@ -301,26 +323,24 @@ async function repairSpecialistPortfolio(
     }
   }
 
-  const finalMap = loadCanonicalMapAt(context.cwd, stateDir);
-  const finalAssessment = finalMap === null
+  const finalSourceMap = loadCanonicalMapAt(context.cwd, stateDir);
+  const finalCompilation = finalSourceMap === null
     ? null
-    : assessSpecialistEvidence(finalMap, { cwd: context.cwd });
-  const finalReceiptAssessment = finalMap === null || finalAssessment === null
+    : compileSpecialistEvidence(finalSourceMap, { cwd: context.cwd });
+  if (finalSourceMap !== null && finalCompilation !== null) {
+    persistSpecialistCompilation(context, finalSourceMap, finalCompilation);
+  }
+  const finalReceiptAssessment = finalCompilation === null
     ? null
-    : receiptAssessmentFor(finalMap, finalAssessment);
-  if (
-    finalMap !== null
-    && finalAssessment !== null
-    && finalAssessment.complete
-    && finalReceiptAssessment?.complete
-  ) {
-    persistTrustedConcernProjection(context, finalMap, finalAssessment);
+    : receiptAssessmentFor(finalCompilation.map, finalCompilation.assessment);
+  if (finalCompilation?.complete && finalReceiptAssessment?.complete) {
+    announceCompiledPortfolio(context, finalCompilation);
     return { turns, cost_usd: costUsd };
   }
   throw new Error(
     "repository specialist discovery did not reach semantic closure: "
       + [
-        ...(finalAssessment?.reasons.slice(0, 12) ?? ["canonical map is unavailable"]),
+        ...(finalCompilation?.reasons.slice(0, 12) ?? ["canonical map is unavailable"]),
         ...(finalReceiptAssessment?.reasons ?? []),
       ].join("; "),
   );
@@ -338,10 +358,11 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     });
     const map = loadCanonicalMapAt(context.cwd, AUDIT_STATE_RELATIVE_DIR);
     if (map === null) throw new Error("repository audit returned without a canonical codebase map");
-    const assessment = assessSpecialistEvidence(map, { cwd: context.cwd });
+    const compilation = compileSpecialistEvidence(map, { cwd: context.cwd });
+    persistSpecialistCompilation(context, map, compilation);
     let repair = { turns: 0, cost_usd: null as number | null };
-    if (assessment.complete) {
-      persistTrustedConcernProjection(context, map, assessment);
+    if (compilation.complete) {
+      announceCompiledPortfolio(context, compilation);
     } else {
       context.ui.info(
         "agentify: coverage closed, but specialist discovery was incomplete; running a bounded semantic repair",
@@ -349,15 +370,18 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       repair = await repairSpecialistPortfolio(context, log);
     }
 
-    const finalMap = loadCanonicalMapAt(context.cwd, AUDIT_STATE_RELATIVE_DIR);
-    if (finalMap === null) throw new Error("canonical codebase map disappeared after specialist repair");
-    const finalAssessment = assessSpecialistEvidence(finalMap, { cwd: context.cwd });
-    if (!finalAssessment.complete) {
+    const finalSourceMap = loadCanonicalMapAt(context.cwd, AUDIT_STATE_RELATIVE_DIR);
+    if (finalSourceMap === null) {
+      throw new Error("canonical codebase map disappeared after specialist repair");
+    }
+    const finalCompilation = compileSpecialistEvidence(finalSourceMap, { cwd: context.cwd });
+    persistSpecialistCompilation(context, finalSourceMap, finalCompilation);
+    if (!finalCompilation.complete) {
       throw new Error(
-        `repository specialist discovery did not reach semantic closure: ${finalAssessment.reasons.join("; ")}`,
+        `repository specialist discovery did not reach semantic closure: ${finalCompilation.reasons.join("; ")}`,
       );
     }
-    const coverage = assessCoverageClosure(finalMap, { cwd: context.cwd });
+    const coverage = assessCoverageClosure(finalCompilation.map, { cwd: context.cwd });
     log.sessionEnd({
       duration_ms: Date.now() - startedAt,
       was_aborted: false,

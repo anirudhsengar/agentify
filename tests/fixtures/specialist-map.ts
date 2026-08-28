@@ -175,6 +175,14 @@ export function makeSpecialistFixtureMap() {
                 { path: "src/billing/charge.ts", what_happens: "Submits the charge with an idempotency key." },
               ],
             },
+            {
+              name: "synthetic package entry",
+              description: "The shared test fixture models two ordered operations at its tracked public entry.",
+              steps: [
+                { path: "src/index.ts", what_happens: "Exports the synthetic package entry used by installer fixtures." },
+                { path: "src/index.ts", what_happens: "Provides the public-entry operation exercised by repository validation." },
+              ],
+            },
           ],
           touchpoints: [
             {
@@ -188,6 +196,20 @@ export function makeSpecialistFixtureMap() {
               path: "src/billing/charge.ts",
               symbol: null,
               role: "The single charge submission path.",
+              line_range: null,
+              centrality: "core" as const,
+            },
+            {
+              path: "src/index.ts",
+              symbol: null,
+              role: "Synthetic public package entry used by installer boundary fixtures.",
+              line_range: null,
+              centrality: "core" as const,
+            },
+            {
+              path: "src/lib.ts",
+              symbol: null,
+              role: "Synthetic public library facade used by packed-installation fixtures.",
               line_range: null,
               centrality: "core" as const,
             },
