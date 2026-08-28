@@ -43,11 +43,13 @@ Every unresolved state has a canonical SHA-256 obligation fingerprint; repeated
 fingerprints terminate repair rather than consuming more broad model turns.
 Overrides for unusually large repositories are explicit, strictly parsed, and
 finite. Canonical map writes enforce the one-megabyte output cap before creating
-or archiving repository state. Every parent and explorer provider request is
-admitted before dispatch against a conservative upper bound derived from its
-exact serialized payload. This closes the cross-invocation interval in which
-provider-reported usage is not yet available and prevents a nearly exhausted
-same-HEAD checkpoint from overshooting its aggregate input-token limit.
+or archiving repository state. Before a new parent or explorer session is
+created, its selected model's full context window must fit in the remaining
+input budget; subsequent provider requests are admitted against a conservative
+upper bound derived from their exact serialized payload. This closes the
+cross-invocation interval in which provider-reported usage is not yet available
+and prevents a nearly exhausted same-HEAD checkpoint from overshooting its
+aggregate input-token limit.
 
 Specialist discovery does not re-decide any of this. The model reads the
 repository and names its concerns; trusted code verifies that what it named

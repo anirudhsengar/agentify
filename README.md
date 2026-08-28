@@ -135,10 +135,11 @@ Overrides are strictly validated and remain subject to finite safety ceilings.
 Parent audit requests and explorer sub-sessions consume the same aggregate call,
 turn, token, cost, and elapsed-time budget. A tool-use continuation must leave
 enough input capacity for another request at the just-observed context size.
-Before every parent or explorer request, Agentify also compares the remaining
-input budget with a conservative serialized-payload upper bound and refuses
-dispatch when the request cannot fit; a same-HEAD restart cannot overshoot a
-nearly exhausted checkpoint before provider usage is reported.
+Before every new parent or explorer session, Agentify reserves the selected
+model's full context window so the SDK's initial request cannot cross the
+remaining budget. Later requests are also checked against a conservative
+serialized-payload upper bound; a same-HEAD restart cannot overshoot a nearly
+exhausted checkpoint before provider usage is reported.
 Diagnostic-only continuation at the same repository commit consumes the same
 persisted aggregate usage; restarting the CLI does not reset the budget. A new
 commit starts a new evidence lineage, while explicit overrides can raise the

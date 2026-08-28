@@ -171,6 +171,7 @@ export class PiSdkRuntime implements AgentRuntime {
       options.config,
       options.modelRole ?? "primary",
     );
+    options.auditResourceBudget?.assertProviderSessionCapacity(selectedModel?.contextWindow ?? 0);
     let sawRequiredRecoveryTool = false;
     let providerRequests = 0;
     let forcedToolChoiceRequests = 0;

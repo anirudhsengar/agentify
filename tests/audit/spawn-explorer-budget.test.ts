@@ -59,8 +59,8 @@ function stubExplorerArgs() {
     reasoning: false,
     input: ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 0,
-    maxTokens: 0,
+    contextWindow: 1,
+    maxTokens: 1,
     api: "openai-completions",
   } as unknown as Model<Api>;
   return { explorerModel: stubModel };

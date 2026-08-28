@@ -254,6 +254,25 @@ export class AuditResourceBudget {
     return requestBound;
   }
 
+  /**
+   * Pi does not expose its initial prompt through every provider-request hook.
+   * Reserve the selected model's full context window before creating a fresh
+   * session so even that first unobservable request cannot cross the aggregate
+   * input limit.
+   */
+  assertProviderSessionCapacity(contextWindow: number): void {
+    this.assertWithinBudget();
+    if (!Number.isSafeInteger(contextWindow) || contextWindow < 1) {
+      this.fail("selected model has no finite positive context window for input-budget admission");
+    }
+    const remainingInput = this.limits.maxInputTokens - this.#inputTokens;
+    if (remainingInput < contextWindow) {
+      this.fail(
+        `input token reserve ${remainingInput} is below the selected model context window of ${contextWindow}`,
+      );
+    }
+  }
+
   beginSession(maxDurationMs = this.limits.maxSessionDurationMs): SessionObservation {
     this.assertWithinBudget();
     if (this.#modelCalls >= this.limits.maxModelCalls) {

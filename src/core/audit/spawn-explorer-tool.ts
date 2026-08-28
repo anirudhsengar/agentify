@@ -674,6 +674,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         let maxProviderCalls = maxSteps;
         try {
             if (toolOptions.resourceBudget) {
+                toolOptions.resourceBudget.assertProviderSessionCapacity(subAgentModel.contextWindow);
                 effectiveSubagentDurationMs = Math.min(
                     effectiveSubagentDurationMs,
                     toolOptions.resourceBudget.reserveExplorer(mode),

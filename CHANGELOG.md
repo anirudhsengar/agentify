@@ -96,10 +96,11 @@ All notable changes to Agentify are documented here.
   rather than user or tool-result transport messages. Same-HEAD diagnostic
   continuations now retain an application-authored cumulative usage checkpoint,
   so restarting the CLI cannot reset elapsed-time, call, turn, token, cost, or
-  explorer-spawn limits. Every parent and explorer provider request is now
-  rejected before dispatch when its serialized-payload upper bound cannot fit
-  the remaining aggregate input reserve, preventing a continuation from
-  overshooting the hard token cap before provider usage is reported.
+  explorer-spawn limits. Every new parent and explorer session now requires its
+  selected model's full context window to fit the remaining input reserve, and
+  later requests are rejected before dispatch when their serialized-payload
+  upper bound cannot fit, preventing a continuation from overshooting the hard
+  token cap before provider usage is reported.
 
 - Explorer sessions now run serially with hard mode-specific repository-read
   and provider-call limits. Aggregate exhaustion reports the exact unresolved
