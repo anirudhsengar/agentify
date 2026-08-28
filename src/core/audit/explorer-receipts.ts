@@ -93,11 +93,24 @@ function reportConcernFromText(text: string): string | null {
   return match?.[1]?.trim() || null;
 }
 
+const SCOUT_PROPOSAL_MAX_LENGTH = 256;
+const SCOUT_PROPOSAL_SUFFIX = /\s+(?:one[_ -]?line|covers|seed[_ -]?paths?|rationale)\s*:/i;
+
+export function normalizeScoutConcernProposal(value: string): string | null {
+  const structuredBoundary = value.search(SCOUT_PROPOSAL_SUFFIX);
+  const proposal = (structuredBoundary >= 0 ? value.slice(0, structuredBoundary) : value).trim();
+  return proposal.length > 0 && proposal.length <= SCOUT_PROPOSAL_MAX_LENGTH
+    ? proposal
+    : null;
+}
+
 function scoutConcernsFromText(text: string): string[] {
   const concerns: string[] = [];
   const pattern = /^\s*-\s*concern:\s*([^\r\n]+)/gim;
   for (const match of text.matchAll(pattern)) {
-    const concern = match[1]?.trim();
+    const concern = match[1] === undefined
+      ? null
+      : normalizeScoutConcernProposal(match[1]);
     if (concern && !concerns.includes(concern)) concerns.push(concern);
   }
   return concerns.slice(0, 128);
