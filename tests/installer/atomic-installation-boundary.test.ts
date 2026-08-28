@@ -11,12 +11,13 @@ import {
   prepareOneTimeInstallationState,
   type RepositoryInstallationPreflight,
 } from "../../src/core/installer/index.ts";
+import { rollbackPendingInstallation } from "../../src/core/installer/installation-transaction.ts";
 import type {
   AgentRuntime,
   AgentRuntimeResult,
   AgentifyUi,
 } from "../../src/core/types.ts";
-import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
 function git(cwd: string, ...args: string[]): string {
   const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
@@ -197,6 +198,49 @@ test("SIGTERM rolls a pending installation back to diagnostic-map-only state", a
     const retainedFiles = fs.readdirSync(path.join(cwd, ".agentify", "runtime", "audit"));
     assert.deepEqual(retainedFiles, ["codebase_map.json"]);
   } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("a current-HEAD attested diagnostic-only map can resume installation without claiming other state", () => {
+  const { cwd, preflight } = createRepository();
+  try {
+    const head = git(cwd, "rev-parse", "HEAD");
+    const auditDir = path.join(cwd, ".agentify", "runtime", "audit");
+    fs.mkdirSync(auditDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(auditDir, "codebase_map.json"),
+      JSON.stringify(attestCodebaseMap(makeValidCodebaseMap(), head), null, 2),
+    );
+
+    assert.doesNotThrow(() => prepareOneTimeInstallationState(cwd, preflight));
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), true);
+    assert.equal(fs.existsSync(path.join(auditDir, "codebase_map.json")), true);
+    rollbackPendingInstallation(cwd);
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), false);
+    assert.equal(fs.existsSync(path.join(auditDir, "codebase_map.json")), true);
+  } finally {
+    rollbackPendingInstallation(cwd);
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("an unattested diagnostic-shaped directory remains user-owned", () => {
+  const { cwd, preflight } = createRepository();
+  try {
+    const auditDir = path.join(cwd, ".agentify", "runtime", "audit");
+    fs.mkdirSync(auditDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(auditDir, "codebase_map.json"),
+      JSON.stringify(makeValidCodebaseMap(), null, 2),
+    );
+    assert.throws(
+      () => prepareOneTimeInstallationState(cwd, preflight),
+      /user-owned or unrecognized state/i,
+    );
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), false);
+  } finally {
+    rollbackPendingInstallation(cwd);
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
