@@ -235,13 +235,22 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
     assert.ok(report.blockers.some((entry) => (
       entry.code === "validation_failed" && /after Agentify installed/.test(entry.message)
     )));
+    assert.ok(report.blockers.some((entry) => (
+      entry.code === "installation_canary_failed" && /Atomic installation rolled back/.test(entry.message)
+    )));
+    assert.equal(report.specialists_installed, 0);
     assert.equal(report.github_issue_intake_enabled, false);
     assert.equal(report.procedures_installed, 0);
-    const policy = JSON.parse(
-      fs.readFileSync(path.join(cwd, ".github", "agentify-task-policy.json"), "utf8"),
-    ) as { configured: boolean; policy: unknown };
-    assert.equal(policy.configured, false);
-    assert.equal(policy.policy, null);
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), false);
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "agents")), false);
+    assert.equal(fs.existsSync(path.join(cwd, ".github", "agentify-task-policy.json")), false);
+    assert.equal(fs.existsSync(path.join(cwd, ".github", "agentify")), false);
+    assert.equal(fs.existsSync(path.join(cwd, ".github", "scripts")), false);
+    assert.equal(fs.existsSync(path.join(cwd, ".github", "workflows", "agentify-issue.yml")), false);
+    assert.equal(fs.existsSync(path.join(cwd, ".github", "workflows", "agentify-learn.yml")), false);
+    assert.equal(fs.existsSync(path.join(cwd, "AGENTS.md")), false);
+    assert.equal(fs.existsSync(path.join(cwd, "SETUP.md")), false);
+    assert.equal(fs.existsSync(mapPath), true, "the externally permitted diagnostic map survives rollback");
     assert.equal(
       requests.some((request) => request.program === "gh" && request.args[0] === "label"),
       false,
