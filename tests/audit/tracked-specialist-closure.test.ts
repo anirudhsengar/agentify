@@ -727,3 +727,61 @@ test("aggregate model-call exhaustion reports the unresolved semantic obligation
     fs.rmSync(repository.cwd, { recursive: true, force: true });
   }
 });
+
+test("same-HEAD audit continuation cannot reset an exhausted aggregate model-call budget", async () => {
+  const repository = createRepository();
+  const previousHome = process.env["HOME"];
+  const temporaryHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-continuation-budget-home-"));
+  process.env["HOME"] = temporaryHome;
+  try {
+    const mapPath = path.join(repository.cwd, ".agentify", "runtime", "audit", "codebase_map.json");
+    fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+    fs.writeFileSync(mapPath, `${JSON.stringify(aqaShapedMap(), null, 2)}\n`);
+    let sessions = 0;
+    const runtime: AgentRuntime = {
+      async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+        sessions += 1;
+        options.onEvent?.({
+          type: "message_end",
+          message: {
+            role: "assistant",
+            stopReason: "toolUse",
+            usage: { input: 1, output: 1, cost: { total: 0 } },
+          },
+        } as never);
+        return { turns: 1, costUsd: 0, aborted: true, diagnostics: { provider_requests: 1 } };
+      },
+    };
+    const config = {
+      schemaVersion: 1,
+      provider: "openai",
+      thinkingLevel: "high",
+      models: {},
+      auditBudgets: { maxModelCalls: 1, maxTurns: 1 },
+    } as AgentifyConfig;
+
+    await assert.rejects(
+      runRepositoryAudit({ cwd: repository.cwd, ui: new RepairUi(), runtime, config }),
+      /resource budget exhausted.*model calls reached 1/i,
+    );
+    await assert.rejects(
+      runRepositoryAudit({ cwd: repository.cwd, ui: new RepairUi(), runtime, config }),
+      /resource budget exhausted.*model calls reached 1/i,
+    );
+    assert.equal(
+      sessions,
+      1,
+      "a continuation at the same repository commit must consume the prior invocation's usage",
+    );
+    const persisted = JSON.parse(fs.readFileSync(mapPath, "utf8")) as CodebaseMap & {
+      audit_budget_checkpoint?: { repository_commit?: string; usage?: { model_calls?: number } };
+    };
+    assert.equal(persisted.audit_budget_checkpoint?.repository_commit, repository.head);
+    assert.equal(persisted.audit_budget_checkpoint?.usage?.model_calls, 1);
+  } finally {
+    if (previousHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previousHome;
+    fs.rmSync(temporaryHome, { recursive: true, force: true });
+    fs.rmSync(repository.cwd, { recursive: true, force: true });
+  }
+});
