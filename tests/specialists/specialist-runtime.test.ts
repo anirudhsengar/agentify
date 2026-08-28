@@ -110,3 +110,60 @@ test("runtime leaves an unrecognized user-owned manifest untouched", () => {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test("runtime refuses an uncompiled canonical map without changing the installed portfolio", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-specialist-uncompiled-"));
+  try {
+    for (const relativePath of [
+      "package.json",
+      "src/index.ts",
+      "src/lib.ts",
+      "src/billing/index.ts",
+      "src/billing/types.ts",
+      "tests/billing.test.ts",
+      "scripts/prime-db.sh",
+    ]) write(cwd, relativePath);
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "runtime fixture");
+    const commit = git(cwd, "rev-parse", "HEAD");
+    const observedAt = readGitCommitTimestamp(cwd, commit);
+    initializeTeamMemoryStore({
+      cwd,
+      repositoryId: "fixture/uncompiled",
+      supportingCommit: commit,
+      evidence: [buildSpecialistEvidenceReference({
+        cwd,
+        supportingCommit: commit,
+        repositoryPath: "package.json",
+        sourceType: "validated_bootstrap",
+        observedAt,
+        actor: "test-maintainer",
+      })],
+      options: { now: () => new Date(observedAt) },
+    });
+    const mapPath = path.join(cwd, ".agentify/runtime/audit/codebase_map.json");
+    write(cwd, ".agentify/runtime/audit/codebase_map.json", `${JSON.stringify(makeSpecialistFixtureMap(), null, 2)}\n`);
+    const first = synchronizeRepositorySpecialists(cwd);
+    assert.equal(first.status, "synchronized");
+    const specialistPath = path.join(cwd, ".agentify/agents/specialists/specialist-billing.json");
+    const specialistBefore = fs.readFileSync(specialistPath);
+    const manifestBefore = fs.readFileSync(path.join(cwd, ".agentify/manifest.json"));
+
+    const incomplete = makeSpecialistFixtureMap();
+    delete incomplete.concern_evidence;
+    delete incomplete.expert_evidence;
+    fs.writeFileSync(mapPath, `${JSON.stringify(incomplete, null, 2)}\n`);
+
+    assert.throws(
+      () => synchronizeRepositorySpecialists(cwd),
+      /specialist compilation.*incomplete/i,
+    );
+    assert.deepEqual(fs.readFileSync(specialistPath), specialistBefore);
+    assert.deepEqual(fs.readFileSync(path.join(cwd, ".agentify/manifest.json")), manifestBefore);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
