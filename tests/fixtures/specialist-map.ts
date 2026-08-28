@@ -175,6 +175,14 @@ export function makeSpecialistFixtureMap() {
                 { path: "src/billing/charge.ts", what_happens: "Submits the charge with an idempotency key." },
               ],
             },
+            {
+              name: "public fixture entry validation",
+              description: "The synthetic package entry is exercised by the installer's repository-owned smoke test.",
+              steps: [
+                { path: "src/index.ts", what_happens: "Exports the synthetic package entry used by installer fixtures." },
+                { path: "tests/index.test.ts", what_happens: "Exercises that public entry during installer validation." },
+              ],
+            },
           ],
           touchpoints: [
             {
@@ -192,6 +200,20 @@ export function makeSpecialistFixtureMap() {
               centrality: "core" as const,
             },
             {
+              path: "src/index.ts",
+              symbol: null,
+              role: "Synthetic public package entry used by installer boundary fixtures.",
+              line_range: null,
+              centrality: "core" as const,
+            },
+            {
+              path: "src/lib.ts",
+              symbol: null,
+              role: "Synthetic public library facade used by packed-installation fixtures.",
+              line_range: null,
+              centrality: "core" as const,
+            },
+            {
               // Deliberately shared with authentication: the same file serves
               // two concerns for different reasons, which must produce a
               // related-specialist link rather than a merge.
@@ -205,6 +227,13 @@ export function makeSpecialistFixtureMap() {
               path: "tests/billing.test.ts",
               symbol: null,
               role: "Covers double-charge protection on retry.",
+              line_range: null,
+              centrality: "supporting" as const,
+            },
+            {
+              path: "tests/index.test.ts",
+              symbol: null,
+              role: "Repository-owned smoke proof for the synthetic public entry.",
               line_range: null,
               centrality: "supporting" as const,
             },
