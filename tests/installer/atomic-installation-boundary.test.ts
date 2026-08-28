@@ -5,7 +5,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
+import { Value } from "typebox/value";
 import { runAgentifyApp } from "../../src/core/agentify-app.ts";
+import { CodebaseMapSchema } from "../../src/core/audit/schema.ts";
 import {
   finalizeOneTimeInstallation,
   prepareOneTimeInstallationState,
@@ -234,6 +236,57 @@ test("a current-HEAD attested diagnostic-only map can resume installation withou
       resumedMap,
       "a failed bounded continuation must retain its newest attested diagnostic checkpoint",
     );
+  } finally {
+    rollbackPendingInstallation(cwd);
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("a legacy diagnostic with only a malformed scout proposal is repaired before resume", () => {
+  const { cwd, preflight } = createRepository();
+  try {
+    const head = git(cwd, "rev-parse", "HEAD");
+    const auditDir = path.join(cwd, ".agentify", "runtime", "audit");
+    const mapPath = path.join(auditDir, "codebase_map.json");
+    fs.mkdirSync(auditDir, { recursive: true });
+    const malformed = attestCodebaseMap(makeValidCodebaseMap(), head);
+    malformed.explorer_receipts!.receipts[0]!.proposed_concerns = [
+      "Argument declaration grammar one_line: " + "x".repeat(240),
+    ];
+    assert.equal(Value.Check(CodebaseMapSchema, malformed), false);
+    fs.writeFileSync(mapPath, JSON.stringify(malformed, null, 2));
+
+    assert.doesNotThrow(() => prepareOneTimeInstallationState(cwd, preflight));
+    const repaired = JSON.parse(fs.readFileSync(mapPath, "utf8")) as unknown;
+    assert.equal(Value.Check(CodebaseMapSchema, repaired), true);
+    assert.deepEqual(
+      (repaired as typeof malformed).explorer_receipts!.receipts[0]!.proposed_concerns,
+      ["Argument declaration grammar"],
+    );
+  } finally {
+    rollbackPendingInstallation(cwd);
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("diagnostic recovery never repairs invalid receipt fields outside scout proposals", () => {
+  const { cwd, preflight } = createRepository();
+  try {
+    const head = git(cwd, "rev-parse", "HEAD");
+    const auditDir = path.join(cwd, ".agentify", "runtime", "audit");
+    fs.mkdirSync(auditDir, { recursive: true });
+    const invalid = attestCodebaseMap(makeValidCodebaseMap(), head);
+    invalid.explorer_receipts!.receipts[0]!.sequence = 0;
+    fs.writeFileSync(
+      path.join(auditDir, "codebase_map.json"),
+      JSON.stringify(invalid, null, 2),
+    );
+
+    assert.throws(
+      () => prepareOneTimeInstallationState(cwd, preflight),
+      /user-owned or unrecognized state/i,
+    );
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), false);
   } finally {
     rollbackPendingInstallation(cwd);
     fs.rmSync(cwd, { recursive: true, force: true });
