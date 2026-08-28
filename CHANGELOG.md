@@ -75,6 +75,9 @@ All notable changes to Agentify are documented here.
 - Scout proposals are now application-attested semantic obligations until
   traced or substantively rejected. Explorer receipts and completed concerns
   checkpoint incrementally and same-HEAD retries preserve source-run provenance.
+  Nested append checkpoints preserve earlier evidence and deduplicate an exact
+  cumulative resend. Aggregate call/turn accounting ignores non-provider tool
+  result messages, so a hard terminal limit cannot be reported as exceeded.
 
 - Explorer success is now persisted as an application-authored receipt ledger
   bound to the audited repository commit. Model map writes cannot create or

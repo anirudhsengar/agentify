@@ -30,7 +30,7 @@ test("parent provider calls, turns, tokens, and cost share one hard budget", () 
   const session = budget.beginSession();
   budget.observeParentEvent({
     type: "message_end",
-    message: { usage: { input: 5, output: 5, cost: { total: 0.5 } } },
+    message: { role: "assistant", usage: { input: 5, output: 5, cost: { total: 0.5 } } },
   } as never, session);
   assert.throws(
     () => budget.finishParentSession(session, {

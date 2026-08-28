@@ -130,7 +130,10 @@ proposal remains an obligation until a related tracer succeeds or normalized
 concern evidence records a substantive rejection. Receipt state is checkpointed
 after each explorer and retains its source run ID; same-HEAD retries resume that
 attested evidence. The builder separately checkpoints scout screening and each
-completed concern through the map tools.
+completed concern through the map tools. Append semantics preserve nested prior
+evidence and deduplicate exact cumulative resends, keeping receipt and concern
+checkpoints aligned. Only provider-generated assistant messages consume the
+aggregate call and turn counters; local tool-result delivery does not.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.

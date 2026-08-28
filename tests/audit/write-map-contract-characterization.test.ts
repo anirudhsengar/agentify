@@ -652,6 +652,24 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
     [...existingConcernNames, "response delivery"],
     "nested append checkpoints must retain previously traced concern bodies",
   );
+  await executeTool(
+    appendTools.writeMapDeltaTool,
+    {
+      delta: {
+        concern_evidence: {
+          concerns: [makeValidConcern(), checkpointedConcern],
+          not_concerns: [],
+        },
+      },
+      merge_strategy: "append",
+    },
+    appendCwd,
+  );
+  assert.deepEqual(
+    readJson(appendTools.canonicalMapPath(appendCwd)).concern_evidence?.concerns.map((concern) => concern.concern),
+    [...existingConcernNames, "response delivery"],
+    "resending the full cumulative checkpoint must be idempotent",
+  );
 
   const deepCwd = tempDir("merge-deep");
   const deepTools = createWriteMapTools({ stateDir: ".agentify/runtime/audit-b" });

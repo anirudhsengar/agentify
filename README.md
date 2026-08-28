@@ -147,6 +147,9 @@ Scout proposals are application-attested obligations: each must be resolved by
 a successful tracer or a substantive `not_concerns` rejection. Agentify
 checkpoints receipts after every explorer and the builder checkpoints each
 completed concern, so a bounded retry on the same HEAD resumes verified work.
+Nested append checkpoints retain earlier concern bodies and deduplicate exact
+cumulative resends. Tool-result delivery is not counted as a provider call or
+turn.
 
 ### 2. Run the one-time installer
 

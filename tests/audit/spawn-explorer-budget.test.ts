@@ -350,7 +350,7 @@ async function testAggregateRemainingCallsReduceExplorerCap(): Promise<void> {
     for (let index = 0; index < 2; index += 1) {
       budget.observeParentEvent({
         type: "message_end",
-        message: { usage: { input: 1, output: 1, cost: { total: 0 } } },
+        message: { role: "assistant", usage: { input: 1, output: 1, cost: { total: 0 } } },
       } as never, parent);
     }
     const listeners = new Set<(event: unknown) => void>();

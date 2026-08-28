@@ -185,7 +185,7 @@ export class AuditResourceBudget {
       type?: string;
       message?: { role?: string; stopReason?: string; usage?: UsageShape };
     };
-    if (value.type !== "message_end") return;
+    if (value.type !== "message_end" || value.message?.role !== "assistant") return;
     const usage = value.message?.usage;
     session.calls += 1;
     session.turns += 1;
