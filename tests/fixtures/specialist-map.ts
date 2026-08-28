@@ -176,11 +176,11 @@ export function makeSpecialistFixtureMap() {
               ],
             },
             {
-              name: "public fixture entry validation",
-              description: "The synthetic package entry is exercised by the installer's repository-owned smoke test.",
+              name: "synthetic package entry",
+              description: "The shared test fixture models two ordered operations at its tracked public entry.",
               steps: [
                 { path: "src/index.ts", what_happens: "Exports the synthetic package entry used by installer fixtures." },
-                { path: "tests/index.test.ts", what_happens: "Exercises that public entry during installer validation." },
+                { path: "src/index.ts", what_happens: "Provides the public-entry operation exercised by repository validation." },
               ],
             },
           ],
@@ -227,13 +227,6 @@ export function makeSpecialistFixtureMap() {
               path: "tests/billing.test.ts",
               symbol: null,
               role: "Covers double-charge protection on retry.",
-              line_range: null,
-              centrality: "supporting" as const,
-            },
-            {
-              path: "tests/index.test.ts",
-              symbol: null,
-              role: "Repository-owned smoke proof for the synthetic public entry.",
               line_range: null,
               centrality: "supporting" as const,
             },
