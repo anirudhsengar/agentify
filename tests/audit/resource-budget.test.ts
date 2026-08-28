@@ -136,6 +136,44 @@ test("a continuation reserves enough aggregate input budget for the next observe
   );
 });
 
+test("a new session rejects a provider payload that can overshoot persisted input headroom", () => {
+  const persistedUsage = {
+    elapsed_ms: 1_048_060,
+    model_calls: 85,
+    turns: 85,
+    input_tokens: 1_995_420,
+    output_tokens: 72_797,
+    cost_usd: 0.18641548,
+    explorer_spawns: 8,
+    coverage_recovery_passes: 0,
+    semantic_repair_passes: 0,
+  };
+  const budget = new AuditResourceBudget(
+    { maxInputTokens: 2_000_000 },
+    Date.now(),
+    persistedUsage,
+  );
+  const admission = budget as unknown as {
+    assertProviderInputCapacity(payload: unknown): number;
+  };
+  assert.throws(
+    () => admission.assertProviderInputCapacity({ input: "x".repeat(7_141) }),
+    /input token reserve 4580.*serialized provider request bound/i,
+  );
+  assert.equal(
+    budget.snapshot().input_tokens,
+    persistedUsage.input_tokens,
+    "rejected request admission must not mutate trusted usage",
+  );
+
+  const admissible = new AuditResourceBudget(
+    { maxInputTokens: 2_000_000 },
+    Date.now(),
+    { ...persistedUsage, input_tokens: 1_980_000 },
+  ) as unknown as { assertProviderInputCapacity(payload: unknown): number };
+  assert.doesNotThrow(() => admissible.assertProviderInputCapacity({ input: "x".repeat(7_141) }));
+});
+
 test("tool-result message events cannot consume provider-call or turn budgets", () => {
   const budget = new AuditResourceBudget({ maxModelCalls: 1, maxTurns: 1 });
   const session = budget.beginSession();
