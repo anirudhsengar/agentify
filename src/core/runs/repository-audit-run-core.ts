@@ -5,7 +5,10 @@ import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { AgentRuntimeResult } from "../types.ts";
 import { defaultConfigDir } from "../agentify-config.ts";
 import { AgentifyLog } from "../audit/log.ts";
-import { ExplorerReceiptTracker } from "../audit/explorer-receipts.ts";
+import {
+  currentRepositoryCommit,
+  ExplorerReceiptTracker,
+} from "../audit/explorer-receipts.ts";
 import { createGapDraftMap } from "../audit/map-draft.ts";
 import { DEFAULT_MAP_FILENAME, writeCanonicalMap } from "../audit/map-storage.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
@@ -542,6 +545,19 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         `repository audit did not reach structured closure (${closure.closed.length}/${COVERAGE_DIMENSIONS.length}); ${reasons.join("; ")}`,
       );
     }
+
+    const repositoryCommit = currentRepositoryCommit(context.cwd);
+    if (repositoryCommit === null || map === null) {
+      throw new Error("cannot bind explorer receipts to the current repository commit");
+    }
+    map = {
+      ...map,
+      explorer_receipts: explorerReceipts.attestation(repositoryCommit, log.runId),
+    };
+    writeCanonicalMap(context.cwd, map, {
+      stateDir,
+      mapFilename: DEFAULT_MAP_FILENAME,
+    });
 
     spinner.stop("repository audit complete", "success");
     spinnerStopped = true;

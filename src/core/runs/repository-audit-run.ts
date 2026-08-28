@@ -1,7 +1,11 @@
 import * as path from "node:path";
 import { defaultConfigDir } from "../agentify-config.ts";
 import { AgentifyLog } from "../audit/log.ts";
-import { ExplorerReceiptTracker } from "../audit/explorer-receipts.ts";
+import {
+  assessExplorerReceiptAttestation,
+  currentRepositoryCommit,
+  ExplorerReceiptTracker,
+} from "../audit/explorer-receipts.ts";
 import { DEFAULT_MAP_FILENAME, writeCanonicalMap } from "../audit/map-storage.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
 import { loadBuilderPrompt } from "../audit/prompt.ts";
@@ -213,6 +217,17 @@ async function repairSpecialistPortfolio(
   let stalledPasses = 0;
   const initialMap = loadCanonicalMapAt(context.cwd, stateDir);
   if (initialMap === null) throw new Error("canonical codebase map disappeared before specialist repair");
+  const trustedReceiptAttestation = initialMap.explorer_receipts;
+  const preserveReceiptAttestation = (map: CodebaseMap | null): CodebaseMap | null => {
+    if (map === null || trustedReceiptAttestation === undefined) return map;
+    if (map.explorer_receipts === trustedReceiptAttestation) return map;
+    const preserved = { ...map, explorer_receipts: trustedReceiptAttestation };
+    writeCanonicalMap(context.cwd, preserved, {
+      stateDir: AUDIT_STATE_RELATIVE_DIR,
+      mapFilename: DEFAULT_MAP_FILENAME,
+    });
+    return preserved;
+  };
   const initialCompilation = compileSpecialistEvidence(initialMap, { cwd: context.cwd });
   persistSpecialistCompilation(context, initialMap, initialCompilation);
   const initialAssessment = initialCompilation.assessment;
@@ -223,6 +238,20 @@ async function repairSpecialistPortfolio(
     || [...initialAssessment.reasons, ...initialCompilation.reasons]
       .some((reason) => /thin specialist portfolio/i.test(reason));
   const explorerReceipts = new ExplorerReceiptTracker();
+  if (trustedReceiptAttestation !== undefined) {
+    explorerReceipts.loadAttestation(trustedReceiptAttestation);
+  }
+  const persistCombinedReceiptAttestation = (map: CodebaseMap): void => {
+    const commit = currentRepositoryCommit(context.cwd);
+    if (commit === null) throw new Error("cannot bind repaired explorer receipts to current HEAD");
+    writeCanonicalMap(context.cwd, {
+      ...map,
+      explorer_receipts: explorerReceipts.attestation(commit, log.runId),
+    }, {
+      stateDir: AUDIT_STATE_RELATIVE_DIR,
+      mapFilename: DEFAULT_MAP_FILENAME,
+    });
+  };
   const receiptAssessmentFor = (
     map: CodebaseMap,
     assessment: SpecialistEvidenceAssessment,
@@ -234,7 +263,7 @@ async function repairSpecialistPortfolio(
   });
 
   for (let pass = 1; pass <= MAX_REPAIR_PASSES; pass += 1) {
-    const sourceMap = loadCanonicalMapAt(context.cwd, stateDir);
+    const sourceMap = preserveReceiptAttestation(loadCanonicalMapAt(context.cwd, stateDir));
     if (sourceMap === null) throw new Error("canonical codebase map disappeared before specialist repair");
     const compilation = compileSpecialistEvidence(sourceMap, { cwd: context.cwd });
     persistSpecialistCompilation(context, sourceMap, compilation);
@@ -242,6 +271,7 @@ async function repairSpecialistPortfolio(
     const assessment = compilation.assessment;
     const receiptAssessment = receiptAssessmentFor(map, assessment);
     if (compilation.complete && receiptAssessment.complete) {
+      persistCombinedReceiptAttestation(map);
       announceCompiledPortfolio(context, compilation);
       return { turns, cost_usd: costUsd };
     }
@@ -293,7 +323,7 @@ async function repairSpecialistPortfolio(
     turns += result.turns;
     costUsd = addCost(costUsd, result.costUsd);
 
-    const updatedSourceMap = loadCanonicalMapAt(context.cwd, stateDir);
+    const updatedSourceMap = preserveReceiptAttestation(loadCanonicalMapAt(context.cwd, stateDir));
     const updatedCompilation = updatedSourceMap === null
       ? null
       : compileSpecialistEvidence(updatedSourceMap, { cwd: context.cwd });
@@ -305,6 +335,7 @@ async function repairSpecialistPortfolio(
       ? null
       : receiptAssessmentFor(updatedCompilation.map, updatedAssessment);
     if (updatedCompilation?.complete && updatedReceiptAssessment?.complete) {
+      persistCombinedReceiptAttestation(updatedCompilation.map);
       announceCompiledPortfolio(context, updatedCompilation);
       return { turns, cost_usd: costUsd };
     }
@@ -323,7 +354,7 @@ async function repairSpecialistPortfolio(
     }
   }
 
-  const finalSourceMap = loadCanonicalMapAt(context.cwd, stateDir);
+  const finalSourceMap = preserveReceiptAttestation(loadCanonicalMapAt(context.cwd, stateDir));
   const finalCompilation = finalSourceMap === null
     ? null
     : compileSpecialistEvidence(finalSourceMap, { cwd: context.cwd });
@@ -334,6 +365,7 @@ async function repairSpecialistPortfolio(
     ? null
     : receiptAssessmentFor(finalCompilation.map, finalCompilation.assessment);
   if (finalCompilation?.complete && finalReceiptAssessment?.complete) {
+    persistCombinedReceiptAttestation(finalCompilation.map);
     announceCompiledPortfolio(context, finalCompilation);
     return { turns, cost_usd: costUsd };
   }
@@ -379,6 +411,15 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     if (!finalCompilation.complete) {
       throw new Error(
         `repository specialist discovery did not reach semantic closure: ${finalCompilation.reasons.join("; ")}`,
+      );
+    }
+    const receiptAttestation = assessExplorerReceiptAttestation(
+      finalCompilation.map,
+      context.cwd,
+    );
+    if (!receiptAttestation.complete) {
+      throw new Error(
+        `repository specialist discovery lacks current explorer attestation: ${receiptAttestation.reasons.join("; ")}`,
       );
     }
     const coverage = assessCoverageClosure(finalCompilation.map, { cwd: context.cwd });

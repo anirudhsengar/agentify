@@ -46,6 +46,12 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Explorer success is now persisted as an application-authored receipt ledger
+  bound to the audited repository commit. Model map writes cannot create or
+  replace the ledger, existing receiptless or stale maps are re-audited, and
+  finalization rolls back instead of installing a team whose semantic evidence
+  cannot be traced to successful scouts and per-concern tracers.
+
 - Installation now honors explicit tracked repository policies that prohibit
   AI/LLM-authored persistent work. A bounded preflight scan runs before memory
   recovery, runtime repair, audit diagnostics, or transaction setup; it reports

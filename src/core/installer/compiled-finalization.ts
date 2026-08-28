@@ -1,6 +1,7 @@
 import { DEFAULT_MAP_FILENAME, writeCanonicalMap } from "../audit/map-storage.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
 import { compileSpecialistEvidence } from "../audit/schema.ts";
+import { assessExplorerReceiptAttestation } from "../audit/explorer-receipts.ts";
 import { loadCanonicalMapAt } from "../audit/write-map-tool.ts";
 import type {
   InstallerBlocker,
@@ -100,6 +101,17 @@ export function finalizeOneTimeInstallation(
       throw new Error(
         "repository specialist compilation failed before installation: "
           + compilation.reasons.join("; "),
+      );
+    }
+    const receiptAttestation = assessExplorerReceiptAttestation(
+      compilation.map,
+      input.cwd,
+    );
+    if (!receiptAttestation.complete) {
+      rollbackPendingInstallation(input.cwd);
+      throw new Error(
+        "repository specialist compilation failed before installation: explorer attestation: "
+          + receiptAttestation.reasons.join("; "),
       );
     }
     if (compilation.assessment.source === "concern_evidence") {

@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import test from "node:test";
-import type { CodebaseMap } from "../../src/core/audit/schema.ts";
-import { ExplorerReceiptTracker } from "../../src/core/audit/explorer-receipts.ts";
+import { Value } from "typebox/value";
+import {
+  PartialCodebaseMapSchema,
+  type CodebaseMap,
+} from "../../src/core/audit/schema.ts";
+import {
+  assessExplorerReceiptAttestation,
+  ExplorerReceiptTracker,
+} from "../../src/core/audit/explorer-receipts.ts";
 
 function mapWithConcerns(...concerns: string[]): CodebaseMap {
   return {
@@ -95,4 +106,50 @@ test("a timed-out tracer remains unresolved instead of becoming a rejection", ()
   }));
   const complete = tracker.assess(mapWithConcerns(), { requiredConcerns: [] });
   assert.equal(complete.complete, true, complete.reasons.join("; "));
+});
+
+test("persisted explorer receipts are application-authored and bound to current HEAD", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-receipt-attestation-"));
+  const git = (...args: string[]): string => {
+    const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  try {
+    fs.writeFileSync(path.join(cwd, "README.md"), "# receipt fixture\n");
+    git("init", "-q");
+    git("config", "user.name", "Agentify Test");
+    git("config", "user.email", "agentify@example.invalid");
+    git("add", ".");
+    git("commit", "-qm", "receipt fixture");
+    const head = git("rev-parse", "HEAD");
+
+    const tracker = new ExplorerReceiptTracker();
+    tracker.observe(explorerEvent({ mode: "concern_scout", success: true }));
+    tracker.observe(explorerEvent({
+      mode: "concern_tracer",
+      success: true,
+      focus: "Routing and route composition",
+      reportConcern: "Routing and route composition",
+    }));
+    const map = mapWithConcerns("Routing and route composition");
+    map.explorer_receipts = tracker.attestation(head, "fixture-run");
+    const current = assessExplorerReceiptAttestation(map, cwd);
+    assert.equal(current.complete, true, current.reasons.join("; "));
+
+    assert.equal(
+      Value.Check(PartialCodebaseMapSchema, { explorer_receipts: map.explorer_receipts }),
+      false,
+      "model-authored map deltas must not be able to forge explorer attestation",
+    );
+
+    fs.writeFileSync(path.join(cwd, "README.md"), "# changed fixture\n");
+    git("add", ".");
+    git("commit", "-qm", "advance head");
+    const stale = assessExplorerReceiptAttestation(map, cwd);
+    assert.equal(stale.complete, false);
+    assert.ok(stale.reasons.some((reason) => /not current HEAD/i.test(reason)));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
 });

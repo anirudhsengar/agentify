@@ -203,6 +203,41 @@ export function makeValidCodebaseMap(
   return map;
 }
 
+export function attestCodebaseMap(
+  map: CodebaseMap,
+  repositoryCommit: string,
+  runId = "deterministic-test-replay",
+): CodebaseMap {
+  const concernNames = map.concern_evidence?.concerns.map((concern) => concern.concern) ?? [];
+  return {
+    ...map,
+    explorer_receipts: {
+      repository_commit: repositoryCommit,
+      run_id: runId,
+      receipts: [
+        {
+          sequence: 1,
+          mode: "concern_scout",
+          success: true,
+          target_path: ".",
+          focus: null,
+          report_concern: null,
+          failure_kind: null,
+        },
+        ...concernNames.map((concern, index) => ({
+          sequence: index + 2,
+          mode: "concern_tracer" as const,
+          success: true,
+          target_path: ".",
+          focus: concern,
+          report_concern: concern,
+          failure_kind: null,
+        })),
+      ],
+    },
+  };
+}
+
 // Self-check at import so a schema change that invalidates the fixture
 // fails loudly in the suite that uses it.
 {

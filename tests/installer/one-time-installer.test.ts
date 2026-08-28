@@ -23,6 +23,7 @@ import {
   SPECIALIST_FIXTURE_TRACKED_FILES,
   makeSpecialistFixtureMap,
 } from "../fixtures/specialist-map.ts";
+import { attestCodebaseMap } from "../fixtures/codebase-map.ts";
 import { runAgentifyApp } from "../../src/core/agentify-app.ts";
 import { installScaffoldRuntime } from "../../src/core/scaffold-installer.ts";
 import { packageRoot as installedPackageRoot } from "../../src/core/pi-sdk-runtime.ts";
@@ -218,7 +219,7 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
     prepareOneTimeInstallationState(cwd, preflight);
     const mapPath = path.join(cwd, ".agentify", "runtime", "audit", "codebase_map.json");
     fs.mkdirSync(path.dirname(mapPath), { recursive: true });
-    fs.writeFileSync(mapPath, `${JSON.stringify(makeSpecialistFixtureMap(), null, 2)}\n`);
+    fs.writeFileSync(mapPath, `${JSON.stringify(attestCodebaseMap(makeSpecialistFixtureMap(), commit), null, 2)}\n`);
 
     const report = finalizeOneTimeInstallation({
       cwd,
@@ -624,7 +625,7 @@ async function testInitialInstallationAndIdempotentAttach(): Promise<void> {
 
     const mapPath = path.join(cwd, ".agentify", "runtime", "audit", "codebase_map.json");
     fs.mkdirSync(path.dirname(mapPath), { recursive: true });
-    fs.writeFileSync(mapPath, `${JSON.stringify(makeSpecialistFixtureMap(), null, 2)}\n`);
+    fs.writeFileSync(mapPath, `${JSON.stringify(attestCodebaseMap(makeSpecialistFixtureMap(), commit), null, 2)}\n`);
     for (const relative of [
       ".github/workflows/agentify-issue.yml",
       ".github/workflows/agentify-learn.yml",

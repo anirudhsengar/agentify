@@ -77,6 +77,12 @@ roots. Withholding network-capable tools and rejecting known network executables
 reduces model-initiated access; it does not isolate the process or indirect
 repository code from the network.
 
+Explorer completion is attested by trusted runtime code, not by model output.
+The bounded receipt ledger is bound to the current Git commit and preserved
+across repair sessions; model map tools cannot author or replace it. Installation
+fails closed and rolls back if the ledger is missing, stale, records a failed
+tracer, or lacks a successful tracer for any accepted concern.
+
 ## Credentials
 
 Provider credentials stay outside repository state. The CLI accepts them through

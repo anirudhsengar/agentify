@@ -1156,6 +1156,13 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                 const bootstrapEntry = existingMap.exploration_log.find((entry) => entry.action === "draft_bootstrap");
                 if (bootstrapEntry) validMap.exploration_log.unshift(bootstrapEntry);
             }
+            // Explorer receipts are application-authored runtime evidence. A
+            // model may submit the complete persisted-map shape, so strip any
+            // claimed ledger before restoring only the trusted existing one.
+            delete validMap.explorer_receipts;
+            if (existingMap?.explorer_receipts !== undefined) {
+                validMap.explorer_receipts = structuredClone(existingMap.explorer_receipts);
+            }
             const downgradedDimensions = downgradeUnsupportedCoverage(validMap, closure);
             let writeResult: { path: string; size_bytes: number };
             try {

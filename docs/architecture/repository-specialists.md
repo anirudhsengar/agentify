@@ -27,6 +27,14 @@ The audit cannot complete before it records that result in
 too small to have distinct specialties, and must be justified in
 `open_questions` and `not_concerns`.
 
+Explorer completion is not inferred from the map. Trusted runtime code records
+an application-authored receipt for the repository-wide scout and every
+successful or failed concern tracer, then binds the ledger to the exact audited
+Git commit. Model-authored full-map and delta writes cannot create or replace
+this attestation. A missing ledger, a failed tracer, an untraced accepted
+concern, or a ledger from another commit keeps semantic closure unresolved.
+Receiptless legacy maps are re-audited rather than attached as trusted output.
+
 Specialist discovery does not re-decide any of this. The model reads the
 repository and names its concerns; trusted code verifies that what it named
 resolves to real bytes tracked at the supporting commit. Touchpoints that are
@@ -59,10 +67,10 @@ concern or repository validation surface. Free-form skill candidates and
 per-area template hints remain audit observations, not executable portfolio
 inputs.
 
-The canonical map is committed with the installation while audit history stays
-ignored. This preserves one routing source across the local installer, issue
-workflows, and accepted-merge learning without making transient model sessions
-authoritative state.
+The canonical map and its commit-bound explorer receipt ledger are committed
+with the installation while audit history stays ignored. This preserves one
+routing source across the local installer, issue workflows, and accepted-merge
+learning without making transient model sessions authoritative state.
 
 ## Persistence
 

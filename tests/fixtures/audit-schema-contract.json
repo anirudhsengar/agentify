@@ -1,8 +1,8 @@
 {
   "serialization": {
     "codebase_map": {
-      "sha256": "ffd164a80170cf6b0fcf6658a906293d4fd5fa35c6bff6080d2b427223f7dd6a",
-      "bytes": 57282
+      "sha256": "f5bd7ea11a64ca9c77cae639ca03e71691806713d5953e97281460035991b810",
+      "bytes": 58256
     },
     "partial_codebase_map": {
       "sha256": "e71e027affb3ef8b0054b24187ed190e81dd52ebacc9d7fa51e3b27d8c163934",
@@ -70,6 +70,7 @@
       "customization_evidence",
       "expert_evidence",
       "concern_evidence",
+      "explorer_receipts",
       "artifact_intents"
     ],
     "partial_codebase_map": [

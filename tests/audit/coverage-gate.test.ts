@@ -2,6 +2,7 @@
 // the validated codebase map, not on unrelated generated-file existence.
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -19,7 +20,7 @@ import type {
   AgentRuntimeSessionOptions,
   AgentifyUi,
 } from "../../src/core/types.ts";
-import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
 function tempDir(name: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `agentify-${name}-`));
@@ -122,7 +123,30 @@ async function run(
   return runWithRuntime(cwd, new ScriptedRuntime(write));
 }
 
+function ensureGitRepository(cwd: string): string {
+  if (!fs.existsSync(path.join(cwd, ".git"))) {
+    fs.mkdirSync(cwd, { recursive: true });
+    if (!fs.existsSync(path.join(cwd, "README.md"))) {
+      fs.writeFileSync(path.join(cwd, "README.md"), "Test fixture evidence citation.\n");
+    }
+    for (const args of [
+      ["init", "-q"],
+      ["config", "user.name", "Agentify Test"],
+      ["config", "user.email", "agentify@example.invalid"],
+      ["add", "."],
+      ["commit", "-qm", "coverage gate fixture"],
+    ]) {
+      const execution = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
+      assert.equal(execution.status, 0, execution.stderr);
+    }
+  }
+  const head = spawnSync("git", ["-C", cwd, "rev-parse", "HEAD"], { encoding: "utf8" });
+  assert.equal(head.status, 0, head.stderr);
+  return head.stdout.trim();
+}
+
 async function runWithRuntime(cwd: string, runtime: AgentRuntime): Promise<SilentUi> {
+  ensureGitRepository(cwd);
   const previousHome = process.env["HOME"];
   const tempHome = tempDir("gate-run-home");
   process.env["HOME"] = tempHome;
@@ -574,7 +598,12 @@ class NoSpecialistEvidenceRuntime implements AgentRuntime {
 async function testAttachSkipsAuditOnlyWhenSpecialistEvidenceRecorded(): Promise<void> {
   const attachedCwd = tempDir("gate-attach-complete");
   try {
-    writeMap(attachedCwd, ".agentify/runtime/audit", makeValidCodebaseMap());
+    const head = ensureGitRepository(attachedCwd);
+    writeMap(
+      attachedCwd,
+      ".agentify/runtime/audit",
+      attestCodebaseMap(makeValidCodebaseMap(), head),
+    );
     const attachedUi = await runWithRuntime(attachedCwd, new FailIfAuditRuntime());
     assert.ok(attachedUi.infos.some((m) => m.includes("no model audit was rerun")));
   } finally {

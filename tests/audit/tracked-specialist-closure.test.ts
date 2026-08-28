@@ -18,7 +18,7 @@ import type {
   AgentRuntimeSessionOptions,
   AgentifyUi,
 } from "../../src/core/types.ts";
-import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
 type Concern = NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
 type Centrality = Concern["touchpoints"][number]["centrality"];
@@ -356,7 +356,10 @@ test("an existing tracked-complete map reconciles without rerunning the model", 
   try {
     const mapPath = path.join(repository.cwd, ".agentify", "runtime", "audit", "codebase_map.json");
     fs.mkdirSync(path.dirname(mapPath), { recursive: true });
-    fs.writeFileSync(mapPath, `${JSON.stringify(aqaShapedMap(), null, 2)}\n`);
+    fs.writeFileSync(
+      mapPath,
+      `${JSON.stringify(attestCodebaseMap(aqaShapedMap(), repository.head), null, 2)}\n`,
+    );
 
     const runtime = new FailIfModelRuns();
     const ui = new RepairUi();

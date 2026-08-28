@@ -2,6 +2,7 @@ import { Type, type Static } from "typebox";
 import { COVERAGE_DIMENSIONS } from "../coverage.ts";
 import { ArtifactIntentsSchema } from "./artifact-intents.ts";
 import { ConcernEvidenceSchema } from "./concerns.ts";
+import { ExplorerReceiptAttestationSchema } from "./explorer-receipts.ts";
 import { ConventionsSchema } from "./conventions.ts";
 import {
   CoverageMatrixSchema,
@@ -53,6 +54,7 @@ export const CodebaseMapSchema = Type.Object({
   customization_evidence: Type.Optional(CustomizationEvidenceSchema),
   expert_evidence: Type.Optional(ExpertEvidenceSchema),
   concern_evidence: Type.Optional(ConcernEvidenceSchema),
+  explorer_receipts: Type.Optional(ExplorerReceiptAttestationSchema),
   artifact_intents: Type.Optional(ArtifactIntentsSchema),
 }, { additionalProperties: false });
 

@@ -22,6 +22,14 @@ export type {
   PartialCodebaseMap,
 } from "./codebase-map.ts";
 export {
+  ExplorerReceiptAttestationSchema,
+  ExplorerReceiptSchema,
+} from "./explorer-receipts.ts";
+export type {
+  ExplorerReceiptAttestation,
+  ExplorerReceiptRecord,
+} from "./explorer-receipts.ts";
+export {
   CustomizationEvidenceSchema,
   ExpertEvidenceSchema,
 } from "./evidence.ts";

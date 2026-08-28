@@ -1280,6 +1280,33 @@ async function testPreventsPrototypePollutionInDottedKeyExpansion(): Promise<voi
   assert.equal((Object.prototype as unknown as Record<string, unknown>).polluted2, undefined);
 }
 
+async function testStripsModelAuthoredExplorerReceiptAttestation(): Promise<void> {
+  const cwd = tempDir("forged-explorer-receipts");
+  const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+  const map = cloneMap();
+  map.explorer_receipts = {
+    repository_commit: "a".repeat(40),
+    run_id: "model-claimed-run",
+    receipts: [{
+      sequence: 1,
+      mode: "concern_scout",
+      success: true,
+      target_path: ".",
+      focus: "claimed scout",
+      report_concern: null,
+      failure_kind: null,
+    }],
+  };
+
+  const result = await executeTool(tools.writeMapTool, { map }, cwd);
+  assert.equal(isToolError(result), false, resultText(result));
+  assert.equal(
+    readJson(tools.canonicalMapPath(cwd)).explorer_receipts,
+    undefined,
+    "write_map must not accept a model-authored explorer attestation",
+  );
+}
+
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "tool definition contract", fn: testToolDefinitionContract },
   { name: "nullable object transport normalization", fn: testNullableObjectTransportNormalization },
@@ -1305,6 +1332,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "specialist_evidence dimension alias merges concern evidence", fn: testSpecialistEvidenceDimensionAlias },
   { name: "substance failures persist as gaps with repair guidance", fn: testSubstanceFailuresPersistAsGapsWithRepairGuidance },
   { name: "prevents prototype pollution in dotted key expansion", fn: testPreventsPrototypePollutionInDottedKeyExpansion },
+  { name: "model-authored explorer receipt attestations are stripped", fn: testStripsModelAuthoredExplorerReceiptAttestation },
 ];
 
 let passed = 0;

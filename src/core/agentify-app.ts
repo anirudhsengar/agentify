@@ -10,6 +10,7 @@ import {
 } from "./audit/schema.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "./audit/paths.ts";
 import { rollbackPendingInstallation } from "./installer/installation-transaction.ts";
+import { assessExplorerReceiptAttestation } from "./audit/explorer-receipts.ts";
 import type {
   AgentifyConfig,
   AgentifyUi,
@@ -109,13 +110,17 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<Fo
         && completion.specialistEvidenceRecorded
       ) {
         const compilation = compileSpecialistEvidence(existingMap, { cwd: options.cwd });
+        const receiptAssessment = assessExplorerReceiptAttestation(
+          compilation.map,
+          options.cwd,
+        );
         if (compilation.map !== existingMap) {
           writeCanonicalMap(options.cwd, compilation.map, {
             stateDir: AUDIT_STATE_RELATIVE_DIR,
             mapFilename: DEFAULT_MAP_FILENAME,
           });
         }
-        if (compilation.complete) {
+        if (compilation.complete && receiptAssessment.complete) {
           options.ui.info(
             `agentify: retained ${compilation.assessment.accepted_concerns.length} tracked specialist concern(s) and recorded ${compilation.assessment.rejected_concerns.length} ungrounded candidate(s) as rejected`,
           );
@@ -128,6 +133,11 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<Fo
             turns: 0,
             cost_usd: null,
           };
+        }
+        if (compilation.complete) {
+          options.ui.info(
+            `agentify: existing specialist evidence lacks current explorer attestation (${receiptAssessment.reasons.join("; ")}); running a bounded receipt repair audit`,
+          );
         }
         options.ui.info(
           "agentify: deterministic specialist compilation reopened unresolved ownership; running a bounded repair audit",

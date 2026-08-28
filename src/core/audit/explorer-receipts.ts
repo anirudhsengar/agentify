@@ -1,4 +1,9 @@
-import type { CodebaseMap } from "./schema/index.ts";
+import { spawnSync } from "node:child_process";
+import type {
+  CodebaseMap,
+  ExplorerReceiptAttestation,
+  ExplorerReceiptRecord,
+} from "./schema/index.ts";
 
 type ExplorerMode = "concern_scout" | "concern_tracer";
 
@@ -176,6 +181,37 @@ export class ExplorerReceiptTracker {
     });
   }
 
+  attestation(repositoryCommit: string, runId: string): ExplorerReceiptAttestation {
+    return {
+      repository_commit: repositoryCommit,
+      run_id: runId,
+      receipts: this.#receipts.map((receipt): ExplorerReceiptRecord => ({
+        sequence: receipt.sequence,
+        mode: receipt.mode,
+        success: receipt.success,
+        target_path: receipt.targetPath,
+        focus: receipt.focus,
+        report_concern: receipt.reportConcern,
+        failure_kind: receipt.failureKind,
+      })),
+    };
+  }
+
+  loadAttestation(attestation: ExplorerReceiptAttestation): void {
+    for (const receipt of [...attestation.receipts].sort((left, right) => left.sequence - right.sequence)) {
+      this.#sequence += 1;
+      this.#receipts.push({
+        sequence: this.#sequence,
+        mode: receipt.mode,
+        success: receipt.success,
+        targetPath: receipt.target_path,
+        focus: receipt.focus,
+        reportConcern: receipt.report_concern,
+        failureKind: receipt.failure_kind,
+      });
+    }
+  }
+
   assess(
     map: CodebaseMap | null,
     options: ExplorerReceiptAssessmentOptions = {},
@@ -228,4 +264,53 @@ export class ExplorerReceiptTracker {
       missing_concern_tracers: missingConcernTracers,
     };
   }
+}
+
+function trackerFromAttestation(attestation: ExplorerReceiptAttestation): ExplorerReceiptTracker {
+  const tracker = new ExplorerReceiptTracker();
+  tracker.loadAttestation(attestation);
+  return tracker;
+}
+
+export function currentRepositoryCommit(cwd: string): string | null {
+  const result = spawnSync("git", ["-C", cwd, "rev-parse", "--verify", "HEAD^{commit}"], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  const commit = result.status === 0 ? result.stdout.trim().toLowerCase() : "";
+  return /^[0-9a-f]{40,64}$/.test(commit) ? commit : null;
+}
+
+export function assessExplorerReceiptAttestation(
+  map: CodebaseMap | null,
+  cwd: string,
+  options: ExplorerReceiptAssessmentOptions = {},
+): ExplorerReceiptAssessment {
+  const attestation = map?.explorer_receipts;
+  if (attestation === undefined) {
+    return {
+      complete: false,
+      reasons: ["application-attested explorer receipt ledger is missing"],
+      successful_scouts: 0,
+      successful_tracers: [],
+      unresolved_tracer_failures: [],
+      missing_concern_tracers: map?.concern_evidence?.concerns.map((concern) => concern.concern) ?? [],
+    };
+  }
+  const currentCommit = currentRepositoryCommit(cwd);
+  if (currentCommit === null || attestation.repository_commit !== currentCommit) {
+    return {
+      complete: false,
+      reasons: [
+        currentCommit === null
+          ? "current repository commit cannot be verified for explorer receipts"
+          : `explorer receipts attest ${attestation.repository_commit}, not current HEAD ${currentCommit}`,
+      ],
+      successful_scouts: 0,
+      successful_tracers: [],
+      unresolved_tracer_failures: [],
+      missing_concern_tracers: map?.concern_evidence?.concerns.map((concern) => concern.concern) ?? [],
+    };
+  }
+  return trackerFromAttestation(attestation).assess(map, options);
 }

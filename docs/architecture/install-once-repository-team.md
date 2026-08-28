@@ -62,14 +62,17 @@ The local installer performs these steps in order:
    isolation; running `agentify` in the target repository is the attestation
    that records maintainer-approved unsandboxed validation;
 7. initialize persistent identity and self-update policy;
-8. run a read-only structured repository audit;
+8. run a read-only structured repository audit and persist application-authored
+   scout/tracer receipts bound to the exact audited commit;
 9. if discovery did not verify a required command, refine validation from the
    audited validation surface and re-verify; when no repository command can be
    verified at all, install the Agentify-owned validation smoke
    (`.github/agentify/validation-smoke.mjs`: tracked-JSON validity, JavaScript
    syntax, committed-secret scan) and record
    the verified smoke command in the task policy;
-10. derive and persist specialists and procedures from repository evidence;
+10. normalize and validate the specialist portfolio, verify normalization is a
+    fixed point, then materialize that exact compiled portfolio and its
+    procedures from repository evidence;
 11. install the issue and learning workflows plus their trusted runtimes;
 12. write a repository-bound task policy with the attested manifest, command,
     and lockfile hashes;
@@ -90,6 +93,11 @@ and occurs before memory recovery, runtime repair, diagnostic map creation, or
 transaction setup. Repository text can reduce Agentify's authority but cannot
 expand it. A permissive policy or an unrelated warning that merely mentions AI
 does not trigger the blocker.
+
+Finalization independently requires a current explorer receipt attestation.
+Missing or stale receipts, failed tracers, and accepted concerns without a
+successful tracer abort the transaction and remove Agentify-managed persistent
+artifacts instead of leaving a partial team.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.
