@@ -364,6 +364,11 @@ function extractFinalAssistantText(
     return "(no report — sub-agent did not produce text)";
 }
 
+function reportConcernName(report: string): string | null {
+    const match = report.match(/(?:^|\n)\s*concern:\s*([^\r\n]+)/i);
+    return match?.[1]?.trim() || null;
+}
+
 function truncateReport(report: string): { report: string; truncated: boolean; report_length: number } {
     if (report.length <= MAX_REPORT_BYTES) {
         return { report, truncated: false, report_length: report.length };
@@ -789,6 +794,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     report_length,
                     report_truncated: truncated,
                     report_truncated_path: truncatedPath || null,
+                    report_concern: mode === "concern_tracer" ? reportConcernName(rawReport) : null,
                     reads: readCount,
                     bash: bashCount,
                     cost_usd: sessionCostUsd,
@@ -812,11 +818,21 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 content: [
                     {
                         type: "text",
-                        text: `Error: sub-agent (mode=${mode}) for ${params.target_path} failed: ${msg}`,
+                        text: `Error: sub-agent (mode=${mode}) for ${params.target_path} failed: ${params.focus?.trim() ? `focus=${JSON.stringify(params.focus.trim())}; ` : ""}${msg}`,
                     },
                 ],
                 isError: true,
-                details: undefined as unknown as Record<string, unknown>,
+                details: {
+                    mode,
+                    target_path: params.target_path,
+                    resolved_target_path: resolvedTarget,
+                    focus: params.focus ?? null,
+                    summary: params.summary ?? null,
+                    error_message: msg,
+                    failure_kind: /timeout|timed out/i.test(msg) ? "timeout" : "error",
+                    duration_ms: Date.now() - start,
+                    run_id: runId,
+                },
             };
         } finally {
             try {

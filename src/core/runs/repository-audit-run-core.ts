@@ -5,6 +5,7 @@ import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { AgentRuntimeResult } from "../types.ts";
 import { defaultConfigDir } from "../agentify-config.ts";
 import { AgentifyLog } from "../audit/log.ts";
+import { ExplorerReceiptTracker } from "../audit/explorer-receipts.ts";
 import { createGapDraftMap } from "../audit/map-draft.ts";
 import { DEFAULT_MAP_FILENAME, writeCanonicalMap } from "../audit/map-storage.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
@@ -152,7 +153,7 @@ function focusedAuditPrompt(): string {
     "A gap-marked map is already present; after initial direct reads, call write_map_delta with concrete repository evidence.",
     "Submit each dimension incrementally via write_map_delta (one or two dimensions per call) to keep tool payloads compact and complete.",
     "Close every supportable coverage dimension and leave unsupported claims as explicit gaps.",
-    "Before finishing, run concern_scout once and one concern_tracer per candidate, then record concern_evidence.concerns through write_map_delta; an honest empty list is valid only when the repository is too small to have distinct specialties and must be justified in open_questions and not_concerns. The audit is not complete without it.",
+    "Before finishing, obtain one successful concern_scout receipt and one successful concern_tracer receipt per accepted concern, then record concern_evidence.concerns through write_map_delta; an honest empty list is valid only when the repository is too small to have distinct specialties and must be justified in open_questions and not_concerns. A timeout remains unresolved and cannot justify not_concerns. The audit is not complete without these receipts.",
     "The map is internal operational evidence for specialists and task planning.",
     "Do not write application files, AGENTS.md, harness configuration, skills, prompts, workflows, dependencies, or prose artifacts.",
     "Do not create a generic agent surface. Repository-specific specialists and procedures are materialized later from validated evidence.",
@@ -168,7 +169,7 @@ function focusedAuditPrompt(): string {
 function specialistEvidenceTopUpPrompt(): string {
   return [
     "The canonical codebase map already closes every coverage dimension, but concern_evidence.concerns was never recorded.",
-    "Run concern_scout, trace each candidate with concern_tracer, then call write_map_delta with `delta: { concern_evidence: { concerns: [...], not_concerns: [...] } }`.",
+    "Run concern_scout successfully, trace each accepted candidate successfully with concern_tracer, then call write_map_delta with `delta: { concern_evidence: { concerns: [...], not_concerns: [...] } }`. A timeout remains unresolved and cannot justify not_concerns.",
     "Record one entry per concern a maintainer would recognize as its own body of knowledge: concern, one_line, covers, excludes, flows (each with at least two observed steps), touchpoints (path, symbol, role, line_range, centrality), invariants, pitfalls, entry_questions, validation, spans_subtrees, stability, recurrence, confidence, last_updated.",
     "Ground every path, type, and command in repository evidence you actually read. Do not invent candidates.",
     "An honest empty concerns list is valid only when the repository is too small to have distinct specialties; record that justification in open_questions in the same delta.",
@@ -178,7 +179,10 @@ function specialistEvidenceTopUpPrompt(): string {
 
 function buildAuditRecoveryPrompt(
   closure: { closed: string[]; unresolved: string[]; reasons: Record<string, string> },
-  options?: { specialistEvidenceMissing?: boolean },
+  options?: {
+    specialistEvidenceMissing?: boolean;
+    explorerReceiptReasons?: ReadonlyArray<string>;
+  },
 ): string {
   const lines: string[] = [
     "The repository audit has recorded progress but still needs structured closure for the following remaining dimension(s):",
@@ -196,9 +200,20 @@ function buildAuditRecoveryPrompt(
     lines.push("- **specialist_evidence**: every coverage dimension is closed, but `concern_evidence.concerns` has not been recorded.");
     lines.push("  Required fields: call `write_map_delta` with `delta: { concern_evidence: { concerns: [...], not_concerns: [...] } }` and OMIT the `dimension` parameter — 'specialist_evidence' is the name of the missing gate, not a value for `dimension`; concern evidence closes no coverage dimension. Record one entry per concern a maintainer would recognize as its own body of knowledge, each traced end to end through tracked files with per-touchpoint roles, flows, invariants, pitfalls, entry questions, stability, recurrence, and confidence. A concern is never a directory and two concerns may share files. An honest empty list is valid only when the repository is too small to have distinct specialties; record that justification in `open_questions` and `not_concerns`.");
   }
+  for (const reason of options?.explorerReceiptReasons ?? []) {
+    lines.push(`- **explorer_receipt**: ${reason}`);
+  }
   lines.push("");
   lines.push("Instructions:");
-  if (options?.specialistEvidenceMissing && closure.unresolved.length === 0) {
+  if (
+    closure.unresolved.length === 0
+    && (options?.explorerReceiptReasons?.length ?? 0) > 0
+  ) {
+    lines.push("1. Resolve the missing explorer receipts before claiming closure. Run concern_scout at the repository root when its receipt is missing, then run a focused concern_tracer for every named concern or failed focus.");
+    lines.push("2. A tracer timeout is unresolved evidence, not a valid not_concerns rejection. Retry with a narrower target_path and the same concern in focus until a successful structured report is returned.");
+    lines.push("3. Preserve every accepted concern and every verified ordered flow step. Call write_map_delta only when the successful reports change concern_evidence; otherwise stop after the required explorer calls.");
+    lines.push("4. Do not return prose instead of the required explorer calls.");
+  } else if (options?.specialistEvidenceMissing && closure.unresolved.length === 0) {
     lines.push("1. The only remaining work is specialist evidence. Do NOT re-close coverage dimensions; they are already covered.");
     lines.push("2. Run `spawn_explorer` with `mode: 'concern_scout'` against the repository root, then one `mode: 'concern_tracer'` per candidate with the concern name and seed paths as `focus`. Merge each report, then call `write_map_delta` with `delta: { concern_evidence: { concerns: [{ concern: 'authentication', one_line: 'Owns how a caller proves identity and how that proof is checked.', covers: 'Login, session issue and renewal, and every enforcement point.', excludes: 'Authorization, which decides what an identified caller may do.', flows: [{ name: 'user login', description: 'Credential submission through session establishment.', steps: [{ path: 'src/routes/login.ts', what_happens: 'Accepts the credential payload.' }, { path: 'src/auth/verify.ts', what_happens: 'Compares the hash and issues a session.' }] }], touchpoints: [{ path: 'src/auth/verify.ts', symbol: 'verifyCredential', role: 'The only credential comparison in the codebase.', line_range: [12, 61], centrality: 'core' }], invariants: [{ rule: 'Credentials are never logged.', why: 'Log shipping would export secrets.', reference: 'src/auth/verify.ts' }], pitfalls: [{ risk: 'Session renewal skips re-validation.', consequence: 'A revoked account keeps access until expiry.', reference: 'src/auth/session.ts' }], entry_questions: ['Does this change alter who is considered authenticated?'], validation: ['npm test -- tests/auth'], spans_subtrees: ['src', 'tests'], stability: 'high', recurrence: 'high', confidence: 'high', last_updated: '2026-01-01T00:00:00.000Z' }], not_concerns: [{ candidate: 'utils', why_rejected: 'A directory, not a specialty.' }] } }`, replacing every value with evidence you actually observed in THIS repository.");
     lines.push("3. If the repository is too small to have distinct specialties, call `write_map_delta` with `delta: { concern_evidence: { concerns: [], not_concerns: [{ candidate: '...', why_rejected: '...' }] }, open_questions: ['No specialist concern because ...'] }`.");
@@ -266,6 +281,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
   let spinnerStopped = false;
   let observedTurns = 0;
   let observedCost = 0;
+  const explorerReceipts = new ExplorerReceiptTracker();
   context.ui.status("agentify: auditing existing repository");
 
   try {
@@ -300,6 +316,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       },
       onEvent: (event) => {
         const eventType = (event as { type?: string }).type ?? "unknown";
+        explorerReceipts.observe(event);
         log.sessionEvent({ pi_event_type: eventType, event });
         if (eventType === "message_start" && (event as { message?: { role?: string } }).message?.role === "user") {
           log.recordTurnStart();
@@ -310,7 +327,11 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
           observedTurns += 1;
           if (typeof usage?.cost?.total === "number") observedCost += usage.cost.total;
           const currentMap = loadCanonicalMapAt(context.cwd, stateDir);
-          if (currentMap && assessAuditCompletion(currentMap, { cwd: context.cwd }).complete) {
+          if (
+            currentMap
+            && assessAuditCompletion(currentMap, { cwd: context.cwd }).complete
+            && explorerReceipts.assess(currentMap).complete
+          ) {
             controlledClosure = true;
             controller.abort();
           }
@@ -353,12 +374,17 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     let closure = map === null
       ? { closed: [] as string[], unresolved: [...COVERAGE_DIMENSIONS], reasons: {} as Record<string, string> }
       : assessCoverageClosure(map, { cwd: context.cwd });
+    let receiptAssessment = explorerReceipts.assess(map);
 
     const maxRecoveryPasses = 2;
     let recoveryPass = 0;
     while (
       map !== null
-      && (closure.unresolved.length > 0 || !specialistEvidenceRecorded(map))
+      && (
+        closure.unresolved.length > 0
+        || !specialistEvidenceRecorded(map)
+        || !receiptAssessment.complete
+      )
       && recoveryPass < maxRecoveryPasses
       && !context.signal?.aborted
       && !providerAuthFailure(runtimeResult.diagnostics)
@@ -374,7 +400,10 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       const recoveryForwardAbort = (): void => recoveryController.abort();
       if (context.signal?.aborted) recoveryForwardAbort();
       else context.signal?.addEventListener("abort", recoveryForwardAbort, { once: true });
-      const recoveryPrompt = buildAuditRecoveryPrompt(closure, { specialistEvidenceMissing });
+      const recoveryPrompt = buildAuditRecoveryPrompt(closure, {
+        specialistEvidenceMissing,
+        explorerReceiptReasons: receiptAssessment.reasons,
+      });
       try {
         await context.runtime.runSession({
           cwd: context.cwd,
@@ -398,6 +427,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
           maxOutputTokens: AUDIT_MAX_OUTPUT_TOKENS,
           onEvent: (event) => {
             const eventType = (event as { type?: string }).type ?? "unknown";
+            explorerReceipts.observe(event);
             log.sessionEvent({ pi_event_type: eventType, event });
             if (eventType === "message_start" && (event as { message?: { role?: string } }).message?.role === "user") {
               log.recordTurnStart();
@@ -408,7 +438,11 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
               observedTurns += 1;
               if (typeof usage?.cost?.total === "number") observedCost += usage.cost.total;
               const currentMap = loadCanonicalMapAt(context.cwd, stateDir);
-              if (currentMap && assessAuditCompletion(currentMap, { cwd: context.cwd }).complete) {
+              if (
+                currentMap
+                && assessAuditCompletion(currentMap, { cwd: context.cwd }).complete
+                && explorerReceipts.assess(currentMap).complete
+              ) {
                 controlledClosure = true;
                 recoveryController.abort();
               }
@@ -437,6 +471,10 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
                     && written.gap.length === 0
                     && (written.gap_warning?.length ?? 0) === 0
                     && written.specialist_evidence_recorded
+                    && (() => {
+                      const currentMap = loadCanonicalMapAt(context.cwd, stateDir);
+                      return currentMap !== null && explorerReceipts.assess(currentMap).complete;
+                    })()
                   ) {
                     controlledClosure = true;
                     recoveryController.abort();
@@ -454,13 +492,19 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       closure = map === null
         ? { closed: [] as string[], unresolved: [...COVERAGE_DIMENSIONS], reasons: {} as Record<string, string> }
         : assessCoverageClosure(map, { cwd: context.cwd });
+      receiptAssessment = explorerReceipts.assess(map);
     }
 
     const specialistRecorded = map !== null && specialistEvidenceRecorded(map);
+    const receiptsComplete = receiptAssessment.complete;
     const intentionallyStopped = (runtimeResult.aborted || controlledClosure)
       && closure.unresolved.length === 0
-      && specialistRecorded;
-    const success = map !== null && closure.unresolved.length === 0 && specialistRecorded;
+      && specialistRecorded
+      && receiptsComplete;
+    const success = map !== null
+      && closure.unresolved.length === 0
+      && specialistRecorded
+      && receiptsComplete;
     const status = success ? "success" : runtimeResult.aborted ? "aborted" : "partial";
     if (!deferLogCompletion) {
       log.sessionEnd({
@@ -493,6 +537,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
           + "an honest empty list is valid but the field must be present",
         );
       }
+      reasons.push(...receiptAssessment.reasons.map((reason) => `explorer receipt: ${reason}`));
       throw new Error(
         `repository audit did not reach structured closure (${closure.closed.length}/${COVERAGE_DIMENSIONS.length}); ${reasons.join("; ")}`,
       );

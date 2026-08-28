@@ -379,22 +379,21 @@ function verifyTouchpoints(
 }
 
 /**
- * Keep only flow steps whose path survived verification.
+ * Keep every ordered flow step whose path resolves to tracked repository bytes.
  *
- * A flow that loses a step is still worth keeping — it tells a specialist most
- * of the route — but a flow reduced below two steps is no longer a trace, so
- * it is dropped entirely rather than persisted as a single misleading hop.
+ * Flow paths are evidence in their own right. Requiring them to duplicate the
+ * touchpoint list silently shortened valid traces during materialization.
  */
 function verifyFlows(
   concern: Concern,
-  verifiedPaths: ReadonlySet<string>,
+  trackedEvidenceFiles: ReadonlySet<string> | undefined,
 ): SpecialistFlow[] {
   const flows: SpecialistFlow[] = [];
   for (const flow of concern.flows) {
     const steps = flow.steps
       .map((step) => ({ path: normalizePathCandidate(step.path), what_happens: step.what_happens }))
       .filter((step): step is { path: string; what_happens: string } =>
-        step.path !== null && verifiedPaths.has(step.path)
+        step.path !== null && isVerifiedFilePath(step.path, trackedEvidenceFiles)
       )
       .map((step) => ({ path: step.path, what_happens: boundedText(step.what_happens, 1_024) }));
     if (steps.length < 2) continue;
@@ -586,8 +585,7 @@ function buildSpecialistDefinitions(
       });
       continue;
     }
-    const verifiedPaths = new Set(kept.map((touchpoint) => touchpoint.path));
-    const flows = verifyFlows(concern, verifiedPaths);
+    const flows = verifyFlows(concern, trackedEvidenceFiles);
     if (
       sourceKind === "concern_evidence"
       && !kept.some((touchpoint) => touchpoint.centrality === "core")
@@ -598,9 +596,23 @@ function buildSpecialistDefinitions(
       });
       continue;
     }
+    const touchpoints: SpecialistTouchpoint[] = [...kept];
+    for (const flow of flows) {
+      for (const step of flow.steps) {
+        if (touchpoints.some((touchpoint) => touchpoint.path === step.path)) continue;
+        touchpoints.push({
+          path: step.path,
+          symbol: null,
+          role: boundedText(`Verified ordered flow step: ${step.what_happens}`, 1_024),
+          line_range: null,
+          centrality: "supporting",
+        });
+      }
+    }
+    touchpoints.sort((left, right) => left.path.localeCompare(right.path));
     verified.push({
       concern,
-      touchpoints: kept,
+      touchpoints,
       flows,
       droppedPaths: dropped,
     });

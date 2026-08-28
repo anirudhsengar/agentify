@@ -407,9 +407,63 @@ class ProgressiveRepairRuntime implements AgentRuntime {
         }
         fs.writeFileSync(destination, `${JSON.stringify(repaired, null, 2)}
 `);
+        options.onEvent?.({
+          type: "tool_execution_end",
+          toolName: "spawn_explorer",
+          resultText: "Sub-agent (mode=concern_scout) explored . in 1ms.\n\n## Report\n",
+          details: {
+            mode: "concern_scout",
+            target_path: ".",
+            focus: null,
+            report_concern: null,
+          },
+        } as never);
+        for (const concern of repaired.concern_evidence?.concerns ?? []) {
+          options.onEvent?.({
+            type: "tool_execution_end",
+            toolName: "spawn_explorer",
+            resultText: `Sub-agent (mode=concern_tracer) explored . in 1ms.\n\n## Report\nconcern: ${concern.concern}\n`,
+            details: {
+              mode: "concern_tracer",
+              target_path: ".",
+              focus: concern.concern,
+              report_concern: concern.concern,
+            },
+          } as never);
+        }
       }
     } else {
       this.baseCalls += 1;
+      const currentMapPath = path.join(
+        options.cwd,
+        options.spawnExplorerStateDir ?? ".agentify/runtime/audit",
+        "codebase_map.json",
+      );
+      const current = JSON.parse(fs.readFileSync(currentMapPath, "utf8")) as CodebaseMap;
+      options.onEvent?.({
+        type: "tool_execution_end",
+        toolName: "spawn_explorer",
+        resultText: "Sub-agent (mode=concern_scout) explored . in 1ms.\n\n## Report\n",
+        details: {
+          mode: "concern_scout",
+          target_path: ".",
+          focus: null,
+          report_concern: null,
+        },
+      } as never);
+      for (const concern of current.concern_evidence?.concerns ?? []) {
+        options.onEvent?.({
+          type: "tool_execution_end",
+          toolName: "spawn_explorer",
+          resultText: `Sub-agent (mode=concern_tracer) explored . in 1ms.\n\n## Report\nconcern: ${concern.concern}\n`,
+          details: {
+            mode: "concern_tracer",
+            target_path: ".",
+            focus: concern.concern,
+            report_concern: concern.concern,
+          },
+        } as never);
+      }
     }
     return { turns: 1, costUsd: 0, aborted: false };
   }

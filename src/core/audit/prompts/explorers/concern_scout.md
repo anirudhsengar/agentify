@@ -58,21 +58,25 @@ FOCUS: $2 # dynamic: optional focus hint (may be empty)
  document you can find. What does this repository *do*? Whose
  problem does it solve? Write that down for yourself before looking
  at any structure.
-2. Read the primary entry points. Follow what happens on the main
+2. Enumerate every tracked workspace/package manifest and read each package's
+ public entry point. Exported module roots and inline-tested implementation
+ files are behavioral surfaces even when tests are colocated or a package is
+ described as an extension, macro, adapter, plugin, or extra crate.
+3. Read the primary entry points. Follow what happens on the main
  path — the request, the invocation, the build, the run. You are
  looking for the *verbs* of this system, not its folders.
-3. Grep for the recurring nouns and verbs you saw. A concern almost
+4. Grep for the recurring nouns and verbs you saw. A concern almost
  always announces itself as a name that appears in many files that
  do not otherwise belong together. Names that appear in exactly one
  directory are usually modules, not concerns.
-4. Read the test names. Tests are the most honest statement of what a
+5. Read the test names. Tests are the most honest statement of what a
  repository believes it must not break, and test *names* are written
  in concern language even when directories are not.
-5. For each candidate concern, find one real entry point and one real
+6. For each candidate concern, find one real entry point and one real
  place the concern has an effect. If you cannot find both, it is not
  a concern yet — record it under `rejected` with that reason.
-6. Check each candidate against the tests in `## Expertise`.
-7. Run `## Report`. `STOP`.
+7. Check each candidate against the tests in `## Expertise`.
+8. Run `## Report`. `STOP`.
 
 ## Report
 
