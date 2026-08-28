@@ -82,6 +82,39 @@ test("a continuation at the exact aggregate call limit fails before another requ
   } as never, finalSession));
 });
 
+test("an explorer call cap reserves one aggregate call for the parent to consume its report", () => {
+  const budget = new AuditResourceBudget({ maxModelCalls: 3 });
+  const session = budget.beginSession();
+  budget.observeParentEvent({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      stopReason: "toolUse",
+      usage: { input: 1, output: 1, cost: { total: 0 } },
+    },
+  } as never, session);
+  assert.equal(
+    budget.remainingModelCalls(10),
+    1,
+    "one of the two remaining calls must stay reserved for the parent continuation",
+  );
+
+  const noCapacity = new AuditResourceBudget({ maxModelCalls: 2 });
+  const noCapacitySession = noCapacity.beginSession();
+  noCapacity.observeParentEvent({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      stopReason: "toolUse",
+      usage: { input: 1, output: 1, cost: { total: 0 } },
+    },
+  } as never, noCapacitySession);
+  assert.throws(
+    () => noCapacity.remainingModelCalls(10),
+    /model-call capacity.*parent continuation/i,
+  );
+});
+
 test("a continuation reserves enough aggregate input budget for the next observed context", () => {
   const budget = new AuditResourceBudget({ maxInputTokens: 15 });
   const session = budget.beginSession();
@@ -195,8 +228,8 @@ test("explorer usage contributes to the same call, token, and cost counters", ()
 
 test("persisted usage bounds same-commit continuation passes and counters", () => {
   const budget = new AuditResourceBudget({
-    maxModelCalls: 4,
-    maxTurns: 4,
+    maxModelCalls: 5,
+    maxTurns: 5,
     maxCoverageRecoveryPasses: 1,
     maxSemanticRepairPasses: 2,
   }, Date.now(), {
