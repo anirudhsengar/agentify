@@ -99,6 +99,13 @@ Missing or stale receipts, failed tracers, and accepted concerns without a
 successful tracer abort the transaction and remove Agentify-managed persistent
 artifacts instead of leaving a partial team.
 
+The installation transaction is captured before final compilation can persist
+a normalized map. The specialist synchronizer then independently requires that
+the canonical map is complete and already recompiles to an idempotent fixed
+point before it changes identities, memory, or procedures. Compiler write,
+materialization, portfolio-count, structural-canary, and later readiness
+failures therefore share the same rollback boundary.
+
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30
 minutes, three semantic repair passes, one coverage recovery, 96 model calls and

@@ -78,49 +78,46 @@ function structuralFailure(report: OneTimeInstallationReport): string | null {
 export function finalizeOneTimeInstallation(
   input: FinalizeOneTimeInstallationInput,
 ): OneTimeInstallationReport {
-  const map = loadCanonicalMapAt(input.cwd, AUDIT_STATE_RELATIVE_DIR);
-  let expectedSpecialists: number | null = null;
-
-  if (map === null) {
-    if (!auditIntentionallyDeferred(input)) {
-      rollbackPendingInstallation(input.cwd);
-      throw new Error(
-        "cannot finalize Agentify without a canonical codebase map that passed specialist compilation",
-      );
-    }
-  } else {
-    const compilation = compileSpecialistEvidence(map, { cwd: input.cwd });
-    if (compilation.map !== map) {
-      writeCanonicalMap(input.cwd, compilation.map, {
-        stateDir: AUDIT_STATE_RELATIVE_DIR,
-        mapFilename: DEFAULT_MAP_FILENAME,
-      });
-    }
-    if (!compilation.complete) {
-      rollbackPendingInstallation(input.cwd);
-      throw new Error(
-        "repository specialist compilation failed before installation: "
-          + compilation.reasons.join("; "),
-      );
-    }
-    const receiptAttestation = assessExplorerReceiptAttestation(
-      compilation.map,
-      input.cwd,
-    );
-    if (!receiptAttestation.complete) {
-      rollbackPendingInstallation(input.cwd);
-      throw new Error(
-        "repository specialist compilation failed before installation: explorer attestation: "
-          + receiptAttestation.reasons.join("; "),
-      );
-    }
-    if (compilation.assessment.source === "concern_evidence") {
-      expectedSpecialists = compilation.assessment.accepted_concerns.length;
-    }
-  }
-
   beginPendingInstallation(input.cwd);
   try {
+    const map = loadCanonicalMapAt(input.cwd, AUDIT_STATE_RELATIVE_DIR);
+    let expectedSpecialists: number | null = null;
+
+    if (map === null) {
+      if (!auditIntentionallyDeferred(input)) {
+        throw new Error(
+          "cannot finalize Agentify without a canonical codebase map that passed specialist compilation",
+        );
+      }
+    } else {
+      const compilation = compileSpecialistEvidence(map, { cwd: input.cwd });
+      if (compilation.map !== map) {
+        writeCanonicalMap(input.cwd, compilation.map, {
+          stateDir: AUDIT_STATE_RELATIVE_DIR,
+          mapFilename: DEFAULT_MAP_FILENAME,
+        });
+      }
+      if (!compilation.complete) {
+        throw new Error(
+          "repository specialist compilation failed before installation: "
+            + compilation.reasons.join("; "),
+        );
+      }
+      const receiptAttestation = assessExplorerReceiptAttestation(
+        compilation.map,
+        input.cwd,
+      );
+      if (!receiptAttestation.complete) {
+        throw new Error(
+          "repository specialist compilation failed before installation: explorer attestation: "
+            + receiptAttestation.reasons.join("; "),
+        );
+      }
+      if (compilation.assessment.source === "concern_evidence") {
+        expectedSpecialists = compilation.assessment.accepted_concerns.length;
+      }
+    }
+
     const report = finalizeBaseInstallation(input);
     const mismatch = expectedSpecialists !== null
       && report.specialists_installed !== expectedSpecialists;

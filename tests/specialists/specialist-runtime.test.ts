@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
+import { compileSpecialistEvidence } from "../../src/core/audit/schema.ts";
 import { initializeTeamMemoryStore } from "../../src/core/memory/index.ts";
 import {
   buildSpecialistEvidenceReference,
@@ -22,6 +23,16 @@ function write(cwd: string, relativePath: string, content = `${relativePath}\n`)
   const destination = path.join(cwd, relativePath);
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.writeFileSync(destination, content);
+}
+
+function writeCompiledMap(cwd: string): void {
+  const compilation = compileSpecialistEvidence(makeSpecialistFixtureMap(), { cwd });
+  assert.equal(compilation.complete, true, compilation.reasons.join("; "));
+  write(
+    cwd,
+    ".agentify/runtime/audit/codebase_map.json",
+    `${JSON.stringify(compilation.map, null, 2)}\n`,
+  );
 }
 
 test("runtime synchronization consumes the canonical map only after memory bootstrap", () => {
@@ -63,11 +74,7 @@ test("runtime synchronization consumes the canonical map only after memory boots
       evidence: [evidence],
       options: { now: () => new Date(observedAt) },
     });
-    write(
-      cwd,
-      ".agentify/runtime/audit/codebase_map.json",
-      `${JSON.stringify(makeSpecialistFixtureMap(), null, 2)}\n`,
-    );
+    writeCompiledMap(cwd);
 
     const synchronized = synchronizeRepositorySpecialists(cwd);
     assert.equal(synchronized.status, "synchronized");
@@ -145,7 +152,7 @@ test("runtime refuses an uncompiled canonical map without changing the installed
       options: { now: () => new Date(observedAt) },
     });
     const mapPath = path.join(cwd, ".agentify/runtime/audit/codebase_map.json");
-    write(cwd, ".agentify/runtime/audit/codebase_map.json", `${JSON.stringify(makeSpecialistFixtureMap(), null, 2)}\n`);
+    writeCompiledMap(cwd);
     const first = synchronizeRepositorySpecialists(cwd);
     assert.equal(first.status, "synchronized");
     const specialistPath = path.join(cwd, ".agentify/agents/specialists/specialist-billing.json");

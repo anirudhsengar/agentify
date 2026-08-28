@@ -46,6 +46,12 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Specialist/procedure synchronization now refuses canonical evidence that is
+  incomplete or not already at the compiler's idempotent fixed point, before
+  changing persistent memory. Installation transaction capture also begins
+  before any normalized-map write, so compiler, output-cap, materialization,
+  and canary failures restore the same pre-installation state.
+
 - Repository audit now enforces one configurable aggregate resource budget
   across coverage, recovery, semantic repair, and explorer sub-sessions. Finite
   defaults bound elapsed time, calls, turns, tokens, provider-reported cost,
