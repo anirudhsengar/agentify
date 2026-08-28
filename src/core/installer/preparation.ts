@@ -9,6 +9,7 @@ import {
 } from "./finalization.ts";
 import {
   beginPendingInstallation,
+  retainDiagnosticProgressOnRollback,
   rollbackPendingInstallation,
 } from "./installation-transaction.ts";
 
@@ -76,6 +77,7 @@ export function prepareOneTimeInstallationState(
   try {
     const diagnosticMap = resumableDiagnosticMapBytes(cwd);
     if (diagnosticMap !== null) {
+      retainDiagnosticProgressOnRollback(cwd);
       fs.rmSync(path.join(cwd, ".agentify"), { recursive: true });
     }
     prepareBaseInstallationState(cwd, preflight);

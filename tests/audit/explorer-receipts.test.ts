@@ -173,7 +173,10 @@ test("a timed-out tracer remains unresolved instead of becoming a rejection", ()
     reportConcern: "Procedural macro derives and diagnostics",
     targetPath: "axum-macros",
   }));
-  const complete = tracker.assess(mapWithConcerns(), { requiredConcerns: [] });
+  const complete = tracker.assess(
+    mapWithConcerns("Procedural macro derives and diagnostics"),
+    { requiredConcerns: [] },
+  );
   assert.equal(complete.complete, true, complete.reasons.join("; "));
 });
 

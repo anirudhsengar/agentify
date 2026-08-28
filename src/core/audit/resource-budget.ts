@@ -233,7 +233,10 @@ export class AuditResourceBudget {
     this.expireSession(session);
     const reportedCalls = result.diagnostics?.provider_requests ?? result.turns;
     const additionalCalls = Math.max(0, reportedCalls - session.calls);
-    const additionalTurns = Math.max(0, result.turns - session.turns);
+    // Runtime `turns` counts delivered user/tool-result messages in some
+    // transports. Provider requests are the authoritative reconciliation
+    // source for both billable calls and provider turns.
+    const additionalTurns = Math.max(0, reportedCalls - session.turns);
     const reportedCost = result.costUsd ?? 0;
     const additionalCost = Math.max(0, reportedCost - session.costUsd);
     this.#modelCalls += additionalCalls;

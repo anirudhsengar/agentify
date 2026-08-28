@@ -268,10 +268,25 @@ export class ExplorerReceiptTracker {
     const rejectedCandidates = map?.concern_evidence?.not_concerns
       .filter((candidate) => isSubstantiveConcernRejection(candidate.why_rejected))
       .map((candidate) => candidate.candidate) ?? [];
+    const persistedConcerns = map?.concern_evidence?.concerns
+      .map((concern) => concern.concern) ?? [];
+    const persistedSuccessfulTracers = successfulTracers.filter((receipt) =>
+      persistedConcerns.some((concern) =>
+        semanticallyRelated(concern, receiptIdentity(receipt))
+      )
+    );
+    const unpersistedSuccessfulTracers = successfulTracers.filter((receipt) =>
+      !persistedSuccessfulTracers.includes(receipt)
+      && !rejectedCandidates.some((candidate) =>
+        semanticallyRelated(candidate, receiptIdentity(receipt))
+      )
+    );
     const unresolvedScoutProposals = [...new Set(
       scouts.flatMap((scout) => scout.proposedConcerns),
     )].filter((proposal) =>
-      !successfulTracers.some((receipt) => semanticallyRelated(proposal, receiptIdentity(receipt)))
+      !persistedSuccessfulTracers.some((receipt) =>
+        semanticallyRelated(proposal, receiptIdentity(receipt))
+      )
       && !rejectedCandidates.some((candidate) => semanticallyRelated(proposal, candidate))
     );
 
@@ -287,6 +302,11 @@ export class ExplorerReceiptTracker {
         `concern_tracer for "${failureDescription(failure)}" failed and was not successfully retraced`,
       );
     }
+    for (const receipt of unpersistedSuccessfulTracers) {
+      reasons.push(
+        `successful concern_tracer receipt for "${receiptIdentity(receipt)}" has no matching persisted concern evidence; retrace it narrowly and checkpoint the complete concern body`,
+      );
+    }
     for (const proposal of unresolvedScoutProposals) {
       reasons.push(`scout proposal "${proposal}" was neither successfully traced nor substantively rejected`);
     }
@@ -295,7 +315,7 @@ export class ExplorerReceiptTracker {
       complete: reasons.length === 0,
       reasons,
       successful_scouts: scouts.length,
-      successful_tracers: successfulTracers.map(receiptIdentity),
+      successful_tracers: persistedSuccessfulTracers.map(receiptIdentity),
       unresolved_tracer_failures: unresolvedFailures.map(failureDescription),
       missing_concern_tracers: missingConcernTracers,
       unresolved_scout_proposals: unresolvedScoutProposals,

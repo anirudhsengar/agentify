@@ -145,6 +145,11 @@ application receipt ledger matches current HEAD. Memory initialization occurs
 against an empty root and the exact map bytes are restored inside the same
 transaction. Any extra path, stale commit, or missing attestation remains
 unrecognized user state and fails closed.
+If a bounded continuation fails, rollback retains the newest map from that
+transaction rather than restoring its older diagnostic snapshot. A successful
+tracer receipt without a matching persisted concern body remains an explicit
+retrace obligation. Aggregate provider turns are counted from assistant
+provider responses, not user or tool-result transport messages.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.

@@ -154,7 +154,10 @@ wording cannot close an obligation. Application timers enforce parent-session
 deadlines, and an interrupted CLI rolls its pending installation back before
 exiting. A later invocation may resume only the exact diagnostic-map-only
 topology with a current-HEAD application receipt ledger; extra, stale, or
-unattested state is never claimed.
+unattested state is never claimed. Each bounded continuation retains its newest
+diagnostic checkpoint on failure, while operational installation state is
+rolled back. A successful tracer is reusable only after its complete concern
+body has also been checkpointed.
 
 ### 2. Run the one-time installer
 

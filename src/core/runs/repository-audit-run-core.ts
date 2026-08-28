@@ -163,7 +163,7 @@ function focusedAuditPrompt(persistedReceiptReasons: ReadonlyArray<string> = [])
   ];
   if (persistedReceiptReasons.length > 0) {
     prompt.push(
-      "Application-attested explorer work from a prior run on this exact HEAD is already present. Do not rerun a successful scout or successful concern tracer. Resolve only these remaining receipt obligations, checkpointing each result: "
+      "Application-attested explorer work from a prior run on this exact HEAD is already present. Do not rerun a successful scout or a successful concern tracer whose matching concern body is already persisted. A successful receipt named below without its matching persisted concern body must be retraced narrowly and checkpointed immediately. Resolve only these remaining receipt obligations: "
         + persistedReceiptReasons.join("; "),
     );
   }

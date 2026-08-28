@@ -84,7 +84,10 @@ All notable changes to Agentify are documented here.
   installation state back before the CLI exits.
   A subsequent invocation can resume the exact diagnostic-only map when its
   receipt ledger is bound to current HEAD; unattested or extra state remains
-  user-owned and blocked.
+  user-owned and blocked. Failed bounded continuations retain their newest
+  diagnostic checkpoint, and a tracer receipt cannot satisfy closure until its
+  matching concern body is persisted. Provider-turn budgets reconcile against
+  provider requests rather than transport-level message counts.
 
 - Explorer success is now persisted as an application-authored receipt ledger
   bound to the audited repository commit. Model map writes cannot create or

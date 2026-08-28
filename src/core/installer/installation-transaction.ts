@@ -28,6 +28,7 @@ interface PendingInstallation {
   snapshotRoot: string;
   entries: SnapshotEntry[];
   freshAgentifyRoot: boolean;
+  retainDiagnosticProgress: boolean;
 }
 
 const pendingInstallations = new Map<string, PendingInstallation>();
@@ -104,11 +105,25 @@ export function beginPendingInstallation(cwd: string): void {
       snapshotRoot,
       entries,
       freshAgentifyRoot: !fs.existsSync(path.join(root, ".agentify")),
+      retainDiagnosticProgress: false,
     });
   } catch (error) {
     removeSnapshot(snapshotRoot);
     throw error;
   }
+}
+
+/**
+ * Allow a validated diagnostic-only continuation to retain its newest map on
+ * rollback. Callers must establish the exact current-HEAD attested topology
+ * before enabling this transaction capability.
+ */
+export function retainDiagnosticProgressOnRollback(cwd: string): void {
+  const pending = pendingInstallations.get(normalizedRoot(cwd));
+  if (pending === undefined) {
+    throw new Error("cannot retain diagnostic progress without a pending installation");
+  }
+  pending.retainDiagnosticProgress = true;
 }
 
 function restoreEntry(pending: PendingInstallation, entry: SnapshotEntry): void {
@@ -146,9 +161,17 @@ export function rollbackPendingInstallation(cwd: string): boolean {
     root,
     ...`${AUDIT_STATE_RELATIVE_DIR}/codebase_map.json`.split("/"),
   );
-  const diagnosticMap = pending.freshAgentifyRoot && fs.existsSync(diagnosticMapPath)
-    ? fs.readFileSync(diagnosticMapPath)
-    : null;
+  let diagnosticMap: Buffer | null = null;
+  if (pending.freshAgentifyRoot || pending.retainDiagnosticProgress) {
+    try {
+      const stat = fs.lstatSync(diagnosticMapPath);
+      if (!stat.isSymbolicLink() && stat.isFile()) {
+        diagnosticMap = fs.readFileSync(diagnosticMapPath);
+      }
+    } catch {
+      diagnosticMap = null;
+    }
+  }
 
   try {
     for (const relativePath of MANAGED_INSTALLATION_PATHS) {
