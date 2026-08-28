@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import { defaultConfigDir } from "../agentify-config.ts";
 import { AgentifyLog } from "../audit/log.ts";
+import { ExplorerReceiptTracker } from "../audit/explorer-receipts.ts";
 import { DEFAULT_MAP_FILENAME, writeCanonicalMap } from "../audit/map-storage.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
 import { loadBuilderPrompt } from "../audit/prompt.ts";
@@ -49,7 +50,11 @@ function rotatingWindow<T>(values: readonly T[], limit: number, pass: number): T
   return result;
 }
 
-function repairPrompt(assessment: SpecialistEvidenceAssessment, pass: number): string {
+function repairPrompt(
+  assessment: SpecialistEvidenceAssessment,
+  pass: number,
+  explorerReceiptReasons: ReadonlyArray<string> = [],
+): string {
   const needsBroadDiscovery = pass === 1 && (
     assessment.accepted_concerns.length === 0
     || assessment.reasons.some((reason) => /thin specialist portfolio/i.test(reason))
@@ -85,6 +90,7 @@ function repairPrompt(assessment: SpecialistEvidenceAssessment, pass: number): s
     `Current tracked-path batch: ${uncovered}.`,
     `Current local implementation/test-cluster batch: ${uncoveredClusters}.`,
     `Concern candidates rejected by trusted evidence binding: ${rejected}.`,
+    `Explorer receipt failures to resolve: ${explorerReceiptReasons.join("; ") || "none"}.`,
     needsBroadDiscovery
       ? "Run concern_scout against the repository root once, then one concern_tracer for each retained candidate."
       : "Do not rerun a broad concern scout. Repair only the named tracked gaps and rejected candidates, preserving accepted concerns.",
@@ -94,6 +100,8 @@ function repairPrompt(assessment: SpecialistEvidenceAssessment, pass: number): s
     "Implementation/test clusters are path-local. Trace both sides when they form a cohesive recurring contract; otherwise attach them to an existing concern or explicitly reject the exact paths.",
     "Treat a concern's excludes statement as negative evidence. Never attach a path or cluster to a concern that excludes that behavior; retain or create the adjacent concern, or reject the exact path with repository-specific evidence.",
     "A high-signal implementation shared by multiple concerns is not closed by supporting mentions. Record one explicit core touchpoint under the concern whose verified flow owns the behavior, or create a distinct concern.",
+    "Workspace package facades, exported module roots, and inline-tested implementation files are behavioral obligations even when no separate test file exists.",
+    "A concern_tracer timeout is unresolved evidence, not grounds for not_concerns. Retry a narrower target with the same focus until a successful report is returned.",
     "Shared files must appear under every concern they serve with the role they play in that concern; overlap is expected and must never cause merging.",
     "Do not include .agentify/** or .github/agentify/** as repository architecture, specialists, or application evidence.",
     "Replace concern_evidence atomically through write_map_delta, preserving accepted concerns and recording rejected candidates in not_concerns. Omit the dimension parameter because concern evidence closes no D1-D10 dimension.",
@@ -196,12 +204,31 @@ async function repairSpecialistPortfolio(
   let turns = 0;
   let costUsd: number | null = null;
   let stalledPasses = 0;
+  const initialMap = loadCanonicalMapAt(context.cwd, stateDir);
+  if (initialMap === null) throw new Error("canonical codebase map disappeared before specialist repair");
+  const initialAssessment = assessSpecialistEvidence(initialMap, { cwd: context.cwd });
+  const baselineConcerns = new Set(
+    initialAssessment.accepted_concerns.map((concern) => concern.trim().toLowerCase()),
+  );
+  const requireScout = initialAssessment.accepted_concerns.length === 0
+    || initialAssessment.reasons.some((reason) => /thin specialist portfolio/i.test(reason));
+  const explorerReceipts = new ExplorerReceiptTracker();
+  const receiptAssessmentFor = (
+    map: CodebaseMap,
+    assessment: SpecialistEvidenceAssessment,
+  ) => explorerReceipts.assess(map, {
+    requireScout,
+    requiredConcerns: assessment.accepted_concerns.filter((concern) =>
+      !baselineConcerns.has(concern.trim().toLowerCase())
+    ),
+  });
 
   for (let pass = 1; pass <= MAX_REPAIR_PASSES; pass += 1) {
     const map = loadCanonicalMapAt(context.cwd, stateDir);
     if (map === null) throw new Error("canonical codebase map disappeared before specialist repair");
     const assessment = assessSpecialistEvidence(map, { cwd: context.cwd });
-    if (assessment.complete) {
+    const receiptAssessment = receiptAssessmentFor(map, assessment);
+    if (assessment.complete && receiptAssessment.complete) {
       persistTrustedConcernProjection(context, map, assessment);
       return { turns, cost_usd: costUsd };
     }
@@ -214,7 +241,7 @@ async function repairSpecialistPortfolio(
       configDir: defaultConfigDir(),
       config: context.config,
       systemPrompt,
-      userPrompt: repairPrompt(assessment, pass),
+      userPrompt: repairPrompt(assessment, pass, receiptAssessment.reasons),
       tools: [...REPAIR_TOOL_ALLOWLIST],
       executionPolicy: createReadOnlyExecutionPolicy({
         cwd: context.cwd,
@@ -240,7 +267,10 @@ async function repairSpecialistPortfolio(
             && !assessSpecialistEvidence(current, { cwd: context.cwd }).complete;
         },
       },
-      onEvent: (event) => logRepairEvent(log, event),
+      onEvent: (event) => {
+        explorerReceipts.observe(event);
+        logRepairEvent(log, event);
+      },
     });
     turns += result.turns;
     costUsd = addCost(costUsd, result.costUsd);
@@ -249,11 +279,21 @@ async function repairSpecialistPortfolio(
     const updatedAssessment = updatedMap === null
       ? null
       : assessSpecialistEvidence(updatedMap, { cwd: context.cwd });
-    if (updatedAssessment?.complete) {
+    const updatedReceiptAssessment = updatedMap === null || updatedAssessment === null
+      ? null
+      : receiptAssessmentFor(updatedMap, updatedAssessment);
+    if (updatedAssessment?.complete && updatedReceiptAssessment?.complete) {
       persistTrustedConcernProjection(context, updatedMap!, updatedAssessment);
       return { turns, cost_usd: costUsd };
     }
-    if (updatedAssessment !== null && repairImproved(assessment, updatedAssessment)) {
+    if (
+      updatedAssessment !== null
+      && (
+        repairImproved(assessment, updatedAssessment)
+        || (updatedReceiptAssessment?.reasons.length ?? Number.POSITIVE_INFINITY)
+          < receiptAssessment.reasons.length
+      )
+    ) {
       stalledPasses = 0;
     } else {
       stalledPasses += 1;
@@ -265,13 +305,24 @@ async function repairSpecialistPortfolio(
   const finalAssessment = finalMap === null
     ? null
     : assessSpecialistEvidence(finalMap, { cwd: context.cwd });
-  if (finalMap !== null && finalAssessment !== null && finalAssessment.complete) {
+  const finalReceiptAssessment = finalMap === null || finalAssessment === null
+    ? null
+    : receiptAssessmentFor(finalMap, finalAssessment);
+  if (
+    finalMap !== null
+    && finalAssessment !== null
+    && finalAssessment.complete
+    && finalReceiptAssessment?.complete
+  ) {
     persistTrustedConcernProjection(context, finalMap, finalAssessment);
     return { turns, cost_usd: costUsd };
   }
   throw new Error(
     "repository specialist discovery did not reach semantic closure: "
-      + (finalAssessment?.reasons.slice(0, 12).join("; ") ?? "canonical map is unavailable"),
+      + [
+        ...(finalAssessment?.reasons.slice(0, 12) ?? ["canonical map is unavailable"]),
+        ...(finalReceiptAssessment?.reasons ?? []),
+      ].join("; "),
   );
 }
 

@@ -100,6 +100,7 @@ export interface RepositoryBehaviorCluster {
   cluster_key: string;
   implementation_paths: string[];
   test_paths: string[];
+  kind?: "workspace-public-surface" | "inline-tested-surface";
 }
 
 export interface RepositoryConcernAttachment {
@@ -356,8 +357,169 @@ function eligibleImplementationPath(repositoryPath: string): boolean {
   );
 }
 
+const PACKAGE_MANIFEST_NAMES = new Set([
+  "build.gradle",
+  "build.gradle.kts",
+  "cargo.toml",
+  "gemfile",
+  "go.mod",
+  "package.json",
+  "pom.xml",
+  "pyproject.toml",
+]);
+
+const PUBLIC_ENTRY_BASENAMES = new Set([
+  "__init__.py",
+  "index.js",
+  "index.jsx",
+  "index.ts",
+  "index.tsx",
+  "lib.js",
+  "lib.rs",
+  "lib.ts",
+  "main.go",
+  "main.js",
+  "main.rs",
+  "main.ts",
+]);
+
+const PACKAGE_ROOT_EXCLUSIONS = new Set([
+  ...DOCUMENTATION_DIRECTORY_NAMES,
+  ...GENERATED_DIRECTORY_NAMES,
+  ...TEST_DIRECTORY_NAMES,
+  "example",
+  "examples",
+  "fixture",
+  "fixtures",
+]);
+
+function packageRootForManifest(repositoryPath: string): string {
+  const directory = path.posix.dirname(repositoryPath);
+  return directory === "." ? "" : directory;
+}
+
+function packageRootAllowed(packageRoot: string): boolean {
+  return !packageRoot.split("/").filter(Boolean)
+    .some((segment) => PACKAGE_ROOT_EXCLUSIONS.has(segment.toLowerCase()));
+}
+
+function trackedPath(packageRoot: string, relativePath: string): string {
+  return packageRoot.length === 0 ? relativePath : `${packageRoot}/${relativePath}`;
+}
+
+function repositoryTextFile(cwd: string, repositoryPath: string): string | null {
+  const root = path.resolve(cwd);
+  const absolute = path.resolve(root, ...repositoryPath.split("/"));
+  if (absolute !== root && !absolute.startsWith(`${root}${path.sep}`)) return null;
+  try {
+    const stat = fs.statSync(absolute);
+    if (!stat.isFile() || stat.size > 2 * 1024 * 1024) return null;
+    return fs.readFileSync(absolute, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+function rustPublicModulePaths(
+  packageRoot: string,
+  crateRoot: string,
+  trackedFiles: ReadonlySet<string>,
+  cwd: string,
+): string[] {
+  const content = repositoryTextFile(cwd, crateRoot);
+  if (content === null) return [];
+  const sourceRoot = trackedPath(packageRoot, "src");
+  const paths = new Set<string>();
+  const declaration = /^\s*pub\s+mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/gm;
+  for (const match of content.matchAll(declaration)) {
+    const moduleName = match[1];
+    if (moduleName === undefined) continue;
+    for (const candidate of [
+      `${sourceRoot}/${moduleName}.rs`,
+      `${sourceRoot}/${moduleName}/mod.rs`,
+    ]) {
+      if (trackedFiles.has(candidate)) paths.add(candidate);
+    }
+  }
+  return [...paths].sort((left, right) => left.localeCompare(right));
+}
+
+function containsInlineTests(cwd: string, repositoryPath: string): boolean {
+  if (!repositoryPath.endsWith(".rs") || isTestRepositoryPath(repositoryPath)) return false;
+  const content = repositoryTextFile(cwd, repositoryPath);
+  return content !== null && (
+    /#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]/.test(content)
+    || /(?:^|\n)\s*mod\s+tests\s*\{/.test(content)
+  );
+}
+
+function discoverPackageSurfaceClusters(
+  trackedFiles: ReadonlySet<string>,
+  cwd: string | undefined,
+): RepositoryBehaviorCluster[] {
+  if (cwd === undefined) return [];
+  const clusters: RepositoryBehaviorCluster[] = [];
+  const packageRoots = [...trackedFiles]
+    .filter((repositoryPath) =>
+      PACKAGE_MANIFEST_NAMES.has(path.posix.basename(repositoryPath).toLowerCase())
+    )
+    .map(packageRootForManifest)
+    .filter(packageRootAllowed)
+    .sort((left, right) => left.localeCompare(right));
+
+  for (const packageRoot of [...new Set(packageRoots)]) {
+    const publicPaths = new Set<string>();
+    const sourcePrefix = trackedPath(packageRoot, "src/");
+    for (const repositoryPath of trackedFiles) {
+      if (!repositoryPath.startsWith(sourcePrefix)) continue;
+      const relative = repositoryPath.slice(sourcePrefix.length);
+      if (!relative.includes("/") && PUBLIC_ENTRY_BASENAMES.has(relative.toLowerCase())) {
+        publicPaths.add(repositoryPath);
+      }
+    }
+
+    for (const crateRoot of [...publicPaths].filter((repositoryPath) =>
+      repositoryPath.endsWith("/src/lib.rs") || repositoryPath === "src/lib.rs"
+    )) {
+      for (const modulePath of rustPublicModulePaths(
+        packageRoot,
+        crateRoot,
+        trackedFiles,
+        cwd,
+      )) {
+        publicPaths.add(modulePath);
+      }
+    }
+
+    for (const repositoryPath of [...publicPaths].sort((left, right) =>
+      left.localeCompare(right)
+    )) {
+      clusters.push({
+        cluster_key: `public-surface@${repositoryPath}`,
+        implementation_paths: [repositoryPath],
+        test_paths: containsInlineTests(cwd, repositoryPath) ? [repositoryPath] : [],
+        kind: "workspace-public-surface",
+      });
+    }
+
+    for (const repositoryPath of trackedFiles) {
+      if (!repositoryPath.startsWith(sourcePrefix) || publicPaths.has(repositoryPath)) continue;
+      if (!containsInlineTests(cwd, repositoryPath)) continue;
+      clusters.push({
+        cluster_key: `inline-tests@${repositoryPath}`,
+        implementation_paths: [repositoryPath],
+        test_paths: [repositoryPath],
+        kind: "inline-tested-surface",
+      });
+    }
+  }
+
+  return clusters.sort((left, right) => left.cluster_key.localeCompare(right.cluster_key));
+}
+
 function discoverRepositoryBehaviorClusters(
   trackedFiles: ReadonlySet<string> | undefined,
+  cwd?: string,
 ): RepositoryBehaviorCluster[] {
   if (trackedFiles === undefined) return [];
   const implementations = new Map<string, string[]>();
@@ -412,7 +574,25 @@ function discoverRepositoryBehaviorClusters(
       });
     }
   }
-  return clusters.sort((left, right) => left.cluster_key.localeCompare(right.cluster_key));
+  const combined = [
+    ...clusters,
+    ...discoverPackageSurfaceClusters(trackedFiles, cwd),
+  ];
+  const seen = new Set<string>();
+  return combined
+    .filter((cluster) => {
+      const key = [
+        cluster.kind ?? "source-test-mirror",
+        cluster.cluster_key,
+        ...cluster.implementation_paths,
+        "|",
+        ...cluster.test_paths,
+      ].join("\0");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((left, right) => left.cluster_key.localeCompare(right.cluster_key));
 }
 
 function collectPathCandidates(map: CodebaseMap): unknown[] {
@@ -928,11 +1108,15 @@ export function assessSpecialistEvidence(
   const reasons: string[] = [];
   const repository = createRepositoryEvidenceContext(map, options?.cwd);
   const resolvePath = repository.resolvePath;
-  const repositoryClusters = discoverRepositoryBehaviorClusters(repository.trackedFiles);
+  const repositoryClusters = discoverRepositoryBehaviorClusters(
+    repository.trackedFiles,
+    options?.cwd,
+  );
   const clusterPaths = repositoryClusters.flatMap((cluster) => [
     ...cluster.implementation_paths,
     ...cluster.test_paths,
   ]);
+  const clusterObligationPaths = new Set(clusterPaths);
   const structuralHighSignal = collectHighSignalPaths(map, resolvePath);
   const highSignal = [...new Set([
     ...structuralHighSignal,
@@ -1002,7 +1186,7 @@ export function assessSpecialistEvidence(
   const uncovered = highSignal.filter((candidate) =>
     !coveredSet.has(candidate)
     && !exemptedSet.has(candidate)
-    && !isGenericPlumbing(candidate)
+    && (!isGenericPlumbing(candidate) || clusterObligationPaths.has(candidate))
   );
   const uncoveredSet = new Set(uncovered);
   const uncoveredClusters = repositoryClusters.filter((cluster) =>
@@ -1078,7 +1262,7 @@ export function assessSpecialistEvidence(
       return `${cluster.cluster_key} [${paths.slice(0, 4).join(", ")}${paths.length > 4 ? ", …" : ""}]`;
     }).join("; ");
     reasons.push(
-      `repository implementation/test clusters are neither covered by an accepted concern nor explicitly rejected: ${summary}${uncoveredClusters.length > 8 ? "; …" : ""}`,
+      `repository implementation/test clusters and public-surface clusters are neither covered by an accepted concern nor explicitly rejected: ${summary}${uncoveredClusters.length > 8 ? "; …" : ""}`,
     );
   }
   const clusterPathSet = new Set(clusterPaths);

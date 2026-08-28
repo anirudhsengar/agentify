@@ -16,6 +16,7 @@ import {
 const COMMIT = "a".repeat(40);
 const INVALID_DIRECTIVES = [
   "add a regression test under tests/",
+  "add or extend a regression test under the affected crate",
   "uv lock if dependencies changed",
   "uv run --locked --no-default-groups --group dev tox run -e typing for typed surface",
 ];

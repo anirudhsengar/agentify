@@ -58,12 +58,44 @@ function writeMap(cwd: string, stateDir: string, map: unknown): void {
   );
 }
 
+function emitExplorerReceipts(
+  options: AgentRuntimeSessionOptions,
+  map: NonNullable<ReturnType<typeof loadCanonicalMapAt>>,
+): void {
+  options.onEvent?.({
+    type: "tool_execution_end",
+    toolName: "spawn_explorer",
+    resultText: "Sub-agent (mode=concern_scout) explored . in 1ms.\n\n## Report\n",
+    details: {
+      mode: "concern_scout",
+      target_path: ".",
+      focus: null,
+      report_concern: null,
+    },
+  } as never);
+  for (const concern of map.concern_evidence?.concerns ?? []) {
+    options.onEvent?.({
+      type: "tool_execution_end",
+      toolName: "spawn_explorer",
+      resultText: `Sub-agent (mode=concern_tracer) explored . in 1ms.\n\n## Report\nconcern: ${concern.concern}\n`,
+      details: {
+        mode: "concern_tracer",
+        target_path: ".",
+        focus: concern.concern,
+        report_concern: concern.concern,
+      },
+    } as never);
+  }
+}
+
 class ScriptedRuntime implements AgentRuntime {
   constructor(private readonly write: (cwd: string, stateDir: string) => void) {}
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
     assert.ok(options.spawnExplorerStateDir);
     this.write(options.cwd, options.spawnExplorerStateDir);
+    const map = loadCanonicalMapAt(options.cwd, options.spawnExplorerStateDir);
+    if (map !== null) emitExplorerReceipts(options, map);
     return { turns: 1, costUsd: null, aborted: false };
   }
 }
@@ -71,11 +103,13 @@ class ScriptedRuntime implements AgentRuntime {
 class CoverageClosureRuntime implements AgentRuntime {
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
+    const map = makeValidCodebaseMap();
     writeMap(
       options.cwd,
       options.spawnExplorerStateDir ?? ".agentify/runtime/audit",
-      makeValidCodebaseMap(),
+      map,
     );
+    emitExplorerReceipts(options, map);
     options.onEvent?.({ type: "message_end" } as never);
     return { turns: 1, costUsd: null, aborted: true };
   }
@@ -120,7 +154,9 @@ class RecoveryRuntime implements AgentRuntime {
     assert.equal(options.recoveryPromptIfToolNotCalled.maxAttempts, 2);
     assert.equal(options.recoveryPromptIfToolNotCalled.shouldRecover?.(), true);
     assert.ok(options.spawnExplorerStateDir);
-    writeMap(options.cwd, options.spawnExplorerStateDir, makeValidCodebaseMap());
+    const map = makeValidCodebaseMap();
+    writeMap(options.cwd, options.spawnExplorerStateDir, map);
+    emitExplorerReceipts(options, map);
     return { turns: 1, costUsd: null, aborted: false };
   }
 }
@@ -137,7 +173,9 @@ class BootstrapRuntime implements AgentRuntime {
     assert.ok(Object.values(draft.coverage ?? {}).every((entry) => entry.status === "gap"));
     assert.match(options.userPrompt, /write_map_delta/);
     assert.equal(options.recoveryPromptIfToolNotCalled?.requiredToolName, "write_map_delta");
-    writeMap(options.cwd, stateDir, makeValidCodebaseMap());
+    const map = makeValidCodebaseMap();
+    writeMap(options.cwd, stateDir, map);
+    emitExplorerReceipts(options, map);
     return { turns: 1, costUsd: null, aborted: false };
   }
 }
@@ -507,7 +545,9 @@ class TopUpRuntime implements AgentRuntime {
     assert.match(options.userPrompt, /concern_evidence/, "top-up audit prompt must request concern evidence");
     assert.match(options.userPrompt, /concern_scout/, "top-up audit prompt must dispatch concern discovery");
     assert.equal(options.recoveryPromptIfToolNotCalled?.requiredToolName, "write_map_delta");
-    writeMap(options.cwd, options.spawnExplorerStateDir ?? ".agentify/runtime/audit", makeValidCodebaseMap());
+    const map = makeValidCodebaseMap();
+    writeMap(options.cwd, options.spawnExplorerStateDir ?? ".agentify/runtime/audit", map);
+    emitExplorerReceipts(options, map);
     return { turns: 1, costUsd: null, aborted: false };
   }
 }

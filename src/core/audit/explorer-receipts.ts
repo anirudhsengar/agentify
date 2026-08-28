@@ -1,0 +1,231 @@
+import type { CodebaseMap } from "./schema/index.ts";
+
+type ExplorerMode = "concern_scout" | "concern_tracer";
+
+interface ExplorerReceipt {
+  sequence: number;
+  mode: ExplorerMode;
+  success: boolean;
+  targetPath: string;
+  focus: string | null;
+  reportConcern: string | null;
+  failureKind: string | null;
+}
+
+export interface ExplorerReceiptAssessment {
+  complete: boolean;
+  reasons: string[];
+  successful_scouts: number;
+  successful_tracers: string[];
+  unresolved_tracer_failures: string[];
+  missing_concern_tracers: string[];
+}
+
+export interface ExplorerReceiptAssessmentOptions {
+  requireScout?: boolean;
+  requiredConcerns?: ReadonlyArray<string>;
+}
+
+const SEMANTIC_STOP_WORDS = new Set([
+  "and",
+  "candidate",
+  "concern",
+  "for",
+  "from",
+  "implementation",
+  "paths",
+  "seed",
+  "specialist",
+  "subsystem",
+  "the",
+  "trace",
+  "tracer",
+  "with",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function stringField(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function resultText(result: unknown): string {
+  if (!isRecord(result)) return "";
+  if (typeof result.resultText === "string") return result.resultText;
+  if (!Array.isArray(result.content)) return "";
+  return result.content
+    .filter((block): block is { type?: unknown; text?: unknown } => isRecord(block))
+    .filter((block) => block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text as string)
+    .join("\n");
+}
+
+function modeFromResult(result: unknown, text: string): ExplorerMode | null {
+  if (isRecord(result) && isRecord(result.details)) {
+    const mode = stringField(result.details.mode);
+    if (mode === "concern_scout" || mode === "concern_tracer") return mode;
+  }
+  const match = text.match(/\bmode=(concern_scout|concern_tracer)\b/i);
+  const mode = match?.[1]?.toLowerCase();
+  return mode === "concern_scout" || mode === "concern_tracer" ? mode : null;
+}
+
+function focusFromText(text: string): string | null {
+  const quoted = text.match(/\bfocus=(?:"([^"]+)"|'([^']+)')/i);
+  if (quoted !== null) return quoted[1]?.trim() || quoted[2]?.trim() || null;
+  const plain = text.match(/\bfocus=([^;\r\n]+)/i);
+  return plain?.[1]?.trim() || null;
+}
+
+function reportConcernFromText(text: string): string | null {
+  const match = text.match(/(?:^|\n)\s*concern:\s*([^\r\n]+)/i);
+  return match?.[1]?.trim() || null;
+}
+
+function semanticTokens(value: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const raw of value.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
+    if (raw.length < 3 || SEMANTIC_STOP_WORDS.has(raw)) continue;
+    const normalized = raw.length > 4 && raw.endsWith("s") ? raw.slice(0, -1) : raw;
+    tokens.add(normalized);
+  }
+  return tokens;
+}
+
+function tokenRelated(left: string, right: string): boolean {
+  return left === right
+    || (Math.min(left.length, right.length) >= 5
+      && (left.startsWith(right) || right.startsWith(left)));
+}
+
+function semanticallyRelated(left: string, right: string): boolean {
+  const normalizedLeft = left.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const normalizedRight = right.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (!normalizedLeft || !normalizedRight) return false;
+  if (
+    normalizedLeft === normalizedRight
+    || normalizedLeft.includes(normalizedRight)
+    || normalizedRight.includes(normalizedLeft)
+  ) {
+    return true;
+  }
+
+  const leftTokens = semanticTokens(left);
+  const rightTokens = semanticTokens(right);
+  if (leftTokens.size === 0 || rightTokens.size === 0) return false;
+  let matches = 0;
+  for (const token of leftTokens) {
+    if ([...rightTokens].some((other) => tokenRelated(token, other))) matches += 1;
+  }
+  const minimum = Math.min(leftTokens.size, rightTokens.size);
+  return matches >= 2 || (matches >= 1 && matches / minimum >= 0.6);
+}
+
+function receiptIdentity(receipt: ExplorerReceipt): string {
+  return receipt.reportConcern ?? receipt.focus ?? receipt.targetPath;
+}
+
+function failureDescription(receipt: ExplorerReceipt): string {
+  const identity = receiptIdentity(receipt);
+  return receipt.failureKind === "timeout"
+    ? `${identity} (timed out)`
+    : identity;
+}
+
+export class ExplorerReceiptTracker {
+  readonly #receipts: ExplorerReceipt[] = [];
+  #sequence = 0;
+
+  observe(event: unknown): void {
+    if (!isRecord(event) || event.type !== "tool_execution_end") return;
+    const toolName = stringField(event.toolName) ?? stringField(event.tool_name);
+    if (toolName !== "spawn_explorer") return;
+
+    const nestedResult = isRecord(event.result) ? event.result : null;
+    const result = nestedResult ?? event;
+    const text = resultText(result);
+    const mode = modeFromResult(result, text);
+    if (mode === null) return;
+    const details = isRecord(result.details)
+      ? result.details
+      : isRecord(event.details) ? event.details : {};
+    const targetPath = stringField(details.target_path)
+      ?? text.match(/\b(?:explored|for)\s+(.+?)\s+(?:in\s+\d+ms|failed:)/i)?.[1]?.trim()
+      ?? ".";
+    const focus = stringField(details.focus) ?? focusFromText(text);
+    const reportConcern = stringField(details.report_concern)
+      ?? (mode === "concern_tracer" ? reportConcernFromText(text) : null);
+    const success = event.isError !== true
+      && !(nestedResult !== null && nestedResult.isError === true);
+    const failureKind = success
+      ? null
+      : stringField(details.failure_kind)
+        ?? (/timeout|timed out/i.test(text) ? "timeout" : "error");
+
+    this.#sequence += 1;
+    this.#receipts.push({
+      sequence: this.#sequence,
+      mode,
+      success,
+      targetPath,
+      focus,
+      reportConcern,
+      failureKind,
+    });
+  }
+
+  assess(
+    map: CodebaseMap | null,
+    options: ExplorerReceiptAssessmentOptions = {},
+  ): ExplorerReceiptAssessment {
+    const requireScout = options.requireScout ?? true;
+    const requiredConcerns = options.requiredConcerns
+      ?? map?.concern_evidence?.concerns.map((concern) => concern.concern)
+      ?? [];
+    const scouts = this.#receipts.filter((receipt) =>
+      receipt.mode === "concern_scout" && receipt.success
+    );
+    const successfulTracers = this.#receipts.filter((receipt) =>
+      receipt.mode === "concern_tracer" && receipt.success
+    );
+    const failedTracers = this.#receipts.filter((receipt) =>
+      receipt.mode === "concern_tracer" && !receipt.success
+    );
+
+    const missingConcernTracers = requiredConcerns.filter((concern) =>
+      !successfulTracers.some((receipt) =>
+        semanticallyRelated(concern, receiptIdentity(receipt))
+      )
+    );
+    const unresolvedFailures = failedTracers.filter((failure) =>
+      !successfulTracers.some((success) =>
+        success.sequence > failure.sequence
+        && semanticallyRelated(receiptIdentity(failure), receiptIdentity(success))
+      )
+    );
+
+    const reasons: string[] = [];
+    if (requireScout && scouts.length === 0) {
+      reasons.push("successful concern_scout receipt is missing");
+    }
+    for (const concern of missingConcernTracers) {
+      reasons.push(`accepted concern "${concern}" has no successful concern_tracer receipt`);
+    }
+    for (const failure of unresolvedFailures) {
+      reasons.push(
+        `concern_tracer for "${failureDescription(failure)}" failed and was not successfully retraced`,
+      );
+    }
+
+    return {
+      complete: reasons.length === 0,
+      reasons,
+      successful_scouts: scouts.length,
+      successful_tracers: successfulTracers.map(receiptIdentity),
+      unresolved_tracer_failures: unresolvedFailures.map(failureDescription),
+      missing_concern_tracers: missingConcernTracers,
+    };
+  }
+}

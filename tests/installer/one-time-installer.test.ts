@@ -65,9 +65,41 @@ class InstallerAuditRuntime implements AgentRuntime {
     const stateDir = options.spawnExplorerStateDir ?? ".agentify/runtime/audit";
     const destination = path.join(options.cwd, stateDir, "codebase_map.json");
     fs.mkdirSync(path.dirname(destination), { recursive: true });
-    const map = JSON.stringify(makeSpecialistFixtureMap(), null, 2)
+    const fixtureMap = makeSpecialistFixtureMap();
+    fixtureMap.concern_evidence?.concerns[0]?.touchpoints.push({
+      path: "src/lib.ts",
+      symbol: null,
+      role: "Public package entry point owned by authentication in this fixture.",
+      line_range: null,
+      centrality: "supporting",
+    });
+    const map = JSON.stringify(fixtureMap, null, 2)
       .replaceAll(".pi/", ".agents/");
     fs.writeFileSync(destination, `${map}\n`);
+    options.onEvent?.({
+      type: "tool_execution_end",
+      toolName: "spawn_explorer",
+      resultText: "Sub-agent (mode=concern_scout) explored . in 1ms.\n\n## Report\n",
+      details: {
+        mode: "concern_scout",
+        target_path: ".",
+        focus: null,
+        report_concern: null,
+      },
+    } as never);
+    for (const concern of fixtureMap.concern_evidence?.concerns ?? []) {
+      options.onEvent?.({
+        type: "tool_execution_end",
+        toolName: "spawn_explorer",
+        resultText: `Sub-agent (mode=concern_tracer) explored . in 1ms.\n\n## Report\nconcern: ${concern.concern}\n`,
+        details: {
+          mode: "concern_tracer",
+          target_path: ".",
+          focus: concern.concern,
+          report_concern: concern.concern,
+        },
+      } as never);
+    }
     return { turns: 1, costUsd: 0, aborted: false };
   }
 }
