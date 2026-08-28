@@ -143,6 +143,10 @@ Model-supplied explorer limits may only narrow trusted mode defaults. Explorer
 usage is charged to the aggregate budget after every provider response, and a
 report over 16 KB is rejected as incomplete evidence rather than truncated into
 a successful receipt.
+Scout proposals are application-attested obligations: each must be resolved by
+a successful tracer or a substantive `not_concerns` rejection. Agentify
+checkpoints receipts after every explorer and the builder checkpoints each
+completed concern, so a bounded retry on the same HEAD resumes verified work.
 
 ### 2. Run the one-time installer
 

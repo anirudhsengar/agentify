@@ -72,6 +72,10 @@ All notable changes to Agentify are documented here.
   Model arguments cannot raise trusted mode defaults, usage is charged live per
   response, and oversized reports fail rather than becoming truncated receipts.
 
+- Scout proposals are now application-attested semantic obligations until
+  traced or substantively rejected. Explorer receipts and completed concerns
+  checkpoint incrementally and same-HEAD retries preserve source-run provenance.
+
 - Explorer success is now persisted as an application-authored receipt ledger
   bound to the audited repository commit. Model map writes cannot create or
   replace the ledger, existing receiptless or stale maps are re-audited, and

@@ -15,6 +15,8 @@ interface ExplorerReceipt {
   focus: string | null;
   reportConcern: string | null;
   failureKind: string | null;
+  proposedConcerns: string[];
+  sourceRunId: string | null;
 }
 
 export interface ExplorerReceiptAssessment {
@@ -24,6 +26,7 @@ export interface ExplorerReceiptAssessment {
   successful_tracers: string[];
   unresolved_tracer_failures: string[];
   missing_concern_tracers: string[];
+  unresolved_scout_proposals: string[];
 }
 
 export interface ExplorerReceiptAssessmentOptions {
@@ -87,6 +90,16 @@ function focusFromText(text: string): string | null {
 function reportConcernFromText(text: string): string | null {
   const match = text.match(/(?:^|\n)\s*concern:\s*([^\r\n]+)/i);
   return match?.[1]?.trim() || null;
+}
+
+function scoutConcernsFromText(text: string): string[] {
+  const concerns: string[] = [];
+  const pattern = /^\s*-\s*concern:\s*([^\r\n]+)/gim;
+  for (const match of text.matchAll(pattern)) {
+    const concern = match[1]?.trim();
+    if (concern && !concerns.includes(concern)) concerns.push(concern);
+  }
+  return concerns.slice(0, 128);
 }
 
 function semanticTokens(value: string): Set<string> {
@@ -178,6 +191,10 @@ export class ExplorerReceiptTracker {
       focus,
       reportConcern,
       failureKind,
+      proposedConcerns: mode === "concern_scout" && success
+        ? scoutConcernsFromText(text)
+        : [],
+      sourceRunId: null,
     });
   }
 
@@ -193,6 +210,10 @@ export class ExplorerReceiptTracker {
         focus: receipt.focus,
         report_concern: receipt.reportConcern,
         failure_kind: receipt.failureKind,
+        ...(receipt.proposedConcerns.length > 0
+          ? { proposed_concerns: receipt.proposedConcerns }
+          : {}),
+        source_run_id: receipt.sourceRunId ?? runId,
       })),
     };
   }
@@ -208,6 +229,8 @@ export class ExplorerReceiptTracker {
         focus: receipt.focus,
         reportConcern: receipt.report_concern,
         failureKind: receipt.failure_kind,
+        proposedConcerns: [...(receipt.proposed_concerns ?? [])],
+        sourceRunId: receipt.source_run_id ?? attestation.run_id,
       });
     }
   }
@@ -241,6 +264,14 @@ export class ExplorerReceiptTracker {
         && semanticallyRelated(receiptIdentity(failure), receiptIdentity(success))
       )
     );
+    const rejectedCandidates = map?.concern_evidence?.not_concerns
+      .map((candidate) => candidate.candidate) ?? [];
+    const unresolvedScoutProposals = [...new Set(
+      scouts.flatMap((scout) => scout.proposedConcerns),
+    )].filter((proposal) =>
+      !successfulTracers.some((receipt) => semanticallyRelated(proposal, receiptIdentity(receipt)))
+      && !rejectedCandidates.some((candidate) => semanticallyRelated(proposal, candidate))
+    );
 
     const reasons: string[] = [];
     if (requireScout && scouts.length === 0) {
@@ -254,6 +285,9 @@ export class ExplorerReceiptTracker {
         `concern_tracer for "${failureDescription(failure)}" failed and was not successfully retraced`,
       );
     }
+    for (const proposal of unresolvedScoutProposals) {
+      reasons.push(`scout proposal "${proposal}" was neither successfully traced nor substantively rejected`);
+    }
 
     return {
       complete: reasons.length === 0,
@@ -262,6 +296,7 @@ export class ExplorerReceiptTracker {
       successful_tracers: successfulTracers.map(receiptIdentity),
       unresolved_tracer_failures: unresolvedFailures.map(failureDescription),
       missing_concern_tracers: missingConcernTracers,
+      unresolved_scout_proposals: unresolvedScoutProposals,
     };
   }
 }
@@ -295,6 +330,7 @@ export function assessExplorerReceiptAttestation(
       successful_tracers: [],
       unresolved_tracer_failures: [],
       missing_concern_tracers: map?.concern_evidence?.concerns.map((concern) => concern.concern) ?? [],
+      unresolved_scout_proposals: [],
     };
   }
   const currentCommit = currentRepositoryCommit(cwd);
@@ -310,6 +346,7 @@ export function assessExplorerReceiptAttestation(
       successful_tracers: [],
       unresolved_tracer_failures: [],
       missing_concern_tracers: map?.concern_evidence?.concerns.map((concern) => concern.concern) ?? [],
+      unresolved_scout_proposals: [],
     };
   }
   return trackerFromAttestation(attestation).assess(map, options);

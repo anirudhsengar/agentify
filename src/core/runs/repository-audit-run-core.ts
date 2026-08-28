@@ -150,8 +150,8 @@ function mapResult(result: WriteMapResult | undefined): {
   };
 }
 
-function focusedAuditPrompt(): string {
-  return [
+function focusedAuditPrompt(persistedReceiptReasons: ReadonlyArray<string> = []): string {
+  const prompt = [
     "Audit this existing repository for its persistent Agentify engineering team.",
     "Use only read-only repository tools and the structured write_map/write_map_delta tools.",
     "A gap-marked map is already present; after initial direct reads, call write_map_delta with concrete repository evidence.",
@@ -162,7 +162,14 @@ function focusedAuditPrompt(): string {
     "Do not write application files, AGENTS.md, harness configuration, skills, prompts, workflows, dependencies, or prose artifacts.",
     "Do not create a generic agent surface. Repository-specific specialists and procedures are materialized later from validated evidence.",
     "Do not return prose instead of the required structured tool call.",
-  ].join(" ");
+  ];
+  if (persistedReceiptReasons.length > 0) {
+    prompt.push(
+      "Application-attested explorer work from a prior run on this exact HEAD is already present. Do not rerun a successful scout or successful concern tracer. Resolve only these remaining receipt obligations, checkpointing each result: "
+        + persistedReceiptReasons.join("; "),
+    );
+  }
+  return prompt.join(" ");
 }
 
 /**
@@ -231,6 +238,32 @@ function buildAuditRecoveryPrompt(
   return lines.join("\n");
 }
 
+function checkpointExplorerReceipts(
+  cwd: string,
+  stateDir: string,
+  runId: string,
+  tracker: ExplorerReceiptTracker,
+  event: unknown,
+): void {
+  const value = event as { type?: string; toolName?: string; tool_name?: string };
+  if (
+    value.type !== "tool_execution_end"
+    || (value.toolName ?? value.tool_name) !== "spawn_explorer"
+  ) {
+    return;
+  }
+  const repositoryCommit = currentRepositoryCommit(cwd);
+  const map = loadCanonicalMapAt(cwd, stateDir);
+  if (repositoryCommit === null || map === null) return;
+  writeCanonicalMap(cwd, {
+    ...map,
+    explorer_receipts: tracker.attestation(repositoryCommit, runId),
+  }, {
+    stateDir,
+    mapFilename: DEFAULT_MAP_FILENAME,
+  });
+}
+
 /**
  * Produce the one validated map required by the focused installer. The
  * canonical map is the deliberately versioned exception beneath
@@ -286,6 +319,14 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
   let observedTurns = 0;
   let observedCost = 0;
   const explorerReceipts = new ExplorerReceiptTracker();
+  const initialCommit = currentRepositoryCommit(context.cwd);
+  if (
+    initialCommit !== null
+    && preExistingMap?.explorer_receipts?.repository_commit === initialCommit
+  ) {
+    explorerReceipts.loadAttestation(preExistingMap.explorer_receipts);
+  }
+  const initialReceiptAssessment = explorerReceipts.assess(preExistingMap);
   const resourceBudget = context.auditResourceBudget
     ?? new AuditResourceBudget(context.config.auditBudgets);
   context.ui.status("agentify: auditing existing repository");
@@ -297,7 +338,13 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       configDir: defaultConfigDir(),
       config: context.config,
       systemPrompt: promptContent,
-      userPrompt: specialistEvidenceTopUp ? specialistEvidenceTopUpPrompt() : focusedAuditPrompt(),
+      userPrompt: specialistEvidenceTopUp
+        ? specialistEvidenceTopUpPrompt()
+        : focusedAuditPrompt(
+          initialReceiptAssessment.successful_scouts > 0
+            ? initialReceiptAssessment.reasons
+            : [],
+        ),
       tools: [...AUDIT_TOOL_ALLOWLIST],
       executionPolicy: createReadOnlyExecutionPolicy({
         cwd: context.cwd,
@@ -330,6 +377,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         }
         const eventType = (event as { type?: string }).type ?? "unknown";
         explorerReceipts.observe(event);
+        checkpointExplorerReceipts(context.cwd, stateDir, log.runId, explorerReceipts, event);
         log.sessionEvent({ pi_event_type: eventType, event });
         if (eventType === "message_start" && (event as { message?: { role?: string } }).message?.role === "user") {
           log.recordTurnStart();
@@ -450,6 +498,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
             }
             const eventType = (event as { type?: string }).type ?? "unknown";
             explorerReceipts.observe(event);
+            checkpointExplorerReceipts(context.cwd, stateDir, log.runId, explorerReceipts, event);
             log.sessionEvent({ pi_event_type: eventType, event });
             if (eventType === "message_start" && (event as { message?: { role?: string } }).message?.role === "user") {
               log.recordTurnStart();

@@ -216,6 +216,7 @@ export class AuditResourceBudget {
   }
 
   finishParentSession(session: SessionObservation, result: RuntimeResultShape): void {
+    this.assertWithinBudget();
     const reportedCalls = result.diagnostics?.provider_requests ?? result.turns;
     const additionalCalls = Math.max(0, reportedCalls - session.calls);
     const additionalTurns = Math.max(0, result.turns - session.turns);

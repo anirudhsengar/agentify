@@ -595,6 +595,40 @@ class NoSpecialistEvidenceRuntime implements AgentRuntime {
   }
 }
 
+class ReceiptCheckpointRuntime implements AgentRuntime {
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
+    options.onEvent?.({
+      type: "tool_execution_end",
+      toolName: "spawn_explorer",
+      resultText: "Sub-agent (mode=concern_scout) explored . in 1ms.\n\n## Report\nconcerns:\n - concern: Request extraction\n",
+      details: {
+        mode: "concern_scout",
+        target_path: ".",
+        focus: null,
+        report_concern: null,
+      },
+    } as never);
+    return { turns: 1, costUsd: null, aborted: true };
+  }
+}
+
+async function testFailedAuditRetainsApplicationAttestedExplorerCheckpoint(): Promise<void> {
+  const cwd = tempDir("gate-receipt-checkpoint");
+  try {
+    await assert.rejects(runWithRuntime(cwd, new ReceiptCheckpointRuntime()), /structured closure/i);
+    const map = loadCanonicalMapAt(cwd, ".agentify/runtime/audit");
+    assert.ok(map?.explorer_receipts, "failed audit must retain its diagnostic receipt checkpoint");
+    assert.ok(map.explorer_receipts.receipts.some((receipt) =>
+      receipt.mode === "concern_scout"
+      && receipt.proposed_concerns?.includes("Request extraction")
+      && typeof receipt.source_run_id === "string"
+    ));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function testAttachSkipsAuditOnlyWhenSpecialistEvidenceRecorded(): Promise<void> {
   const attachedCwd = tempDir("gate-attach-complete");
   try {
@@ -659,6 +693,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "writeMapGuidesSpecialistEvidence", fn: testWriteMapGuidesSpecialistEvidence },
   { name: "attachSkipsAuditOnlyWhenSpecialistEvidenceRecorded", fn: testAttachSkipsAuditOnlyWhenSpecialistEvidenceRecorded },
   { name: "auditFailsWhenSpecialistEvidenceNeverRecorded", fn: testAuditFailsWhenSpecialistEvidenceNeverRecorded },
+  { name: "failedAuditRetainsApplicationAttestedExplorerCheckpoint", fn: testFailedAuditRetainsApplicationAttestedExplorerCheckpoint },
 ];
 
 let passed = 0;

@@ -82,15 +82,25 @@ This is the part of the audit the whole installation exists for. Everything
 above establishes how the repository is built; this establishes what a person
 would specialize in to work on it well.
 
-1. Run `concern_scout` against the repository root exactly once. It returns
+1. Run `concern_scout` against the repository root exactly once, unless the
+   application reports a successful current-HEAD scout receipt to resume. It returns
    candidate concerns with seed paths, plus the candidates it rejected.
-2. For each candidate worth keeping, run `concern_tracer` with the concern name
+2. Before tracing, screen the candidate set as a portfolio. Reject a candidate
+   that is subsumed by a broader behavioral concern, is only a public type surface,
+   or is only a release or contribution process. Record each exact candidate and
+   a repository-specific reason in `not_concerns`; generic labels are insufficient.
+   Merge overlapping behavioral candidates by rejecting the narrower names as
+   subsumed, then trace the coherent concern that owns their shared flow.
+3. After the scout, immediately call `write_map_delta` to checkpoint the scout's
+   rejections and every screening decision in `concern_evidence.not_concerns`.
+   Keep `concern_evidence.concerns` empty until a tracer has verified a concern.
+4. For each candidate worth keeping, run `concern_tracer` with the concern name
    and its seed paths as the focus. One tracer per concern. Read and merge each
    report before dispatching the next.
-3. Record the traced concerns through `write_map_delta` as
-   `concern_evidence.concerns`, and the scout's rejections as
-   `concern_evidence.not_concerns`. Concern evidence closes no coverage
-   dimension: omit the `dimension` parameter on this write.
+5. After each successful tracer, immediately call `write_map_delta` with the
+   complete accumulated `concern_evidence.concerns` and `not_concerns` lists.
+   Concern evidence closes no coverage dimension: omit the `dimension` parameter.
+   Never hold multiple completed reports only in conversation context.
 
 A concern is a body of knowledge, not a folder. Authentication is not
 `src/auth/` — it is the login route, the credential check, the session store,

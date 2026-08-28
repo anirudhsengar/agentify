@@ -869,7 +869,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             if (sessionCostUsd !== null) {
                 totalCostUsd = roundCost(totalCostUsd + sessionCostUsd);
             }
-            let readCount = 0;
+            const readCount = repositoryReadCalls;
             let bashCount = 0;
             for (const m of subagentMessages) {
                 if (m.role !== "assistant") continue;
@@ -878,8 +878,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     if (!block || typeof block !== "object") continue;
                     const b = block as { type?: string; name?: string };
                     if (b.type === "toolCall") {
-                        if (readOnlySet.has(b.name ?? "")) readCount += 1;
-                        else if (b.name === "bash") bashCount += 1;
+                        if (b.name === "bash") bashCount += 1;
                     }
                 }
             }

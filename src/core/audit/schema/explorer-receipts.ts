@@ -10,6 +10,10 @@ export const ExplorerReceiptSchema = Type.Object({
   focus: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
   report_concern: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
   failure_kind: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  proposed_concerns: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 256 }), {
+    maxItems: 128,
+  })),
+  source_run_id: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
 });
 
 export const ExplorerReceiptAttestationSchema = Type.Object({
