@@ -581,6 +581,103 @@ test("configured semantic repair pass budgets fail closed with an obligation fin
   }
 });
 
+class InterruptedRepairRuntime implements AgentRuntime {
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    const mapPath = path.join(
+      options.cwd,
+      options.spawnExplorerStateDir ?? ".agentify/runtime/audit",
+      "codebase_map.json",
+    );
+    const current = JSON.parse(fs.readFileSync(mapPath, "utf8")) as CodebaseMap;
+    if (/trusted semantic-quality gate/i.test(options.userPrompt)) {
+      const repaired = aqaShapedMap();
+      repaired.explorer_receipts = current.explorer_receipts;
+      fs.writeFileSync(mapPath, `${JSON.stringify(repaired, null, 2)}\n`);
+      const concern = "External containerized test harness lifecycle";
+      options.onEvent?.({
+        type: "tool_execution_end",
+        toolName: "spawn_explorer",
+        resultText: `Sub-agent (mode=concern_tracer) explored external in 1ms.\n\n## Report\nconcern: ${concern}\n`,
+        details: {
+          mode: "concern_tracer",
+          target_path: "external",
+          focus: concern,
+          report_concern: concern,
+        },
+      } as never);
+      throw new Error("simulated repair interruption");
+    }
+
+    options.onEvent?.({
+      type: "tool_execution_end",
+      toolName: "spawn_explorer",
+      resultText: "Sub-agent (mode=concern_scout) explored . in 1ms.\n\n## Report\n",
+      details: {
+        mode: "concern_scout",
+        target_path: ".",
+        focus: null,
+        report_concern: null,
+      },
+    } as never);
+    for (const concern of current.concern_evidence?.concerns ?? []) {
+      options.onEvent?.({
+        type: "tool_execution_end",
+        toolName: "spawn_explorer",
+        resultText: `Sub-agent (mode=concern_tracer) explored . in 1ms.\n\n## Report\nconcern: ${concern.concern}\n`,
+        details: {
+          mode: "concern_tracer",
+          target_path: ".",
+          focus: concern.concern,
+          report_concern: concern.concern,
+        },
+      } as never);
+    }
+    return { turns: 1, costUsd: 0, aborted: false };
+  }
+}
+
+test("semantic repair checkpoints successful tracer receipts before an interrupted session exits", async () => {
+  const repository = createRepository();
+  const previousHome = process.env["HOME"];
+  const temporaryHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-repair-receipt-home-"));
+  process.env["HOME"] = temporaryHome;
+  try {
+    const initial = aqaShapedMap();
+    initial.concern_evidence = {
+      concerns: [initial.concern_evidence!.concerns.at(-1)!],
+      not_concerns: initial.concern_evidence!.not_concerns,
+    };
+    const mapPath = path.join(repository.cwd, ".agentify", "runtime", "audit", "codebase_map.json");
+    fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+    fs.writeFileSync(mapPath, `${JSON.stringify(initial, null, 2)}\n`);
+
+    await assert.rejects(
+      runRepositoryAudit({
+        cwd: repository.cwd,
+        ui: new RepairUi(),
+        runtime: new InterruptedRepairRuntime(),
+        config: { schemaVersion: 1, provider: "openai", thinkingLevel: "high", models: {} },
+      }),
+      /simulated repair interruption/i,
+    );
+
+    const persisted = JSON.parse(fs.readFileSync(mapPath, "utf8")) as CodebaseMap;
+    assert.ok(
+      persisted.explorer_receipts?.receipts.some((receipt) =>
+        receipt.success
+        && receipt.mode === "concern_tracer"
+        && receipt.report_concern === "External containerized test harness lifecycle"
+      ),
+      "a successful tracer must remain attested even when the parent repair session is interrupted",
+    );
+  } finally {
+    if (previousHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previousHome;
+    fs.rmSync(temporaryHome, { recursive: true, force: true });
+    fs.rmSync(repository.cwd, { recursive: true, force: true });
+  }
+});
+
 test("aggregate model-call exhaustion reports the unresolved semantic obligations", async () => {
   const repository = createRepository();
   const previousHome = process.env["HOME"];
