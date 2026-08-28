@@ -6,6 +6,7 @@ import * as path from "node:path";
 import test from "node:test";
 import { Value } from "typebox/value";
 import {
+  ExplorerReceiptAttestationSchema,
   PartialCodebaseMapSchema,
   type CodebaseMap,
 } from "../../src/core/audit/schema.ts";
@@ -92,6 +93,29 @@ test("every scout proposal remains an obligation until traced or substantively r
   };
   assessment = tracker.assess(map);
   assert.equal(assessment.complete, true, assessment.reasons.join("; "));
+});
+
+test("scout proposal parsing strips structured prose and never authors an invalid receipt", () => {
+  const tracker = new ExplorerReceiptTracker();
+  tracker.observe(explorerEvent({
+    mode: "concern_scout",
+    success: true,
+    scoutConcerns: [
+      "Argument declaration grammar one_line: Owns option and argument construction behavior covers: lib/option.js",
+      "x".repeat(257),
+    ],
+  }));
+
+  const attestation = tracker.attestation("a".repeat(40), "fixture-run");
+  assert.deepEqual(
+    attestation.receipts[0]?.proposed_concerns,
+    ["Argument declaration grammar"],
+  );
+  assert.equal(
+    Value.Check(ExplorerReceiptAttestationSchema, attestation),
+    true,
+    "application-authored receipt attestations must satisfy their persisted schema",
+  );
 });
 
 test("semantic closure requires successful scout and per-concern tracer receipts", () => {
