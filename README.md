@@ -161,6 +161,8 @@ body has also been checkpointed. Concern checkpoints append and deduplicate by
 default so later bounded invocations cannot erase earlier tracer evidence.
 Agentify-managed paths observed during the transaction are normalized out of
 repository topography and process evidence before the map can close.
+The explorer runtime permits only one successful concern scout per repository
+commit; resumed and repair sessions reuse its attested proposal set.
 
 ### 2. Run the one-time installer
 

@@ -157,6 +157,10 @@ Agentify-managed paths from skeleton topography, entry/read-first lists,
 agentic-layer bleed paths, and repository process identities. The tool reports
 every removed path, preventing in-transaction installation state from becoming
 repository evidence.
+Before creating a scout model session, the explorer tool checks the canonical
+application receipt ledger. A successful scout bound to current HEAD makes
+subsequent scout dispatches a deterministic error; stale and failed receipts
+remain retriable.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.

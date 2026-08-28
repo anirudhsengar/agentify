@@ -54,6 +54,8 @@ import {
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { Model, Api } from "@earendil-works/pi-ai";
 import type { AuditResourceBudget } from "./resource-budget.ts";
+import { currentRepositoryCommit } from "./explorer-receipts.ts";
+import { loadCanonicalMapAt } from "./map-storage.ts";
 import { Type } from "typebox";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
@@ -482,6 +484,16 @@ function roundCost(costUsd: number): number {
     return Number(costUsd.toFixed(12));
 }
 
+function hasSuccessfulCurrentHeadScout(cwd: string, stateDir: string): boolean {
+    const map = loadCanonicalMapAt(cwd, stateDir);
+    const currentCommit = currentRepositoryCommit(cwd);
+    return currentCommit !== null
+        && map?.explorer_receipts?.repository_commit === currentCommit
+        && map.explorer_receipts.receipts.some((receipt) =>
+            receipt.mode === "concern_scout" && receipt.success
+        );
+}
+
 function extractSessionCostUsd(messages: ReadonlyArray<unknown>): number | null {
     let total = 0;
     let found = false;
@@ -526,6 +538,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         "pitfalls (git-log + grep for tribal knowledge), validation (test/lint/typecheck commands), " +
         "gap_filler (close an uncovered D1-D10 dimension; pass dimension in focus). " +
         "Two concern modes discover (`concern_scout`) and trace (`concern_tracer`) maintainer-recognizable specialties. " +
+        "A successful application-attested concern_scout on current HEAD blocks duplicate scouting. " +
         "The final mode is `custom`: the parent supplies self-contained read-only " +
         "instructions based on gathered repository evidence through `system_prompt`. " +
         `Hard dispatch budgets: max ${maxTotalSpawns} total sub-agents per audit, ` +
@@ -558,6 +571,21 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 ],
                 isError: true,
                 details: undefined as unknown as Record<string, unknown>,
+            };
+        }
+        if (mode === "concern_scout" && hasSuccessfulCurrentHeadScout(ctx.cwd, stateDir)) {
+            return {
+                content: [{
+                    type: "text",
+                    text:
+                        "Error: a successful current-HEAD concern_scout already exists in the application-attested receipt ledger. " +
+                        "Reuse its proposed concerns and resolve only the remaining named obligations; duplicate scouting is refused.",
+                }],
+                isError: true,
+                details: {
+                    duplicate_current_head_scout: true,
+                    state_file: `${stateDir}/codebase_map.json`,
+                },
             };
         }
 

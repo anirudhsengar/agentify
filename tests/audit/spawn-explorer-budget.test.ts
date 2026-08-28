@@ -136,6 +136,39 @@ async function testRefusesDuplicateCurrentHeadConcernScout(): Promise<void> {
     assert.equal((result as { isError?: boolean }).isError, true);
     assert.match(textFrom(result), /successful current-HEAD concern_scout already exists/i);
     assert.equal(sessionCreated, false, "duplicate scout must be refused before model execution");
+
+    fs.writeFileSync(path.join(cwd, "README.md"), "# advanced fixture\n");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "advance head");
+    sessionCreated = false;
+    const staleResult = await tool.execute(
+      "test-stale-scout-receipt",
+      { mode: "concern_scout", target_path: "." } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((staleResult as { isError?: boolean }).isError, undefined);
+    assert.equal(sessionCreated, true, "a stale-HEAD scout receipt cannot suppress new evidence collection");
+
+    const currentHead = git(cwd, "rev-parse", "HEAD");
+    const failedScoutMap = attestCodebaseMap(makeValidCodebaseMap(), currentHead);
+    failedScoutMap.explorer_receipts!.receipts[0]!.success = false;
+    failedScoutMap.explorer_receipts!.receipts[0]!.failure_kind = "timeout";
+    fs.writeFileSync(
+      path.join(auditDir, "codebase_map.json"),
+      JSON.stringify(failedScoutMap),
+    );
+    sessionCreated = false;
+    const failedResult = await tool.execute(
+      "test-failed-current-head-scout",
+      { mode: "concern_scout", target_path: "." } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((failedResult as { isError?: boolean }).isError, undefined);
+    assert.equal(sessionCreated, true, "a failed current-HEAD scout remains retriable");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
