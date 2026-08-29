@@ -666,6 +666,47 @@ async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
   }
 }
 
+async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(): Promise<void> {
+  const cwd = tempDir("spawn-budget-concern-portfolio");
+  try {
+    fs.writeFileSync(path.join(cwd, "README.md"), "# fixture\n");
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "fixture");
+    const report = `## Report
+\`\`\`json
+{"concern":"Repository orientation","one_line":"Owns the documented entry path.","covers":"The repository entry documentation.","excludes":"Runtime behavior outside the entry path.","flows":[{"name":"read entry documentation","description":"A reader follows the repository entry path.","steps":[{"path":"README.md","what_happens":"Introduces the repository."},{"path":"README.md","what_happens":"Provides the first operational reference."}]}],"touchpoints":[{"path":"README.md","symbol":null,"role":"Defines the entry documentation.","line_range":null,"centrality":"core"}],"invariants":[{"rule":"The entry remains documented.","why":"New contributors otherwise lack a starting point.","reference":"README.md"}],"pitfalls":[{"risk":"The entry documentation drifts.","consequence":"Repository orientation becomes unreliable.","reference":"README.md"}],"entry_questions":["Does this change alter the documented entry?"],"validation":[],"spans_subtrees":["README.md"],"stability":"high","recurrence":"medium","confidence":"high","adjacent_concerns":[],"blocker_reason":null}
+\`\`\``;
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      stateDir: ".agentify/runtime/audit",
+      ...stubExplorerArgs(),
+      createSession: async () => ({
+        session: {
+          messages: [{ role: "assistant", content: report }],
+          async prompt(): Promise<void> {},
+          dispose(): void {},
+        },
+      }),
+    });
+    const result = await tool.execute(
+      "test-concern-portfolio-budget",
+      { mode: "concern_tracer", target_path: ".", focus: "Repository orientation" } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((result as { isError?: boolean }).isError, undefined);
+    const details = result.details as { max_reads?: number; max_provider_calls?: number } | undefined;
+    assert.equal(details?.max_reads, 6);
+    assert.equal(details?.max_provider_calls, 8);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 await testRejectsWhenTotalSpawnBudgetIsExhausted();
 await testRefusesDuplicateCurrentHeadConcernScout();
 await testRejectsWhenConcurrentSpawnBudgetIsExhausted();
@@ -678,5 +719,6 @@ await testLiveExplorerUsageAbortsAtAggregateTokenLimit();
 await testOversizedReportsFailInsteadOfBecomingReceipts();
 await testDefaultsBoundSmallRepositoryAudits();
 await testSubagentTimeoutReturnsControlToAudit();
+await testConcernTracerDefaultsLeaveRoomForARealPortfolio();
 
 console.log("spawn-explorer budget tests passed.");

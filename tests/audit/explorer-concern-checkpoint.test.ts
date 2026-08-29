@@ -88,3 +88,11 @@ test("blocked and malformed tracer reports remain unresolved", () => {
   ), null);
   assert.equal(parseStructuredConcernReport("## Report\nnot json", "2026-08-29T00:00:00.000Z"), null);
 });
+
+test("tracked touchpoints deterministically supply omitted subtree metadata", () => {
+  const concern = parseStructuredConcernReport(
+    REPORT.replace('  "spans_subtrees": ["src"],\n', ""),
+    "2026-08-29T00:00:00.000Z",
+  );
+  assert.deepEqual(concern?.spans_subtrees, ["src"]);
+});
