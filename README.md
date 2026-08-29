@@ -131,12 +131,12 @@ large repository through the optional `auditBudgets` object in
 | `maxSessionDurationMs` | 720,000 (12 minutes) |
 | `maxScoutDurationMs` / `maxTracerDurationMs` | 180,000 each |
 | `maxExplorerDurationMs` | 120,000 |
-| `maxModelCalls` / `maxTurns` | 96 each |
-| `maxInputTokens` / `maxOutputTokens` | 2,000,000 / 200,000 |
+| `maxModelCalls` / `maxTurns` | 160 each |
+| `maxInputTokens` / `maxOutputTokens` | 8,000,000 / 200,000 |
 | `maxTotalCostUsd` | 20 (provider-reported) |
 | `maxCoverageRecoveryPasses` / `maxSemanticRepairPasses` | 1 / 3 |
 | `maxRepeatedFingerprintStates` | 2 |
-| `maxExplorerSpawns` | 16 |
+| `maxExplorerSpawns` | 24 |
 
 Overrides are strictly validated and remain subject to finite safety ceilings.
 Parent audit requests and explorer sub-sessions consume the same aggregate call,

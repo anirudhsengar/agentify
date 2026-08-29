@@ -59,15 +59,15 @@ export const DEFAULT_AUDIT_BUDGETS: Readonly<ResolvedAuditBudgets> = Object.free
   maxScoutDurationMs: 3 * 60 * 1000,
   maxTracerDurationMs: 3 * 60 * 1000,
   maxExplorerDurationMs: 2 * 60 * 1000,
-  maxModelCalls: 96,
-  maxTurns: 96,
-  maxInputTokens: 2_000_000,
+  maxModelCalls: 160,
+  maxTurns: 160,
+  maxInputTokens: 8_000_000,
   maxOutputTokens: 200_000,
   maxTotalCostUsd: 20,
   maxCoverageRecoveryPasses: 1,
   maxSemanticRepairPasses: 3,
   maxRepeatedFingerprintStates: 2,
-  maxExplorerSpawns: 16,
+  maxExplorerSpawns: 24,
 });
 
 const AUDIT_BUDGET_MAXIMUMS: Readonly<ResolvedAuditBudgets> = Object.freeze({
