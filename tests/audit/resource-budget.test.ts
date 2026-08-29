@@ -19,6 +19,25 @@ test("audit budget defaults bound every aggregate resource", () => {
   assert.ok(limits.maxTracerDurationMs <= limits.maxSessionDurationMs);
 });
 
+test("default budgets retain bounded capacity after a grounded six-concern portfolio checkpoint", () => {
+  const budget = new AuditResourceBudget(undefined, Date.now(), {
+    elapsed_ms: 572_181,
+    model_calls: 67,
+    turns: 67,
+    input_tokens: 1_621_089,
+    output_tokens: 63_789,
+    cost_usd: 0.23609152,
+    explorer_spawns: 7,
+    coverage_recovery_passes: 0,
+    semantic_repair_passes: 0,
+  });
+  assert.doesNotThrow(() => budget.assertProviderSessionCapacity(1_000_000));
+  assert.equal(budget.remainingModelCalls(64), 64);
+  for (let index = 0; index < 10; index += 1) {
+    assert.doesNotThrow(() => budget.reserveExplorer("module_graph"));
+  }
+});
+
 test("parent provider calls, turns, tokens, and cost share one hard budget", () => {
   const budget = new AuditResourceBudget({
     maxModelCalls: 1,
