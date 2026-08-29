@@ -86,7 +86,7 @@ export const DEFAULT_SUBAGENT_TIMEOUT_MS = 3 * 60 * 1000;
 const DEFAULT_MAX_TOTAL_COST_USD = 5;
 const MAX_EXPLORER_READS = 32;
 const MAX_EXPLORER_PROVIDER_CALLS = 40;
-const MAX_CONCERN_REPORT_TOKENS = 3_500;
+const MAX_CONCERN_RESPONSE_TOKENS = 12_000;
 
 // The 9 dimension-shaped modes, the two concern modes that find and trace what
 // this repository's specialties actually are, plus a custom mode that takes an
@@ -799,7 +799,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                 ? capProviderOutputTokens(
                                     event.payload,
                                     subAgentModel.api,
-                                    MAX_CONCERN_REPORT_TOKENS,
+                                    MAX_CONCERN_RESPONSE_TOKENS,
                                 )
                                 : event.payload;
                             toolOptions.resourceBudget?.assertProviderInputCapacity(payload);

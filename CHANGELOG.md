@@ -52,9 +52,10 @@ All notable changes to Agentify are documented here.
   checkpoints directly before receipt attestation. Evidence freshness is bound
   to the exact HEAD commit timestamp, eliminating parent-model retranscription
   and wall-clock churn from specialist fixed-point compilation. Tracers use a
-  six-read/eight-call envelope and a provider-native 3,500-token output ceiling
-  so a multi-concern portfolio fits the aggregate audit budget; subtree reach
-  is derived deterministically from tracked touchpoints.
+  six-read/eight-call envelope so a multi-concern portfolio fits the aggregate
+  audit budget; subtree reach is derived deterministically from tracked
+  touchpoints. A 12,000-token response ceiling leaves room for model reasoning,
+  while the existing 16 KB report gate remains authoritative.
 
 - New audits begin with an immutable exact-HEAD evidence map derived from the
   already-verified installer preflight. Repository identity, languages and
