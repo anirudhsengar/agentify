@@ -392,10 +392,12 @@ test("an existing tracked-complete map reconciles without rerunning the model", 
 class ProgressiveRepairRuntime implements AgentRuntime {
   baseCalls = 0;
   repairCalls = 0;
+  repairToolSets: string[][] = [];
 
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     if (/trusted semantic-quality gate/i.test(options.userPrompt)) {
       this.repairCalls += 1;
+      this.repairToolSets.push([...options.tools]);
       if (this.repairCalls <= 3) {
         const destination = path.join(
           options.cwd,
@@ -499,6 +501,11 @@ test("progressive semantic repair may exceed two passes while each pass closes t
 
     assert.equal(runtime.baseCalls, 1);
     assert.equal(runtime.repairCalls, 3);
+    assert.deepEqual(
+      runtime.repairToolSets,
+      Array.from({ length: 3 }, () => ["write_map_delta", "spawn_explorer"]),
+      "repair parents must act on the supplied obligations instead of rereading broad repository state",
+    );
     assert.equal(result.turns, 4);
     assert.ok(ui.messages.some((message) => /retained 4 tracked specialist concern/i.test(message)));
 
