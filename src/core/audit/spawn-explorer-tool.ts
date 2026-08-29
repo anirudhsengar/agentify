@@ -904,12 +904,15 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     submission.concern = concern;
                 })
                 : null;
+            const sessionTools = concernSubmissionTool
+                ? [...toolsForMode, concernSubmissionTool.name]
+                : [...toolsForMode];
             const { session: createdSession } = await createSession({
                 cwd: ctx.cwd,
                 agentDir: toolOptions.agentDir,
                 model: subAgentModel,
                 thinkingLevel: parentThinkingLevel === "unknown" ? undefined : parentThinkingLevel,
-                tools: [...toolsForMode],
+                tools: sessionTools,
                 customTools: concernSubmissionTool ? [concernSubmissionTool] : [],
                 resourceLoader,
             });
@@ -1091,7 +1094,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     focus: params.focus ?? null,
                     summary: params.summary ?? null,
                     model: subAgentModelLabel,
-                    tools: toolsForMode,
+                    tools: sessionTools,
                     duration_ms: durationMs,
                     report_length,
                     report_truncated: truncated,

@@ -699,6 +699,10 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(): Promise<vo
         assert.ok(sessionOptions);
         const submissionTool = sessionOptions.customTools?.find((candidate) => candidate.name === "submit_concern_report");
         assert.ok(submissionTool, "concern tracer must receive the typed submission tool");
+        assert.ok(
+          sessionOptions.tools?.includes("submit_concern_report"),
+          "the typed submission tool must be requested in the explorer session tool list",
+        );
         return {
           session: {
             messages: [],
