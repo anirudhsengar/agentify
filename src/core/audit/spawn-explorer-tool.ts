@@ -474,6 +474,15 @@ function normalizeSubmittedEvidencePaths(value: unknown, repositoryRoot: string 
     };
 }
 
+export function shouldForceConcernSubmission(
+    providerCalls: number,
+    maxProviderCalls: number,
+    repositoryReadCalls: number,
+    maxReads: number,
+): boolean {
+    return repositoryReadCalls >= maxReads || providerCalls >= Math.max(0, maxProviderCalls - 2);
+}
+
 const ConcernSubmissionSchema = Type.Object({
     report_json: Type.String({
         minLength: 2,
@@ -933,7 +942,12 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                             if (
                                 mode === "concern_tracer"
                                 && submission.concern === null
-                                && providerCalls >= Math.max(0, maxProviderCalls - 2)
+                                && shouldForceConcernSubmission(
+                                    providerCalls,
+                                    maxProviderCalls,
+                                    repositoryReadCalls,
+                                    maxReads,
+                                )
                             ) {
                                 payload = forceProviderToolChoice(
                                     payload,
