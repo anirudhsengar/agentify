@@ -182,3 +182,28 @@ test("the tracer envelope rejects malformed and oversized JSON before recording"
   assert.equal((oversized as { isError?: boolean }).isError, true);
   assert.equal(submissions, 0);
 });
+
+test("the tracer normalizes domain-locked absolute evidence paths", async () => {
+  let submitted: ReturnType<typeof parseStructuredConcernReport> = null;
+  const parsed = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null") as {
+    touchpoints: Array<{ path: string }>;
+  };
+  parsed.touchpoints[0]!.path = "/repo/src/extract/mod.rs";
+  const factory = createConcernSubmissionTool as unknown as (
+    observedAt: string,
+    onSubmit: (concern: NonNullable<typeof submitted>) => void,
+    repositoryRoot: string,
+  ) => ReturnType<typeof createConcernSubmissionTool>;
+  const tool = factory("2026-08-29T00:00:00.000Z", (concern) => {
+    submitted = concern;
+  }, "/repo");
+  const result = await tool.execute(
+    "submit",
+    { report_json: JSON.stringify(parsed) } as never,
+    undefined,
+    undefined,
+    {} as never,
+  );
+  assert.equal((result as { isError?: boolean }).isError, undefined);
+  assert.equal((submitted as unknown as { touchpoints: Array<{ path: string }> }).touchpoints[0]?.path, "src/extract/mod.rs");
+});
