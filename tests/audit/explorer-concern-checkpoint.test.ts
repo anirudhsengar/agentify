@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
   checkpointExplorerConcernEvidence,
@@ -45,6 +46,26 @@ const REPORT = `## Report
   "blocker_reason": null
 }
 \`\`\``;
+
+test("the simple tracer envelope retains the complete nested concern contract", () => {
+  const prompt = fs.readFileSync(
+    path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../../src/core/audit/prompts/explorers/concern_tracer.md",
+    ),
+    "utf8",
+  );
+  for (const field of [
+    '"one_line": string',
+    '"covers": string',
+    '"excludes": string',
+    '"line_range": [number, number] | null',
+    '"what_happens": string',
+    '"validation": string[]',
+  ]) {
+    assert.ok(prompt.includes(field), `tracer prompt is missing ${field}`);
+  }
+});
 
 function git(cwd: string, ...args: string[]): string {
   const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
