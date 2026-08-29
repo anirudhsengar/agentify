@@ -155,6 +155,10 @@ All notable changes to Agentify are documented here.
   shared supporting touchpoints remain valid overlap, while tracers prefer a
   concern-specific implementation core over shared orchestration.
 
+- Deterministic normalization now promotes one uniquely cited tracked
+  implementation path when a concern would otherwise have test-only core
+  ownership; ambiguous or multiply cited candidates still fail closed.
+
 - Explorer sessions now run serially with hard mode-specific repository-read
   and provider-call limits. Aggregate exhaustion reports the exact unresolved
   semantic obligations and fingerprint; complete reports at the limit survive.

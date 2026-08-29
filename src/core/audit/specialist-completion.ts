@@ -1238,6 +1238,22 @@ export function assessSpecialistEvidence(
       });
     }
   }
+  for (const assessment of accepted) {
+    if (assessment.corePaths.length === 0 || !assessment.corePaths.every(isTestRepositoryPath)) continue;
+    const uniqueImplementationPaths = assessment.contextPaths.filter((repositoryPath) =>
+      !isTestRepositoryPath(repositoryPath)
+      && eligibleImplementationPath(repositoryPath)
+      && accepted.filter((candidate) => candidate.contextPaths.includes(repositoryPath)).length === 1
+      && (coreOwnersByPath.get(repositoryPath) ?? []).every((owner) => owner === assessment.concern)
+    );
+    if (uniqueImplementationPaths.length !== 1) continue;
+    addOwnershipResolution({
+      concern: assessment.concern,
+      path: uniqueImplementationPaths[0]!,
+      reason:
+        "the selected concern is the only accepted concern that cites this tracked implementation while its prior core evidence is test-only",
+    });
+  }
   for (const [repositoryPath, owners] of coreOwnersByPath) {
     if (owners.length <= 1 || ownershipResolutionByPath.has(repositoryPath)) continue;
     reasons.push(
@@ -1249,10 +1265,14 @@ export function assessSpecialistEvidence(
     const implementationContext = assessment.contextPaths.filter((repositoryPath) =>
       !isTestRepositoryPath(repositoryPath) && eligibleImplementationPath(repositoryPath)
     );
+    const hasResolvedImplementationOwner = implementationContext.some((repositoryPath) =>
+      ownershipResolutionByPath.get(repositoryPath)?.concern === assessment.concern
+    );
     if (
       assessment.corePaths.length > 0
       && assessment.corePaths.every(isTestRepositoryPath)
       && implementationContext.length > 0
+      && !hasResolvedImplementationOwner
     ) {
       reasons.push(
         `accepted concern "${assessment.concern}" has test-only core ownership despite tracked implementation context: ${implementationContext.join(", ")}; assign core ownership to the implementing behavior, merge the duplicate concern, or reject it substantively`,
