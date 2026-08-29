@@ -483,6 +483,17 @@ export function shouldForceConcernSubmission(
     return repositoryReadCalls >= maxReads || providerCalls >= Math.max(0, maxProviderCalls - 2);
 }
 
+export function activeExplorerToolsAfterRead(
+    mode: string,
+    repositoryReadCalls: number,
+    maxReads: number,
+    activeTools: ReadonlyArray<string>,
+): string[] {
+    return mode === "concern_tracer" && repositoryReadCalls >= maxReads
+        ? ["submit_concern_report"]
+        : [...activeTools];
+}
+
 const ConcernSubmissionSchema = Type.Object({
     report_json: Type.String({
         minLength: 2,
@@ -969,6 +980,14 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                     };
                                 }
                                 repositoryReadCalls += 1;
+                                if (mode === "concern_tracer" && repositoryReadCalls >= maxReads) {
+                                    pi.setActiveTools(activeExplorerToolsAfterRead(
+                                        mode,
+                                        repositoryReadCalls,
+                                        maxReads,
+                                        [...toolsForMode, "submit_concern_report"],
+                                    ));
+                                }
                             }
                             return undefined;
                         });
