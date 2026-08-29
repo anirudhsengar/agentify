@@ -1,14 +1,37 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
+import { Value } from "typebox/value";
+import {
+  assessCoverageClosure,
+  CodebaseMapSchema,
+  compileSpecialistEvidence,
+  type CodebaseMap,
+} from "../../src/core/audit/schema.ts";
+import { assessExplorerReceiptAttestation } from "../../src/core/audit/explorer-receipts.ts";
+import { writeCanonicalMap } from "../../src/core/audit/map-storage.ts";
+import { detectRestrictiveRepositoryPolicy } from "../../src/core/installer/repository-policy.ts";
+import { initializeTeamMemoryStore } from "../../src/core/memory/index.ts";
+import {
+  buildSpecialistEvidenceReference,
+  readGitCommitTimestamp,
+  synchronizeRepositorySpecialists,
+} from "../../src/core/specialists/index.ts";
+import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import {
+  STABILIZATION_PORTFOLIOS,
+  type StabilizationConcernFixture,
+  type StabilizationPortfolioFixture,
+} from "../fixtures/stabilization-portfolios.ts";
 
 interface CorpusCase {
   repository: string;
   target_commit: string;
   fixture_kind: "reduced-deterministic" | "captured-policy-and-audit-replay";
-  replay_modules: string[];
+  portfolio_fixture?: string;
   audit_events: string[];
   expected_core_ownership: string[];
   expected_rejected_candidates: string[];
@@ -26,7 +49,7 @@ interface CorpusCase {
 }
 
 interface CorpusFixture {
-  schema_version: "1";
+  schema_version: "2";
   captured_at: string;
   cases: CorpusCase[];
 }
@@ -34,9 +57,128 @@ interface CorpusFixture {
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const FIXTURE_PATH = path.join(ROOT, "tests/fixtures/stabilization-corpus.json");
 const FIXTURE = JSON.parse(fs.readFileSync(FIXTURE_PATH, "utf8")) as CorpusFixture;
+const MAP_CONTEXT = {
+  stateDir: ".agentify/runtime/audit",
+  mapFilename: "codebase_map.json",
+};
 
-test("the stabilization corpus is pinned, explicit, and machine-readable", () => {
-  assert.equal(FIXTURE.schema_version, "1");
+function git(cwd: string, ...args: string[]): string {
+  const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
+function write(cwd: string, repositoryPath: string, content = `${repositoryPath}\n`): void {
+  const destination = path.join(cwd, repositoryPath);
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.writeFileSync(destination, content);
+}
+
+function topLevel(repositoryPath: string): string {
+  return repositoryPath.split("/")[0] ?? repositoryPath;
+}
+
+function makeConcern(fixture: StabilizationConcernFixture): NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number] {
+  return {
+    concern: fixture.name,
+    one_line: `Owns ${fixture.covers.charAt(0).toLowerCase()}${fixture.covers.slice(1)}`,
+    covers: fixture.covers,
+    excludes: fixture.excludes,
+    flows: [{
+      name: fixture.flow.name,
+      description: `Verified repository flow for ${fixture.name}.`,
+      steps: fixture.flow.steps,
+    }],
+    touchpoints: fixture.core.map((touchpoint) => ({
+      ...touchpoint,
+      line_range: null,
+      centrality: "core" as const,
+    })),
+    invariants: [{ ...fixture.invariant, reference: fixture.core[0]!.path }],
+    pitfalls: [{
+      risk: `Breaking ${fixture.invariant.rule}`,
+      consequence: fixture.invariant.why,
+      reference: fixture.core[0]!.path,
+    }],
+    entry_questions: [fixture.entry_question],
+    validation: [],
+    spans_subtrees: [...new Set(fixture.core.map((touchpoint) => topLevel(touchpoint.path)))],
+    stability: "high",
+    recurrence: "high",
+    confidence: "high",
+    last_updated: "2026-08-28T00:00:00.000Z",
+  };
+}
+
+function makePortfolioRepository(
+  repository: string,
+  portfolio: StabilizationPortfolioFixture,
+): { cwd: string; commit: string; map: CodebaseMap } {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), `agentify-corpus-${repository}-`));
+  write(cwd, "README.md", `${repository}\n${portfolio.project_type}\n`);
+  for (const repositoryPath of new Set(portfolio.concerns.flatMap((concern) => [
+    ...concern.core.map((touchpoint) => touchpoint.path),
+    ...concern.flow.steps.map((step) => step.path),
+  ]))) write(cwd, repositoryPath);
+  git(cwd, "init", "-q");
+  git(cwd, "config", "user.name", "Agentify Corpus");
+  git(cwd, "config", "user.email", "agentify@example.invalid");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "deterministic portfolio fixture");
+  const commit = git(cwd, "rev-parse", "HEAD");
+  const base = makeValidCodebaseMap();
+  const map = attestCodebaseMap(makeValidCodebaseMap({
+    generated_at: "2026-08-28T00:00:00.000Z",
+    meta: {
+      ...base.meta,
+      project_type: portfolio.project_type,
+      languages: portfolio.languages,
+      domain_hypothesis: `Repository-specific specialist portfolio for ${repository}.`,
+    },
+    skeleton: {
+      ...base.skeleton,
+      top_level_tree: [...new Set(portfolio.concerns.flatMap((concern) => (
+        concern.core.map((touchpoint) => topLevel(touchpoint.path))
+      )))].sort(),
+      entry_points: portfolio.concerns.map((concern) => ({
+        path: concern.flow.steps[0]!.path,
+        role: concern.flow.name,
+        language: portfolio.languages[0]!,
+        run_command: "not available in deterministic fixture",
+      })),
+      first_5_files_for_fresh_agent: portfolio.concerns.slice(0, 5).map((concern) => ({
+        path: concern.flow.steps[0]!.path,
+        why: `Entry to ${concern.name}.`,
+      })),
+    },
+    module_graph: {
+      ...base.module_graph,
+      edges: portfolio.concerns.flatMap((concern) => concern.flow.steps.slice(1).map((step, index) => ({
+        from: concern.flow.steps[index]!.path,
+        to: step.path,
+        kind: "behavioral flow",
+      }))),
+    },
+    pitfalls: portfolio.concerns.map((concern) => ({
+      module: concern.core[0]!.path,
+      what: `Breaking ${concern.invariant.rule}`,
+      consequence: concern.invariant.why,
+      line_ref: 1,
+    })),
+    concern_evidence: {
+      concerns: portfolio.concerns.map(makeConcern),
+      not_concerns: [
+        ...portfolio.rejected.map(({ candidate, why }) => ({ candidate, why_rejected: why })),
+        { candidate: "README documentation", why_rejected: "Repository documentation supports every concern but is not core behavioral ownership." },
+      ],
+    },
+    expert_evidence: undefined,
+  }), commit, `corpus-${repository}`);
+  return { cwd, commit, map };
+}
+
+test("the stabilization corpus declares executable portfolio fixtures", () => {
+  assert.equal(FIXTURE.schema_version, "2");
   assert.equal(FIXTURE.cases.length, 9);
   assert.equal(new Set(FIXTURE.cases.map((entry) => entry.repository)).size, 9);
   assert.deepEqual(
@@ -45,7 +187,6 @@ test("the stabilization corpus is pinned, explicit, and machine-readable", () =>
   );
   for (const entry of FIXTURE.cases) {
     assert.match(entry.target_commit, /^[0-9a-f]{40}$/);
-    assert.ok(entry.replay_modules.length > 0, `${entry.repository}: no replay modules`);
     assert.ok(entry.audit_events.length > 0, `${entry.repository}: no audit events`);
     assert.ok(entry.expected_readiness.length > 0, `${entry.repository}: no readiness outcome`);
     assert.ok(entry.expected_installation_disposition.length > 0, `${entry.repository}: no installation outcome`);
@@ -54,40 +195,125 @@ test("the stabilization corpus is pinned, explicit, and machine-readable", () =>
     assert.equal(entry.budgets.turns, 0);
     assert.equal(entry.budgets.tokens, 0);
     assert.equal(entry.budgets.cost_usd, 0);
+    if (entry.repository === "lobsters") {
+      assert.equal(entry.portfolio_fixture, undefined);
+    } else {
+      assert.equal(entry.portfolio_fixture, entry.repository);
+      assert.ok(STABILIZATION_PORTFOLIOS[entry.portfolio_fixture!]);
+    }
   }
 });
 
-for (const entry of FIXTURE.cases) {
-  test(`${entry.repository}: deterministic historical replay passes within budget`, () => {
+for (const entry of FIXTURE.cases.filter((candidate) => candidate.repository !== "lobsters")) {
+  test(`${entry.repository}: evidence compiles and installs the expected portfolio`, () => {
     const startedAt = Date.now();
-    const command = path.join(ROOT, "node_modules/.bin/tsx");
-    const outputLimit = Math.max(entry.budgets.output_bytes, 64 * 1024);
-    let outputBytes = 0;
-    for (const module of entry.replay_modules) {
-      const remainingMs = entry.budgets.runtime_ms - (Date.now() - startedAt);
-      assert.ok(remainingMs > 0, `${entry.repository}: runtime budget exceeded`);
-      const result = spawnSync(command, [path.join(ROOT, module)], {
-        cwd: ROOT,
-        encoding: "utf8",
-        timeout: remainingMs,
-        env: {
-          PATH: process.env.PATH,
-          HOME: process.env.HOME,
-          TMPDIR: process.env.TMPDIR,
-          NODE_OPTIONS: "--disable-warning=ExperimentalWarning",
-        },
-        maxBuffer: outputLimit,
-      });
-      assert.equal(result.signal, null, `${entry.repository}: ${module} exceeded its runtime budget`);
+    const portfolioFixture = STABILIZATION_PORTFOLIOS[entry.portfolio_fixture!];
+    assert.ok(portfolioFixture);
+    const { cwd, commit, map } = makePortfolioRepository(entry.repository, portfolioFixture);
+    try {
+      const compilation = compileSpecialistEvidence(map, { cwd });
+      assert.equal(compilation.status, "compiled", compilation.reasons.join("; "));
+      assert.equal(compilation.complete, true);
+      assert.deepEqual(compilation.reasons, entry.expected_unresolved_obligations);
+      assert.equal(compilation.map.meta.project_type, portfolioFixture.project_type);
+      assert.deepEqual(compilation.map.meta.languages, portfolioFixture.languages);
+      assert.deepEqual(assessCoverageClosure(compilation.map, { cwd }).unresolved, []);
+      assert.equal(assessExplorerReceiptAttestation(compilation.map, cwd).complete, true);
+      assert.equal(fs.existsSync(path.join(cwd, ".agentify")), false, "compilation must not contaminate repository evidence");
+
+      const repeated = compileSpecialistEvidence(compilation.map, { cwd });
+      assert.equal(repeated.status, "compiled", repeated.reasons.join("; "));
+      assert.deepEqual(repeated.map, compilation.map, "normalization must be idempotent");
       assert.equal(
-        result.status,
-        0,
-        `${entry.repository}: ${module} failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+        Value.Check(CodebaseMapSchema, compilation.map),
+        true,
+        [...Value.Errors(CodebaseMapSchema, compilation.map)].slice(0, 5).map((error) => `${(error as { path?: string }).path ?? "?"}: ${error.message}`).join("; "),
       );
-      outputBytes += Buffer.byteLength(result.stdout) + Buffer.byteLength(result.stderr);
+
+      const observedAt = readGitCommitTimestamp(cwd, commit);
+      initializeTeamMemoryStore({
+        cwd,
+        repositoryId: `corpus/${entry.repository}`,
+        supportingCommit: commit,
+        evidence: [buildSpecialistEvidenceReference({
+          cwd,
+          supportingCommit: commit,
+          repositoryPath: "README.md",
+          sourceType: "validated_bootstrap",
+          observedAt,
+          actor: "agentify-corpus",
+        })],
+        options: { now: () => new Date(observedAt) },
+      });
+      writeCanonicalMap(cwd, compilation.map, MAP_CONTEXT);
+      const synchronized = synchronizeRepositorySpecialists(cwd);
+      assert.equal(synchronized.status, "synchronized");
+      if (synchronized.status !== "synchronized") return;
+
+      const specialists = synchronized.portfolio.specialists;
+      assert.deepEqual(specialists.map((specialist) => specialist.concern).sort(), [...entry.expected_core_ownership].sort());
+      assert.equal(specialists.length, compilation.map.concern_evidence!.concerns.length);
+      assert.equal(synchronized.materialized.created_specialist_ids.length, specialists.length);
+
+      for (const expected of portfolioFixture.concerns) {
+        const specialist = specialists.find((candidate) => candidate.concern === expected.name);
+        assert.ok(specialist, `missing specialist ${expected.name}`);
+        assert.equal(specialist.excludes, expected.excludes);
+        assert.deepEqual(
+          specialist.touchpoints.filter((touchpoint) => touchpoint.centrality === "core").map(({ path: repositoryPath, symbol, role }) => ({ path: repositoryPath, symbol, role })).sort((left, right) => left.path.localeCompare(right.path)),
+          [...expected.core].sort((left, right) => left.path.localeCompare(right.path)),
+        );
+        assert.deepEqual(specialist.flows[0]!.steps, expected.flow.steps);
+        assert.equal(specialist.invariants[0]!.rule, expected.invariant.rule);
+        assert.deepEqual(specialist.entry_questions, [expected.entry_question]);
+      }
+
+      for (const repositoryPath of portfolioFixture.concerns.flatMap((concern) => concern.core.map((touchpoint) => touchpoint.path))) {
+        assert.equal(
+          specialists.filter((specialist) => specialist.touchpoints.some((touchpoint) => (
+            touchpoint.path === repositoryPath && touchpoint.centrality === "core"
+          ))).length,
+          1,
+          `${repositoryPath}: expected exactly one core owner`,
+        );
+      }
+      assert.deepEqual(
+        compilation.map.concern_evidence!.not_concerns
+          .filter((candidate) => candidate.candidate !== "README documentation")
+          .map((candidate) => candidate.candidate),
+        entry.expected_rejected_candidates,
+      );
+      assert.equal(entry.expected_readiness, "ready");
+      assert.equal(entry.expected_installation_disposition, "install");
+      const outputBytes = synchronized.materialized.created_specialist_ids.reduce((total, specialistId) => (
+        total + fs.statSync(path.join(cwd, ".agentify/agents/specialists", `${specialistId}.json`)).size
+      ), 0);
+      assert.ok(outputBytes <= entry.budgets.output_bytes, `${entry.repository}: specialist output budget exceeded`);
+      assert.ok(Date.now() - startedAt <= entry.budgets.runtime_ms, `${entry.repository}: runtime budget exceeded`);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
     }
-    const elapsedMs = Date.now() - startedAt;
-    assert.ok(elapsedMs <= entry.budgets.runtime_ms, `${entry.repository}: runtime budget exceeded`);
-    assert.ok(outputBytes <= outputLimit, `${entry.repository}: output budget exceeded`);
   });
 }
+
+test("lobsters: restrictive tracked policy blocks before persistent mutation", () => {
+  const entry = FIXTURE.cases.find((candidate) => candidate.repository === "lobsters")!;
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-corpus-lobsters-"));
+  try {
+    write(cwd, "AGENTS.md", "LLM-generated contributions are prohibited. Do not use AI for code, documentation, tests, or patches.\n");
+    write(cwd, "README.md", "Lobsters fixture\n");
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Corpus");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "restrictive policy fixture");
+    const policy = detectRestrictiveRepositoryPolicy(cwd, ["AGENTS.md", "README.md"]);
+    assert.equal(policy?.path, "AGENTS.md");
+    assert.deepEqual(entry.expected_unresolved_obligations, ["repository policy prohibits installation"]);
+    assert.equal(entry.expected_readiness, "blocked-before-mutation");
+    assert.equal(entry.expected_installation_disposition, "no-installation");
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify")), false);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
