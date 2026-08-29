@@ -10,6 +10,7 @@ import {
 } from "../../src/core/audit/explorer-receipts.ts";
 import { loadCanonicalMapAt, writeCanonicalMap } from "../../src/core/audit/map-storage.ts";
 import {
+  activeExplorerToolsAfterRead,
   createConcernSubmissionTool,
   parseStructuredConcernReport,
   shouldForceConcernSubmission,
@@ -72,6 +73,14 @@ test("a tracer must submit as soon as its repository-read budget is exhausted", 
   assert.equal(shouldForceConcernSubmission(4, 8, 5, 6), false);
   assert.equal(shouldForceConcernSubmission(4, 8, 6, 6), true);
   assert.equal(shouldForceConcernSubmission(6, 8, 2, 6), true);
+  assert.deepEqual(
+    activeExplorerToolsAfterRead("concern_tracer", 6, 6, ["read", "grep", "submit_concern_report"]),
+    ["submit_concern_report"],
+  );
+  assert.deepEqual(
+    activeExplorerToolsAfterRead("module_graph", 10, 10, ["read", "grep"]),
+    ["read", "grep"],
+  );
 });
 
 function git(cwd: string, ...args: string[]): string {
