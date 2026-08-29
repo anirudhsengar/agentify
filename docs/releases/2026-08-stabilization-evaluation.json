@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-29T03:30:00Z",
+  "evaluation_scope": "specialist compiler stabilization",
+  "candidate": {
+    "production_sha": "b35b17e492bda6bbbd2d1cc90453da30e568b367",
+    "base_sha": "f2df9eb8563bfcb26919d82c7bf28c9fb7c19e8b",
+    "branch": "codex/stabilize-specialist-compiler",
+    "package": "anirudhsengar-agentify-1.1.0.tgz",
+    "package_bytes": 8052219,
+    "package_sha256": "50bd96bd3c0762a1b60ae22fe63e521d95b46564a3943b88909179a4b95875c2",
+    "node": "v26.7.0",
+    "npm": "11.19.0",
+    "model_configuration": {
+      "primary": "openai-codex/gpt-5.6-luna",
+      "explorer": "minimax/MiniMax-M3",
+      "thinking": "high",
+      "audit_budgets": "defaults"
+    }
+  },
+  "default_budgets": {
+    "total_duration_ms": 1800000,
+    "session_duration_ms": 720000,
+    "model_calls": 96,
+    "turns": 96,
+    "input_tokens": 2000000,
+    "output_tokens": 200000,
+    "cost_usd": 20,
+    "explorer_spawns": 16,
+    "canonical_map_bytes": 1048576
+  },
+  "deterministic_qualification": {
+    "exact_sha": "b35b17e492bda6bbbd2d1cc90453da30e568b367",
+    "command": "npm run test:all",
+    "status": "passed",
+    "source_test_files": 94,
+    "historical_replay_cases": 9,
+    "assertions": [
+      "typecheck",
+      "unit and integration tests",
+      "executable historical corpus replay",
+      "package and documentation contracts",
+      "specialist compiler fixed-point and atomicity invariants"
+    ]
+  },
+  "historical_live": [
+    {"repository":"commander.js","target_sha":"ba6d13ddb4243e5913367734f8c159089ffe7834","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1506564,"output_tokens":60599,"cost_usd":0.17969776,"elapsed_ms":809931,"fingerprint":"43e428a1f591176b3c03f8886318ce4fb373ab411ebb8c8899c1e309af67f617"},
+    {"repository":"aqa-tests","target_sha":"19b1fd94ec2b2c8b17adb20d28c75f4d17891eb8","disposition":"diagnostic_only","calls":74,"turns":74,"input_tokens":1938993,"output_tokens":52458,"cost_usd":0.19468818,"elapsed_ms":701609,"fingerprint":"c80be252296196c0f83b90fecb1540d87ea3112ac3e8c9bea544ec31602d99a0"},
+    {"repository":"click","target_sha":"36baa15ff831b939a22bc527cd76ce653ef6f66d","disposition":"diagnostic_only","calls":71,"turns":71,"input_tokens":1939751,"output_tokens":54973,"cost_usd":0.17210472,"elapsed_ms":635601,"fingerprint":"d881dc5c14f109048ee80a404257c769d1c79f90db9758d596ccece57cdf7021"},
+    {"repository":"cobra","target_sha":"adbc8813901bba65827259daa8e22ff94ec1f30e","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1711768,"output_tokens":57772,"cost_usd":0.17791848,"elapsed_ms":660123,"fingerprint":"dead158fbeba6b3d2c69516b8825d2d23aeade49345eeed75a86aeae2716e982"},
+    {"repository":"hono","target_sha":"e2740d5a1bd0b4254e517e3af8b60789284bc7bd","disposition":"diagnostic_only","calls":82,"turns":82,"input_tokens":1970683,"output_tokens":49988,"cost_usd":0.1608809,"elapsed_ms":664415,"fingerprint":"2b72070ae25c52d017b061ff47935fa2874a3b1e70f2af97151f8a9b9a316bda"},
+    {"repository":"gin","target_sha":"dcaa4296d111981ffb31ac3eba90bb63e1eb5ab9","disposition":"diagnostic_only","calls":87,"turns":87,"input_tokens":1983755,"output_tokens":62999,"cost_usd":0.20351822,"elapsed_ms":874749,"fingerprint":"d00f606af76edb85a85f6bac761e44b15b3c2ae8ca56a09171987645654dbec3"},
+    {"repository":"axum","target_sha":"3d78036dcac289d6c1d54934708acb6a5bd73686","disposition":"diagnostic_only","calls":93,"turns":93,"input_tokens":1980975,"output_tokens":63860,"cost_usd":0.18739646,"elapsed_ms":876954,"fingerprint":"75c85c6efcdad4196848199fc77bba32543b43d8b751105dfd839ad4be885ffc"},
+    {"repository":"spring-petclinic","target_sha":"818c4136ea971c21674525f9053de0d9c7ad8cfe","disposition":"diagnostic_only","calls":95,"turns":95,"input_tokens":1996036,"output_tokens":60264,"cost_usd":0.16242856,"elapsed_ms":842570,"fingerprint":"2f9626abe8b910d925752d1dcc8269fe2303d682fbbbcbc14621060093076e59"},
+    {"repository":"lobsters","target_sha":"2f385d149e67f5ff78643dcf6d3cab0b24c0117c","disposition":"policy_refusal","calls":0,"turns":0,"input_tokens":0,"output_tokens":0,"cost_usd":0,"persistent_writes":0,"blocker":"repository_policy_prohibits_ai"}
+  ],
+  "held_out_rounds": [
+    {
+      "round": 1,
+      "production_code_unchanged": true,
+      "cases": [
+        {"repository":"vitest","target_sha":"e08c45c3921ab1c517021836bc73a13f1310c538","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1224933,"output_tokens":60002,"cost_usd":0.1593593,"elapsed_ms":900080,"fingerprint":"0b44d106d885859f29034fc79cd621f5d213680c772c7948c01ba51ebd836e5d"},
+        {"repository":"itsdangerous","target_sha":"672971d66a2ef9f85151e53283113f33d642dabd","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1723995,"output_tokens":65137,"cost_usd":0.17386524,"elapsed_ms":894688,"fingerprint":"f971a98f0446f17f5f73cd67d908ec0ed8dfd38f25a7ff10295e522993e210b4"},
+        {"repository":"groupcache","target_sha":"2c02b8208cf8c02a3e358cb1d9b60950647543fc","disposition":"diagnostic_only","calls":79,"turns":79,"input_tokens":1925205,"output_tokens":51449,"cost_usd":0.15559792,"elapsed_ms":686769,"fingerprint":"099a16eb3b700a5e1ca74a0a79bd67241a52ef316d030e7b5223d9e91ed5fcc7"},
+        {"repository":"anyhow","target_sha":"c63b279f3f4af2b02ca6267d9eb47d6d10497f69","disposition":"diagnostic_only","calls":93,"turns":93,"input_tokens":1986768,"output_tokens":63764,"cost_usd":0.1911433,"elapsed_ms":904097,"fingerprint":"5e1f88a88b5db1c9a2f8447351ad0f0512acf545224b68883774e82d3cfba521"},
+        {"repository":"junit4","target_sha":"890f3c972647de378f25e7271d8fbbd9d3456b79","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1125994,"output_tokens":69009,"cost_usd":0.16195726,"elapsed_ms":890163,"fingerprint":"a798f41d5eb3bcfe18378552344eb1278493924886ac92e5259e7d00209d6fba"},
+        {"repository":"rack","target_sha":"8bf4eb078498edc9105fb04add80d89c5340e60b","disposition":"diagnostic_only","calls":79,"turns":79,"input_tokens":1948624,"output_tokens":56719,"cost_usd":0.16961626,"elapsed_ms":708275,"fingerprint":"625462617f24f7498fc697b0b950e8b091ed93e1ddecbd9a46644452d9fae6e0"},
+        {"repository":"emacs","target_sha":"f4f249a2249a7047ba41a659b8fcdcd7e1caf4e0","disposition":"policy_refusal","calls":0,"turns":0,"input_tokens":0,"output_tokens":0,"cost_usd":0,"persistent_writes":0,"blocker":"repository_policy_prohibits_ai"}
+      ]
+    },
+    {
+      "round": 2,
+      "production_code_unchanged": true,
+      "cases": [
+        {"repository":"vitest","target_sha":"e08c45c3921ab1c517021836bc73a13f1310c538","disposition":"diagnostic_only","calls":92,"turns":92,"input_tokens":1987626,"output_tokens":63472,"cost_usd":0.19240372,"elapsed_ms":872546,"fingerprint":"a54233209bab7172ee2aa9eac95e94bdd01077d0be47207b3b1d41993f03181b"},
+        {"repository":"itsdangerous","target_sha":"672971d66a2ef9f85151e53283113f33d642dabd","disposition":"diagnostic_only","calls":95,"turns":95,"input_tokens":1921726,"output_tokens":53099,"cost_usd":0.16889182,"elapsed_ms":698069,"fingerprint":"ece57148ff8812e4eef0a4311d7124f6a7942c040dc10cebd1bb25a7e2a91954"},
+        {"repository":"groupcache","target_sha":"2c02b8208cf8c02a3e358cb1d9b60950647543fc","disposition":"diagnostic_only","calls":88,"turns":88,"input_tokens":1781222,"output_tokens":51608,"cost_usd":0.15581356,"elapsed_ms":720945,"fingerprint":"79c2a5aadaa946aaef6cfc61bf92a8a42f91b6a68707d350cf3e0c12affaac26"},
+        {"repository":"anyhow","target_sha":"c63b279f3f4af2b02ca6267d9eb47d6d10497f69","disposition":"diagnostic_only","calls":90,"turns":90,"input_tokens":1995288,"output_tokens":70180,"cost_usd":0.21433254,"elapsed_ms":1044128,"fingerprint":"7ecf6af3510af693970d78aa6ca2bf05412dbbfb86074b6bced4840bdbeac85f"},
+        {"repository":"junit4","target_sha":"890f3c972647de378f25e7271d8fbbd9d3456b79","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1868518,"output_tokens":79623,"cost_usd":0.19438182,"elapsed_ms":1179296,"fingerprint":"84303b9e80ba8cb299936a2ccd7092a4fa0fc6f8792a823b06c9fdd96229d68a"},
+        {"repository":"rack","target_sha":"8bf4eb078498edc9105fb04add80d89c5340e60b","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1914100,"output_tokens":64337,"cost_usd":0.19348116,"elapsed_ms":991048,"fingerprint":"fa70e262397c0bd929627cfb8885c2b1ea2d5fe442c73c406d6c363e71e5b69a"},
+        {"repository":"emacs","target_sha":"f4f249a2249a7047ba41a659b8fcdcd7e1caf4e0","disposition":"policy_refusal","calls":0,"turns":0,"input_tokens":0,"output_tokens":0,"cost_usd":0,"persistent_writes":0,"blocker":"repository_policy_prohibits_ai"}
+      ]
+    }
+  ],
+  "acceptance": {
+    "historical_replay": "passed",
+    "historical_live": "passed",
+    "held_out_round_1": "passed",
+    "held_out_round_2": "passed",
+    "normalization_idempotent": true,
+    "installation_atomic": true,
+    "restrictive_policy_no_write": true,
+    "partial_teams": 0,
+    "operational_workflows_left_by_failed_runs": 0,
+    "resource_budget_violations": 0,
+    "production_repository_specific_hacks": 0
+  },
+  "qualification_outcome": "ready_for_exact_pr_head_release_gate",
+  "known_limitations": [
+    "Default budgets intentionally reject repositories whose semantic closure cannot be completed within the configured call, token, or duration ceilings.",
+    "Repository validation commands run in disposable Git checkouts but are not containerized or network-isolated.",
+    "Live model qualification is nondeterministic; deterministic replay is the primary regression gate."
+  ]
+}

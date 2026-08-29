@@ -6,6 +6,12 @@ All notable changes to Agentify are documented here.
 
 ### Added
 
+- An executable nine-repository stabilization corpus now replays historical
+  semantic-closure failures with deterministic maps and assertions. The
+  accompanying machine-readable evaluation and release reports record pinned
+  live targets, resource usage, terminal dispositions, and two unchanged-code
+  held-out qualification rounds.
+
 - Specialist discovery is now concern-based. The audit runs a `concern_scout`
   explorer once to propose the repository's specialties, then a
   `concern_tracer` per candidate to trace it end to end, and records the
