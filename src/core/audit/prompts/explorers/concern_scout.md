@@ -120,10 +120,14 @@ focus_acknowledged: <echo of FOCUS>
 - **The overlap test.** Two concerns that both touch the same file are
  normal and expected. Auth and checkout both touch the request
  middleware; auth cares about who the caller is, checkout cares about
- whether the cart is still valid. **Never merge two concerns because
- they share files.** Shared files are evidence you found real
- concerns rather than folder names. Merge only when two candidates
- turn out to be the same body of knowledge under two names.
+ whether the cart is still valid. Do not merge two concerns merely because
+ they share files. Shared supporting files are evidence you found real
+ concerns rather than folder names. But when multiple candidates have the
+ same sole tracked implementation file and none has an independent tracked
+ implementation owner, group them into the broader behavioral concern
+ implemented by that file; separate symbols do not create separate file-level
+ core owners. Otherwise merge only when two candidates are the same body of
+ knowledge under two names.
 
 - **The scatter test.** A strong concern has touchpoints in at least
  two unrelated top-level areas. A candidate whose every path sits

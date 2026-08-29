@@ -191,18 +191,18 @@ async function testConcernPromptsRespectFileLevelCoreOwnership(): Promise<void> 
   for (const [name, prompt] of [["builder", builder], ["scout", scout]] as const) {
     assert.match(
       prompt,
-      /same sole tracked implementation file[\s\S]*group[^.]*broader behavioral concern/i,
+      /same sole tracked\s+implementation file[\s\S]*group[^.]*broader behavioral concern/i,
       `${name} prompt must group proposals that cannot have independent file-level core ownership`,
     );
   }
   assert.match(
     tracer,
-    /exactly one specialist may core-own a shared tracked file/i,
+    /exactly one specialist\s+may core-own a shared tracked file/i,
     "tracer prompt must treat core ownership as portfolio-wide and file-level",
   );
   assert.match(
     tracer,
-    /independent tracked implementation file[\s\S]*core/i,
+    /independent tracked\s+implementation file[\s\S]*core/i,
     "tracer prompt must prefer concern-specific implementation ownership over shared orchestration",
   );
 }

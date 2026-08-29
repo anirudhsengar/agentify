@@ -154,6 +154,12 @@ remain confined to those explorers, preventing broad map and tree rereads.
 Concern-tracer dispatch binds an exact application-owned concern identity. The
 typed submission must preserve it verbatim, so a model cannot rename one scout
 proposal into an alias that later forces a duplicate specialist.
+Portfolio screening distinguishes ordinary shared supporting touchpoints from
+an impossible monolithic ownership split. Candidates with the same sole tracked
+implementation file and no independent implementation owner are grouped into
+the broader behavioral concern before tracing; separate symbols cannot create
+multiple file-level core owners. Tracers prefer concern-specific implementation
+files as core and retain shared orchestration as supporting evidence.
 The application checkpoints cumulative usage in the diagnostic map, bound to
 the audited commit. Same-HEAD CLI continuations resume the remaining budget
 rather than resetting counters; a new commit begins a new evidence lineage.

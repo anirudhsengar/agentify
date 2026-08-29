@@ -91,6 +91,10 @@ would specialize in to work on it well.
    a repository-specific reason in `not_concerns`; generic labels are insufficient.
    Merge overlapping behavioral candidates by rejecting the narrower names as
    subsumed, then trace the coherent concern that owns their shared flow.
+   In particular, when multiple candidates have the same sole tracked
+   implementation file and none has an independent implementation owner, group
+   them into the broader behavioral concern implemented by that file. Distinct
+   symbols inside one file do not create independent file-level core owners.
 3. After the scout, immediately call `write_map_delta` to checkpoint the scout's
    rejections and every screening decision in `concern_evidence.not_concerns`.
    Keep `concern_evidence.concerns` empty until a tracer has verified a concern.
@@ -105,8 +109,10 @@ would specialize in to work on it well.
 A concern is a body of knowledge, not a folder. Authentication is not
 `src/auth/` — it is the login route, the credential check, the session store,
 the middleware guarding every other route, and the tests that cover them. Two
-concerns touching the same file is the normal case and never a reason to merge
-them: record the file under both, with the role it plays in each.
+concerns touching the same file is normal and is not by itself a reason to merge
+them: record the file under both, with the role it plays in each. The exception
+is the same sole tracked implementation file case above, where separate
+proposals could never satisfy file-level core ownership.
 
 Do not name a concern after a directory, do not emit one concern per directory,
 and do not reduce a repository to a single concern covering everything. If the

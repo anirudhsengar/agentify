@@ -151,6 +151,14 @@ invalid tool submission remains an unresolved tracer.
  touchpoints are `supporting`. A concern with fifteen `core`
  touchpoints has not been triaged.
 
+- **Core ownership is portfolio-wide and file-level.** Exactly one specialist
+ may core-own a shared tracked file. Prefer an independent tracked
+ implementation file specific to this concern as its `core`; classify shared
+ orchestration as `supporting`. If the behavior has no independent
+ implementation owner outside the same monolithic file as adjacent behavior,
+ report that boundary honestly so the parent can group it into the broader
+ concern instead of inventing symbol-level file owners.
+
 - **Shared files are expected.** A file that belongs to three concerns
  is not a problem to resolve. Record the part that is yours.
 

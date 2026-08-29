@@ -150,6 +150,11 @@ All notable changes to Agentify are documented here.
   prevents aliases from satisfying the wrong scout proposal or becoming duplicate
   specialists during repair.
 
+- Concern discovery now groups candidates that share the same sole tracked
+  implementation file and have no independent implementation owner. Ordinary
+  shared supporting touchpoints remain valid overlap, while tracers prefer a
+  concern-specific implementation core over shared orchestration.
+
 - Explorer sessions now run serially with hard mode-specific repository-read
   and provider-call limits. Aggregate exhaustion reports the exact unresolved
   semantic obligations and fingerprint; complete reports at the limit survive.

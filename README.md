@@ -191,6 +191,10 @@ commit; resumed and repair sessions reuse its attested proposal set.
 Each tracer dispatch binds one exact concern identity before model entry;
 renamed typed reports are rejected instead of creating duplicate specialists or
 silently satisfying a different scout proposal.
+Before tracing, candidates with the same sole tracked implementation file and
+no independent implementation owner are grouped into the broader behavioral
+concern. Ordinary shared supporting touchpoints remain overlap rather than a
+merge signal, and tracers prefer concern-specific implementation files as core.
 Semantic closure requires exactly one accepted core owner for each tracked
 file. Adjacent specialists may share it only as a supporting touchpoint until
 the portfolio resolves ownership. Normalization resolves a shared
