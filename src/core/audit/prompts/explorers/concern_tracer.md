@@ -89,13 +89,47 @@ Agentify will retain the tracer as unresolved.
 
 ## Report
 
-The `report_json` object uses the concern contract below. Every flow needs at least
-two ordered tracked steps. Every touchpoint needs path, symbol or null, role,
-line range or null, and centrality. Include invariants, pitfalls, entry
-questions, validation commands when observed, stability, recurrence, and
-confidence. `spans_subtrees` is optional because Agentify derives it from the
-touchpoint paths. Agentify also binds `last_updated` to the exact repository
-commit. A missing or invalid tool submission remains an unresolved tracer.
+The `report_json` argument must be a compact JSON object with exactly this shape
+(the notation below describes JSON types; do not copy the type words):
+
+```text
+{
+  "concern": string,
+  "one_line": string,
+  "covers": string,
+  "excludes": string,
+  "flows": [{
+    "name": string,
+    "description": string,
+    "steps": [{ "path": string, "what_happens": string }]
+  }],
+  "touchpoints": [{
+    "path": string,
+    "symbol": string | null,
+    "role": string,
+    "line_range": [number, number] | null,
+    "centrality": "core" | "supporting" | "peripheral"
+  }],
+  "invariants": [{ "rule": string, "why": string, "reference": string }],
+  "pitfalls": [{ "risk": string, "consequence": string, "reference": string }],
+  "entry_questions": string[],
+  "validation": string[],
+  "stability": "high" | "medium" | "low",
+  "recurrence": "high" | "medium" | "low",
+  "confidence": "high" | "medium" | "low"
+}
+```
+
+`covers` and `excludes` are prose strings, not arrays. Flow steps use only
+`path` and `what_happens`; touchpoint line ranges use a two-number array or
+null. Do not add `name`, `summary`, `id`, `validation_commands`, or other
+aliases. Every flow needs at least two ordered tracked steps. Prefer the
+strongest 4–8 touchpoints, 2–5 invariants, 2–5 pitfalls, and 2–5 entry
+questions so the complete object stays below 14 KB without dropping a distinct
+verified flow. `validation` contains only observed executable commands.
+`spans_subtrees` is optional because Agentify derives it from touchpoint paths.
+Agentify also binds `last_updated` to the exact repository commit. A missing or
+invalid tool submission remains an unresolved tracer.
 
 ## Expertise
 
