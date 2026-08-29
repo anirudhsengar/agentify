@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-29T06:00:00Z",
+  "generated_at": "2026-08-29T15:21:52Z",
   "evaluation_scope": "specialist compiler stabilization",
   "candidate": {
-    "production_sha": "6015b3b0a92c368d9840702b051fde04337baef7",
+    "production_sha": "e1186861095ac543b4bef9e4f97ca09a76918be8",
     "base_sha": "f2df9eb8563bfcb26919d82c7bf28c9fb7c19e8b",
     "branch": "codex/stabilize-specialist-compiler",
     "package": "anirudhsengar-agentify-1.1.0.tgz",
-    "package_bytes": 8058779,
-    "package_sha256": "7eadf42f3ad80eab3f9a5b96096cb5850d7892fae5a34ebcfe9d9b7a3546637b",
+    "package_bytes": 8060372,
+    "package_sha256": "acf4a0f09b6739249b5418f7f1bc21ca4f99d98baa2d1c3286cf23dab0c5bb1e",
     "package_node": "v22.19.0",
     "package_npm": "10.9.3",
     "live_evaluation_node": "v26.7.0",
@@ -32,10 +32,10 @@
     "canonical_map_bytes": 1048576
   },
   "deterministic_qualification": {
-    "exact_sha": "6015b3b0a92c368d9840702b051fde04337baef7",
+    "exact_sha": "e1186861095ac543b4bef9e4f97ca09a76918be8",
     "command": "mise exec node@22.19.0 -- npm run verify:release",
     "status": "passed",
-    "source_test_files": 94,
+    "source_test_files": 95,
     "historical_replay_cases": 9,
     "assertions": [
       "implementation delivery-integrity gate",
@@ -51,8 +51,8 @@
   },
   "historical_live_provenance": {
     "production_sha": "b35b17e492bda6bbbd2d1cc90453da30e568b367",
-    "carried_forward_to": "6015b3b0a92c368d9840702b051fde04337baef7",
-    "basis": "The later production delta is confined to opening the installation transaction before recognized-runtime repair. Exact-candidate package tests exercise ready and fail-closed recognized-runtime fixtures, including rollback of newly repaired policy and workflow files; the historical repositories are fresh diagnostic-only or policy-refusal cases and do not enter recognized-runtime repair."
+    "carried_forward_to": "e1186861095ac543b4bef9e4f97ca09a76918be8",
+    "basis": "Later production deltas open the installation transaction before recognized-runtime repair and harden installer reads and subprocess selection against filesystem races and untrusted environment-selected executables. Exact-candidate deterministic and package tests exercise ready and fail-closed recognized-runtime fixtures, rollback of newly repaired policy and workflow files, bounded no-follow reads, and fixed executable selection; exact-candidate CodeQL reports no alerts. Historical cases are diagnostic-only or policy-refusal cases and do not enter recognized-runtime repair."
   },
   "historical_live": [
     {"repository":"commander.js","target_sha":"ba6d13ddb4243e5913367734f8c159089ffe7834","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1506564,"output_tokens":60599,"cost_usd":0.17969776,"elapsed_ms":809931,"fingerprint":"43e428a1f591176b3c03f8886318ce4fb373ab411ebb8c8899c1e309af67f617"},
@@ -70,26 +70,26 @@
       "round": 1,
       "production_code_unchanged": true,
       "cases": [
-        {"repository":"vitest","target_sha":"e08c45c3921ab1c517021836bc73a13f1310c538","disposition":"diagnostic_only","calls":91,"turns":91,"input_tokens":1966366,"output_tokens":80282,"cost_usd":0.21091488,"elapsed_ms":1070535,"explorer_spawns":9,"fingerprint":"10ff4df80fbf7e8f5c448c32463bd2ac5e524add1d2b0e45f1f60b2ae62c076a"},
-        {"repository":"itsdangerous","target_sha":"672971d66a2ef9f85151e53283113f33d642dabd","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1172082,"output_tokens":63546,"cost_usd":0.16289582,"elapsed_ms":886048,"explorer_spawns":10,"fingerprint":"502d384a93a0616ff3d57da500dbdb019a9d6ba467257e7aa712bcf8918a8991"},
-        {"repository":"groupcache","target_sha":"2c02b8208cf8c02a3e358cb1d9b60950647543fc","disposition":"diagnostic_only","calls":88,"turns":88,"input_tokens":1946030,"output_tokens":47897,"cost_usd":0.15252376,"elapsed_ms":604257,"explorer_spawns":8,"fingerprint":"35495beddf92fa7cdef95db69d9b6daec59626ff6bf4462dfd5e99fabf7790e6"},
-        {"repository":"anyhow","target_sha":"c63b279f3f4af2b02ca6267d9eb47d6d10497f69","disposition":"diagnostic_only","calls":89,"turns":89,"input_tokens":1958320,"output_tokens":70656,"cost_usd":0.21005926,"elapsed_ms":1063498,"explorer_spawns":8,"fingerprint":"d2206ff493c3f02cf6b59ffa3c564f6a2e2bc0853a6374866bce34f00445dd73"},
-        {"repository":"junit4","target_sha":"890f3c972647de378f25e7271d8fbbd9d3456b79","disposition":"diagnostic_only","calls":95,"turns":95,"input_tokens":1971237,"output_tokens":59262,"cost_usd":0.179997,"elapsed_ms":853989,"explorer_spawns":10,"fingerprint":"49a0191a493aa843eabc40069a0ea9ce5833d75ab535ab91df52cd299b49c5da"},
-        {"repository":"rack","target_sha":"8bf4eb078498edc9105fb04add80d89c5340e60b","disposition":"diagnostic_only","calls":90,"turns":90,"input_tokens":1994707,"output_tokens":63297,"cost_usd":0.18556284,"elapsed_ms":907586,"explorer_spawns":9,"fingerprint":"fcf135828ddbf2255798ac785d829c631728bc2deaa5699543a3fae1cddcd469"},
-        {"repository":"emacs","target_sha":"f4f249a2249a7047ba41a659b8fcdcd7e1caf4e0","disposition":"policy_refusal","calls":0,"turns":0,"input_tokens":0,"output_tokens":0,"cost_usd":0,"persistent_writes":0,"blocker":"repository_policy_prohibits_ai"}
+        {"repository":"vitest","target_sha":"e08c45c3921ab1c517021836bc73a13f1310c538","disposition":"diagnostic_only","calls":77,"turns":77,"input_tokens":1983477,"output_tokens":62963,"cost_usd":0.18053296,"elapsed_ms":959686,"explorer_spawns":7,"fingerprint":"60e653c9924529543f6d4bdd34ed981060288f6bb17867cdb8bfe56cbc8e4b8a"},
+        {"repository":"itsdangerous","target_sha":"672971d66a2ef9f85151e53283113f33d642dabd","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1423558,"output_tokens":57586,"cost_usd":0.1549276,"elapsed_ms":742954,"explorer_spawns":9,"fingerprint":"c7761d173bd174d0980e13f493c20fac463811fb4db23e6a93643b1bd29b6793"},
+        {"repository":"groupcache","target_sha":"2c02b8208cf8c02a3e358cb1d9b60950647543fc","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1263924,"output_tokens":44331,"cost_usd":0.13964998,"elapsed_ms":715355,"explorer_spawns":8,"fingerprint":"48ce443b9cb8123ae860878d77e2ce0ea232b33c7ead59380585d3d90fac99a7"},
+        {"repository":"anyhow","target_sha":"c63b279f3f4af2b02ca6267d9eb47d6d10497f69","disposition":"diagnostic_only","calls":78,"turns":78,"input_tokens":1953392,"output_tokens":62784,"cost_usd":0.19300432,"elapsed_ms":867981,"explorer_spawns":6,"fingerprint":"af9601fa98c2d3251bf32499e3744e8c3abcfefa0c5aae8061e749b109d0e218"},
+        {"repository":"junit4","target_sha":"890f3c972647de378f25e7271d8fbbd9d3456b79","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1670717,"output_tokens":60358,"cost_usd":0.17532546,"elapsed_ms":828239,"explorer_spawns":9,"fingerprint":"e287a6001e61bf070cd334c1531c2cdf725038dad927a0424168152d2b689a0b"},
+        {"repository":"rack","target_sha":"8bf4eb078498edc9105fb04add80d89c5340e60b","disposition":"diagnostic_only","calls":86,"turns":86,"input_tokens":1992369,"output_tokens":60268,"cost_usd":0.19348094,"elapsed_ms":901742,"explorer_spawns":7,"fingerprint":"b7a17f5a114de129f4920f84528760c4a3c1c30548b274e303e040da13d2b72d"},
+        {"repository":"emacs","target_sha":"f4f249a2249a7047ba41a659b8fcdcd7e1caf4e0","disposition":"policy_refusal","calls":0,"turns":0,"input_tokens":0,"output_tokens":0,"cost_usd":0,"elapsed_ms":2975,"persistent_writes":0,"blocker":"repository_policy_prohibits_ai"}
       ]
     },
     {
       "round": 2,
       "production_code_unchanged": true,
       "cases": [
-        {"repository":"vitest","target_sha":"e08c45c3921ab1c517021836bc73a13f1310c538","disposition":"diagnostic_only","calls":94,"turns":94,"input_tokens":1961023,"output_tokens":60563,"cost_usd":0.17506624,"elapsed_ms":884882,"explorer_spawns":9,"fingerprint":"354ec3e80ca5e980076511218d98edff1fc84adb9f7e5bec5ac4dd1e6fb4e527"},
-        {"repository":"itsdangerous","target_sha":"672971d66a2ef9f85151e53283113f33d642dabd","disposition":"diagnostic_only","calls":76,"turns":76,"input_tokens":1952795,"output_tokens":49846,"cost_usd":0.15969202,"elapsed_ms":682493,"explorer_spawns":7,"fingerprint":"1318383cf6507e7d529c8d4232e014cbd97833788bfe804dc9f2accb07beb882"},
-        {"repository":"groupcache","target_sha":"2c02b8208cf8c02a3e358cb1d9b60950647543fc","disposition":"diagnostic_only","calls":87,"turns":87,"input_tokens":1980193,"output_tokens":52242,"cost_usd":0.1591082,"elapsed_ms":808487,"explorer_spawns":7,"fingerprint":"f78f73a7cd3ad12ff74665e39561fe9c84c731bf710dc09a9ac51cc55da1d4ab"},
-        {"repository":"anyhow","target_sha":"c63b279f3f4af2b02ca6267d9eb47d6d10497f69","disposition":"diagnostic_only","calls":89,"turns":89,"input_tokens":1968968,"output_tokens":45499,"cost_usd":0.1808779,"elapsed_ms":626839,"explorer_spawns":7,"fingerprint":"51312d004508d0aab313a2580304d7920e0f4d4d7835d5cfc9c3f6d6f520b7da"},
-        {"repository":"junit4","target_sha":"890f3c972647de378f25e7271d8fbbd9d3456b79","disposition":"diagnostic_only","calls":94,"turns":94,"input_tokens":1966090,"output_tokens":64863,"cost_usd":0.18954332,"elapsed_ms":832433,"explorer_spawns":9,"fingerprint":"512ca6781f57557ac6669c504611824c78d4e8da1f58855d7d9bc0e78ea396b1"},
-        {"repository":"rack","target_sha":"8bf4eb078498edc9105fb04add80d89c5340e60b","disposition":"diagnostic_only","calls":88,"turns":88,"input_tokens":1975519,"output_tokens":58110,"cost_usd":0.18298942,"elapsed_ms":816760,"explorer_spawns":8,"fingerprint":"fda89b9cd2cef98a4eefedec174ea8e09e27d7043e1e67c4032646495730a281"},
-        {"repository":"emacs","target_sha":"f4f249a2249a7047ba41a659b8fcdcd7e1caf4e0","disposition":"policy_refusal","calls":0,"turns":0,"input_tokens":0,"output_tokens":0,"cost_usd":0,"persistent_writes":0,"blocker":"repository_policy_prohibits_ai"}
+        {"repository":"vitest","target_sha":"e08c45c3921ab1c517021836bc73a13f1310c538","disposition":"diagnostic_only","calls":88,"turns":88,"input_tokens":1954754,"output_tokens":61718,"cost_usd":0.17221442,"elapsed_ms":895752,"explorer_spawns":9,"fingerprint":"0b5c5ef8a69e2fa7c9d0cde5f7de23f0c2447116a3c521d97ca5cd491023a82f"},
+        {"repository":"itsdangerous","target_sha":"672971d66a2ef9f85151e53283113f33d642dabd","disposition":"diagnostic_only","calls":91,"turns":91,"input_tokens":1975279,"output_tokens":57467,"cost_usd":0.17843686,"elapsed_ms":890910,"explorer_spawns":8,"fingerprint":"072570de7dd16b9dc29587b54d6a66120f51aff89b687f31eed9e7559017fe9b"},
+        {"repository":"groupcache","target_sha":"2c02b8208cf8c02a3e358cb1d9b60950647543fc","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1881847,"output_tokens":52792,"cost_usd":0.16624778,"elapsed_ms":861623,"explorer_spawns":7,"fingerprint":"e0162c30c73620bd9125284a33bb288705ce4486423660c8101b0f1ed8048a9a"},
+        {"repository":"anyhow","target_sha":"c63b279f3f4af2b02ca6267d9eb47d6d10497f69","disposition":"diagnostic_only","calls":87,"turns":87,"input_tokens":1981401,"output_tokens":62891,"cost_usd":0.19792638,"elapsed_ms":924592,"explorer_spawns":9,"fingerprint":"5a196e1d9f4ec350cc0647685fd28667fa415ee9b4b65d812ae92f9d310cfde4"},
+        {"repository":"junit4","target_sha":"890f3c972647de378f25e7271d8fbbd9d3456b79","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1898421,"output_tokens":64861,"cost_usd":0.18246034,"elapsed_ms":1083472,"explorer_spawns":9,"fingerprint":"1bb032e60767a4d2b17826bcf7a8e9a9aff5adcd8ce66eab00cee3451aa7a9ee"},
+        {"repository":"rack","target_sha":"8bf4eb078498edc9105fb04add80d89c5340e60b","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1514922,"output_tokens":73840,"cost_usd":0.18999486,"elapsed_ms":1078596,"explorer_spawns":9,"fingerprint":"bddb9e5342fe8e1486d47e2d01086fbbf6df58ec04e69fdccf1f97bd8cab0fd1"},
+        {"repository":"emacs","target_sha":"f4f249a2249a7047ba41a659b8fcdcd7e1caf4e0","disposition":"policy_refusal","calls":0,"turns":0,"input_tokens":0,"output_tokens":0,"cost_usd":0,"elapsed_ms":2363,"persistent_writes":0,"blocker":"repository_policy_prohibits_ai"}
       ]
     }
   ],
@@ -125,12 +125,14 @@
     "src/core/audit/specialist-completion.ts",
     "src/core/audit/write-map-tools.ts",
     "src/core/installer/agent-validation-discovery.ts",
+    "src/core/installer/bounded-regular-file.ts",
     "src/core/installer/build-systems/shared.ts",
     "src/core/installer/compiled-finalization.ts",
     "src/core/installer/contracts.ts",
     "src/core/installer/finalization.ts",
     "src/core/installer/installation-transaction.ts",
     "src/core/installer/preparation.ts",
+    "src/core/installer/process-runner.ts",
     "src/core/installer/repository-inspection.ts",
     "src/core/installer/repository-policy.ts",
     "src/core/installer/task-policy.ts",
@@ -160,6 +162,7 @@
     "tests/fixtures/codebase-map.ts",
     "tests/fixtures/stabilization-corpus.json",
     "tests/installer/atomic-installation-boundary.test.ts",
+    "tests/installer/bounded-regular-file.test.ts",
     "tests/installer/one-time-installer.test.ts",
     "tests/installer/repository-policy-preflight.test.ts",
     "tests/installer/validation-isolation.test.ts",
@@ -174,7 +177,7 @@
   ],
   "acceptance": {
     "historical_replay": "passed",
-    "historical_live": "passed_on_b35b17e_with_exact-candidate_transaction-boundary_qualification",
+    "historical_live": "passed_on_b35b17e_with_exact-candidate_transaction_and_security_qualification",
     "held_out_round_1": "passed",
     "held_out_round_2": "passed",
     "two_consecutive_held_out_rounds_without_production_changes": true,
@@ -186,7 +189,7 @@
     "resource_budget_violations": 0,
     "production_repository_specific_hacks": 0
   },
-  "qualification_outcome": "ready_for_exact_pr_head_release_gate",
+  "qualification_outcome": "release_ready_pending_exact_report_head_ci",
   "known_limitations": [
     "Default budgets intentionally reject repositories whose semantic closure cannot be completed within the configured call, token, or duration ceilings.",
     "Repository validation commands run in disposable Git checkouts but are not containerized or network-isolated.",

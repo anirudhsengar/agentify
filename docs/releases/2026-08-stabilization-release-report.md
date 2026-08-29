@@ -1,14 +1,14 @@
 # Specialist compiler stabilization release report
 
-Agentify is ready for the exact pull-request-head release gate. The evaluated production candidate is `6015b3b0a92c368d9840702b051fde04337baef7`, built from base `f2df9eb8563bfcb26919d82c7bf28c9fb7c19e8b`. Its Node 22.19.0 packed artifact is 8,058,779 bytes with SHA-256 `7eadf42f3ad80eab3f9a5b96096cb5850d7892fae5a34ebcfe9d9b7a3546637b`.
+Agentify is ready for the exact pull-request-head release gate. The evaluated production candidate is `e1186861095ac543b4bef9e4f97ca09a76918be8`, built from base `f2df9eb8563bfcb26919d82c7bf28c9fb7c19e8b`. Its Node 22.19.0 packed artifact is 8,060,372 bytes with SHA-256 `acf4a0f09b6739249b5418f7f1bc21ca4f99d98baa2d1c3286cf23dab0c5bb1e`.
 
 The implementation now treats specialist generation as a bounded, fail-closed compiler. Repository evidence and application-attested explorer receipts feed concern proposals; deterministic normalization resolves ownership; validation checks normalized closure and fixed-point idempotence; only the exact validated output can materialize; and the installation transaction rolls back every operational artifact on failure or termination. Restrictive tracked policy is evaluated before persistent mutation. Repository validation runs in disposable checkouts.
 
 ## Qualification result
 
-- `mise exec node@22.19.0 -- npm run verify:release` passed on the evaluated production SHA: delivery-integrity inspection, strict typecheck, 94 recursively discovered source test files, nine executable historical replay cases, documentation/package contracts, focused invariants, scaffold E2E, exact packed-package qualification, and a zero-vulnerability full dependency audit.
-- All nine historical live repositories reached an allowed terminal disposition on `b35b17e492bda6bbbd2d1cc90453da30e568b367`. Lobsters refused all writes because tracked policy prohibited AI-authored persistence. Commander.js, aqa-tests, Click, Cobra, Hono, Gin, Axum, and Spring Petclinic failed safely with precise unresolved obligations and only the explicitly permitted diagnostic map. That evidence is carried forward explicitly: the later production delta only opens the installation transaction before recognized-runtime repair, and exact-candidate package tests cover both ready and fail-closed recognized-runtime rollback.
-- Two fresh consecutive held-out rounds ran on exact `6015b3b` without production-code changes across Vitest, ItsDangerous, Groupcache, Anyhow, JUnit4, Rack, and Emacs. Emacs refused all persistent writes in both rounds. The other six cases remained diagnostic-only; none installed a partial team or operational workflow.
+- `mise exec node@22.19.0 -- npm run verify:release` passed on the evaluated production SHA: delivery-integrity inspection, strict typecheck, 95 recursively discovered source test files, nine executable historical replay cases, documentation/package contracts, focused invariants, scaffold E2E, exact packed-package qualification, and a zero-vulnerability full dependency audit.
+- All nine historical live repositories reached an allowed terminal disposition on `b35b17e492bda6bbbd2d1cc90453da30e568b367`. Lobsters refused all writes because tracked policy prohibited AI-authored persistence. Commander.js, aqa-tests, Click, Cobra, Hono, Gin, Axum, and Spring Petclinic failed safely with precise unresolved obligations and only the explicitly permitted diagnostic map. This historical evidence is carried forward rather than presented as an exact-candidate rerun. Later production deltas open the installation transaction before recognized-runtime repair and harden filesystem reads and executable selection; exact-candidate tests and CodeQL cover those paths.
+- Two fresh consecutive held-out rounds ran on exact `e118686` without production-code changes across Vitest, ItsDangerous, Groupcache, Anyhow, JUnit4, Rack, and Emacs. Emacs refused all persistent writes in both rounds. The other six cases remained diagnostic-only; none installed a partial team or operational workflow.
 - Every accepted live invocation stayed at or below 96 calls, 96 turns, two million input/cache tokens, 200,000 output tokens, USD 20, 16 explorers, and 1.8 million aggregate audit milliseconds. Every audit invocation emitted one budget event and one terminal result.
 - Exact target comparisons found no application-code mutation or build/cache residue. Failed analyzable runs retained only `.agentify/runtime/audit/codebase_map.json`; restrictive-policy cases retained nothing.
 
@@ -16,9 +16,9 @@ The complete machine-readable evidence summary is [`2026-08-stabilization-evalua
 
 ## Changed-file policy
 
-The branch is restricted to 77 intentional production source, prompt, documentation, deterministic fixture, and test files. It contains no apply/export/materialization workflow, encoded payload, patch archive, generated source archive, retry workflow, one-shot qualification workflow, or staging machinery.
+The branch is restricted to 80 intentional production source, prompt, documentation, deterministic fixture, and test files. It contains no apply/export/materialization workflow, encoded payload, patch archive, generated source archive, retry workflow, one-shot qualification workflow, or staging machinery.
 
-The complete changed-file list is recorded in the machine-readable report under `changed_files`. It covers four repository-root files, five release/index/architecture documents, 38 production source and prompt files under `src/`, and 30 deterministic test/fixture files under `tests/`. The exact list is also regenerated by the delivery-integrity gate before the pull request is opened.
+The complete changed-file list is recorded in the machine-readable report under `changed_files`. It covers four repository-root files, five release/index/architecture documents, 40 production source and prompt files under `src/`, and 31 deterministic test/fixture files under `tests/`. The exact list is also regenerated by the delivery-integrity gate before the pull request is updated.
 
 ## Known limitations
 
@@ -28,4 +28,4 @@ The complete changed-file list is recorded in the machine-readable report under 
 
 ## Recommendation
 
-Open a non-draft pull request and merge only if the exact PR head passes Node 22.19.0 and Node 24 tests, typecheck, package/scaffold qualification, full dependency audit, delivery-integrity inspection, and CodeQL. Do not merge on the basis of this pre-PR qualification alone.
+Update the existing non-draft pull request and merge only if its exact report head passes Node 22.19.0 and Node 24 tests, typecheck, package/scaffold qualification, full dependency audit, delivery-integrity inspection, and CodeQL. Do not merge without explicit authorization.
