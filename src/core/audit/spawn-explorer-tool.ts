@@ -494,6 +494,16 @@ export function activeExplorerToolsAfterRead(
         : [...activeTools];
 }
 
+export function concernSubmissionSteerMessage(
+    mode: string,
+    repositoryReadCalls: number,
+    maxReads: number,
+): string | null {
+    return mode === "concern_tracer" && repositoryReadCalls === maxReads
+        ? "Repository evidence collection is complete. Call submit_concern_report now; do not request another repository tool."
+        : null;
+}
+
 const ConcernSubmissionSchema = Type.Object({
     report_json: Type.String({
         minLength: 2,
@@ -987,6 +997,14 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                         maxReads,
                                         [...toolsForMode, "submit_concern_report"],
                                     ));
+                                    const steerMessage = concernSubmissionSteerMessage(
+                                        mode,
+                                        repositoryReadCalls,
+                                        maxReads,
+                                    );
+                                    if (steerMessage) {
+                                        pi.sendUserMessage(steerMessage, { deliverAs: "steer" });
+                                    }
                                 }
                             }
                             return undefined;
