@@ -217,3 +217,42 @@ test("the tracer normalizes domain-locked absolute evidence paths", async () => 
   );
   assert.equal((outside as { isError?: boolean }).isError, true);
 });
+
+test("the tracer reports exact validation locations and normalizes tracked path references", async () => {
+  let submitted: ReturnType<typeof parseStructuredConcernReport> = null;
+  const parsed = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null") as {
+    flows: Array<{ steps: unknown[] }>;
+    invariants: Array<{ reference: string }>;
+  };
+  parsed.flows[0]!.steps = parsed.flows[0]!.steps.slice(0, 1);
+  const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", (concern) => {
+    submitted = concern;
+  }, "/repo");
+  const invalid = await tool.execute(
+    "submit",
+    { report_json: JSON.stringify(parsed) } as never,
+    undefined,
+    undefined,
+    {} as never,
+  ) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+  assert.equal(invalid.isError, true);
+  assert.match(invalid.content[0]?.text ?? "", /\/flows\/0\/steps/u);
+
+  parsed.flows[0]!.steps = [
+    { path: "src/extract/mod.rs", what_happens: "Runs parts-only extractors." },
+    { path: "src/extract/rejection.rs", what_happens: "Converts failures into typed rejections." },
+  ];
+  parsed.invariants[0]!.reference = "src/extract/mod.rs FromRequest";
+  const valid = await tool.execute(
+    "submit",
+    { report_json: JSON.stringify(parsed) } as never,
+    undefined,
+    undefined,
+    {} as never,
+  );
+  assert.equal((valid as { isError?: boolean }).isError, undefined);
+  assert.equal(
+    (submitted as unknown as { invariants: Array<{ reference: string }> }).invariants[0]?.reference,
+    "src/extract/mod.rs",
+  );
+});
