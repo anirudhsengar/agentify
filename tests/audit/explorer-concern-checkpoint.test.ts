@@ -179,6 +179,30 @@ test("the tracer submits its concern through an application-owned typed tool", a
   assert.deepEqual(concern.spans_subtrees, ["src"]);
 });
 
+test("the tracer cannot rename its application-bound concern identity", async () => {
+  let submissions = 0;
+  const parsed = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null") as Record<string, unknown>;
+  const factory = createConcernSubmissionTool as unknown as (
+    observedAt: string,
+    onSubmit: () => void,
+    repositoryRoot: string | undefined,
+    expectedConcern: string,
+  ) => ReturnType<typeof createConcernSubmissionTool>;
+  const tool = factory("2026-08-29T00:00:00.000Z", () => {
+    submissions += 1;
+  }, undefined, "Request parsing and rejection contracts");
+  const result = await tool.execute(
+    "submit",
+    { report_json: JSON.stringify(parsed) } as never,
+    undefined,
+    undefined,
+    {} as never,
+  ) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+  assert.equal(result.isError, true);
+  assert.match(result.content[0]?.text ?? "", /must exactly match.*Request parsing and rejection contracts/i);
+  assert.equal(submissions, 0);
+});
+
 test("the tracer envelope rejects malformed and oversized JSON before recording", async () => {
   let submissions = 0;
   const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", () => {
