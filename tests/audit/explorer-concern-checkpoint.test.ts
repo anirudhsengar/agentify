@@ -11,6 +11,7 @@ import {
 import { loadCanonicalMapAt, writeCanonicalMap } from "../../src/core/audit/map-storage.ts";
 import {
   activeExplorerToolsAfterRead,
+  concernSubmissionSteerMessage,
   createConcernSubmissionTool,
   parseStructuredConcernReport,
   shouldForceConcernSubmission,
@@ -81,6 +82,12 @@ test("a tracer must submit as soon as its repository-read budget is exhausted", 
     activeExplorerToolsAfterRead("module_graph", 10, 10, ["read", "grep"]),
     ["read", "grep"],
   );
+  assert.match(
+    concernSubmissionSteerMessage("concern_tracer", 6, 6) ?? "",
+    /call submit_concern_report now; do not request another repository tool/iu,
+  );
+  assert.equal(concernSubmissionSteerMessage("concern_tracer", 5, 6), null);
+  assert.equal(concernSubmissionSteerMessage("module_graph", 6, 6), null);
 });
 
 function git(cwd: string, ...args: string[]): string {
