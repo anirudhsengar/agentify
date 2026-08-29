@@ -178,6 +178,35 @@ function readRawGapFillerPrompt(): string {
   return fs.readFileSync(promptPath, "utf-8").replaceAll("\r\n", "\n");
 }
 
+function readExplorerPrompt(name: string): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const promptPath = path.resolve(here, `../../src/core/audit/prompts/explorers/${name}.md`);
+  return fs.readFileSync(promptPath, "utf-8").replaceAll("\r\n", "\n");
+}
+
+async function testConcernPromptsRespectFileLevelCoreOwnership(): Promise<void> {
+  const builder = readRawBuilderPrompt();
+  const scout = readExplorerPrompt("concern_scout");
+  const tracer = readExplorerPrompt("concern_tracer");
+  for (const [name, prompt] of [["builder", builder], ["scout", scout]] as const) {
+    assert.match(
+      prompt,
+      /same sole tracked implementation file[\s\S]*group[^.]*broader behavioral concern/i,
+      `${name} prompt must group proposals that cannot have independent file-level core ownership`,
+    );
+  }
+  assert.match(
+    tracer,
+    /exactly one specialist may core-own a shared tracked file/i,
+    "tracer prompt must treat core ownership as portfolio-wide and file-level",
+  );
+  assert.match(
+    tracer,
+    /independent tracked implementation file[\s\S]*core/i,
+    "tracer prompt must prefer concern-specific implementation ownership over shared orchestration",
+  );
+}
+
 async function testPromptMatchesSubstanceGateForSmallRepositories(): Promise<void> {
   const raw = readRawBuilderPrompt();
   assert.match(
@@ -237,8 +266,9 @@ async function main(): Promise<void> {
   await testPromptDoesNotRequestUnavailableInternalTemplate();
   await testPromptMatchesSubstanceGateForSmallRepositories();
   await testGapFillerMatchesSubstanceGateForSmallRepositories();
+  await testConcernPromptsRespectFileLevelCoreOwnership();
   // eslint-disable-next-line no-console
-  console.log("builder-prompt-state-dir: all 9 checks passed");
+  console.log("builder-prompt-state-dir: all 10 checks passed");
 }
 
 await main();
