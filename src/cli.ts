@@ -33,6 +33,10 @@ import {
   type RepositoryInstallationPreflight,
   type RepositoryValidationApproval,
 } from "./core/installer/index.ts";
+import {
+  beginPendingInstallation,
+  rollbackPendingInstallation,
+} from "./core/installer/installation-transaction.ts";
 import { ClackUi, printBanner } from "./core/ui/index.ts";
 import { getProviderEnvValue, isAgentifyProvider } from "./core/provider-auth.ts";
 import { selectModelForRole } from "./core/models/resolver.ts";
@@ -191,30 +195,36 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   }
 
   let repairedPaths: string[] = [];
-  const repair = repairInstalledRuntime({
-    cwd: process.cwd(),
-    packageRoot: packageRoot(),
-    agentifyVersion: readPackageVersion(),
-    preflight: installerPreflight,
-    validationApproval: validationApproval ?? undefined,
-  });
-  repairedPaths = repair.repaired_paths;
-  if (repair.conflicts.length > 0) {
-    installerPreflight = {
-      ...installerPreflight,
-      disposition: "analyzable-only",
-      blockers: [
-        ...installerPreflight.blockers,
-        {
-          code: "user_owned_workflow_conflict",
-          message: `User-owned files conflict with ${repair.conflicts.length} required Agentify runtime path(s).`,
-          remediation: "Review the preserved *.agentify.* files and explicitly resolve each workflow conflict.",
-        },
-      ],
-    };
-  }
+  beginPendingInstallation(process.cwd());
+  try {
+    const repair = repairInstalledRuntime({
+      cwd: process.cwd(),
+      packageRoot: packageRoot(),
+      agentifyVersion: readPackageVersion(),
+      preflight: installerPreflight,
+      validationApproval: validationApproval ?? undefined,
+    });
+    repairedPaths = repair.repaired_paths;
+    if (repair.conflicts.length > 0) {
+      installerPreflight = {
+        ...installerPreflight,
+        disposition: "analyzable-only",
+        blockers: [
+          ...installerPreflight.blockers,
+          {
+            code: "user_owned_workflow_conflict",
+            message: `User-owned files conflict with ${repair.conflicts.length} required Agentify runtime path(s).`,
+            remediation: "Review the preserved *.agentify.* files and explicitly resolve each workflow conflict.",
+          },
+        ],
+      };
+    }
 
-  prepareOneTimeInstallationState(process.cwd(), installerPreflight);
+    prepareOneTimeInstallationState(process.cwd(), installerPreflight);
+  } catch (error) {
+    rollbackPendingInstallation(process.cwd());
+    throw error;
+  }
 
   const validationConsentBlocked = installerPreflight.blockers.some((blocker) => (
     blocker.code === "validation_consent_required" || blocker.code === "validation_policy_stale"

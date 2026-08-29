@@ -126,6 +126,26 @@ process.exit(1);
       assert.match(output, /Draft PR publication disabled/);
     }
     assert.match(first.stdout, /Automatic application merge disabled/);
+    if (isScaffolded) {
+      for (const relative of [
+        ".agentify/policies/self-update-allowlist.json",
+        ".github/agentify-task-policy.json",
+        ".github/workflows/agentify-issue.yml",
+        ".github/workflows/agentify-learn.yml",
+        ".github/scripts/complete-accepted-task-merge.mjs",
+        ".github/scripts/publish-task-draft.mjs",
+        ".github/scripts/run-task-lifecycle.mjs",
+        ".github/scripts/task-state-github.mjs",
+        ".github/agentify/task-runtime.mjs",
+        ".github/agentify/learning-runtime.mjs",
+        ".github/agentify/validation-smoke.mjs",
+      ]) assert.equal(
+        fs.existsSync(path.join(fixture, relative)),
+        false,
+        `${profile}: failed readiness must not retain ${relative}`,
+      );
+      continue;
+    }
     for (const relative of [
       ".agentify/manifest.json",
       ".agentify/agents/orchestrator.json",
@@ -145,20 +165,15 @@ process.exit(1);
     ]) assert.ok(fs.existsSync(path.join(fixture, relative)), `${profile}: ${relative}`);
     const policy = JSON.parse(fs.readFileSync(path.join(fixture, ".github/agentify-task-policy.json"), "utf-8"));
     assert.equal(policy.schema_version, "2");
-    assert.equal(policy.configured, !isScaffolded);
+    assert.equal(policy.configured, true);
     assert.equal(policy.repository.repository_id, String(987651 + index));
     assert.equal(policy.validation_execution.mode, "maintainer-approved-unsandboxed");
     assert.equal(policy.application_merge, "disabled");
-    if (isScaffolded) {
-      assert.equal(policy.validation_approval, null);
-      assert.equal(policy.policy, null);
-    } else {
-      assert.notEqual(policy.validation_approval, null);
-      assert.ok(policy.policy.validation_commands.some((command) => (
-        command.command_id.startsWith("test-")
-        && command.command_id !== "test-agentify-validation-smoke"
-      )), `${profile}: configured policy requires a verified repository test`);
-    }
+    assert.notEqual(policy.validation_approval, null);
+    assert.ok(policy.policy.validation_commands.some((command) => (
+      command.command_id.startsWith("test-")
+      && command.command_id !== "test-agentify-validation-smoke"
+    )), `${profile}: configured policy requires a verified repository test`);
   }
 
   const fixture = path.join(fixturesRoot, "attached");

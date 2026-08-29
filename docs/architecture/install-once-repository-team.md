@@ -100,8 +100,9 @@ Missing or stale receipts, failed tracers, and accepted concerns without a
 successful tracer abort the transaction and remove Agentify-managed persistent
 artifacts instead of leaving a partial team.
 
-The installation transaction is captured before final compilation can persist
-a normalized map. The specialist synchronizer then independently requires that
+The installation transaction is captured before recognized runtime repair or
+final compilation can persist any managed path or normalized map. The
+specialist synchronizer then independently requires that
 the canonical map is complete and already recompiles to an idempotent fixed
 point before it changes identities, memory, or procedures. Compiler write,
 materialization, portfolio-count, structural-canary, and later readiness

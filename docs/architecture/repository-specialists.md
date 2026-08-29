@@ -98,9 +98,10 @@ and retired IDs.
 The synchronizer accepts only a complete canonical map that recompiles to the
 same object at the compiler's idempotent fixed point. It refuses incomplete or
 normalization-pending evidence before changing specialist identities, memory,
-or procedures. Installer transaction capture precedes normalized-map
-persistence, so materialization always consumes the exact compiled map and a
-later mismatch or canary failure restores the pre-installation bytes.
+or procedures. Installer transaction capture precedes recognized runtime repair
+and normalized-map persistence, so materialization always consumes the exact
+compiled map and a later mismatch, readiness failure, or canary failure restores
+the pre-installation bytes.
 
 The canonical roles—builder, reviewer, and knowledge maintainer—are separate from
 repository specialists. Specialists never receive application-source write

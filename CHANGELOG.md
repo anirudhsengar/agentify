@@ -70,8 +70,9 @@ All notable changes to Agentify are documented here.
 - Specialist/procedure synchronization now refuses canonical evidence that is
   incomplete or not already at the compiler's idempotent fixed point, before
   changing persistent memory. Installation transaction capture also begins
-  before any normalized-map write, so compiler, output-cap, materialization,
-  and canary failures restore the same pre-installation state. Every tracked
+  before recognized runtime repair or any normalized-map write, so repair,
+  compiler, output-cap, materialization, and canary failures restore the same
+  pre-installation state. Every tracked
   file must have exactly one accepted core owner; adjacent specialists may keep
   it only as supporting context until ownership is resolved. A concern cannot
   assign only tests as core while citing tracked implementation behavior as
