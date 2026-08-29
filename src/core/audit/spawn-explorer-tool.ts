@@ -58,6 +58,7 @@ import { currentRepositoryCommit } from "./explorer-receipts.ts";
 import { loadCanonicalMapAt } from "./map-storage.ts";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
+import { capProviderOutputTokens } from "../pi-sdk-runtime.ts";
 import { ConcernSchema, type Concern } from "./schema/concerns.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
@@ -85,6 +86,7 @@ export const DEFAULT_SUBAGENT_TIMEOUT_MS = 3 * 60 * 1000;
 const DEFAULT_MAX_TOTAL_COST_USD = 5;
 const MAX_EXPLORER_READS = 32;
 const MAX_EXPLORER_PROVIDER_CALLS = 40;
+const MAX_CONCERN_REPORT_TOKENS = 3_500;
 
 // The 9 dimension-shaped modes, the two concern modes that find and trace what
 // this repository's specialties actually are, plus a custom mode that takes an
@@ -136,7 +138,7 @@ const MODE_STEP_DEFAULTS: Record<string, { reads: number; bash: number; steps: n
     // tests, and public surfaces, but must summarize instead of repeatedly
     // re-ingesting the repository.
     concern_scout: { reads: 10, bash: 0, steps: 14 },
-    concern_tracer: { reads: 9, bash: 0, steps: 12 },
+    concern_tracer: { reads: 6, bash: 0, steps: 8 },
     // The builder specifies custom exploration limits per call.
     custom: { reads: 8, bash: 0, steps: 12 },
 };
@@ -399,7 +401,12 @@ function decodeStructuredConcernReport(
     const blocker = typeof parsed.blocker_reason === "string" ? parsed.blocker_reason.trim() : "";
     if (blocker) return { concern: null, error: `concern_tracer reported blocker: ${blocker}` };
     const { adjacent_concerns: _adjacent, blocker_reason: _blocker, last_updated: _lastUpdated, ...fields } = parsed;
-    const concern = { ...fields, last_updated: observedAt };
+    const touchpoints = Array.isArray(fields.touchpoints) ? fields.touchpoints : [];
+    const spansSubtrees = [...new Set(touchpoints.flatMap((touchpoint) => {
+        if (!isRecord(touchpoint) || typeof touchpoint.path !== "string") return [];
+        return [touchpoint.path.includes("/") ? touchpoint.path.split("/", 1)[0] : "."];
+    }))].sort();
+    const concern = { ...fields, spans_subtrees: spansSubtrees, last_updated: observedAt };
     if (!Value.Check(ConcernSchema, concern)) {
         const first = [...Value.Errors(ConcernSchema, concern)][0] as { path?: string; message?: string } | undefined;
         return {
@@ -739,7 +746,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             `\n\n# Constraints (from parent)\n` +
             `- Model: ${subAgentModelLabel}\n` +
             `- Provider-call cap: ${maxProviderCalls} (${maxReads} repository reads, ${maxBash} bash invocations max)\n` +
-            `- Return ## Report within ~${maxSteps * 1000} tokens.`;
+            `- Return ## Report within ~${mode === "concern_tracer" ? 3_000 : maxSteps * 1_000} tokens.`;
         const task = mode === "custom"
             ? `${params.target_path}${summarySuffix}${constraintsBlock}`
             : `${params.target_path} ${params.focus ?? ""}${summarySuffix}${constraintsBlock}`;
@@ -788,8 +795,15 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 extensionFactories: [
                     (pi) => {
                         pi.on("before_provider_request", (event) => {
-                            toolOptions.resourceBudget?.assertProviderInputCapacity(event.payload);
-                            return event.payload;
+                            const payload = mode === "concern_tracer"
+                                ? capProviderOutputTokens(
+                                    event.payload,
+                                    subAgentModel.api,
+                                    MAX_CONCERN_REPORT_TOKENS,
+                                )
+                                : event.payload;
+                            toolOptions.resourceBudget?.assertProviderInputCapacity(payload);
+                            return payload;
                         });
                         pi.on("tool_call", async (event) => {
                             const defenseResult = await defenseHook(event);

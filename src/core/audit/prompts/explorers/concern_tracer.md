@@ -118,7 +118,7 @@ Return `## Report` followed by exactly one fenced JSON object and no other prose
   "pitfalls": [{ "risk": "what goes wrong", "consequence": "what it costs", "reference": "tracked/path" }],
   "entry_questions": ["what a task here must answer first"],
   "validation": ["exact observed command, or leave this array empty"],
-  "spans_subtrees": ["top-level-area"],
+  "spans_subtrees": ["top-level-area derived from the touchpoint paths"],
   "stability": "high",
   "recurrence": "high",
   "confidence": "high",
@@ -130,9 +130,11 @@ Return `## Report` followed by exactly one fenced JSON object and no other prose
 
 Use only schema values shown above. `line_range` may be `null`; `symbol` may be
 `null`; stability, recurrence, and confidence are each `high`, `medium`, or
-`low`. If the trace cannot be completed, set `blocker_reason` to the precise
-reason. Agentify validates and checkpoints a complete object directly; invalid
-JSON, a non-null blocker, or a schema mismatch remains an unresolved tracer.
+`low`. Agentify derives `spans_subtrees` again from the tracked touchpoint paths
+and binds `last_updated` to the exact repository commit. If the trace cannot be
+completed, set `blocker_reason` to the precise reason. Agentify validates and
+checkpoints a complete object directly; invalid JSON, a non-null blocker, or a
+schema mismatch remains an unresolved tracer.
 
 ## Expertise
 

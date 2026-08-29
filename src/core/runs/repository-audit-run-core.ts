@@ -181,7 +181,7 @@ function specialistEvidenceTopUpPrompt(): string {
   return [
     "The canonical codebase map already closes every coverage dimension, but concern_evidence.concerns was never recorded.",
     "Run concern_scout successfully, record its substantive rejections through write_map_delta, then trace each accepted candidate successfully with concern_tracer. Agentify validates and checkpoints complete tracer bodies directly. A timeout remains unresolved and cannot justify not_concerns.",
-    "Record one entry per concern a maintainer would recognize as its own body of knowledge: concern, one_line, covers, excludes, flows (each with at least two observed steps), touchpoints (path, symbol, role, line_range, centrality), invariants, pitfalls, entry_questions, validation, spans_subtrees, stability, recurrence, confidence, last_updated.",
+    "Record one entry per concern a maintainer would recognize as its own body of knowledge: concern, one_line, covers, excludes, flows (each with at least two observed steps), touchpoints (path, symbol, role, line_range, centrality), invariants, pitfalls, entry_questions, validation, spans_subtrees, stability, recurrence, and confidence. Agentify binds last_updated to the exact repository commit.",
     "Ground every path, type, and command in repository evidence you actually read. Do not invent candidates.",
     "An honest empty concerns list is valid only when the repository is too small to have distinct specialties; record that justification in open_questions in the same delta.",
     "Do not modify or weaken the existing closed coverage dimensions. Do not return prose instead of the required structured tool call.",

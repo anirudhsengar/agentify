@@ -159,7 +159,9 @@ obligations and their deterministic fingerprint.
 Model-supplied explorer limits may only narrow trusted mode defaults. Explorer
 usage is charged to the aggregate budget after every provider response, and a
 report over 16 KB is rejected as incomplete evidence rather than truncated into
-a successful receipt.
+a successful receipt. Concern tracers are additionally capped at six repository
+reads, eight provider calls, and 3,500 provider output tokens so one verbose
+trace cannot starve the rest of an evidence-backed portfolio.
 Scout proposals are application-attested obligations: each must be resolved by
 a successful tracer or a substantive `not_concerns` rejection. Agentify
 schema-validates each bounded JSON tracer report and checkpoints its complete
