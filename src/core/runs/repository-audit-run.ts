@@ -36,11 +36,6 @@ export { ProviderAuthFailedError };
 export type { FocusedAuditResult };
 
 const REPAIR_TOOL_ALLOWLIST = [
-  "read",
-  "grep",
-  "find",
-  "ls",
-  "write_map",
   "write_map_delta",
   "spawn_explorer",
 ];
@@ -357,10 +352,10 @@ async function repairSpecialistPortfolio(
       executionPolicy: createReadOnlyExecutionPolicy({
         cwd: context.cwd,
         mode: "audit-readonly",
-        tools: ["read", "grep", "find", "ls"],
+        tools: [],
         protectedPaths: [path.resolve(context.cwd)],
       }),
-      customTools: [mapTools.writeMapTool, mapTools.writeMapDeltaTool],
+      customTools: [mapTools.writeMapDeltaTool],
       spawnExplorerAgentDir: defaultConfigDir(),
       spawnExplorerStateDir: stateDir,
       auditResourceBudget: resourceBudget,

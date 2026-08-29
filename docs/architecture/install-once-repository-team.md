@@ -148,6 +148,9 @@ cost. Per-scout and per-tracer deadlines are three minutes. Repair state is
 measured by a canonical unresolved-obligation fingerprint and terminates after
 repeated no-progress states. Strict optional `auditBudgets` config overrides
 support unusually large repositories without permitting unbounded values.
+Semantic-repair parents receive the current unresolved obligations directly and
+may only dispatch bounded explorers or apply a concern delta; repository reads
+remain confined to those explorers, preventing broad map and tree rereads.
 The application checkpoints cumulative usage in the diagnostic map, bound to
 the audited commit. Same-HEAD CLI continuations resume the remaining budget
 rather than resetting counters; a new commit begins a new evidence lineage.

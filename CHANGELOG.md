@@ -141,6 +141,10 @@ All notable changes to Agentify are documented here.
   upper bound cannot fit, preventing a continuation from overshooting the hard
   token cap before provider usage is reported.
 
+- Semantic repair now acts on the compiler's named unresolved obligations with
+  only bounded explorer dispatch and concern-delta tools. Repository reads stay
+  inside explorers instead of consuming parent calls by rereading the broad map.
+
 - Explorer sessions now run serially with hard mode-specific repository-read
   and provider-call limits. Aggregate exhaustion reports the exact unresolved
   semantic obligations and fingerprint; complete reports at the limit survive.
