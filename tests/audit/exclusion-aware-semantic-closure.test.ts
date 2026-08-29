@@ -202,6 +202,34 @@ test("test-only repositories may own their executable test behavior as core", ()
   }
 });
 
+test("normalization promotes a uniquely cited implementation out of test-only core ownership", () => {
+  const cwd = repository([
+    "src/parser.ts",
+    "src/parser.test.ts",
+  ]);
+  try {
+    const parser = concern({
+      name: "request grammar and rejection",
+      covers: "Parses request grammar and preserves rejection behavior.",
+      excludes: "Transport and response rendering.",
+      core: "src/parser.test.ts",
+      test: "src/parser.test.ts",
+      supporting: ["src/parser.ts"],
+    });
+    const map = mapWithConcerns(["src/parser.ts"], [parser]);
+    const compilation = compileSpecialistEvidence(map, { cwd });
+
+    assert.equal(compilation.complete, true, compilation.reasons.join("; "));
+    assert.equal(
+      compilation.map.concern_evidence?.concerns[0]?.touchpoints
+        .find((touchpoint) => touchpoint.path === "src/parser.ts")?.centrality,
+      "core",
+    );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("a shared high-signal implementation needs explicit core behavioral ownership", () => {
   const cwd = repository([
     "src/auth.ts",
