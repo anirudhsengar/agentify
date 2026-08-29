@@ -8,7 +8,10 @@ import {
   checkpointExplorerConcernEvidence,
 } from "../../src/core/audit/explorer-receipts.ts";
 import { loadCanonicalMapAt, writeCanonicalMap } from "../../src/core/audit/map-storage.ts";
-import { parseStructuredConcernReport } from "../../src/core/audit/spawn-explorer-tool.ts";
+import {
+  createConcernSubmissionTool,
+  parseStructuredConcernReport,
+} from "../../src/core/audit/spawn-explorer-tool.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
 const REPORT = `## Report
@@ -95,4 +98,19 @@ test("tracked touchpoints deterministically supply omitted subtree metadata", ()
     "2026-08-29T00:00:00.000Z",
   );
   assert.deepEqual(concern?.spans_subtrees, ["src"]);
+});
+
+test("the tracer submits its concern through an application-owned typed tool", async () => {
+  let submitted: ReturnType<typeof parseStructuredConcernReport> = null;
+  const parsed = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null") as Record<string, unknown>;
+  delete parsed.spans_subtrees;
+  delete parsed.adjacent_concerns;
+  delete parsed.blocker_reason;
+  const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", (concern) => {
+    submitted = concern;
+  });
+  const result = await tool.execute("submit", parsed as never, undefined, undefined, {} as never);
+  assert.equal((result as { isError?: boolean }).isError, undefined);
+  assert.equal(submitted?.concern, "Request extraction and rejection contracts");
+  assert.deepEqual(submitted?.spans_subtrees, ["src"]);
 });
