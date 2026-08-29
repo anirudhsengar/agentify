@@ -171,10 +171,11 @@ The application parses scout proposal identities into the receipt ledger. Every
 proposal remains an obligation until a related tracer succeeds or normalized
 concern evidence records a substantive rejection. Receipt state is checkpointed
 after each explorer and retains its source run ID; same-HEAD retries resume that
-attested evidence. The builder separately checkpoints scout screening and each
-completed concern through the map tools. Append semantics preserve nested prior
-evidence and deduplicate exact cumulative resends, keeping receipt and concern
-checkpoints aligned. Only provider-generated assistant messages consume the
+attested evidence. Each tracer must emit one bounded JSON concern body. The
+application validates it against the concern schema, binds its freshness to the
+exact HEAD commit timestamp, and checkpoints it before receipt attestation;
+the builder records scout screening but does not retranscribe tracer evidence.
+Only provider-generated assistant messages consume the
 aggregate call and turn counters; local tool-result delivery does not.
 Before a tool-use continuation, the same boundary reserves enough aggregate
 input capacity for another request at the just-observed input/cache size.

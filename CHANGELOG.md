@@ -48,6 +48,11 @@ All notable changes to Agentify are documented here.
 
 ### Changed
 
+- Concern tracers now return bounded JSON that Agentify schema-validates and
+  checkpoints directly before receipt attestation. Evidence freshness is bound
+  to the exact HEAD commit timestamp, eliminating parent-model retranscription
+  and wall-clock churn from specialist fixed-point compilation.
+
 - New audits begin with an immutable exact-HEAD evidence map derived from the
   already-verified installer preflight. Repository identity, languages and
   formats, tracked topography, verified behavioral validation, build metadata,

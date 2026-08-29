@@ -8,6 +8,7 @@ import {
 } from "../audit/resource-budget.ts";
 import {
   assessExplorerReceiptAttestation,
+  checkpointExplorerConcernEvidence,
   currentRepositoryCommit,
   ExplorerReceiptTracker,
 } from "../audit/explorer-receipts.ts";
@@ -115,7 +116,7 @@ function repairPrompt(
     "A concern_tracer timeout is unresolved evidence, not grounds for not_concerns. Retry a narrower target with the same focus until a successful report is returned.",
     "Shared files must appear under every concern they serve with the role they play in that concern; overlap is expected and must never cause merging.",
     "Do not include .agentify/** or .github/agentify/** as repository architecture, specialists, or application evidence.",
-    "Replace concern_evidence atomically through write_map_delta, preserving accepted concerns and recording rejected candidates in not_concerns. Omit the dimension parameter because concern evidence closes no D1-D10 dimension.",
+    "Agentify validates and checkpoints complete concern_tracer bodies directly. Use write_map_delta to preserve accepted concerns while recording rejected candidates in not_concerns, without retranscribing tracer reports. Omit the dimension parameter because concern evidence closes no D1-D10 dimension.",
     "Do not modify application files, workflows, dependencies, prompts, or documentation. Do not return prose instead of the structured write_map_delta call.",
   ].join(" ");
 }
@@ -384,6 +385,7 @@ async function repairSpecialistPortfolio(
         } catch {
           repairController.abort();
         }
+        checkpointExplorerConcernEvidence(context.cwd, stateDir, event);
         explorerReceipts.observe(event);
         const value = event as { type?: string; toolName?: string; tool_name?: string };
         if (

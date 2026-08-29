@@ -34,9 +34,9 @@ TARGET_PATH: $1 # dynamic: codebase root (usually ".")
 FOCUS: $2 # dynamic: the concern to trace, plus its seed paths
 
 `FOCUS` is not optional for this mode. It names the concern and gives
-you the scout's seed paths. If `FOCUS` is empty, emit a `## Report`
-with `blocker_reason: concern_tracer requires a named concern in FOCUS`
-and stop.
+you the scout's seed paths. If `FOCUS` is empty, emit the JSON report
+below with `blocker_reason` set to
+`concern_tracer requires a named concern in FOCUS` and stop.
 
 ## Instructions
 
@@ -89,46 +89,50 @@ and stop.
 
 ## Report
 
-Return exactly this format (no extra prose):
+Return `## Report` followed by exactly one fenced JSON object and no other prose:
 
-```
+````text
 ## Report
-concern: <name from FOCUS>
-one_line: <what a specialist in this owns>
-covers: <prose scope: everything this specialist holds context on>
-excludes: <the boundary against adjacent concerns>
-flows:
- - name: <flow a maintainer would name>
- description: <one line>
- steps:
- - path: <path>
- what_happens: <one line>
-touchpoints:
- - path: <path>
- symbol: <function/class/target/rule/section, or null>
- line_range: [<start>, <end>] | null
- centrality: core | supporting | peripheral
- role: <what this does FOR THIS CONCERN>
-invariants:
- - rule: <what must always hold>
- why: <what breaks otherwise>
- reference: <path>
-pitfalls:
- - risk: <what goes wrong>
- consequence: <what it costs>
- reference: <path>
-entry_questions:
- - <what a task here must answer first>
-validation:
- - <observed command that exercises this concern, if any>
-spans_subtrees: [<top-level area>, ...]
-stability: high | medium | low
-recurrence: high | medium | low
-confidence: high | medium | low
-adjacent_concerns:
- - <concern name> # <where the boundary sits>
-blocker_reason: <only if the trace could not be completed>
+```json
+{
+  "concern": "name from FOCUS",
+  "one_line": "what a specialist in this owns",
+  "covers": "everything this specialist holds context on",
+  "excludes": "the boundary against adjacent concerns",
+  "flows": [{
+    "name": "flow a maintainer would name",
+    "description": "one line",
+    "steps": [
+      { "path": "tracked/path", "what_happens": "entry behavior" },
+      { "path": "tracked/effect", "what_happens": "observable effect" }
+    ]
+  }],
+  "touchpoints": [{
+    "path": "tracked/path",
+    "symbol": "function, class, target, rule, section, or null",
+    "line_range": [1, 20],
+    "centrality": "core",
+    "role": "what this location does for this concern"
+  }],
+  "invariants": [{ "rule": "what must hold", "why": "what breaks otherwise", "reference": "tracked/path" }],
+  "pitfalls": [{ "risk": "what goes wrong", "consequence": "what it costs", "reference": "tracked/path" }],
+  "entry_questions": ["what a task here must answer first"],
+  "validation": ["exact observed command, or leave this array empty"],
+  "spans_subtrees": ["top-level-area"],
+  "stability": "high",
+  "recurrence": "high",
+  "confidence": "high",
+  "adjacent_concerns": ["concern name: where the boundary sits"],
+  "blocker_reason": null
+}
 ```
+````
+
+Use only schema values shown above. `line_range` may be `null`; `symbol` may be
+`null`; stability, recurrence, and confidence are each `high`, `medium`, or
+`low`. If the trace cannot be completed, set `blocker_reason` to the precise
+reason. Agentify validates and checkpoints a complete object directly; invalid
+JSON, a non-null blocker, or a schema mismatch remains an unresolved tracer.
 
 ## Expertise
 

@@ -5,6 +5,8 @@ import type {
   ExplorerReceiptRecord,
 } from "./schema/index.ts";
 import { isSubstantiveConcernRejection } from "./concern-rejection.ts";
+import { mergeEvidenceIntoMap } from "./map-draft.ts";
+import { loadCanonicalMapAt, writeCanonicalMap } from "./map-storage.ts";
 
 type ExplorerMode = "concern_scout" | "concern_tracer";
 
@@ -334,6 +336,44 @@ export class ExplorerReceiptTracker {
       unresolved_scout_proposals: unresolvedScoutProposals,
     };
   }
+}
+
+/** Persist one application-validated tracer body before its receipt is attested. */
+export function checkpointExplorerConcernEvidence(
+  cwd: string,
+  stateDir: string,
+  event: unknown,
+): boolean {
+  if (!isRecord(event) || event.type !== "tool_execution_end" || event.isError === true) return false;
+  const toolName = stringField(event.toolName) ?? stringField(event.tool_name);
+  if (toolName !== "spawn_explorer") return false;
+  const nestedResult = isRecord(event.result) ? event.result : null;
+  if (nestedResult?.isError === true) return false;
+  const details = nestedResult && isRecord(nestedResult.details)
+    ? nestedResult.details
+    : isRecord(event.details) ? event.details : null;
+  if (!details || details.mode !== "concern_tracer" || !isRecord(details.structured_concern)) return false;
+  const map = loadCanonicalMapAt(cwd, stateDir);
+  if (!map) return false;
+  const concern = details.structured_concern;
+  const concernName = stringField(concern.concern);
+  if (!concernName) return false;
+  const identity = concernName.toLowerCase();
+  const current = map.concern_evidence ?? { concerns: [], not_concerns: [] };
+  const merged = mergeEvidenceIntoMap({
+    concern_evidence: {
+      concerns: [
+        ...current.concerns.filter((candidate) => candidate.concern.trim().toLowerCase() !== identity),
+        concern,
+      ],
+      not_concerns: current.not_concerns.filter((candidate) => candidate.candidate.trim().toLowerCase() !== identity),
+    },
+  }, map);
+  if (!merged.concern_evidence?.concerns.some((candidate) => candidate.concern.trim().toLowerCase() === identity)) {
+    return false;
+  }
+  writeCanonicalMap(cwd, merged, { stateDir, mapFilename: "codebase_map.json" });
+  return true;
 }
 
 function trackerFromAttestation(attestation: ExplorerReceiptAttestation): ExplorerReceiptTracker {

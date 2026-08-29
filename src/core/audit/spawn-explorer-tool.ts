@@ -57,6 +57,8 @@ import type { AuditResourceBudget } from "./resource-budget.ts";
 import { currentRepositoryCommit } from "./explorer-receipts.ts";
 import { loadCanonicalMapAt } from "./map-storage.ts";
 import { Type } from "typebox";
+import { Value } from "typebox/value";
+import { ConcernSchema, type Concern } from "./schema/concerns.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
 import {
@@ -372,9 +374,44 @@ function extractFinalAssistantText(
     return "(no report — sub-agent did not produce text)";
 }
 
-function reportConcernName(report: string): string | null {
-    const match = report.match(/(?:^|\n)\s*concern:\s*([^\r\n]+)/i);
-    return match?.[1]?.trim() || null;
+function currentRepositoryTimestamp(cwd: string): string | null {
+    const result = spawnSync("git", ["-C", cwd, "show", "-s", "--format=%cI", "HEAD"], {
+        encoding: "utf8",
+        windowsHide: true,
+    });
+    const timestamp = result.status === 0 ? result.stdout.trim() : "";
+    return timestamp && Number.isFinite(Date.parse(timestamp)) ? timestamp : null;
+}
+
+function decodeStructuredConcernReport(
+    report: string,
+    observedAt: string,
+): { concern: Concern | null; error: string | null } {
+    const fenced = report.match(/```json\s*([\s\S]*?)```/iu)?.[1];
+    if (!fenced) return { concern: null, error: "concern_tracer did not return a fenced JSON report" };
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(fenced);
+    } catch {
+        return { concern: null, error: "concern_tracer returned malformed JSON" };
+    }
+    if (!isRecord(parsed)) return { concern: null, error: "concern_tracer JSON report is not an object" };
+    const blocker = typeof parsed.blocker_reason === "string" ? parsed.blocker_reason.trim() : "";
+    if (blocker) return { concern: null, error: `concern_tracer reported blocker: ${blocker}` };
+    const { adjacent_concerns: _adjacent, blocker_reason: _blocker, last_updated: _lastUpdated, ...fields } = parsed;
+    const concern = { ...fields, last_updated: observedAt };
+    if (!Value.Check(ConcernSchema, concern)) {
+        const first = [...Value.Errors(ConcernSchema, concern)][0] as { path?: string; message?: string } | undefined;
+        return {
+            concern: null,
+            error: `concern_tracer JSON report failed schema validation at ${first?.path ?? "/"}: ${first?.message ?? "invalid concern"}`,
+        };
+    }
+    return { concern: concern as Concern, error: null };
+}
+
+export function parseStructuredConcernReport(report: string, observedAt: string): Concern | null {
+    return decodeStructuredConcernReport(report, observedAt).concern;
 }
 
 function truncateReport(report: string): { report: string; truncated: boolean; report_length: number } {
@@ -883,6 +920,16 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     "retry with a narrower focus and a concise report",
                 );
             }
+            const observedAt = mode === "concern_tracer" ? currentRepositoryTimestamp(ctx.cwd) : null;
+            if (mode === "concern_tracer" && !observedAt) {
+                throw new Error("concern_tracer could not bind its report to the current repository commit timestamp");
+            }
+            const structuredConcern = mode === "concern_tracer"
+                ? decodeStructuredConcernReport(rawReport, observedAt as string)
+                : null;
+            if (structuredConcern?.concern === null) {
+                throw new Error(structuredConcern.error ?? "concern_tracer report is invalid");
+            }
 
             // Truncate the report if it exceeds the cap.
             const { report, truncated, report_length } = truncateReport(rawReport);
@@ -958,7 +1005,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     report_length,
                     report_truncated: truncated,
                     report_truncated_path: truncatedPath || null,
-                    report_concern: mode === "concern_tracer" ? reportConcernName(rawReport) : null,
+                    report_concern: structuredConcern?.concern?.concern ?? null,
+                    structured_concern: structuredConcern?.concern ?? null,
                     reads: readCount,
                     bash: bashCount,
                     cost_usd: sessionCostUsd,

@@ -8,6 +8,7 @@ import { AgentifyLog } from "../audit/log.ts";
 import { AuditResourceBudget } from "../audit/resource-budget.ts";
 import {
   currentRepositoryCommit,
+  checkpointExplorerConcernEvidence,
   ExplorerReceiptTracker,
 } from "../audit/explorer-receipts.ts";
 import { createGapDraftMap } from "../audit/map-draft.ts";
@@ -156,7 +157,7 @@ function focusedAuditPrompt(persistedReceiptReasons: ReadonlyArray<string> = [])
     "A gap-marked map is already present; after initial direct reads, call write_map_delta with concrete repository evidence.",
     "Submit each dimension incrementally via write_map_delta (one or two dimensions per call) to keep tool payloads compact and complete.",
     "Close every supportable coverage dimension and leave unsupported claims as explicit gaps.",
-    "Before finishing, obtain one successful concern_scout receipt and one successful concern_tracer receipt per accepted concern, then record concern_evidence.concerns through write_map_delta; an honest empty list is valid only when the repository is too small to have distinct specialties and must be justified in open_questions and not_concerns. A timeout remains unresolved and cannot justify not_concerns. The audit is not complete without these receipts.",
+    "Before finishing, obtain one successful concern_scout receipt and one successful concern_tracer receipt per accepted concern. Agentify validates and checkpoints complete tracer bodies directly; use write_map_delta for scout rejections and other map evidence, not to retranscribe tracer reports. An honest empty list is valid only when the repository is too small to have distinct specialties and must be justified in open_questions and not_concerns. A timeout remains unresolved and cannot justify not_concerns. The audit is not complete without these receipts.",
     "The map is internal operational evidence for specialists and task planning.",
     "Do not write application files, AGENTS.md, harness configuration, skills, prompts, workflows, dependencies, or prose artifacts.",
     "Do not create a generic agent surface. Repository-specific specialists and procedures are materialized later from validated evidence.",
@@ -179,7 +180,7 @@ function focusedAuditPrompt(persistedReceiptReasons: ReadonlyArray<string> = [])
 function specialistEvidenceTopUpPrompt(): string {
   return [
     "The canonical codebase map already closes every coverage dimension, but concern_evidence.concerns was never recorded.",
-    "Run concern_scout successfully, trace each accepted candidate successfully with concern_tracer, then call write_map_delta with `delta: { concern_evidence: { concerns: [...], not_concerns: [...] } }`. A timeout remains unresolved and cannot justify not_concerns.",
+    "Run concern_scout successfully, record its substantive rejections through write_map_delta, then trace each accepted candidate successfully with concern_tracer. Agentify validates and checkpoints complete tracer bodies directly. A timeout remains unresolved and cannot justify not_concerns.",
     "Record one entry per concern a maintainer would recognize as its own body of knowledge: concern, one_line, covers, excludes, flows (each with at least two observed steps), touchpoints (path, symbol, role, line_range, centrality), invariants, pitfalls, entry_questions, validation, spans_subtrees, stability, recurrence, confidence, last_updated.",
     "Ground every path, type, and command in repository evidence you actually read. Do not invent candidates.",
     "An honest empty concerns list is valid only when the repository is too small to have distinct specialties; record that justification in open_questions in the same delta.",
@@ -225,7 +226,7 @@ function buildAuditRecoveryPrompt(
     lines.push("4. Do not return prose instead of the required explorer calls.");
   } else if (options?.specialistEvidenceMissing && closure.unresolved.length === 0) {
     lines.push("1. The only remaining work is specialist evidence. Do NOT re-close coverage dimensions; they are already covered.");
-    lines.push("2. Run `spawn_explorer` with `mode: 'concern_scout'` against the repository root, then one `mode: 'concern_tracer'` per candidate with the concern name and seed paths as `focus`. Merge each report, then call `write_map_delta` with `delta: { concern_evidence: { concerns: [{ concern: 'authentication', one_line: 'Owns how a caller proves identity and how that proof is checked.', covers: 'Login, session issue and renewal, and every enforcement point.', excludes: 'Authorization, which decides what an identified caller may do.', flows: [{ name: 'user login', description: 'Credential submission through session establishment.', steps: [{ path: 'src/routes/login.ts', what_happens: 'Accepts the credential payload.' }, { path: 'src/auth/verify.ts', what_happens: 'Compares the hash and issues a session.' }] }], touchpoints: [{ path: 'src/auth/verify.ts', symbol: 'verifyCredential', role: 'The only credential comparison in the codebase.', line_range: [12, 61], centrality: 'core' }], invariants: [{ rule: 'Credentials are never logged.', why: 'Log shipping would export secrets.', reference: 'src/auth/verify.ts' }], pitfalls: [{ risk: 'Session renewal skips re-validation.', consequence: 'A revoked account keeps access until expiry.', reference: 'src/auth/session.ts' }], entry_questions: ['Does this change alter who is considered authenticated?'], validation: ['npm test -- tests/auth'], spans_subtrees: ['src', 'tests'], stability: 'high', recurrence: 'high', confidence: 'high', last_updated: '2026-01-01T00:00:00.000Z' }], not_concerns: [{ candidate: 'utils', why_rejected: 'A directory, not a specialty.' }] } }`, replacing every value with evidence you actually observed in THIS repository.");
+    lines.push("2. Run `spawn_explorer` with `mode: 'concern_scout'` against the repository root. Record substantive scout rejections with `write_map_delta`, then run one `mode: 'concern_tracer'` per retained candidate with the concern name and seed paths as `focus`. Agentify validates and checkpoints each complete tracer body directly; do not retranscribe it.");
     lines.push("3. If the repository is too small to have distinct specialties, call `write_map_delta` with `delta: { concern_evidence: { concerns: [], not_concerns: [{ candidate: '...', why_rejected: '...' }] }, open_questions: ['No specialist concern because ...'] }`.");
     lines.push("4. Do not return prose or summaries. Submit the structured tool call.");
   } else {
@@ -387,6 +388,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
           controller.abort();
         }
         const eventType = (event as { type?: string }).type ?? "unknown";
+        checkpointExplorerConcernEvidence(context.cwd, stateDir, event);
         explorerReceipts.observe(event);
         checkpointExplorerReceipts(context.cwd, stateDir, log.runId, explorerReceipts, event);
         log.sessionEvent({ pi_event_type: eventType, event });
@@ -524,6 +526,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
               recoveryController.abort();
             }
             const eventType = (event as { type?: string }).type ?? "unknown";
+            checkpointExplorerConcernEvidence(context.cwd, stateDir, event);
             explorerReceipts.observe(event);
             checkpointExplorerReceipts(context.cwd, stateDir, log.runId, explorerReceipts, event);
             log.sessionEvent({ pi_event_type: eventType, event });

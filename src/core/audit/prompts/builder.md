@@ -95,12 +95,11 @@ would specialize in to work on it well.
    rejections and every screening decision in `concern_evidence.not_concerns`.
    Keep `concern_evidence.concerns` empty until a tracer has verified a concern.
 4. For each candidate worth keeping, run `concern_tracer` with the concern name
-   and its seed paths as the focus. One tracer per concern. Read and merge each
-   report before dispatching the next.
-5. After each successful tracer, immediately call `write_map_delta` with the
-   complete accumulated `concern_evidence.concerns` and `not_concerns` lists.
-   Concern evidence closes no coverage dimension: omit the `dimension` parameter.
-   Never hold multiple completed reports only in conversation context.
+   and its seed paths as the focus. One tracer per concern. Agentify validates and
+   checkpoints each complete tracer report directly; do not retranscribe it.
+5. Use `write_map_delta` only for scout rejections or later evidence changes that
+   are not already in a checkpointed tracer report. Concern evidence closes no
+   coverage dimension: omit the `dimension` parameter.
 
 A concern is a body of knowledge, not a folder. Authentication is not
 `src/auth/` — it is the login route, the credential check, the session store,
