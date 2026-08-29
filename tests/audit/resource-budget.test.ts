@@ -19,22 +19,22 @@ test("audit budget defaults bound every aggregate resource", () => {
   assert.ok(limits.maxTracerDurationMs <= limits.maxSessionDurationMs);
 });
 
-test("default budgets retain bounded capacity after a grounded six-concern portfolio checkpoint", () => {
+test("default budgets retain bounded capacity for a final obligation-focused repair pass", () => {
   const budget = new AuditResourceBudget(undefined, Date.now(), {
-    elapsed_ms: 572_181,
-    model_calls: 67,
-    turns: 67,
-    input_tokens: 1_621_089,
-    output_tokens: 63_789,
-    cost_usd: 0.23609152,
-    explorer_spawns: 7,
+    elapsed_ms: 997_918,
+    model_calls: 160,
+    turns: 160,
+    input_tokens: 2_614_181,
+    output_tokens: 95_679,
+    cost_usd: 0.39316984,
+    explorer_spawns: 18,
     coverage_recovery_passes: 0,
-    semantic_repair_passes: 0,
+    semantic_repair_passes: 1,
   });
   assert.doesNotThrow(() => budget.assertProviderSessionCapacity(1_000_000));
   assert.equal(budget.remainingModelCalls(64), 64);
-  for (let index = 0; index < 10; index += 1) {
-    assert.doesNotThrow(() => budget.reserveExplorer("module_graph"));
+  for (let index = 0; index < 6; index += 1) {
+    assert.doesNotThrow(() => budget.reserveExplorer("concern_tracer"));
   }
 });
 
