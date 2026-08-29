@@ -12,6 +12,7 @@ import { loadCanonicalMapAt, writeCanonicalMap } from "../../src/core/audit/map-
 import {
   createConcernSubmissionTool,
   parseStructuredConcernReport,
+  shouldForceConcernSubmission,
 } from "../../src/core/audit/spawn-explorer-tool.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
@@ -65,6 +66,12 @@ test("the simple tracer envelope retains the complete nested concern contract", 
   ]) {
     assert.ok(prompt.includes(field), `tracer prompt is missing ${field}`);
   }
+});
+
+test("a tracer must submit as soon as its repository-read budget is exhausted", () => {
+  assert.equal(shouldForceConcernSubmission(4, 8, 5, 6), false);
+  assert.equal(shouldForceConcernSubmission(4, 8, 6, 6), true);
+  assert.equal(shouldForceConcernSubmission(6, 8, 2, 6), true);
 });
 
 function git(cwd: string, ...args: string[]): string {
