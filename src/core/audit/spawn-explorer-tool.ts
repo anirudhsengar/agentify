@@ -400,10 +400,13 @@ function decodeStructuredConcernObject(
     }))].sort();
     const concern = { ...fields, spans_subtrees: spansSubtrees, last_updated: observedAt };
     if (!Value.Check(ConcernSchema, concern)) {
-        const first = [...Value.Errors(ConcernSchema, concern)][0] as { path?: string; message?: string } | undefined;
+        const first = [...Value.Errors(ConcernSchema, concern)][0] as {
+            instancePath?: string;
+            message?: string;
+        } | undefined;
         return {
             concern: null,
-            error: `concern_tracer JSON report failed schema validation at ${first?.path ?? "/"}: ${first?.message ?? "invalid concern"}`,
+            error: `concern_tracer JSON report failed schema validation at ${first?.instancePath || "/"}: ${first?.message ?? "invalid concern"}`,
         };
     }
     return { concern: concern as Concern, error: null };
@@ -437,21 +440,36 @@ function normalizeSubmittedEvidencePaths(value: unknown, repositoryRoot: string 
     };
     const mapPath = (candidate: unknown, key: "path" | "reference"): unknown =>
         isRecord(candidate) ? { ...candidate, [key]: normalize(candidate[key]) } : candidate;
+    const touchpoints = Array.isArray(value.touchpoints)
+        ? value.touchpoints.map((touchpoint) => mapPath(touchpoint, "path"))
+        : value.touchpoints;
+    const flows = Array.isArray(value.flows)
+        ? value.flows.map((flow) => isRecord(flow) && Array.isArray(flow.steps)
+            ? { ...flow, steps: flow.steps.map((step) => mapPath(step, "path")) }
+            : flow)
+        : value.flows;
+    const evidencePaths = [
+        ...(Array.isArray(touchpoints) ? touchpoints : []),
+        ...(Array.isArray(flows) ? flows.flatMap((flow) => isRecord(flow) && Array.isArray(flow.steps) ? flow.steps : []) : []),
+    ].flatMap((candidate) => isRecord(candidate) && typeof candidate.path === "string" ? [candidate.path] : [])
+        .sort((left, right) => right.length - left.length);
+    const mapReference = (candidate: unknown): unknown => {
+        if (!isRecord(candidate)) return candidate;
+        const normalized = normalize(candidate.reference);
+        const reference = typeof normalized === "string"
+            ? evidencePaths.find((evidencePath) => normalized.startsWith(`${evidencePath} `)) ?? normalized
+            : normalized;
+        return { ...candidate, reference };
+    };
     return {
         ...value,
-        touchpoints: Array.isArray(value.touchpoints)
-            ? value.touchpoints.map((touchpoint) => mapPath(touchpoint, "path"))
-            : value.touchpoints,
-        flows: Array.isArray(value.flows)
-            ? value.flows.map((flow) => isRecord(flow) && Array.isArray(flow.steps)
-                ? { ...flow, steps: flow.steps.map((step) => mapPath(step, "path")) }
-                : flow)
-            : value.flows,
+        touchpoints,
+        flows,
         invariants: Array.isArray(value.invariants)
-            ? value.invariants.map((invariant) => mapPath(invariant, "reference"))
+            ? value.invariants.map(mapReference)
             : value.invariants,
         pitfalls: Array.isArray(value.pitfalls)
-            ? value.pitfalls.map((pitfall) => mapPath(pitfall, "reference"))
+            ? value.pitfalls.map(mapReference)
             : value.pitfalls,
     };
 }

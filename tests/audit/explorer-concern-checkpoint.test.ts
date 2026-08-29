@@ -255,4 +255,14 @@ test("the tracer reports exact validation locations and normalizes tracked path 
     (submitted as unknown as { invariants: Array<{ reference: string }> }).invariants[0]?.reference,
     "src/extract/mod.rs",
   );
+
+  parsed.invariants[0]!.reference = "src/other.rs OtherSymbol";
+  const unrelated = await tool.execute(
+    "submit",
+    { report_json: JSON.stringify(parsed) } as never,
+    undefined,
+    undefined,
+    {} as never,
+  );
+  assert.equal((unrelated as { isError?: boolean }).isError, true);
 });
