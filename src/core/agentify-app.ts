@@ -16,6 +16,7 @@ import type {
   AgentifyUi,
   AgentRuntime,
 } from "./types.ts";
+import type { RepositoryInstallationPreflight } from "./installer/contracts.ts";
 
 export interface RunAgentifyAppOptions {
   args: ReadonlyArray<string>;
@@ -24,6 +25,7 @@ export interface RunAgentifyAppOptions {
   runtime: AgentRuntime;
   signal?: AbortSignal;
   configOverride?: AgentifyConfig;
+  repositoryPreflight?: RepositoryInstallationPreflight;
 }
 
 /** Provider slug a failure blamed, if the failure is credential-shaped. */
@@ -81,6 +83,7 @@ async function runAuditWithCredentialRecovery(
     runtime: options.runtime,
     config: activeConfig,
     signal: options.signal,
+    repositoryPreflight: options.repositoryPreflight,
   });
   try {
     return await runOnce(config);

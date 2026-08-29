@@ -237,6 +237,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       cwd: process.cwd(),
       ui,
       runtime: new PiSdkRuntime(),
+      repositoryPreflight: installerPreflight,
     });
   }
 

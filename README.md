@@ -114,6 +114,13 @@ agentify models set "anthropic/<model-id>"
 
 `agentify login` offers exactly the authentication methods the Pi model runtime supports for each provider: OAuth subscription sign-in where available (browser or device-code flow), otherwise an API key. Credentials are read from provider environment variables, the stored OAuth/API-key credentials from login, or a masked interactive prompt. They are never accepted as command-line values or written to the repository.
 
+Before model exploration, Agentify seeds the audit map from immutable bytes at
+the installer-preflight commit. This deterministically records repository
+identity, languages and formats, tracked topography, verified test commands,
+build metadata, and documentation metrics without trusting dirty working-tree
+content. Semantic contracts and specialist concerns still require traced,
+current-HEAD evidence; deterministic seeding cannot close them by inference.
+
 Audit resource limits are finite by default and may be raised for an unusually
 large repository through the optional `auditBudgets` object in
 `~/.agentify/config.json`. Omitted fields retain these defaults:

@@ -6,8 +6,12 @@ All notable changes to Agentify are documented here.
 
 ### Added
 
-- An executable nine-repository stabilization corpus now replays historical
-  semantic-closure failures with deterministic maps and assertions. The
+- An executable nine-repository stabilization corpus now compiles eight
+  repository-specific evidence portfolios through fixed-point normalization
+  and materializes their exact specialists, while the restrictive-policy case
+  proves pre-mutation refusal. It asserts names, exclusions, core symbols and
+  roles, flows, invariants, entry questions, rejected candidates, ownership,
+  readiness, disposition, runtime, and output size. The
   accompanying machine-readable evaluation and release reports record pinned
   live targets, resource usage, terminal dispositions, and two unchanged-code
   held-out qualification rounds.
@@ -43,6 +47,15 @@ All notable changes to Agentify are documented here.
   setups. `AGENT_PAT` now also needs Secrets read/write for the write-back.
 
 ### Changed
+
+- New audits begin with an immutable exact-HEAD evidence map derived from the
+  already-verified installer preflight. Repository identity, languages and
+  formats, tracked topography, verified behavioral validation, build metadata,
+  and README metrics are recorded deterministically before model exploration;
+  semantic contracts, conventions, pitfalls, operations, security, and process
+  remain gaps until separately proven. Internal tracked README symlinks resolve
+  through Git objects, while dirty working-tree bytes and stale preflight SHAs
+  cannot influence the map.
 
 - The published npm package is now zero-dependency: every runtime library is
   bundled into `dist/` by esbuild, so `npm install --global` no longer emits

@@ -11,6 +11,7 @@ import {
   ExplorerReceiptTracker,
 } from "../audit/explorer-receipts.ts";
 import { createGapDraftMap } from "../audit/map-draft.ts";
+import { createRepositoryEvidenceDraft } from "../audit/repository-evidence-bootstrap.ts";
 import { DEFAULT_MAP_FILENAME, writeCanonicalMap } from "../audit/map-storage.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
 import { loadBuilderPrompt } from "../audit/prompt.ts";
@@ -298,7 +299,9 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
   const preExistingMap = loadCanonicalMapAt(context.cwd, stateDir);
   const bootstrappedGapDraft = preExistingMap === null;
   if (bootstrappedGapDraft) {
-    writeCanonicalMap(context.cwd, createGapDraftMap(), {
+    writeCanonicalMap(context.cwd, context.repositoryPreflight
+      ? createRepositoryEvidenceDraft(context.cwd, context.repositoryPreflight)
+      : createGapDraftMap(), {
       stateDir,
       mapFilename: DEFAULT_MAP_FILENAME,
     });

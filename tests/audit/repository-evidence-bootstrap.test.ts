@@ -23,19 +23,22 @@ function write(cwd: string, repositoryPath: string, content: string): void {
 test("immutable preflight evidence seeds identity, topography, validation, and documentation", () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-evidence-bootstrap-"));
   try {
-    write(cwd, "README.md", "# Checkout Fixture\n\n## Usage\n\nA command library.\n");
+    write(cwd, "docs/overview.md", "# Checkout Fixture\n\n## Usage\n\nA command library.\n");
+    fs.symlinkSync("docs/overview.md", path.join(cwd, "README.md"));
     write(cwd, "package.json", JSON.stringify({
       name: "checkout-fixture",
       scripts: { build: "node --check src/index.js", test: "node --test" },
     }, null, 2));
     write(cwd, "src/index.js", "export function checkout() { return true; }\n");
     write(cwd, "test/checkout.test.js", "import { test } from 'node:test';\n");
+    write(cwd, "scripts/run-tests", "#!/usr/bin/env bash\nnode --test\n");
     git(cwd, "init", "-q");
     git(cwd, "config", "user.name", "Agentify Test");
     git(cwd, "config", "user.email", "agentify@example.invalid");
     git(cwd, "add", ".");
     git(cwd, "commit", "-qm", "fixture");
     const commit = git(cwd, "rev-parse", "HEAD");
+    write(cwd, "README.md", "# Ignore This Dirty Working-Tree Heading\n\nRepository text cannot replace committed evidence.\n");
     const preflight: RepositoryInstallationPreflight = {
       disposition: "ready",
       analysis_allowed: true,
@@ -87,7 +90,9 @@ test("immutable preflight evidence seeds identity, topography, validation, and d
 
     assert.notEqual(map.meta.project_type.toLowerCase(), "unknown");
     assert.match(map.meta.project_type, /checkout fixture/i);
+    assert.doesNotMatch(map.meta.project_type, /dirty working-tree/i);
     assert.ok(map.meta.languages.includes("JavaScript"));
+    assert.ok(map.meta.languages.includes("Shell"));
     assert.ok(map.skeleton.entry_points.some((entry) => entry.path === "src/index.js"));
     assert.equal(map.validation_surface.test_command, "npm test");
     assert.equal(map.operational_surface.build.command, "npm run build");
@@ -99,6 +104,14 @@ test("immutable preflight evidence seeds identity, topography, validation, and d
     assert.equal(map.skeleton.top_level_tree.some((entry) => entry.startsWith(".agentify")), false);
     assert.equal(fs.existsSync(path.join(cwd, ".agentify")), false);
     assert.equal(git(cwd, "status", "--short"), before);
+
+    git(cwd, "add", "docs/overview.md");
+    git(cwd, "commit", "-qm", "advance fixture head");
+    assert.throws(
+      () => createRepositoryEvidenceDraft(cwd, preflight),
+      /repository changed after installer preflight/,
+    );
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify")), false);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

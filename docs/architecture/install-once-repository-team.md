@@ -62,23 +62,27 @@ The local installer performs these steps in order:
    committed HEAD; post-install validation overlays only the Agentify-managed
    output into another disposable checkout. Validation still has no OS sandbox
    or network isolation, and running `agentify` records that remaining posture;
-7. initialize persistent identity and self-update policy;
-8. run a read-only structured repository audit and persist application-authored
+7. collect immutable repository evidence from the exact preflight commit and
+   seed only deterministically provable identity, language/format, topography,
+   verified-validation, build, and documentation facts; dirty working-tree
+   bytes are excluded and every semantic claim remains a gap;
+8. initialize persistent identity and self-update policy;
+9. run a read-only structured repository audit and persist application-authored
    scout/tracer receipts bound to the exact audited commit;
-9. if discovery did not verify a required command, refine validation from the
+10. if discovery did not verify a required command, refine validation from the
    audited validation surface and re-verify; when no repository command can be
    verified at all, install the Agentify-owned validation smoke
    (`.github/agentify/validation-smoke.mjs`: tracked-JSON validity, JavaScript
    syntax, committed-secret scan) and record
    the verified smoke command in the task policy;
-10. normalize and validate the specialist portfolio, verify normalization is a
+11. normalize and validate the specialist portfolio, verify normalization is a
     fixed point, then materialize that exact compiled portfolio and its
     procedures from repository evidence;
-11. install the issue and learning workflows plus their trusted runtimes;
-12. write a repository-bound task policy with the attested manifest, command,
+12. install the issue and learning workflows plus their trusted runtimes;
+13. write a repository-bound task policy with the attested manifest, command,
     and lockfile hashes;
-13. run deterministic installation canaries;
-14. configure required GitHub labels, non-secret variables, and the repository
+14. run deterministic installation canaries;
+15. configure required GitHub labels, non-secret variables, and the repository
     Actions permission needed to create unmerged draft pull requests; with
     interactive consent, upload the stored provider credentials (API keys and
     OAuth subscription sign-ins) to the `PI_AUTH_JSON` Actions secret — or copy
@@ -87,7 +91,7 @@ The local installer performs these steps in order:
     interactive consent when the maintainer wants those pull requests to
     trigger ordinary repository workflows and rotated OAuth credentials to be
     written back to `PI_AUTH_JSON`;
-15. enable issue intake only when every required check passes.
+16. enable issue intake only when every required check passes.
 
 Policy inspection is deterministic, bounded to tracked regular policy files,
 and occurs before memory recovery, runtime repair, diagnostic map creation, or
