@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { compileSpecialistEvidence } from "../../src/core/audit/schema.ts";
 import { initializeTeamMemoryStore } from "../../src/core/memory/index.ts";
 import {
   buildSpecialistEvidenceReference,
@@ -62,9 +63,13 @@ initializeTeamMemoryStore({
   options: { now: () => new Date(observedAt) },
 });
 installSelfUpdatePolicy({ cwd, supportingCommit: commit, observedAt });
+const compilation = compileSpecialistEvidence(makeSpecialistFixtureMap(), { cwd });
+if (!compilation.complete) {
+  throw new Error(`package learning fixture failed specialist compilation: ${compilation.reasons.join("; ")}`);
+}
 write(
   ".agentify/runtime/audit/codebase_map.json",
-  `${JSON.stringify(makeSpecialistFixtureMap(), null, 2)}\n`,
+  `${JSON.stringify(compilation.map, null, 2)}\n`,
 );
 synchronizeRepositorySpecialists(cwd);
 git("add", ".agentify");
