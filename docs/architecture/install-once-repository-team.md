@@ -141,7 +141,7 @@ it never enters the installation target or its rollback surface.
 
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30
-minutes, three semantic repair passes, one coverage recovery, 160 model calls and
+minutes, three semantic repair passes, one coverage recovery, 240 model calls and
 turns, eight million input/cache tokens, 200,000 output tokens, 24 explorer
 dispatches, and USD 20 of provider-reported
 cost. Per-scout and per-tracer deadlines are three minutes. Repair state is

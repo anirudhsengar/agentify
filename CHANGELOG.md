@@ -48,7 +48,7 @@ All notable changes to Agentify are documented here.
 
 ### Changed
 
-- The bounded default audit envelope now permits 160 model calls/turns, eight million input/cache tokens, and 24 explorer spawns so a complete evidence-backed portfolio can fit while duration, output, cost, convergence, and artifact caps remain enforced.
+- The bounded default audit envelope now permits 240 model calls/turns, eight million input/cache tokens, and 24 explorer spawns so a complete evidence-backed portfolio and final obligation-focused repair can fit while duration, output, cost, convergence, and artifact caps remain enforced.
 
 - Concern tracers now submit their body through an application-owned typed tool
   that Agentify schema-validates and checkpoints directly before receipt
