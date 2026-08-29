@@ -426,6 +426,36 @@ export function parseStructuredConcernReport(report: string, observedAt: string)
     return decodeStructuredConcernReport(report, observedAt).concern;
 }
 
+function normalizeSubmittedEvidencePaths(value: unknown, repositoryRoot: string | undefined): unknown {
+    if (!repositoryRoot || !isRecord(value)) return value;
+    const normalize = (candidate: unknown): unknown => {
+        if (typeof candidate !== "string" || !path.isAbsolute(candidate)) return candidate;
+        const relative = path.relative(repositoryRoot, candidate);
+        return relative && !relative.startsWith("..") && !path.isAbsolute(relative)
+            ? relative.split(path.sep).join("/")
+            : candidate;
+    };
+    const mapPath = (candidate: unknown, key: "path" | "reference"): unknown =>
+        isRecord(candidate) ? { ...candidate, [key]: normalize(candidate[key]) } : candidate;
+    return {
+        ...value,
+        touchpoints: Array.isArray(value.touchpoints)
+            ? value.touchpoints.map((touchpoint) => mapPath(touchpoint, "path"))
+            : value.touchpoints,
+        flows: Array.isArray(value.flows)
+            ? value.flows.map((flow) => isRecord(flow) && Array.isArray(flow.steps)
+                ? { ...flow, steps: flow.steps.map((step) => mapPath(step, "path")) }
+                : flow)
+            : value.flows,
+        invariants: Array.isArray(value.invariants)
+            ? value.invariants.map((invariant) => mapPath(invariant, "reference"))
+            : value.invariants,
+        pitfalls: Array.isArray(value.pitfalls)
+            ? value.pitfalls.map((pitfall) => mapPath(pitfall, "reference"))
+            : value.pitfalls,
+    };
+}
+
 const ConcernSubmissionSchema = Type.Object({
     report_json: Type.String({
         minLength: 2,
@@ -439,6 +469,7 @@ const ConcernSubmissionSchema = Type.Object({
 export function createConcernSubmissionTool(
     observedAt: string,
     onSubmit: (concern: Concern) => void,
+    repositoryRoot?: string,
 ): ToolDefinition {
     return defineTool({
         name: "submit_concern_report",
@@ -458,7 +489,10 @@ export function createConcernSubmissionTool(
                     details: { recorded: false, concern: null },
                 };
             }
-            const decoded = decodeStructuredConcernObject(parsed, observedAt);
+            const decoded = decodeStructuredConcernObject(
+                normalizeSubmittedEvidencePaths(parsed, repositoryRoot),
+                observedAt,
+            );
             if (!decoded.concern) {
                 return {
                     content: [{ type: "text", text: `Error: ${decoded.error ?? "invalid concern report"}` }],
@@ -920,7 +954,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const concernSubmissionTool = mode === "concern_tracer"
                 ? createConcernSubmissionTool(concernObservedAt as string, (concern) => {
                     submission.concern = concern;
-                })
+                }, ctx.cwd)
                 : null;
             const sessionTools = concernSubmissionTool
                 ? [...toolsForMode, concernSubmissionTool.name]

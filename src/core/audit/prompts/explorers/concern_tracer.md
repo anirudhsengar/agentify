@@ -123,7 +123,9 @@ The `report_json` argument must be a compact JSON object with exactly this shape
 `covers` and `excludes` are prose strings, not arrays. Flow steps use only
 `path` and `what_happens`; touchpoint line ranges use a two-number array or
 null. Do not add `name`, `summary`, `id`, `validation_commands`, or other
-aliases. Every flow needs at least two ordered tracked steps. Prefer the
+aliases. Every evidence path and reference must be relative to the repository
+root, never absolute and never suffixed with a line number. Every flow needs at
+least two ordered tracked steps. Prefer the
 strongest 4–8 touchpoints, 2–5 invariants, 2–5 pitfalls, and 2–5 entry
 questions so the complete object stays near 8 KB without dropping a distinct
 verified flow. `validation` contains only observed executable commands.

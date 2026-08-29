@@ -206,4 +206,14 @@ test("the tracer normalizes domain-locked absolute evidence paths", async () => 
   );
   assert.equal((result as { isError?: boolean }).isError, undefined);
   assert.equal((submitted as unknown as { touchpoints: Array<{ path: string }> }).touchpoints[0]?.path, "src/extract/mod.rs");
+
+  parsed.touchpoints[0]!.path = "/outside/src/extract/mod.rs";
+  const outside = await tool.execute(
+    "submit",
+    { report_json: JSON.stringify(parsed) } as never,
+    undefined,
+    undefined,
+    {} as never,
+  );
+  assert.equal((outside as { isError?: boolean }).isError, true);
 });
