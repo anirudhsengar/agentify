@@ -127,3 +127,30 @@ test("the tracer submits its concern through an application-owned typed tool", a
   assert.equal(concern.concern, "Request extraction and rejection contracts");
   assert.deepEqual(concern.spans_subtrees, ["src"]);
 });
+
+test("the tracer envelope rejects malformed and oversized JSON before recording", async () => {
+  let submissions = 0;
+  const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", () => {
+    submissions += 1;
+  });
+  const malformed = await tool.execute(
+    "submit",
+    { report_json: "{" } as never,
+    undefined,
+    undefined,
+    {} as never,
+  );
+  assert.equal((malformed as { isError?: boolean }).isError, true);
+
+  const parsed = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null") as Record<string, unknown>;
+  parsed.covers = "evidence ".repeat(3_000);
+  const oversized = await tool.execute(
+    "submit",
+    { report_json: JSON.stringify(parsed) } as never,
+    undefined,
+    undefined,
+    {} as never,
+  );
+  assert.equal((oversized as { isError?: boolean }).isError, true);
+  assert.equal(submissions, 0);
+});

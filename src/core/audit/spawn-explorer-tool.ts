@@ -426,17 +426,14 @@ export function parseStructuredConcernReport(report: string, observedAt: string)
     return decodeStructuredConcernReport(report, observedAt).concern;
 }
 
-const {
-    last_updated: _lastUpdatedProperty,
-    spans_subtrees: spansSubtreesProperty,
-    ...CONCERN_SUBMISSION_PROPERTIES
-} = ConcernSchema.properties;
-
 const ConcernSubmissionSchema = Type.Object({
-    ...CONCERN_SUBMISSION_PROPERTIES,
-    spans_subtrees: Type.Optional(spansSubtreesProperty),
-    adjacent_concerns: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 1_024 }), { maxItems: 32 })),
-    blocker_reason: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 2_048 }), Type.Null()])),
+    report_json: Type.String({
+        minLength: 2,
+        maxLength: 14_000,
+        description:
+            "Compact JSON object containing the complete concern body. Do not use a markdown fence. " +
+            "Omit last_updated; spans_subtrees is optional. Keep the serialized object below 14 KB.",
+    }),
 }, { additionalProperties: false });
 
 export function createConcernSubmissionTool(
@@ -447,14 +444,35 @@ export function createConcernSubmissionTool(
         name: "submit_concern_report",
         label: "Submit concern report",
         description:
-            "Submit the complete evidence-backed concern. Agentify validates the typed body, " +
+            "Submit the complete evidence-backed concern as compact JSON. Agentify parses and validates the body, " +
             "derives subtree reach from touchpoints, and binds freshness to the repository commit.",
         parameters: ConcernSubmissionSchema,
         async execute(_id, params) {
-            const decoded = decodeStructuredConcernObject(params, observedAt);
+            let parsed: unknown;
+            try {
+                parsed = JSON.parse(params.report_json);
+            } catch {
+                return {
+                    content: [{ type: "text", text: "Error: report_json is not valid JSON; resubmit one compact JSON object." }],
+                    isError: true,
+                    details: { recorded: false, concern: null },
+                };
+            }
+            const decoded = decodeStructuredConcernObject(parsed, observedAt);
             if (!decoded.concern) {
                 return {
                     content: [{ type: "text", text: `Error: ${decoded.error ?? "invalid concern report"}` }],
+                    isError: true,
+                    details: { recorded: false, concern: null },
+                };
+            }
+            const canonicalReport = `## Report\n\`\`\`json\n${JSON.stringify(decoded.concern, null, 2)}\n\`\`\``;
+            if (Buffer.byteLength(canonicalReport, "utf8") > MAX_REPORT_BYTES) {
+                return {
+                    content: [{
+                        type: "text",
+                        text: `Error: validated concern exceeds ${MAX_REPORT_BYTES} bytes; remove redundant evidence and resubmit concisely.`,
+                    }],
                     isError: true,
                     details: { recorded: false, concern: null },
                 };

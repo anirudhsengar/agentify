@@ -42,15 +42,16 @@ Agentify will retain the tracer as unresolved.
 - `MUST` trace the concern named in `FOCUS` and no other. If you find
  a second concern along the way, note it in `adjacent_concerns` and
  keep tracing yours.
-- `MUST` finish by calling `submit_concern_report` exactly once with the complete
- typed concern body. Do not print or fence JSON as prose.
+- `MUST` finish by calling `submit_concern_report` exactly once. Put the complete
+ concern object in its `report_json` argument as compact JSON without a markdown
+ fence. Do not print or fence JSON as prose.
 - Do not modify any files. You are read-only.
 - `MUST NOT` cite any path listed as untracked below. If the concern's
  real implementation lives in untracked code, stop without submitting so
  Agentify retains the tracer as unresolved.
 - Every path you cite `MUST` be one you actually opened or grepped a
  match in. Do not infer a file's contents from its name.
-- Use at most 9 repository-read tool calls. Start with the scout's seed paths,
+- Use at most 6 repository-read tool calls. Start with the scout's seed paths,
  batch related searches, and select the strongest source, test, and public
  surface evidence instead of reading every matching file.
 - Keep the complete report below 14 KB. Preserve every distinct verified flow,
@@ -88,7 +89,7 @@ Agentify will retain the tracer as unresolved.
 
 ## Report
 
-Use the model-visible `submit_concern_report` schema. Every flow needs at least
+The `report_json` object uses the concern contract below. Every flow needs at least
 two ordered tracked steps. Every touchpoint needs path, symbol or null, role,
 line range or null, and centrality. Include invariants, pitfalls, entry
 questions, validation commands when observed, stability, recurrence, and

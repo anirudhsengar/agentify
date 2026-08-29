@@ -707,8 +707,14 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(): Promise<vo
           session: {
             messages: [],
             async prompt(): Promise<void> {
-              const params = JSON.parse(report.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null");
-              await submissionTool.execute("submit", params, undefined, undefined, { cwd } as never);
+              const reportJson = report.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null";
+              await submissionTool.execute(
+                "submit",
+                { report_json: reportJson },
+                undefined,
+                undefined,
+                { cwd } as never,
+              );
             },
             dispose(): void {},
           },
