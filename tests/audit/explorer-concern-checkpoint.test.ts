@@ -130,11 +130,18 @@ test("the tracer submits its concern through an application-owned typed tool", a
   const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", (concern) => {
     submitted = concern;
   });
-  const parameters = tool.parameters as { properties?: Record<string, unknown> };
+  const parameters = tool.parameters as {
+    properties?: Record<string, { maxLength?: number }>;
+  };
   assert.deepEqual(
     Object.keys(parameters.properties ?? {}),
     ["report_json"],
     "provider-facing submission must stay a simple bounded envelope",
+  );
+  assert.equal(
+    parameters.properties?.report_json?.maxLength,
+    32_768,
+    "transport must admit one bounded retry body so Agentify can enforce its smaller canonical artifact cap",
   );
   const result = await tool.execute(
     "submit",
