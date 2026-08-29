@@ -429,10 +429,10 @@ export function parseStructuredConcernReport(report: string, observedAt: string)
 const ConcernSubmissionSchema = Type.Object({
     report_json: Type.String({
         minLength: 2,
-        maxLength: 14_000,
+        maxLength: 32_768,
         description:
             "Compact JSON object containing the complete concern body. Do not use a markdown fence. " +
-            "Omit last_updated; spans_subtrees is optional. Keep the serialized object below 14 KB.",
+            "Omit last_updated; spans_subtrees is optional. Target 8 KB; Agentify rejects canonical reports above 16 KB.",
     }),
 }, { additionalProperties: false });
 
