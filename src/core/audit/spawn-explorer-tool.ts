@@ -58,7 +58,7 @@ import { currentRepositoryCommit } from "./explorer-receipts.ts";
 import { loadCanonicalMapAt } from "./map-storage.ts";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
-import { capProviderOutputTokens } from "../pi-sdk-runtime.ts";
+import { capProviderOutputTokens, forceProviderToolChoice } from "../pi-sdk-runtime.ts";
 import { ConcernSchema, type Concern } from "./schema/concerns.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
@@ -385,18 +385,10 @@ function currentRepositoryTimestamp(cwd: string): string | null {
     return timestamp && Number.isFinite(Date.parse(timestamp)) ? timestamp : null;
 }
 
-function decodeStructuredConcernReport(
-    report: string,
+function decodeStructuredConcernObject(
+    parsed: unknown,
     observedAt: string,
 ): { concern: Concern | null; error: string | null } {
-    const fenced = report.match(/```json\s*([\s\S]*?)```/iu)?.[1];
-    if (!fenced) return { concern: null, error: "concern_tracer did not return a fenced JSON report" };
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(fenced);
-    } catch {
-        return { concern: null, error: "concern_tracer returned malformed JSON" };
-    }
     if (!isRecord(parsed)) return { concern: null, error: "concern_tracer JSON report is not an object" };
     const blocker = typeof parsed.blocker_reason === "string" ? parsed.blocker_reason.trim() : "";
     if (blocker) return { concern: null, error: `concern_tracer reported blocker: ${blocker}` };
@@ -417,8 +409,63 @@ function decodeStructuredConcernReport(
     return { concern: concern as Concern, error: null };
 }
 
+function decodeStructuredConcernReport(
+    report: string,
+    observedAt: string,
+): { concern: Concern | null; error: string | null } {
+    const fenced = report.match(/```json\s*([\s\S]*?)```/iu)?.[1];
+    if (!fenced) return { concern: null, error: "concern_tracer did not return a fenced JSON report" };
+    try {
+        return decodeStructuredConcernObject(JSON.parse(fenced), observedAt);
+    } catch {
+        return { concern: null, error: "concern_tracer returned malformed JSON" };
+    }
+}
+
 export function parseStructuredConcernReport(report: string, observedAt: string): Concern | null {
     return decodeStructuredConcernReport(report, observedAt).concern;
+}
+
+const {
+    last_updated: _lastUpdatedProperty,
+    spans_subtrees: spansSubtreesProperty,
+    ...CONCERN_SUBMISSION_PROPERTIES
+} = ConcernSchema.properties;
+
+const ConcernSubmissionSchema = Type.Object({
+    ...CONCERN_SUBMISSION_PROPERTIES,
+    spans_subtrees: Type.Optional(spansSubtreesProperty),
+    adjacent_concerns: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 1_024 }), { maxItems: 32 })),
+    blocker_reason: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 2_048 }), Type.Null()])),
+}, { additionalProperties: false });
+
+export function createConcernSubmissionTool(
+    observedAt: string,
+    onSubmit: (concern: Concern) => void,
+): ToolDefinition {
+    return defineTool({
+        name: "submit_concern_report",
+        label: "Submit concern report",
+        description:
+            "Submit the complete evidence-backed concern. Agentify validates the typed body, " +
+            "derives subtree reach from touchpoints, and binds freshness to the repository commit.",
+        parameters: ConcernSubmissionSchema,
+        async execute(_id, params) {
+            const decoded = decodeStructuredConcernObject(params, observedAt);
+            if (!decoded.concern) {
+                return {
+                    content: [{ type: "text", text: `Error: ${decoded.error ?? "invalid concern report"}` }],
+                    isError: true,
+                    details: { recorded: false, concern: null },
+                };
+            }
+            onSubmit(decoded.concern);
+            return {
+                content: [{ type: "text", text: "Typed concern report recorded. Stop now." }],
+                details: { recorded: true, concern: decoded.concern.concern as string | null },
+            };
+        },
+    });
 }
 
 function truncateReport(report: string): { report: string; truncated: boolean; report_length: number } {
@@ -590,8 +637,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         "wall-clock time per sub-agent" +
         (maxTotalCostUsd === null ? "" : `, plus max $${maxTotalCostUsd.toFixed(2)} provider-reported sub-agent cost`) +
         ". Dispatch as many as the topic decomposition needs within those bounds. " +
-        "Default mode: topography. Reports exceeding 32 KB are truncated; the full report is " +
-        "persisted to the log dir. target_path is permanently domain-locked to ctx.cwd. " +
+        "Default mode: topography. Reports exceeding 16 KB fail closed and cannot establish " +
+        "an explorer receipt. target_path is permanently domain-locked to ctx.cwd. " +
         "Use `summary` for a one-line focus hint passed as " +
         "additional context.",
     parameters: SpawnExplorerParams,
@@ -729,6 +776,16 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const message = error instanceof Error ? error.message : String(error);
             return makeBudgetError(`Error: ${message}.`, {}, stateDir);
         }
+        const concernObservedAt = mode === "concern_tracer"
+            ? currentRepositoryTimestamp(ctx.cwd)
+            : null;
+        if (mode === "concern_tracer" && !concernObservedAt) {
+            return makeBudgetError(
+                "Error: concern_tracer could not bind its report to the current repository commit timestamp.",
+                {},
+                stateDir,
+            );
+        }
 
         activeSpawnCount += 1;
         totalSpawnCount += 1;
@@ -755,6 +812,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         let resourceUsageRecorded = false;
         let providerCalls = 0;
         let oversizedReportPath: string | null = null;
+        const submission: { concern: Concern | null } = { concern: null };
 
         try {
             const toolsForMode: ReadonlyArray<string> = params.tools ?? READ_ONLY_TOOLS;
@@ -795,13 +853,24 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 extensionFactories: [
                     (pi) => {
                         pi.on("before_provider_request", (event) => {
-                            const payload = mode === "concern_tracer"
+                            let payload = mode === "concern_tracer"
                                 ? capProviderOutputTokens(
                                     event.payload,
                                     subAgentModel.api,
                                     MAX_CONCERN_RESPONSE_TOKENS,
                                 )
                                 : event.payload;
+                            if (
+                                mode === "concern_tracer"
+                                && submission.concern === null
+                                && providerCalls >= Math.max(0, maxProviderCalls - 2)
+                            ) {
+                                payload = forceProviderToolChoice(
+                                    payload,
+                                    subAgentModel.api,
+                                    "submit_concern_report",
+                                );
+                            }
                             toolOptions.resourceBudget?.assertProviderInputCapacity(payload);
                             return payload;
                         });
@@ -830,12 +899,18 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             // builder. A sub-agent running at the SDK default would
             // silently do less reasoning and produce weaker reports.
             const parentThinkingLevel = getThinkingLevel();
+            const concernSubmissionTool = mode === "concern_tracer"
+                ? createConcernSubmissionTool(concernObservedAt as string, (concern) => {
+                    submission.concern = concern;
+                })
+                : null;
             const { session: createdSession } = await createSession({
                 cwd: ctx.cwd,
                 agentDir: toolOptions.agentDir,
                 model: subAgentModel,
                 thinkingLevel: parentThinkingLevel === "unknown" ? undefined : parentThinkingLevel,
                 tools: [...toolsForMode],
+                customTools: concernSubmissionTool ? [concernSubmissionTool] : [],
                 resourceLoader,
             });
             session = createdSession;
@@ -923,9 +998,15 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
 
             // Extract the final assistant text from the sub-agent's
             // message history and return it as the tool result.
-            const rawReport = extractFinalAssistantText(
-                session.messages as ReadonlyArray<{ role?: string; content?: unknown }>,
-            );
+            const submittedConcern = submission.concern as Concern | null;
+            if (mode === "concern_tracer" && submittedConcern === null) {
+                throw new Error("concern_tracer did not call submit_concern_report with a valid typed concern");
+            }
+            const rawReport = submittedConcern
+                ? `## Report\n\`\`\`json\n${JSON.stringify(submittedConcern, null, 2)}\n\`\`\``
+                : extractFinalAssistantText(
+                    session.messages as ReadonlyArray<{ role?: string; content?: unknown }>,
+                );
             const rawReportBytes = Buffer.byteLength(rawReport, "utf8");
             if (rawReportBytes > MAX_REPORT_BYTES) {
                 oversizedReportPath = persistTruncatedReport(ctx.cwd, mode, runId, rawReport, stateDir);
@@ -934,12 +1015,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     "retry with a narrower focus and a concise report",
                 );
             }
-            const observedAt = mode === "concern_tracer" ? currentRepositoryTimestamp(ctx.cwd) : null;
-            if (mode === "concern_tracer" && !observedAt) {
-                throw new Error("concern_tracer could not bind its report to the current repository commit timestamp");
-            }
             const structuredConcern = mode === "concern_tracer"
-                ? decodeStructuredConcernReport(rawReport, observedAt as string)
+                ? { concern: submittedConcern, error: null }
                 : null;
             if (structuredConcern?.concern === null) {
                 throw new Error(structuredConcern.error ?? "concern_tracer report is invalid");

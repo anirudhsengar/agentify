@@ -111,6 +111,7 @@ test("the tracer submits its concern through an application-owned typed tool", a
   });
   const result = await tool.execute("submit", parsed as never, undefined, undefined, {} as never);
   assert.equal((result as { isError?: boolean }).isError, undefined);
-  assert.equal(submitted?.concern, "Request extraction and rejection contracts");
-  assert.deepEqual(submitted?.spans_subtrees, ["src"]);
+  const concern = submitted as unknown as { concern: string; spans_subtrees: string[] };
+  assert.equal(concern.concern, "Request extraction and rejection contracts");
+  assert.deepEqual(concern.spans_subtrees, ["src"]);
 });

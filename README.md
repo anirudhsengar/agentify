@@ -165,9 +165,10 @@ an evidence-backed portfolio. A 12,000-token response ceiling leaves room for
 configured reasoning; the stricter 16 KB final-report gate remains authoritative.
 Scout proposals are application-attested obligations: each must be resolved by
 a successful tracer or a substantive `not_concerns` rejection. Agentify
-schema-validates each bounded JSON tracer report and checkpoints its complete
-concern body before attesting the receipt, so a bounded retry on the same HEAD
-resumes verified work without parent-model retranscription.
+requires each tracer to call an application-owned typed submission tool, then
+schema-validates and checkpoints the complete concern body before attesting the
+receipt. A bounded retry on the same HEAD resumes verified work without parsing
+free-form prose or asking the parent model to retranscribe it.
 Nested append checkpoints retain earlier concern bodies and deduplicate exact
 cumulative resends. Tool-result delivery is not counted as a provider call or
 turn. `not_concerns` entries must actually reject their candidate; acceptance

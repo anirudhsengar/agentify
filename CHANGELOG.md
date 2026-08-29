@@ -48,8 +48,9 @@ All notable changes to Agentify are documented here.
 
 ### Changed
 
-- Concern tracers now return bounded JSON that Agentify schema-validates and
-  checkpoints directly before receipt attestation. Evidence freshness is bound
+- Concern tracers now submit their body through an application-owned typed tool
+  that Agentify schema-validates and checkpoints directly before receipt
+  attestation. Evidence freshness is bound
   to the exact HEAD commit timestamp, eliminating parent-model retranscription
   and wall-clock churn from specialist fixed-point compilation. Tracers use a
   six-read/eight-call envelope so a multi-concern portfolio fits the aggregate

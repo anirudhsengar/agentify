@@ -593,6 +593,12 @@ async function testLiveExplorerUsageAbortsAtAggregateTokenLimit(): Promise<void>
 async function testOversizedReportsFailInsteadOfBecomingReceipts(): Promise<void> {
   const cwd = tempDir("spawn-budget-report-cap");
   try {
+    fs.writeFileSync(path.join(cwd, "README.md"), "# fixture\n");
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "fixture");
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
       stateDir: ".agentify/runtime/audit",
@@ -607,7 +613,7 @@ async function testOversizedReportsFailInsteadOfBecomingReceipts(): Promise<void
     });
     const result = await tool.execute(
       "test-report-cap",
-      { mode: "concern_tracer", target_path: ".", focus: "argument parsing" } as never,
+      { mode: "topography", target_path: ".", focus: "repository shape" } as never,
       undefined,
       undefined,
       { cwd } as never,
@@ -623,6 +629,12 @@ async function testOversizedReportsFailInsteadOfBecomingReceipts(): Promise<void
 async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
   const cwd = tempDir("spawn-budget-timeout");
   try {
+    fs.writeFileSync(path.join(cwd, "README.md"), "# fixture\n");
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "fixture");
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
       stateDir: ".agentify/runtime/audit",
@@ -683,13 +695,21 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(): Promise<vo
       agentDir: cwd,
       stateDir: ".agentify/runtime/audit",
       ...stubExplorerArgs(),
-      createSession: async () => ({
-        session: {
-          messages: [{ role: "assistant", content: report }],
-          async prompt(): Promise<void> {},
-          dispose(): void {},
-        },
-      }),
+      createSession: async (sessionOptions) => {
+        assert.ok(sessionOptions);
+        const submissionTool = sessionOptions.customTools?.find((candidate) => candidate.name === "submit_concern_report");
+        assert.ok(submissionTool, "concern tracer must receive the typed submission tool");
+        return {
+          session: {
+            messages: [],
+            async prompt(): Promise<void> {
+              const params = JSON.parse(report.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null");
+              await submissionTool.execute("submit", params, undefined, undefined, { cwd } as never);
+            },
+            dispose(): void {},
+          },
+        };
+      },
     });
     const result = await tool.execute(
       "test-concern-portfolio-budget",

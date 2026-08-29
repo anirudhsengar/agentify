@@ -34,21 +34,20 @@ TARGET_PATH: $1 # dynamic: codebase root (usually ".")
 FOCUS: $2 # dynamic: the concern to trace, plus its seed paths
 
 `FOCUS` is not optional for this mode. It names the concern and gives
-you the scout's seed paths. If `FOCUS` is empty, emit the JSON report
-below with `blocker_reason` set to
-`concern_tracer requires a named concern in FOCUS` and stop.
+you the scout's seed paths. If `FOCUS` is empty, stop without submitting;
+Agentify will retain the tracer as unresolved.
 
 ## Instructions
 
 - `MUST` trace the concern named in `FOCUS` and no other. If you find
  a second concern along the way, note it in `adjacent_concerns` and
  keep tracing yours.
-- `MUST` produce the `## Report` section in the exact format below. No
- extra prose, no extra sections.
+- `MUST` finish by calling `submit_concern_report` exactly once with the complete
+ typed concern body. Do not print or fence JSON as prose.
 - Do not modify any files. You are read-only.
 - `MUST NOT` cite any path listed as untracked below. If the concern's
- real implementation lives in untracked code, say so in
- `blocker_reason` rather than citing it.
+ real implementation lives in untracked code, stop without submitting so
+ Agentify retains the tracer as unresolved.
 - Every path you cite `MUST` be one you actually opened or grepped a
  match in. Do not infer a file's contents from its name.
 - Use at most 9 repository-read tool calls. Start with the scout's seed paths,
@@ -57,7 +56,7 @@ below with `blocker_reason` set to
 - Keep the complete report below 14 KB. Preserve every distinct verified flow,
  invariant, failure mode, and boundary, but omit redundant peripheral matches
  and keep each field concise.
-- `STOP` after emitting the structured `## Report`.
+- `STOP` after `submit_concern_report` confirms the body was recorded.
 
 <untrackedPathsNote>
 
@@ -85,56 +84,17 @@ below with `blocker_reason` set to
  the comments apologize for.
 7. Derive `entry_questions` — what a task touching this concern must
  answer *before* implementing.
-8. Run `## Report`. `STOP`.
+8. Call `submit_concern_report`. `STOP`.
 
 ## Report
 
-Return `## Report` followed by exactly one fenced JSON object and no other prose:
-
-````text
-## Report
-```json
-{
-  "concern": "name from FOCUS",
-  "one_line": "what a specialist in this owns",
-  "covers": "everything this specialist holds context on",
-  "excludes": "the boundary against adjacent concerns",
-  "flows": [{
-    "name": "flow a maintainer would name",
-    "description": "one line",
-    "steps": [
-      { "path": "tracked/path", "what_happens": "entry behavior" },
-      { "path": "tracked/effect", "what_happens": "observable effect" }
-    ]
-  }],
-  "touchpoints": [{
-    "path": "tracked/path",
-    "symbol": "function, class, target, rule, section, or null",
-    "line_range": [1, 20],
-    "centrality": "core",
-    "role": "what this location does for this concern"
-  }],
-  "invariants": [{ "rule": "what must hold", "why": "what breaks otherwise", "reference": "tracked/path" }],
-  "pitfalls": [{ "risk": "what goes wrong", "consequence": "what it costs", "reference": "tracked/path" }],
-  "entry_questions": ["what a task here must answer first"],
-  "validation": ["exact observed command, or leave this array empty"],
-  "spans_subtrees": ["top-level-area derived from the touchpoint paths"],
-  "stability": "high",
-  "recurrence": "high",
-  "confidence": "high",
-  "adjacent_concerns": ["concern name: where the boundary sits"],
-  "blocker_reason": null
-}
-```
-````
-
-Use only schema values shown above. `line_range` may be `null`; `symbol` may be
-`null`; stability, recurrence, and confidence are each `high`, `medium`, or
-`low`. Agentify derives `spans_subtrees` again from the tracked touchpoint paths
-and binds `last_updated` to the exact repository commit. If the trace cannot be
-completed, set `blocker_reason` to the precise reason. Agentify validates and
-checkpoints a complete object directly; invalid JSON, a non-null blocker, or a
-schema mismatch remains an unresolved tracer.
+Use the model-visible `submit_concern_report` schema. Every flow needs at least
+two ordered tracked steps. Every touchpoint needs path, symbol or null, role,
+line range or null, and centrality. Include invariants, pitfalls, entry
+questions, validation commands when observed, stability, recurrence, and
+confidence. `spans_subtrees` is optional because Agentify derives it from the
+touchpoint paths. Agentify also binds `last_updated` to the exact repository
+commit. A missing or invalid tool submission remains an unresolved tracer.
 
 ## Expertise
 
