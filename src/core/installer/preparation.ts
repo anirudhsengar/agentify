@@ -17,6 +17,7 @@ import {
   retainDiagnosticProgressOnRollback,
   rollbackPendingInstallation,
 } from "./installation-transaction.ts";
+import { readBoundedRegularFile } from "./bounded-regular-file.ts";
 
 function exactDirectoryEntries(
   directory: string,
@@ -86,14 +87,9 @@ function resumableDiagnosticMapBytes(cwd: string): Buffer | null {
   ) {
     return null;
   }
-  let mapStat: fs.Stats;
-  try {
-    mapStat = fs.lstatSync(mapPath);
-  } catch {
-    return null;
-  }
-  if (mapStat.isSymbolicLink() || !mapStat.isFile()) return null;
-  const diagnostic = parseResumableDiagnosticMap(fs.readFileSync(mapPath));
+  const mapBytes = readBoundedRegularFile(mapPath, MAX_MAP_FILE_BYTES);
+  if (mapBytes === null) return null;
+  const diagnostic = parseResumableDiagnosticMap(mapBytes);
   const currentCommit = currentRepositoryCommit(cwd);
   if (
     diagnostic?.map.explorer_receipts === undefined

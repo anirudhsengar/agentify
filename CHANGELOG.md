@@ -52,6 +52,13 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Bounded tracked-policy and diagnostic-map reads now open without following
+  the final symlink, verify and read through one descriptor, and enforce the
+  byte cap while reading. Installation rollback therefore cannot retain bytes
+  from a path substituted between a metadata check and use. Installer child
+  invocation also no longer accepts environment-selected executable paths;
+  Windows wrappers resolve only through application-selected runtimes.
+
 - Installer readiness commands no longer execute in the installation target.
   Preflight validation runs in a disposable checkout of the exact committed
   HEAD, and post-install validation overlays only Agentify-managed output into

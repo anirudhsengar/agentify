@@ -91,9 +91,12 @@ The local installer performs these steps in order:
 
 Policy inspection is deterministic, bounded to tracked regular policy files,
 and occurs before memory recovery, runtime repair, diagnostic map creation, or
-transaction setup. Repository text can reduce Agentify's authority but cannot
-expand it. A permissive policy or an unrelated warning that merely mentions AI
-does not trigger the blocker.
+transaction setup. Policy and resumable-diagnostic files are opened without
+following their final symlink, then type-checked and read with a byte cap
+through that same descriptor so metadata checks and content reads cannot
+resolve different files. Repository text can reduce Agentify's authority but
+cannot expand it. A permissive policy or an unrelated warning that merely
+mentions AI does not trigger the blocker.
 
 Finalization independently requires a current explorer receipt attestation.
 Missing or stale receipts, failed tracers, and accepted concerns without a

@@ -30,9 +30,8 @@ function resolveWindowsCmdScript(
   }
   // Node cannot spawn .bat/.cmd directly (EINVAL). Route through cmd.exe without shell:true
   // so argv stays discrete and is not concatenated into an injectable shell string.
-  const comspec = process.env.ComSpec?.trim() || "cmd.exe";
   return {
-    program: comspec,
+    program: "cmd.exe",
     args: ["/d", "/s", "/c", resolved, ...args],
   };
 }
@@ -41,27 +40,9 @@ function resolveInvocation(request: InstallerProcessRequest): {
   program: string;
   args: string[];
 } {
-  if (request.program === "gh") {
-    const override = process.env.AGENTIFY_GH_CLI?.trim();
-    if (override) {
-      const resolved = path.resolve(override);
-      const stat = fs.lstatSync(resolved);
-      if (stat.isSymbolicLink() || !stat.isFile()) {
-        throw new Error("AGENTIFY_GH_CLI must identify a regular local executable or JavaScript file");
-      }
-      if (/\.(?:cjs|mjs|js)$/i.test(resolved)) {
-        return { program: process.execPath, args: [resolved, ...request.args] };
-      }
-      return { program: resolved, args: [...request.args] };
-    }
-  }
   if (request.program === "npm" && process.platform === "win32") {
-    const candidates = [
-      process.env.npm_execpath,
-      path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
-    ].filter((candidate): candidate is string => typeof candidate === "string" && candidate.length > 0);
-    const npmCli = candidates.find((candidate) => fs.existsSync(candidate));
-    if (npmCli) return { program: process.execPath, args: [npmCli, ...request.args] };
+    const npmCli = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+    if (fs.existsSync(npmCli)) return { program: process.execPath, args: [npmCli, ...request.args] };
   }
   const windowsScript = resolveWindowsCmdScript(request.program, request.args, request.cwd);
   if (windowsScript) return windowsScript;

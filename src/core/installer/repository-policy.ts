@@ -1,5 +1,5 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
+import { readBoundedRegularFile } from "./bounded-regular-file.ts";
 
 const MAX_POLICY_FILE_BYTES = 256 * 1024;
 const MAX_POLICY_TOTAL_BYTES = 1024 * 1024;
@@ -61,16 +61,11 @@ export function detectRestrictiveRepositoryPolicy(
   for (const repositoryPath of [...trackedPaths].sort((left, right) => left.localeCompare(right))) {
     if (!isPolicyPath(repositoryPath)) continue;
     const absolute = path.join(cwd, ...repositoryPath.split("/"));
-    let stat: fs.Stats;
-    try {
-      stat = fs.lstatSync(absolute);
-    } catch {
-      continue;
-    }
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_POLICY_FILE_BYTES) continue;
-    totalBytes += stat.size;
+    const bytes = readBoundedRegularFile(absolute, MAX_POLICY_FILE_BYTES);
+    if (bytes === null) continue;
+    totalBytes += bytes.byteLength;
     if (totalBytes > MAX_POLICY_TOTAL_BYTES) break;
-    const summary = restrictiveSummary(fs.readFileSync(absolute, "utf8"));
+    const summary = restrictiveSummary(bytes.toString("utf8"));
     if (summary !== null) return { path: repositoryPath, summary };
   }
   return null;

@@ -94,6 +94,9 @@ process.exit(1);
   const ghPath = path.join(fakeBin, "gh.js");
   fs.writeFileSync(ghPath, ghScript, { mode: 0o755 });
   fs.chmodSync(ghPath, 0o755);
+  const ghExecutablePath = path.join(fakeBin, "gh");
+  fs.writeFileSync(ghExecutablePath, ghScript, { mode: 0o755 });
+  fs.chmodSync(ghExecutablePath, 0o755);
   fs.writeFileSync(path.join(fakeBin, "gh.cmd"), `@"${nodeCommand}" "%~dp0gh.js" %*\r\n`);
 
   const bin = path.join(installRoot, "node_modules", packageJson.name, "bin", "agentify.js");
@@ -104,7 +107,6 @@ process.exit(1);
     CI: "1",
     NO_COLOR: "1",
     PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
-    AGENTIFY_GH_CLI: ghPath,
     ANTHROPIC_API_KEY: "installed-smoke-placeholder-not-a-real-key",
   };
   for (const [index, profile] of profiles.entries()) {

@@ -1,7 +1,9 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { MAX_MAP_FILE_BYTES } from "../audit/map-input.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
+import { readBoundedRegularFile } from "./bounded-regular-file.ts";
 
 export const MANAGED_INSTALLATION_PATHS = [
   ".agentify",
@@ -187,14 +189,7 @@ export function rollbackPendingInstallation(cwd: string): boolean {
   );
   let diagnosticMap: Buffer | null = null;
   if (pending.freshAgentifyRoot || pending.retainDiagnosticProgress) {
-    try {
-      const stat = fs.lstatSync(diagnosticMapPath);
-      if (!stat.isSymbolicLink() && stat.isFile()) {
-        diagnosticMap = fs.readFileSync(diagnosticMapPath);
-      }
-    } catch {
-      diagnosticMap = null;
-    }
+    diagnosticMap = readBoundedRegularFile(diagnosticMapPath, MAX_MAP_FILE_BYTES);
   }
 
   try {

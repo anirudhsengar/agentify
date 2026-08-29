@@ -209,6 +209,28 @@ test("rollback restores a pre-existing managed installation instead of deleting 
   }
 });
 
+test("rollback never retains diagnostic bytes through a substituted symlink", { skip: process.platform === "win32" }, () => {
+  const { cwd } = createRepository();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-rollback-map-outside-"));
+  try {
+    beginPendingInstallation(cwd);
+    const auditDirectory = path.join(cwd, ".agentify", "runtime", "audit");
+    const mapPath = path.join(auditDirectory, "codebase_map.json");
+    const outsideFile = path.join(outside, "secret.txt");
+    fs.mkdirSync(auditDirectory, { recursive: true });
+    fs.writeFileSync(outsideFile, "outside bytes must not become a diagnostic map\n");
+    fs.symlinkSync(outsideFile, mapPath);
+
+    assert.equal(rollbackPendingInstallation(cwd), true);
+    assert.equal(fs.existsSync(mapPath), false);
+    assert.equal(fs.readFileSync(outsideFile, "utf8"), "outside bytes must not become a diagnostic map\n");
+  } finally {
+    rollbackPendingInstallation(cwd);
+    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
 test("SIGTERM rolls a pending installation back to diagnostic-map-only state", async () => {
   const { cwd } = createRepository();
   try {
