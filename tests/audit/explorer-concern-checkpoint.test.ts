@@ -109,7 +109,19 @@ test("the tracer submits its concern through an application-owned typed tool", a
   const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", (concern) => {
     submitted = concern;
   });
-  const result = await tool.execute("submit", parsed as never, undefined, undefined, {} as never);
+  const parameters = tool.parameters as { properties?: Record<string, unknown> };
+  assert.deepEqual(
+    Object.keys(parameters.properties ?? {}),
+    ["report_json"],
+    "provider-facing submission must stay a simple bounded envelope",
+  );
+  const result = await tool.execute(
+    "submit",
+    { report_json: JSON.stringify(parsed) } as never,
+    undefined,
+    undefined,
+    {} as never,
+  );
   assert.equal((result as { isError?: boolean }).isError, undefined);
   const concern = submitted as unknown as { concern: string; spans_subtrees: string[] };
   assert.equal(concern.concern, "Request extraction and rejection contracts");
