@@ -226,7 +226,7 @@ function buildAuditRecoveryPrompt(
     lines.push("4. Do not return prose instead of the required explorer calls.");
   } else if (options?.specialistEvidenceMissing && closure.unresolved.length === 0) {
     lines.push("1. The only remaining work is specialist evidence. Do NOT re-close coverage dimensions; they are already covered.");
-    lines.push("2. Run `spawn_explorer` with `mode: 'concern_scout'` against the repository root. Record substantive scout rejections with `write_map_delta`, then run one `mode: 'concern_tracer'` per retained candidate with the concern name and seed paths as `focus`. Agentify validates and checkpoints each complete tracer body directly; do not retranscribe it.");
+    lines.push("2. Run `spawn_explorer` with `mode: 'concern_scout'` against the repository root. Record substantive scout rejections with `write_map_delta`, then run one `mode: 'concern_tracer'` per retained candidate with its exact name in `concern` and the name plus seed paths in `focus`. Agentify rejects renamed tracer bodies, validates each complete body, and checkpoints it directly; do not retranscribe it.");
     lines.push("3. If the repository is too small to have distinct specialties, call `write_map_delta` with `delta: { concern_evidence: { concerns: [], not_concerns: [{ candidate: '...', why_rejected: '...' }] }, open_questions: ['No specialist concern because ...'] }`.");
     lines.push("4. Do not return prose or summaries. Submit the structured tool call.");
   } else {

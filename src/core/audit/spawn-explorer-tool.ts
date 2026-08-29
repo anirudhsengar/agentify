@@ -156,6 +156,14 @@ const SpawnExplorerParams = Type.Object({
                 "Optional focus. Semantics depend on mode: for type_tracer, the type name to trace; for gap_filler, the dimension (e.g., 'D5_pitfalls'); for others, a one-sentence hint.",
         }),
     ),
+    concern: Type.Optional(
+        Type.String({
+            minLength: 1,
+            description:
+                "Required for concern_tracer: the exact application-bound concern identity. " +
+                "The submitted report must use this name verbatim.",
+        }),
+    ),
     summary: Type.Optional(
         Type.String({
             description:
@@ -518,6 +526,7 @@ export function createConcernSubmissionTool(
     observedAt: string,
     onSubmit: (concern: Concern) => void,
     repositoryRoot?: string,
+    expectedConcern?: string,
 ): ToolDefinition {
     return defineTool({
         name: "submit_concern_report",
@@ -544,6 +553,16 @@ export function createConcernSubmissionTool(
             if (!decoded.concern) {
                 return {
                     content: [{ type: "text", text: `Error: ${decoded.error ?? "invalid concern report"}` }],
+                    isError: true,
+                    details: { recorded: false, concern: null },
+                };
+            }
+            if (expectedConcern !== undefined && decoded.concern.concern !== expectedConcern) {
+                return {
+                    content: [{
+                        type: "text",
+                        text: `Error: concern must exactly match the application-bound identity ${JSON.stringify(expectedConcern)}; resubmit without renaming it.`,
+                    }],
                     isError: true,
                     details: { recorded: false, concern: null },
                 };
@@ -779,6 +798,14 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 },
             };
         }
+        const expectedConcern = params.concern?.trim();
+        if (mode === "concern_tracer" && !expectedConcern) {
+            return makeBudgetError(
+                "Error: concern_tracer requires concern with the exact application-bound concern identity.",
+                {},
+                stateDir,
+            );
+        }
 
         const subAgentModel = toolOptions.explorerModel;
         const subAgentModelLabel = `${subAgentModel.provider}/${subAgentModel.id}`;
@@ -906,7 +933,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             `- Return ## Report within ~${mode === "concern_tracer" ? 3_000 : maxSteps * 1_000} tokens.`;
         const task = mode === "custom"
             ? `${params.target_path}${summarySuffix}${constraintsBlock}`
-            : `${params.target_path} ${params.focus ?? ""}${summarySuffix}${constraintsBlock}`;
+            : `${params.target_path} ${params.focus ?? ""}${summarySuffix}${constraintsBlock}` +
+              (expectedConcern ? `\n- Required concern identity: ${JSON.stringify(expectedConcern)}. Use it verbatim.` : "");
 
         let session: ExplorerSubSession | undefined;
         let resourceUsageRecorded = false;
@@ -1023,7 +1051,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const concernSubmissionTool = mode === "concern_tracer"
                 ? createConcernSubmissionTool(concernObservedAt as string, (concern) => {
                     submission.concern = concern;
-                }, ctx.cwd)
+                }, ctx.cwd, expectedConcern)
                 : null;
             const sessionTools = concernSubmissionTool
                 ? [...toolsForMode, concernSubmissionTool.name]
@@ -1213,6 +1241,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     target_path: params.target_path,
                     resolved_target_path: resolvedTarget,
                     focus: params.focus ?? null,
+                    expected_concern: expectedConcern ?? null,
                     summary: params.summary ?? null,
                     model: subAgentModelLabel,
                     tools: sessionTools,

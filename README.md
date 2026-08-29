@@ -188,6 +188,9 @@ Agentify-managed paths observed during the transaction are normalized out of
 repository topography and process evidence before the map can close.
 The explorer runtime permits only one successful concern scout per repository
 commit; resumed and repair sessions reuse its attested proposal set.
+Each tracer dispatch binds one exact concern identity before model entry;
+renamed typed reports are rejected instead of creating duplicate specialists or
+silently satisfying a different scout proposal.
 Semantic closure requires exactly one accepted core owner for each tracked
 file. Adjacent specialists may share it only as a supporting touchpoint until
 the portfolio resolves ownership. Normalization resolves a shared

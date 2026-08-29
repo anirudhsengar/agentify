@@ -109,6 +109,7 @@ function repairPrompt(
     "A high-signal implementation shared by multiple concerns is not closed by supporting mentions. Record one explicit core touchpoint under the concern whose verified flow owns the behavior, or create a distinct concern.",
     "Workspace package facades, exported module roots, and inline-tested implementation files are behavioral obligations even when no separate test file exists.",
     "A concern_tracer timeout is unresolved evidence, not grounds for not_concerns. Retry a narrower target with the same focus until a successful report is returned.",
+    "Every concern_tracer call must pass the exact intended identity in concern. When repairing an accepted concern, reuse its name verbatim; do not create a renamed or narrower duplicate.",
     "Shared files must appear under every concern they serve with the role they play in that concern; overlap is expected and must never cause merging.",
     "Do not include .agentify/** or .github/agentify/** as repository architecture, specialists, or application evidence.",
     "Agentify validates and checkpoints complete concern_tracer bodies directly. Use write_map_delta to preserve accepted concerns while recording rejected candidates in not_concerns, without retranscribing tracer reports. Omit the dimension parameter because concern evidence closes no D1-D10 dimension.",

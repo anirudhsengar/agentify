@@ -94,9 +94,10 @@ would specialize in to work on it well.
 3. After the scout, immediately call `write_map_delta` to checkpoint the scout's
    rejections and every screening decision in `concern_evidence.not_concerns`.
    Keep `concern_evidence.concerns` empty until a tracer has verified a concern.
-4. For each candidate worth keeping, run `concern_tracer` with the concern name
-   and its seed paths as the focus. One tracer per concern. Agentify validates and
-   checkpoints each complete tracer report directly; do not retranscribe it.
+4. For each candidate worth keeping, run `concern_tracer` with the proposal's
+   exact name in `concern` and the name plus seed paths in `focus`. One tracer per
+   concern. Agentify rejects renamed reports, validates each complete report, and
+   checkpoints it directly; do not retranscribe it.
 5. Use `write_map_delta` only for scout rejections or later evidence changes that
    are not already in a checkpointed tracer report. Concern evidence closes no
    coverage dimension: omit the `dimension` parameter.

@@ -118,12 +118,12 @@ async function testPromptKeepsExplorerDispatchBounded(): Promise<void> {
   );
   assert.match(
     raw,
-    /run `concern_tracer` with the concern name/,
+    /run `concern_tracer` with the proposal's\n   exact name in `concern`/,
     "builder prompt must trace each candidate concern",
   );
   assert.match(
     raw,
-    /After the scout.*write_map_delta.*Agentify validates and\n   checkpoints each complete tracer report directly; do not retranscribe it/s,
+    /After the scout.*write_map_delta.*Agentify rejects renamed reports, validates each complete report, and\n   checkpoints it directly; do not retranscribe it/s,
     "builder prompt must checkpoint scout decisions without retranscribing validated tracer bodies",
   );
   assert.match(

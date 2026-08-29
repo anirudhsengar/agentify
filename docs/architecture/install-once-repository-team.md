@@ -151,6 +151,9 @@ support unusually large repositories without permitting unbounded values.
 Semantic-repair parents receive the current unresolved obligations directly and
 may only dispatch bounded explorers or apply a concern delta; repository reads
 remain confined to those explorers, preventing broad map and tree rereads.
+Concern-tracer dispatch binds an exact application-owned concern identity. The
+typed submission must preserve it verbatim, so a model cannot rename one scout
+proposal into an alias that later forces a duplicate specialist.
 The application checkpoints cumulative usage in the diagnostic map, bound to
 the audited commit. Same-HEAD CLI continuations resume the remaining budget
 rather than resetting counters; a new commit begins a new evidence lineage.

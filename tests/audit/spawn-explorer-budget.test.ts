@@ -126,6 +126,15 @@ async function testRefusesDuplicateCurrentHeadConcernScout(): Promise<void> {
         };
       },
     });
+    const missingIdentity = await tool.execute(
+      "test-concern-portfolio-missing-identity",
+      { mode: "concern_tracer", target_path: ".", focus: "Repository orientation" } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((missingIdentity as { isError?: boolean }).isError, true);
+    assert.match(textFrom(missingIdentity), /requires concern with the exact application-bound concern identity/i);
     const result = await tool.execute(
       "test-duplicate-current-head-scout",
       { mode: "concern_scout", target_path: "." } as never,
@@ -655,6 +664,7 @@ async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
       {
         mode: "concern_tracer",
         target_path: ".",
+        concern: "procedural macro derives and diagnostics",
         focus: "procedural macro derives and diagnostics",
       } as never,
       undefined,
@@ -723,7 +733,12 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(): Promise<vo
     });
     const result = await tool.execute(
       "test-concern-portfolio-budget",
-      { mode: "concern_tracer", target_path: ".", focus: "Repository orientation" } as never,
+      {
+        mode: "concern_tracer",
+        target_path: ".",
+        concern: "Repository orientation",
+        focus: "Repository orientation",
+      } as never,
       undefined,
       undefined,
       { cwd } as never,

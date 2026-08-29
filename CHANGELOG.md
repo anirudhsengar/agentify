@@ -145,6 +145,11 @@ All notable changes to Agentify are documented here.
   only bounded explorer dispatch and concern-delta tools. Repository reads stay
   inside explorers instead of consuming parent calls by rereading the broad map.
 
+- Concern tracers now receive an application-bound exact concern identity, and
+  typed submissions that rename it are rejected before checkpointing. This
+  prevents aliases from satisfying the wrong scout proposal or becoming duplicate
+  specialists during repair.
+
 - Explorer sessions now run serially with hard mode-specific repository-read
   and provider-call limits. Aggregate exhaustion reports the exact unresolved
   semantic obligations and fingerprint; complete reports at the limit survive.
