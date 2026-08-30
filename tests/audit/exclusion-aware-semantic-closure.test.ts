@@ -256,10 +256,8 @@ test("an auxiliary-only concern cannot duplicate implementation-owned behavior",
       core: "examples/pm-install",
       test: "tests/fixtures/pm-install",
     });
-    const duplicated = assessSpecialistEvidence(
-      mapWithConcerns(["src/command.ts"], [dispatch, example]),
-      { cwd },
-    );
+    const duplicatedMap = mapWithConcerns(["src/command.ts"], [dispatch, example]);
+    const duplicated = assessSpecialistEvidence(duplicatedMap, { cwd });
 
     assert.equal(duplicated.complete, false);
     assert.ok(
@@ -269,6 +267,20 @@ test("an auxiliary-only concern cannot duplicate implementation-owned behavior",
       ),
       duplicated.reasons.join("; "),
     );
+    const compiled = compileSpecialistEvidence(duplicatedMap, { cwd });
+    assert.equal(compiled.complete, true, compiled.reasons.join("; "));
+    assert.deepEqual(
+      compiled.map.concern_evidence?.concerns.map((candidate) => candidate.concern),
+      ["subcommand dispatch and lifecycle"],
+    );
+    assert.ok(compiled.map.concern_evidence?.not_concerns.some((candidate) =>
+      candidate.candidate === "standalone executable subcommand launching"
+      && candidate.why_rejected.includes("examples/pm-install")
+      && candidate.why_rejected.includes("tests/fixtures/pm-install")
+    ));
+    const repeated = compileSpecialistEvidence(compiled.map, { cwd });
+    assert.equal(repeated.complete, true, repeated.reasons.join("; "));
+    assert.strictEqual(repeated.map, compiled.map);
 
     example.concern = "package installation example output";
     example.one_line = "Documents package installation output and failure behavior.";
