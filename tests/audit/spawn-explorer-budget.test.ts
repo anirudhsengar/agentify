@@ -241,6 +241,50 @@ async function testRefusesDuplicateCurrentHeadConcernScout(): Promise<void> {
   }
 }
 
+async function testInitialConcernScoutRejectsParentAuthoredPortfolioCaps(): Promise<void> {
+  const cwd = tempDir("spawn-budget-initial-scout-cap");
+  let sessionCreated = false;
+  try {
+    fs.writeFileSync(path.join(cwd, "README.md"), "# fixture\n");
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "fixture");
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      stateDir: ".agentify/runtime/audit",
+      ...stubExplorerArgs(),
+      createSession: async () => {
+        sessionCreated = true;
+        return {
+          session: {
+            messages: [],
+            async prompt(): Promise<void> {},
+            dispose(): void {},
+          },
+        };
+      },
+    });
+    const result = await tool.execute(
+      "test-initial-scout-cap",
+      {
+        mode: "concern_scout",
+        target_path: ".",
+        focus: "Find at most four core behavioral concerns and be concise.",
+      } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((result as { isError?: boolean }).isError, true);
+    assert.match(textFrom(result), /initial concern_scout must derive portfolio size from evidence/i);
+    assert.equal(sessionCreated, false, "an application-authored numeric cap must fail before model execution");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function testRejectsWhenConcurrentSpawnBudgetIsExhausted(): Promise<void> {
   const cwd = tempDir("spawn-budget-concurrent");
   try {
@@ -815,6 +859,7 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(): Promise<vo
 }
 
 await testRejectsWhenTotalSpawnBudgetIsExhausted();
+await testInitialConcernScoutRejectsParentAuthoredPortfolioCaps();
 await testRefusesDuplicateCurrentHeadConcernScout();
 await testRejectsWhenConcurrentSpawnBudgetIsExhausted();
 await testRejectsWhenCostBudgetIsExhausted();
