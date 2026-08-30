@@ -299,6 +299,10 @@ async function testDocumentedOfflineUnittestOutranksNetworkDependentDiscovery():
       path.join(cwd, "tests", "test_parser.py"),
       "from parser import parse\nfrom unittest import TestCase\nclass TestParser(TestCase):\n    def test_parse(self): self.assertEqual(parse('ok'), 'ok')\n",
     );
+    fs.writeFileSync(
+      path.join(cwd, "tests", "test_alpha.py"),
+      "from unittest import TestCase\nclass TestAlpha(TestCase):\n    def test_alpha(self): self.assertTrue(True)\n",
+    );
     fs.writeFileSync(path.join(cwd, "parser.py"), "def parse(value): return value\n");
     git(cwd, "init", "-q");
     git(cwd, "config", "user.name", "Agentify Test");
@@ -309,10 +313,35 @@ async function testDocumentedOfflineUnittestOutranksNetworkDependentDiscovery():
     const { commands, blockers } = discoverRepositoryCommands(cwd, fakeRunner(cwd), false);
     assert.ok(commands.some((command) => (
       command.kind === "test"
-      && command.argv.join(" ") === "python -m unittest tests/test_parser.py"
+      && command.argv.join(" ") === "python -m unittest tests/test_alpha.py"
     )));
     assert.ok(!commands.some((command) => command.argv.join(" ") === "python -m unittest discover tests"));
     assert.ok(!blockers.some((blocker) => blocker.code === "missing_deterministic_validation"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testNetworkDependentUnittestWithoutDocumentedIndividualFormFailsClosed(): Promise<void> {
+  const cwd = tempDir("agentify-build-python-no-individual-form-");
+  try {
+    fs.mkdirSync(path.join(cwd, "tests"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "pyproject.toml"), "[project]\nname='tool'\n");
+    fs.writeFileSync(path.join(cwd, "README.md"), "Run the complete test suite before submitting.\n");
+    fs.writeFileSync(path.join(cwd, "tests", "test_remote.py"), "import requests\n");
+    fs.writeFileSync(
+      path.join(cwd, "tests", "test_safe.py"),
+      "from unittest import TestCase\nclass TestSafe(TestCase):\n    def test_safe(self): self.assertTrue(True)\n",
+    );
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "fixture");
+
+    const { commands, blockers } = discoverRepositoryCommands(cwd, fakeRunner(cwd), false);
+    assert.ok(!commands.some((command) => command.kind === "test"));
+    assert.ok(blockers.some((blocker) => blocker.code === "missing_deterministic_validation"));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -353,6 +382,7 @@ const tests = [
   { name: "tracked nested Python tests outrank root build-only shell", fn: testTrackedNestedPythonTestsOutrankRootBuildOnlyShell },
   { name: "untracked nested manifest cannot change build selection", fn: testUntrackedNestedManifestCannotChangeBuildSelection },
   { name: "documented offline unittest outranks network-dependent discovery", fn: testDocumentedOfflineUnittestOutranksNetworkDependentDiscovery },
+  { name: "network-dependent unittest without documented individual form fails closed", fn: testNetworkDependentUnittestWithoutDocumentedIndividualFormFailsClosed },
   { name: "unittest fixture URLs do not imply network execution", fn: testUnittestFixtureUrlsDoNotImplyNetworkExecution },
 ];
 
