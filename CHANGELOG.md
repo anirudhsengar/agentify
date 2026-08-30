@@ -48,6 +48,11 @@ All notable changes to Agentify are documented here.
 
 ### Changed
 
+- Path-backed rejected candidates that claim behavior is accepted, existing,
+  or subsumed elsewhere now exempt tracked obligations only when their named
+  disposition semantically binds to a real accepted concern. Independent
+  substantive rejections remain valid; delegation to a nonexistent specialist
+  fails closure with the exact candidate and claimed owner.
 - Fixed-point specialist normalization now removes stale append-only
   `not_concerns` entries that explicitly retain an accepted concern, recognizes
   exact tracked paths embedded in descriptive rejection labels, and resolves a

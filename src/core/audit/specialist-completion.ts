@@ -773,6 +773,9 @@ interface AssessedConcern {
   corePaths: string[];
 }
 
+type ConcernRecord = NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
+type RejectionRecord = NonNullable<CodebaseMap["concern_evidence"]>["not_concerns"][number];
+
 function assessConcern(
   concern: NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number],
   resolvePath: RepositoryPathResolver,
@@ -896,6 +899,28 @@ function matchingTokenCount(left: ReadonlySet<string>, right: ReadonlySet<string
   return matches;
 }
 
+function delegatedOwnerDescription(value: string): string | null {
+  return /\b(?:accepted|existing)\s+(.{3,160}?)\s+(?:concern|specialist|contract|flow)\b/i
+    .exec(value)?.[1]?.trim()
+    ?? /\bsubsum(?:e|ed|es|ing)\s+by\s+(?:the\s+)?([^.;\n]{3,160})/i.exec(value)?.[1]?.trim()
+    ?? null;
+}
+
+function rejectionHasGroundedDisposition(
+  rejection: RejectionRecord,
+  acceptedConcerns: readonly ConcernRecord[],
+): boolean {
+  const delegatedOwner = delegatedOwnerDescription(rejection.why_rejected);
+  if (delegatedOwner === null) return true;
+  const delegatedTokens = semanticTokens(delegatedOwner);
+  return acceptedConcerns.some((concern) =>
+    matchingTokenCount(
+      delegatedTokens,
+      semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`),
+    ) >= 2
+  );
+}
+
 function attachmentConflictsWithExclusions(
   candidate: AttachmentConcernCandidate,
   paths: readonly string[],
@@ -1005,6 +1030,7 @@ function inferRepositoryConcernAttachments(input: {
       excludedTokens: semanticTokens(concern.excludes),
     }];
   });
+  const acceptedConcernRecords = candidates.map((candidate) => candidate.concern);
   const attachmentPaths = new Map<string, Set<string>>();
   const reasons = new Map<string, Set<string>>();
   const add = (concern: string, paths: readonly string[], reason: string): void => {
@@ -1017,7 +1043,10 @@ function inferRepositoryConcernAttachments(input: {
   };
   const rejected = (repositoryPath: string): boolean =>
     (input.map.concern_evidence?.not_concerns ?? [])
-      .some((entry) => rejectionCoversPath(entry, repositoryPath));
+      .some((entry) =>
+        rejectionHasGroundedDisposition(entry, acceptedConcernRecords)
+        && rejectionCoversPath(entry, repositoryPath)
+      );
 
   for (const cluster of input.clusters) {
     const clusterPaths = [...cluster.implementation_paths, ...cluster.test_paths]
@@ -1115,10 +1144,17 @@ function concreteTouchpointSymbols(value: string | null): Set<string> {
   ));
 }
 
-function pathsMentionedByRejections(map: CodebaseMap, candidates: readonly string[]): string[] {
+function pathsMentionedByRejections(
+  map: CodebaseMap,
+  candidates: readonly string[],
+  acceptedConcerns: readonly ConcernRecord[],
+): string[] {
   const mentioned = new Set<string>();
   const rejections = (map.concern_evidence?.not_concerns ?? [])
-    .filter((entry) => isSubstantiveConcernRejection(entry.why_rejected));
+    .filter((entry) =>
+      isSubstantiveConcernRejection(entry.why_rejected)
+      && rejectionHasGroundedDisposition(entry, acceptedConcerns)
+    );
   for (const candidate of candidates) {
     if (rejections.some((entry) => rejectionCoversPath(entry, candidate))) mentioned.add(candidate);
   }
@@ -1206,6 +1242,10 @@ export function assessSpecialistEvidence(
   const concernsByName = new Map(
     map.concern_evidence.concerns.map((concern) => [concern.concern, concern]),
   );
+  const acceptedConcernRecords = accepted.flatMap((assessment) => {
+    const concern = concernsByName.get(assessment.concern);
+    return concern === undefined ? [] : [concern];
+  });
   const portfolioTokens = new Map(accepted.flatMap((assessment) => {
     const concern = concernsByName.get(assessment.concern);
     return concern === undefined ? [] : [[
@@ -1514,7 +1554,7 @@ export function assessSpecialistEvidence(
     }
   }
   const covered = [...coveredSet].sort((left, right) => left.localeCompare(right));
-  const exempted = pathsMentionedByRejections(map, highSignal);
+  const exempted = pathsMentionedByRejections(map, highSignal, acceptedConcernRecords);
   const exemptedSet = new Set(exempted);
   const uncovered = highSignal.filter((candidate) =>
     !coveredSet.has(candidate)
@@ -1557,6 +1597,10 @@ export function assessSpecialistEvidence(
       reasons.push(
         `not_concerns candidate "${rejection.candidate}" does not contain a substantive rejection`,
       );
+    } else if (!rejectionHasGroundedDisposition(rejection, acceptedConcernRecords)) {
+      reasons.push(
+        `not_concerns candidate "${rejection.candidate}" delegates behavior to "${delegatedOwnerDescription(rejection.why_rejected)}", but no accepted concern semantically matches that disposition`,
+      );
     }
   }
 
@@ -1583,6 +1627,7 @@ export function assessSpecialistEvidence(
   const areas = topLevelAreas(highSignal);
   const pathBackedRejections = map.concern_evidence.not_concerns.filter((entry) =>
     isSubstantiveConcernRejection(entry.why_rejected)
+    && rejectionHasGroundedDisposition(entry, acceptedConcernRecords)
     && highSignal.some((candidate) => rejectionCoversPath(entry, candidate))
   ).length;
   if (

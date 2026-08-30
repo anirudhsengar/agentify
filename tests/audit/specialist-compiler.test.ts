@@ -440,7 +440,7 @@ test("a path-backed rejection cannot delegate behavior to a nonexistent concern"
     const compiled = compileSpecialistEvidence(map, { cwd });
     assert.equal(compiled.status, "incomplete");
     assert.ok(compiled.reasons.some((reason) =>
-      reason.includes("accepted package initialization concern")
+      reason.includes("no accepted concern semantically matches")
     ));
     assert.ok(compiled.reasons.some((reason) => reason.includes("scripts/common/__init__.py")));
   } finally {

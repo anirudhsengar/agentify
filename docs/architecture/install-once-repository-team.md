@@ -252,7 +252,10 @@ The compiler and receipt gate both refuse `not_concerns` explanations that
 explicitly accept the named candidate. Normalization removes such an append-only
 entry only when it semantically matches an accepted concern. Exact tracked paths
 embedded in a descriptive rejection label exempt only those paths, with path
-boundaries preventing substring matches. Parent sessions are terminated by an
+boundaries preventing substring matches. A rejection that says behavior is
+accepted, existing, or subsumed elsewhere must also bind its named disposition
+to a real accepted concern; a nonexistent delegated owner remains an unresolved
+obligation. Parent sessions are terminated by an
 application-owned timer at the configured session deadline. SIGINT and SIGTERM
 run the same synchronous pending-installation rollback before process exit, so
 only the permitted diagnostic map can survive an interrupted fresh install.
