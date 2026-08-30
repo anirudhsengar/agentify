@@ -163,6 +163,10 @@ All notable changes to Agentify are documented here.
   claimant when every existing core owner retains an independent implementation
   core. Examples, fixtures, tests, and tied claimants cannot prove this rule.
 
+- Exclusion-aware attachment now distinguishes a substantive behavioral match
+  from one generic token already present in the concern's positive evidence,
+  preventing unrelated mirrored clusters from being vetoed by broad wording.
+
 - Explorer sessions now run serially with hard mode-specific repository-read
   and provider-call limits. Aggregate exhaustion reports the exact unresolved
   semantic obligations and fingerprint; complete reports at the limit survive.

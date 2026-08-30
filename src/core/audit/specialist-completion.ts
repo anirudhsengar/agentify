@@ -886,10 +886,14 @@ function attachmentConflictsWithExclusions(
   paths: readonly string[],
   label: string,
 ): boolean {
-  return matchingTokenCount(
-    pathSemanticTokens(paths, label),
-    candidate.excludedTokens,
-  ) > 0;
+  const clusterTokens = pathSemanticTokens(paths, label);
+  const matched = [...clusterTokens].filter((token) =>
+    [...candidate.excludedTokens].some((excluded) => tokensRelated(token, excluded))
+  );
+  if (matched.length >= 2) return true;
+  return matched.some((token) =>
+    ![...candidate.tokens].some((positive) => tokensRelated(token, positive))
+  );
 }
 
 function directoryAffinity(candidate: string, contextPath: string): number {

@@ -169,6 +169,9 @@ one supporting claimant only when it is the sole claimant without another
 independent implementation core and every current owner retains one. Examples,
 fixtures, and tests do not establish that independent implementation ownership;
 tied dependent claimants remain unresolved.
+Negative evidence remains authoritative without allowing a generic domain word
+to veto unrelated local mirrors: an exclusion conflict requires two behavioral
+token matches, or one matched token absent from the concern's positive evidence.
 The application checkpoints cumulative usage in the diagnostic map, bound to
 the audited commit. Same-HEAD CLI continuations resume the remaining budget
 rather than resetting counters; a new commit begins a new evidence lineage.

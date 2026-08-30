@@ -201,7 +201,7 @@ test("a generic exclusion token does not veto a distinct mirrored behavior clust
       && attachment.paths.includes("tests/options.env.test.js")
     ));
 
-    options.excludes = "Environment-backed option value behavior is a separate specialty.";
+    options.excludes = "Option env values are a separate specialty.";
     const excluded = assessSpecialistEvidence(map, { cwd });
     assert.ok(!excluded.attachments.some((attachment) =>
       attachment.paths.includes("examples/options-env.js")
