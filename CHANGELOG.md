@@ -6,6 +6,9 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Semantic repair now orders uncovered JavaScript and TypeScript clusters by
+  direct dependency centrality before deterministic name ties, so missing core
+  behavior is investigated before disconnected leaf utilities.
 - Mirrored JavaScript and TypeScript clusters now attach deterministically when
   a current-HEAD relative import, export, or require edge links them to exactly
   one accepted concern. Multiple owners and explicit exclusions remain

@@ -210,6 +210,11 @@ event; model work cannot consume the cleanup interval itself.
 Semantic-repair parents receive the current unresolved obligations directly and
 may only dispatch bounded explorers or apply a concern delta; repository reads
 remain confined to those explorers, preventing broad map and tree rereads.
+Uncovered JavaScript and TypeScript clusters are ordered by the number of
+distinct tracked modules connected through current-HEAD relative dependency
+edges, with cluster identity as the stable tie-break. Repair handles central
+missing behavior before disconnected leaf utilities unless stronger evidence
+shows another obligation blocks it.
 Concern-tracer dispatch binds an exact application-owned concern identity. The
 typed submission must preserve it verbatim, so a model cannot rename one scout
 proposal into an alias that later forces a duplicate specialist. Retracing an

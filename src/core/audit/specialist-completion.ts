@@ -1265,6 +1265,35 @@ function directModuleEdges(input: {
   return edges;
 }
 
+function prioritizeRepositoryClusters(input: {
+  clusters: readonly RepositoryBehaviorCluster[];
+  cwd: string | undefined;
+  trackedFiles: ReadonlySet<string> | undefined;
+}): RepositoryBehaviorCluster[] {
+  if (input.cwd === undefined || input.trackedFiles === undefined) return [...input.clusters];
+  const edges = directModuleEdges({
+    cwd: input.cwd,
+    trackedFiles: input.trackedFiles,
+    paths: [...input.trackedFiles],
+  });
+  const neighbors = new Map<string, Set<string>>();
+  for (const [from, targets] of edges) {
+    for (const to of targets) {
+      const fromNeighbors = neighbors.get(from) ?? new Set<string>();
+      const toNeighbors = neighbors.get(to) ?? new Set<string>();
+      fromNeighbors.add(to);
+      toNeighbors.add(from);
+      neighbors.set(from, fromNeighbors);
+      neighbors.set(to, toNeighbors);
+    }
+  }
+  const degree = (cluster: RepositoryBehaviorCluster): number => new Set(
+    cluster.implementation_paths.flatMap((repositoryPath) => [...(neighbors.get(repositoryPath) ?? [])]),
+  ).size;
+  return [...input.clusters].sort((left, right) => degree(right) - degree(left)
+    || left.cluster_key.localeCompare(right.cluster_key));
+}
+
 function selectUniqueDirectDependencyConcern(input: {
   implementationPaths: readonly string[];
   candidates: readonly AttachmentConcernCandidate[];
@@ -1879,10 +1908,14 @@ export function assessSpecialistEvidence(
     && (!isGenericPlumbing(candidate) || clusterObligationPaths.has(candidate))
   );
   const uncoveredSet = new Set(uncovered);
-  const uncoveredClusters = repositoryClusters.filter((cluster) =>
-    [...cluster.implementation_paths, ...cluster.test_paths]
-      .some((candidate) => uncoveredSet.has(candidate))
-  );
+  const uncoveredClusters = prioritizeRepositoryClusters({
+    clusters: repositoryClusters.filter((cluster) =>
+      [...cluster.implementation_paths, ...cluster.test_paths]
+        .some((candidate) => uncoveredSet.has(candidate))
+    ),
+    cwd: repository.cwd,
+    trackedFiles: repository.trackedFiles,
+  });
 
   if (
     map.meta.project_type.trim().length === 0
