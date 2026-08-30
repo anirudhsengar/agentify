@@ -28,6 +28,7 @@ function explorerEvent(input: {
   mode: "concern_scout" | "concern_tracer";
   success: boolean;
   focus?: string;
+  expectedConcern?: string;
   reportConcern?: string;
   targetPath?: string;
   failureKind?: string;
@@ -48,6 +49,7 @@ function explorerEvent(input: {
       mode: input.mode,
       target_path: input.targetPath ?? ".",
       focus: input.focus ?? null,
+      expected_concern: input.expectedConcern ?? null,
       report_concern: input.reportConcern ?? null,
       failure_kind: input.failureKind ?? (input.success ? null : "timeout"),
     },
@@ -202,6 +204,37 @@ test("a timed-out tracer remains unresolved instead of becoming a rejection", ()
     { requiredConcerns: [] },
   );
   assert.equal(complete.complete, true, complete.reasons.join("; "));
+});
+
+test("a successful retrace resolves a verbose failed focus by its bound concern identity", () => {
+  const tracker = new ExplorerReceiptTracker();
+  tracker.observe(explorerEvent({ mode: "concern_scout", success: true }));
+  tracker.observe(explorerEvent({
+    mode: "concern_tracer",
+    success: false,
+    expectedConcern: "Command dispatch and lifecycle",
+    focus: "Repair the already-attested concern after grouping help rendering, typo suggestions, and positional validation into the broader command lifecycle while preserving every ordered flow and tracked core path.",
+  }));
+
+  let assessment = tracker.assess(mapWithConcerns(), { requiredConcerns: [] });
+  assert.equal(assessment.complete, false);
+  assert.deepEqual(
+    assessment.unresolved_tracer_failures,
+    ["Command dispatch and lifecycle (timed out)"],
+  );
+
+  tracker.observe(explorerEvent({
+    mode: "concern_tracer",
+    success: true,
+    expectedConcern: "Command dispatch and lifecycle",
+    focus: "Return a compact repair report.",
+    reportConcern: "Command dispatch and lifecycle",
+  }));
+  assessment = tracker.assess(
+    mapWithConcerns("Command dispatch and lifecycle"),
+    { requiredConcerns: [] },
+  );
+  assert.equal(assessment.complete, true, assessment.reasons.join("; "));
 });
 
 test("persisted explorer receipts are application-authored and bound to current HEAD", () => {
