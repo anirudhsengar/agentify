@@ -234,6 +234,55 @@ test("test-only repositories may own their executable test behavior as core", ()
   }
 });
 
+test("an auxiliary-only concern cannot duplicate implementation-owned behavior", () => {
+  const cwd = repository([
+    "src/command.ts",
+    "tests/command.test.ts",
+    "examples/pm-install",
+    "tests/fixtures/pm-install",
+  ]);
+  try {
+    const dispatch = concern({
+      name: "subcommand dispatch and lifecycle",
+      covers: "Dispatches and launches executable subcommands through the command runtime.",
+      excludes: "Package installation example output.",
+      core: "src/command.ts",
+      test: "tests/command.test.ts",
+    });
+    const example = concern({
+      name: "standalone executable subcommand launching",
+      covers: "Demonstrates the executable subcommand launch contract in a standalone example.",
+      excludes: "Parent command dispatch internals.",
+      core: "examples/pm-install",
+      test: "tests/fixtures/pm-install",
+    });
+    const duplicated = assessSpecialistEvidence(
+      mapWithConcerns(["src/command.ts"], [dispatch, example]),
+      { cwd },
+    );
+
+    assert.equal(duplicated.complete, false);
+    assert.ok(
+      duplicated.reasons.some((reason) =>
+        /auxiliary-only.*standalone executable subcommand launching.*subcommand dispatch and lifecycle/i
+          .test(reason)
+      ),
+      duplicated.reasons.join("; "),
+    );
+
+    example.concern = "package installation example output";
+    example.one_line = "Documents package installation output and failure behavior.";
+    example.covers = "Package-name validation, force output, and per-package installation output.";
+    const distinct = assessSpecialistEvidence(
+      mapWithConcerns(["src/command.ts"], [dispatch, example]),
+      { cwd },
+    );
+    assert.equal(distinct.complete, true, distinct.reasons.join("; "));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("normalization promotes a uniquely cited implementation out of test-only core ownership", () => {
   const cwd = repository([
     "src/parser.ts",
