@@ -346,6 +346,11 @@ test("SIGTERM preserves one terminal audit result and charged budget through rol
     assert.equal(map.audit_budget_checkpoint?.usage.output_tokens, 2);
     assert.equal(map.audit_budget_checkpoint?.usage.cost_usd, 0.01);
     assert.equal(fs.existsSync(path.join(cwd, ".agentify/manifest.json")), false);
+    assert.deepEqual(
+      fs.readdirSync(path.join(cwd, ".agentify/runtime/audit"), { recursive: true }),
+      ["codebase_map.json"],
+      "signal checkpoint must not recreate history after rollback",
+    );
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
     fs.rmSync(configRoot, { recursive: true, force: true });
