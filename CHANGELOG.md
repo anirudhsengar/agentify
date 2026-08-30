@@ -21,6 +21,9 @@ All notable changes to Agentify are documented here.
   closure. Trusted normalization retires a grounded subsumed concern only when
   one retained owner preserves every prior flow name and ordered step-path
   sequence, cites every retired core path, and no longer excludes that scope.
+- Existing-concern tracer replacements now preserve every verified flow name
+  and ordered step-path sequence, preventing a later retrace from collapsing
+  established behavior while global file coverage happens to remain unchanged.
 
 ### Added
 

@@ -306,6 +306,8 @@ test("a retracer cannot trade one covered repository obligation for another", as
       touchpoints: Array<Record<string, unknown>>;
       flows: Array<Record<string, unknown>>;
     };
+    const preservedFlow = structuredClone(currentConcern.flows.at(-1)!);
+    parsed.flows.push(preservedFlow);
     const regressiveConcern = parseStructuredConcernReport(REPORT, "2026-08-29T00:00:00.000Z");
     assert.ok(regressiveConcern);
     assert.ok(
@@ -345,6 +347,7 @@ test("a retracer cannot trade one covered repository obligation for another", as
       line_range: null,
       centrality: "supporting",
     });
+    parsed.flows.pop();
     const flowRegressive = await tool.execute(
       "submit-monotonic",
       { report_json: JSON.stringify(parsed) } as never,
@@ -356,7 +359,7 @@ test("a retracer cannot trade one covered repository obligation for another", as
     assert.match(flowRegressive.content[0]?.text ?? "", /preserve.*verified flow.*Previously verified rejection fallback/i);
     assert.equal(submissions, 0);
 
-    parsed.flows.push(structuredClone(currentConcern.flows.at(-1)!));
+    parsed.flows.push(preservedFlow);
     const monotonic = await tool.execute(
       "submit-flow-monotonic",
       { report_json: JSON.stringify(parsed) } as never,

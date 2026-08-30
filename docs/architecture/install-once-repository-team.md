@@ -204,7 +204,10 @@ Concern-tracer dispatch binds an exact application-owned concern identity. The
 typed submission must preserve it verbatim, so a model cannot rename one scout
 proposal into an alias that later forces a duplicate specialist. Retracing an
 existing concern must also retain at least one prior core path in its submitted
-touchpoints or verified flow; a distinct body requires a new scout proposal.
+touchpoints or verified flow, plus every prior verified flow name and ordered
+step-path sequence. Descriptions may be refined, but established behavioral
+structure cannot disappear merely because another concern still covers the
+same files. A distinct body requires a new scout proposal.
 Portfolio screening distinguishes ordinary shared supporting touchpoints from
 an impossible monolithic ownership split. Candidates with the same sole tracked
 implementation file and no independent implementation owner are grouped into

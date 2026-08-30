@@ -594,6 +594,27 @@ export function createConcernSubmissionTool(
                     concern.concern === expectedConcern
                 );
                 if (concernIndex >= 0) {
+                    const existingConcern = existingMap.concern_evidence.concerns[concernIndex]!;
+                    const missingFlow = existingConcern.flows.find((flow) =>
+                        !decoded.concern!.flows.some((candidate) =>
+                            candidate.name.trim().toLowerCase() === flow.name.trim().toLowerCase()
+                            && candidate.steps.length === flow.steps.length
+                            && candidate.steps.every((step, index) =>
+                                step.path === flow.steps[index]!.path
+                            )
+                        )
+                    );
+                    if (missingFlow !== undefined) {
+                        return {
+                            content: [{
+                                type: "text",
+                                text:
+                                    `Error: retracing an existing concern must preserve the verified flow ${JSON.stringify(missingFlow.name)} and its ordered step paths; refine descriptions without dropping or renaming verified structure.`,
+                            }],
+                            isError: true,
+                            details: { recorded: false, concern: null },
+                        };
+                    }
                     const baseline = assessSpecialistEvidence(existingMap, { cwd: repositoryRoot });
                     const concerns = [...existingMap.concern_evidence.concerns];
                     concerns[concernIndex] = decoded.concern;
@@ -904,6 +925,13 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     .map((touchpoint) => touchpoint.path),
             )]
             : [];
+        const requiredFlows = existingMap && expectedConcern
+            ? existingMap.concern_evidence?.concerns.find((concern) =>
+                concern.concern === expectedConcern
+            )?.flows.map((flow) =>
+                `${flow.name} [${flow.steps.map((step) => step.path).join(" > ")}]`
+            ) ?? []
+            : [];
 
         const subAgentModel = toolOptions.explorerModel;
         const subAgentModelLabel = `${subAgentModel.provider}/${subAgentModel.id}`;
@@ -1031,6 +1059,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             `- Return ## Report within ~${mode === "concern_tracer" ? 3_000 : maxSteps * 1_000} tokens.` +
             (requiredScopePaths.length > 0
                 ? `\n- Preserve the existing concern scope by retaining at least one prior core path: ${requiredScopePaths.join(", ")}.`
+                : "") +
+            (requiredFlows.length > 0
+                ? `\n- Preserve every verified flow name and ordered step-path sequence: ${requiredFlows.join("; ")}.`
                 : "");
         const task = mode === "custom"
             ? `${params.target_path}${summarySuffix}${constraintsBlock}`
