@@ -721,7 +721,7 @@ async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
       "test-spawn-budget-timeout",
       {
         mode: "concern_tracer",
-        target_path: ".",
+        target_path: cwd,
         concern: "procedural macro derives and diagnostics",
         focus: "procedural macro derives and diagnostics",
       } as never,
@@ -738,7 +738,11 @@ async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
       failure_kind?: string;
     } | undefined;
     assert.equal(details?.mode, "concern_tracer");
-    assert.equal(details?.target_path, ".");
+    assert.equal(
+      details?.target_path,
+      ".",
+      "trusted receipt details must canonicalize an absolute repository target",
+    );
     assert.equal(details?.focus, "procedural macro derives and diagnostics");
     assert.equal(details?.failure_kind, "timeout");
   } finally {
