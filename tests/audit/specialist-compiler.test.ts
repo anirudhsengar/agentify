@@ -448,6 +448,27 @@ test("a path-backed rejection cannot delegate behavior to a nonexistent concern"
   }
 });
 
+test("a negative hypothetical about an accepted concern is not a delegation", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    write(cwd, "CONTRIBUTING.md");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "add contribution policy");
+    const map = aqaShapedMap();
+    map.concern_evidence!.not_concerns = [{
+      candidate: "CONTRIBUTING.md",
+      why_rejected: "Contributor onboarding and PR workflow only. It documents how humans submit patches rather than recurring runtime behavior, so attaching it to an accepted runtime concern would conflate project governance with library semantics.",
+    }];
+    map.concern_evidence!.concerns[1]!.touchpoints[0]!.centrality = "supporting";
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.status, "compiled", compiled.reasons.join("; "));
+    assert.equal(compiled.complete, true);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("path-backed rejection labels close only their exact tracked cluster", () => {
   const cwd = createAqaShapedRepository();
   try {
