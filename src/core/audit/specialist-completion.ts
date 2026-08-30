@@ -956,8 +956,15 @@ function rejectionHasGroundedDisposition(
 
 function concernExclusionPaths(candidate: AttachmentConcernCandidate): string[] {
   return [...candidate.concern.excludes.matchAll(
-    /(?:^|[\s(])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.*-]+)+)/g,
+    /(?:^|[^A-Za-z0-9_.-])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.*-]+)+)/g,
   )].flatMap((match) => match[1] ? [match[1].replace(/\*+$/, "").replace(/\/$/, "")] : []);
+}
+
+function excludedPathCoversRepositoryPath(excludedPath: string, repositoryPath: string): boolean {
+  return repositoryPath === excludedPath
+    || repositoryPath.startsWith(`${excludedPath}/`)
+    || repositoryPath.endsWith(`/${excludedPath}`)
+    || repositoryPath.includes(`/${excludedPath}/`);
 }
 
 function attachmentConflictsWithExclusions(
@@ -972,9 +979,7 @@ function attachmentConflictsWithExclusions(
   ]);
   const exclusionPaths = concernExclusionPaths(candidate);
   const pathExclusionApplies = exclusionPaths.some((excludedPath) =>
-    paths.some((repositoryPath) => (
-      repositoryPath === excludedPath || repositoryPath.startsWith(`${excludedPath}/`)
-    ))
+    paths.some((repositoryPath) => excludedPathCoversRepositoryPath(excludedPath, repositoryPath))
   );
   const pathTokens = semanticTokens(exclusionPaths.join(" "));
   const effectiveExcludedTokens = pathExclusionApplies
@@ -1003,9 +1008,7 @@ function attachmentHasPathExclusion(
   paths: readonly string[],
 ): boolean {
   return concernExclusionPaths(candidate).some((excludedPath) =>
-    paths.some((repositoryPath) => (
-      repositoryPath === excludedPath || repositoryPath.startsWith(`${excludedPath}/`)
-    ))
+    paths.some((repositoryPath) => excludedPathCoversRepositoryPath(excludedPath, repositoryPath))
   );
 }
 
@@ -1873,7 +1876,22 @@ export function assessSpecialistEvidence(
   }
   const explicitOwnersByPath = new Map<string, Set<string>>();
   for (const assessment of accepted) {
+    const concern = concernsByName.get(assessment.concern);
+    const candidate = concern === undefined ? undefined : {
+      concern,
+      assessment,
+      tokens: concernSemanticTokens(concern),
+      excludedTokens: semanticTokens(concern.excludes),
+    };
     for (const repositoryPath of assessment.contextPaths) {
+      const touchpoint = concern?.touchpoints.find((entry) =>
+        resolvePath(entry.path) === repositoryPath
+      );
+      if (
+        candidate !== undefined
+        && touchpoint?.centrality === "supporting"
+        && attachmentHasPathExclusion(candidate, [repositoryPath])
+      ) continue;
       const owners = explicitOwnersByPath.get(repositoryPath) ?? new Set<string>();
       owners.add(assessment.concern);
       explicitOwnersByPath.set(repositoryPath, owners);

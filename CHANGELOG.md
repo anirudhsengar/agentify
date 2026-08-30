@@ -6,6 +6,9 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Repository-relative subtree exclusions such as `router/*` now remain negative
+  ownership evidence below source roots, so a supporting citation cannot
+  compete for implementation or mirrored-test ownership that it excludes.
 - Semantic repair now orders uncovered JavaScript and TypeScript clusters by
   direct dependency centrality before deterministic name ties, so missing core
   behavior is investigated before disconnected leaf utilities.

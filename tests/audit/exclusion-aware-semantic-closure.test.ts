@@ -409,7 +409,7 @@ test("a supporting citation cannot compete for ownership of behavior it explicit
     const urls = concern({
       name: "URL parsing and path normalization",
       covers: "Parses request URLs and normalizes route paths consumed by routers.",
-      excludes: "Router matching decisions and concrete router algorithms under src/router/.",
+      excludes: "Router matching decisions and concrete router algorithms under `router/*`.",
       core: "src/utils/url.ts",
       test: "src/utils/url.test.ts",
       supporting: ["src/router/reg-exp-router/router.ts"],
