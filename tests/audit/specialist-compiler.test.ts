@@ -456,7 +456,10 @@ test("specialist compilation canonicalizes scout names and recomputes trusted in
   const cwd = createAqaShapedRepository();
   try {
     write(cwd, "scripts/disabled_tests/exclude_openjdk.py");
+    write(cwd, "scripts/disabled_tests/inventory.py");
+    write(cwd, "scripts/disabled_tests/issue_filter.py");
     write(cwd, "scripts/disabled_tests/tests/test_exclude_openjdk.py");
+    write(cwd, "scripts/disabled_tests/tests/test_issue_filter.py");
     git(cwd, "add", ".");
     git(cwd, "commit", "-qm", "add exclusion maintenance fixture");
     const map = aqaShapedMap();
@@ -464,27 +467,20 @@ test("specialist compilation canonicalizes scout names and recomputes trusted in
     acquisition.concern = "Test dependency and external material acquisition; seed paths: get.sh and Jenkins. Trace sources, branches, credentials, and tracked descriptors only.";
     const inventory = concern({
       name: "Disabled and excluded test inventory maintenance",
-      covers: "ProblemList exclusion parsing and its mirrored regression behavior.",
+      covers: "ProblemList exclusion parsing, issue filtering, and mirrored regression behavior.",
       excludes: "Playlist-to-Make generation, dependency acquisition, and openjdk/excludes inputs owned by test suites.",
       touchpoints: [
         {
-          path: "scripts/disabled_tests/exclude_openjdk.py",
-          symbol: "parse_exclude_command",
-          role: "Implements exclusion maintenance.",
+          path: "scripts/disabled_tests/inventory.py",
+          symbol: "inventory",
+          role: "Implements disabled test inventory maintenance.",
           line_range: null,
           centrality: "core",
         },
-        {
-          path: "scripts/disabled_tests/tests/test_exclude_openjdk.py",
-          symbol: "TestParseExcludeCommand",
-          role: "Mirrored exclusion regression coverage.",
-          line_range: null,
-          centrality: "supporting",
-        },
       ],
       flow: [
-        "scripts/disabled_tests/exclude_openjdk.py",
-        "scripts/disabled_tests/tests/test_exclude_openjdk.py",
+        "scripts/disabled_tests/inventory.py",
+        "scripts/disabled_tests/inventory.py",
       ],
     });
     map.concern_evidence!.concerns.push(inventory);
