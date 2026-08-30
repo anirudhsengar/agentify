@@ -265,6 +265,7 @@ test("normalization assigns a mirrored cluster to its unique complete claimant",
     "examples/options-required.js",
     "tests/options-required.test.js",
   ]) write(cwd, repositoryPath);
+  fs.writeFileSync(path.join(cwd, "examples/options-required.js"), "export function requiredOption(value) { return value; }\n");
   git(cwd, "init", "-q");
   git(cwd, "config", "user.name", "Agentify Test");
   git(cwd, "config", "user.email", "agentify@example.invalid");
@@ -338,6 +339,15 @@ test("normalization assigns a mirrored cluster to its unique complete claimant",
     const repeated = compileSpecialistEvidence(compiled.map, { cwd });
     assert.equal(repeated.complete, true, repeated.reasons.join("; "));
     assert.strictEqual(repeated.map, compiled.map);
+
+    const ungrounded = structuredClone(map);
+    ungrounded.concern_evidence!.concerns[0]!.touchpoints.find((entry) =>
+      entry.path === "examples/options-required.js"
+    )!.symbol = "nonexistentRequiredOption";
+    const refused = compileSpecialistEvidence(ungrounded, { cwd });
+    assert.equal(refused.complete, false, "an unsupported claim cannot silently retire a specialist");
+    assert.match(refused.reasons.join("; "), /nonexistentRequiredOption/);
+    assert.equal(refused.map.concern_evidence!.concerns.length, 2);
 
     errorContract.touchpoints.push({
       path: "examples/options-required.js",
