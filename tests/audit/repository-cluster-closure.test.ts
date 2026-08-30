@@ -169,6 +169,31 @@ test("repository-wide implementation/test mirrors prevent false specialist closu
   }
 });
 
+test("normalization keeps an explicitly excluded sibling behavior unresolved", () => {
+  const cwd = createRepository();
+  try {
+    const map = clickShapedMap();
+    const command = map.concern_evidence!.concerns[0]!;
+    command.excludes = "Help formatting remains a separate specialist concern.";
+    command.touchpoints[0]!.role += " Formatting is delegated to the adjacent formatter.";
+    const compiled = compileSpecialistEvidence(map, { cwd });
+
+    assert.equal(compiled.complete, false);
+    assert.ok(compiled.reasons.some((reason) => reason.includes("src/click/formatting.py")));
+    assert.ok(compiled.reasons.some((reason) => reason.includes("src/click/shell_completion.py")));
+    const normalizedCommand = compiled.map.concern_evidence!.concerns.find((entry) =>
+      entry.concern === "command invocation"
+    );
+    assert.ok(normalizedCommand);
+    assert.equal(normalizedCommand.touchpoints.some((touchpoint) =>
+      touchpoint.path === "src/click/formatting.py"
+      || touchpoint.path === "src/click/shell_completion.py"
+    ), false);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("normalization assigns a mirrored cluster to its unique complete claimant", () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-cluster-owner-"));
   for (const repositoryPath of [
