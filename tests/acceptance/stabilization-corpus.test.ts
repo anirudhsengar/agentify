@@ -14,10 +14,16 @@ import {
 import { assessExplorerReceiptAttestation } from "../../src/core/audit/explorer-receipts.ts";
 import { writeCanonicalMap } from "../../src/core/audit/map-storage.ts";
 import { detectRestrictiveRepositoryPolicy } from "../../src/core/installer/repository-policy.ts";
-import { initializeTeamMemoryStore } from "../../src/core/memory/index.ts";
 import {
-  buildSpecialistEvidenceReference,
-  readGitCommitTimestamp,
+  createRepositoryValidationApproval,
+  DEFAULT_INSTALLER_PROCESS_RUNNER,
+  finalizeOneTimeInstallation,
+  prepareOneTimeInstallationState,
+  readRepositoryTaskPolicyConfiguration,
+  type InstallerProcessRunner,
+  type RepositoryInstallationPreflight,
+} from "../../src/core/installer/index.ts";
+import {
   synchronizeRepositorySpecialists,
 } from "../../src/core/specialists/index.ts";
 import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
@@ -61,6 +67,7 @@ const MAP_CONTEXT = {
   stateDir: ".agentify/runtime/audit",
   mapFilename: "codebase_map.json",
 };
+const FIXTURE_VALIDATION_ARGV = ["node", "-e", "require('node:assert/strict').ok(require('node:fs').readFileSync('README.md','utf8').length > 0)"];
 
 function git(cwd: string, ...args: string[]): string {
   const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
@@ -120,6 +127,7 @@ function makePortfolioRepository(
     ...concern.core.map((touchpoint) => touchpoint.path),
     ...concern.flow.steps.map((step) => step.path),
   ]))) write(cwd, repositoryPath);
+  write(cwd, "Makefile", `# Reduced-fixture validation, not the historical build.\ntest:\n\tnode -e "${FIXTURE_VALIDATION_ARGV[2]}"\n`);
   git(cwd, "init", "-q");
   git(cwd, "config", "user.name", "Agentify Corpus");
   git(cwd, "config", "user.email", "agentify@example.invalid");
@@ -230,22 +238,77 @@ for (const entry of FIXTURE.cases.filter((candidate) => candidate.repository !==
         [...Value.Errors(CodebaseMapSchema, compilation.map)].slice(0, 5).map((error) => `${(error as { path?: string }).path ?? "?"}: ${error.message}`).join("; "),
       );
 
-      const observedAt = readGitCommitTimestamp(cwd, commit);
-      initializeTeamMemoryStore({
-        cwd,
-        repositoryId: `corpus/${entry.repository}`,
-        supportingCommit: commit,
-        evidence: [buildSpecialistEvidenceReference({
-          cwd,
-          supportingCommit: commit,
-          repositoryPath: "README.md",
-          sourceType: "validated_bootstrap",
-          observedAt,
-          actor: "agentify-corpus",
-        })],
-        options: { now: () => new Date(observedAt) },
+      // Only external GitHub operations are replayed. Fixture validation and
+      // the compiler, scaffold, readiness canaries, and transaction run for real.
+      const validationArgv = FIXTURE_VALIDATION_ARGV;
+      const runner: InstallerProcessRunner = {
+        run(request) {
+          if (request.program === "node") {
+            assert.deepEqual([request.program, ...request.args], validationArgv);
+            return DEFAULT_INSTALLER_PROCESS_RUNNER.run(request);
+          }
+          assert.equal(request.program, "gh", "corpus must not invoke an unclassified command");
+          assert.ok(["api", "variable", "label"].includes(request.args[0]!));
+          const stdout = request.args[0] === "api" && request.args[1] !== "--method"
+            ? JSON.stringify({ default_workflow_permissions: "read" })
+            : request.args[1] === "list" ? "[]" : "";
+          return { status: 0, stdout, stderr: "", timedOut: false, errorMessage: null };
+        },
+      };
+      const initialValidation = runner.run({
+        program: validationArgv[0]!, args: validationArgv.slice(1), cwd, timeoutMs: 5_000,
       });
+      assert.equal(initialValidation.status, 0, initialValidation.stderr);
+      const preflight: RepositoryInstallationPreflight = {
+        disposition: "ready", analysis_allowed: true, blockers: [],
+        identity: {
+          repository_id: `corpus-${entry.repository}`, full_name: `corpus/${entry.repository}`,
+          current_commit: commit, default_branch: "main", current_branch: git(cwd, "branch", "--show-current"),
+          origin_url: `https://github.com/corpus/${entry.repository}.git`,
+          actor_login: "corpus", actor_permission: "admin", default_branch_policy: "unprotected",
+        },
+        commands: [{
+          command_id: "test-corpus-fixture", kind: "test", argv: validationArgv,
+          cwd: ".", timeout_ms: 5_000, required: true, assessment: "verified",
+          exit_code: initialValidation.status, output_digest: null,
+          detail: "Executable reduced-fixture validation; not the historical repository test suite.",
+        }],
+        allowed_write_paths: portfolioFixture.concerns.flatMap((concern) => concern.core.map((touchpoint) => touchpoint.path)),
+        protected_paths: [".github/workflows", ".agentify"],
+      };
+      const approval = createRepositoryValidationApproval({
+        cwd, preflight, approvedBy: "corpus", approvedAt: "2026-08-30T00:00:00.000Z",
+      });
+      prepareOneTimeInstallationState(cwd, preflight);
       writeCanonicalMap(cwd, compilation.map, MAP_CONTEXT);
+      const refused = finalizeOneTimeInstallation({
+        cwd, preflight, validationApproval: approval,
+        provider: "fixture", model: "deterministic-replay", providerVerified: true, agentifyVersion: "1.1.0",
+        runner: { run(request) {
+          assert.equal(request.program, "node", "failed validation must stop before GitHub configuration");
+          return { status: 1, stdout: "", stderr: "replayed validation failure", timedOut: false, errorMessage: null };
+        } },
+      });
+      assert.equal(refused.disposition, "analyzable-only");
+      assert.equal(refused.specialists_installed, 0);
+      assert.equal(refused.github_issue_intake_enabled, false);
+      assert.ok(refused.blockers.some((blocker) => blocker.code === "validation_failed"));
+      for (const relative of [".agentify/agents", ".agentify/manifest.json", "AGENTS.md", ".github/workflows/agentify-issue.yml", ".github/workflows/agentify-learn.yml"]) {
+        assert.equal(fs.existsSync(path.join(cwd, relative)), false, `${relative}: partial installation survived`);
+      }
+      prepareOneTimeInstallationState(cwd, preflight);
+      writeCanonicalMap(cwd, compilation.map, MAP_CONTEXT);
+      const installed = finalizeOneTimeInstallation({
+        cwd, preflight, validationApproval: approval, runner,
+        agentifyVersion: "1.1.0", provider: "fixture", model: "deterministic-replay", providerVerified: true,
+      });
+      assert.equal(installed.disposition, entry.expected_readiness, JSON.stringify(installed.blockers));
+      assert.equal(installed.specialists_installed, portfolioFixture.concerns.length);
+      assert.equal(installed.github_issue_intake_enabled, true);
+      assert.equal(readRepositoryTaskPolicyConfiguration(cwd)?.configured, true);
+      assert.equal(fs.existsSync(path.join(cwd, ".agentify/manifest.json")), true);
+      assert.equal(fs.existsSync(path.join(cwd, ".github/workflows/agentify-issue.yml")), true);
+      assert.equal(installed.disposition === "ready" ? "install" : "no-installation", entry.expected_installation_disposition);
       const synchronized = synchronizeRepositorySpecialists(cwd);
       assert.equal(synchronized.status, "synchronized");
       if (synchronized.status !== "synchronized") return;
@@ -253,7 +316,7 @@ for (const entry of FIXTURE.cases.filter((candidate) => candidate.repository !==
       const specialists = synchronized.portfolio.specialists;
       assert.deepEqual(specialists.map((specialist) => specialist.concern).sort(), [...entry.expected_core_ownership].sort());
       assert.equal(specialists.length, compilation.map.concern_evidence!.concerns.length);
-      assert.equal(synchronized.materialized.created_specialist_ids.length, specialists.length);
+      assert.equal(installed.specialists_installed, specialists.length);
 
       for (const expected of portfolioFixture.concerns) {
         const specialist = specialists.find((candidate) => candidate.concern === expected.name);
@@ -283,9 +346,7 @@ for (const entry of FIXTURE.cases.filter((candidate) => candidate.repository !==
           .map((candidate) => candidate.candidate),
         entry.expected_rejected_candidates,
       );
-      assert.equal(entry.expected_readiness, "ready");
-      assert.equal(entry.expected_installation_disposition, "install");
-      const outputBytes = synchronized.materialized.created_specialist_ids.reduce((total, specialistId) => (
+      const outputBytes = specialists.map((specialist) => specialist.specialist_id).reduce((total, specialistId) => (
         total + fs.statSync(path.join(cwd, ".agentify/agents/specialists", `${specialistId}.json`)).size
       ), 0);
       assert.ok(outputBytes <= entry.budgets.output_bytes, `${entry.repository}: specialist output budget exceeded`);

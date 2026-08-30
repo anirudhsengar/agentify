@@ -29,7 +29,7 @@ The archived 80-file inventory in the machine-readable report is not the current
 ## Known limitations
 
 - Hono still fails convergence and has exposed false attachment and generic-portfolio risks. Safe failure remains necessary but is not successful product qualification.
-- The corpus compiles and materializes portfolios, but its readiness/disposition assertions still need to exercise actual installer results instead of fixture constants.
+- The reduced corpus now exercises real compilation, installation, readiness canaries, and validation-failure rollback, with only GitHub operations replayed. It does not replace live generation or maintainer-quality review.
 - Validation commands execute in disposable exact-HEAD checkouts with scrubbed credentials, but Agentify does not provide container or network isolation.
 - Live model outcomes are nondeterministic. The executable replay corpus, compiler invariants, and package qualification remain the authoritative repeatable release gates.
 
