@@ -40,3 +40,31 @@ test("the concern scout derives portfolio size from evidence rather than a targe
   assert.doesNotMatch(prompt, /Aim for 3[–-]8 concerns/i);
   assert.match(prompt, /Do not target a numeric range/i);
 });
+
+test("concern discovery rejects generic catalogs built from unrelated behaviors", () => {
+  const scout = fs.readFileSync(
+    new URL("../../src/core/audit/prompts/explorers/concern_scout.md", import.meta.url),
+    "utf8",
+  );
+  const tracer = fs.readFileSync(
+    new URL("../../src/core/audit/prompts/explorers/concern_tracer.md", import.meta.url),
+    "utf8",
+  );
+  const builder = fs.readFileSync(
+    new URL("../../src/core/audit/prompts/builder.md", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    scout,
+    /catalog.*framework layer.*unrelated failure domains.*shared (?:API|subtree)/is,
+  );
+  assert.match(
+    builder,
+    /reject.*catalog.*unrelated failure domains.*shared (?:integration )?(?:API|subtree)/is,
+  );
+  assert.match(
+    tracer,
+    /never mark a shared integration file `core` while behavior-specific implementations are only `supporting`/i,
+  );
+});
