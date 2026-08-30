@@ -215,6 +215,8 @@ test("inferred attachments require behavioral locality instead of one generic to
   const cwd = repository([
     "src/adapter/aws/handler.ts",
     "src/adapter/aws/handler.test.ts",
+    "src/adapter/bun/server.ts",
+    "src/adapter/bun/server.test.ts",
     "src/adapter/vercel/handler.ts",
     "src/adapter/vercel/handler.test.ts",
     "src/auth/check.ts",
@@ -258,6 +260,7 @@ test("inferred attachments require behavioral locality instead of one generic to
 
     assert.ok(pathsFor(jsx.concern).includes("src/jsx/dom/server.ts"));
     assert.ok(!pathsFor(adapters.concern).includes("src/jsx/dom/server.ts"));
+    assert.ok(pathsFor(adapters.concern).includes("src/adapter/bun/server.ts"));
     assert.ok(pathsFor(adapters.concern).includes("src/adapter/vercel/handler.ts"));
     assert.ok(!assessment.attachments.some((attachment) =>
       attachment.paths.includes("src/client/accept.ts")

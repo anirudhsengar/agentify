@@ -242,6 +242,15 @@ still establish an implementation/test attachment under the ordinary exclusion
 rule, but inference alone cannot attach a cluster whose behavioral tokens match
 an explicit exclusion. Incidental positive mentions cannot erase that boundary;
 the cluster remains unresolved until separately traced or substantively rejected.
+Inferred mirrored clusters require substantive evidence: an exact distinctive
+behavioral term with tracked path affinity, a file-stem term plus a non-generic
+behavioral locality, two semantic matches, or an exact multi-segment behavioral
+directory already owned by the concern. Locality suffixes used to distinguish
+same-name files are never treated as behavioral words. A single generic word
+plus a shared source root cannot establish ownership, and ties remain
+unresolved. An explicitly cited
+implementation carries its mirrored test unless the exclusion names that path;
+merely citing a test does not override behavioral negative evidence.
 Observed public type traces deterministically bind a uniquely resolved tracked
 declaration to one specialist only when all traced runtime files have the same
 normalized core owner. The declaration becomes a core touchpoint; multiple type

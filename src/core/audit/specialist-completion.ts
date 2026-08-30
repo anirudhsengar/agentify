@@ -847,6 +847,11 @@ const SEMANTIC_STOP_WORDS = new Set([
   "module", "repository", "runtime", "supporting", "test", "tests", "through", "with",
 ]);
 
+const WEAK_ATTACHMENT_TOKENS = new Set([
+  "accept", "body", "client", "component", "context", "handler", "path", "request",
+  "response", "server", "type", "url", "util", "utility", "value",
+]);
+
 function semanticTokens(value: string): Set<string> {
   const tokens = new Set<string>();
   for (const raw of value.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
@@ -888,7 +893,27 @@ function pathSemanticTokens(paths: readonly string[], label: string): Set<string
   // Compare only the behavioral label and file stems; path affinity is
   // evaluated independently by directoryAffinity().
   const stems = paths.map((repositoryPath) => filenameStem(repositoryPath));
-  return semanticTokens(`${label} ${stems.join(" ")}`);
+  return semanticTokens(`${label.split("@", 1)[0] ?? label} ${stems.join(" ")}`);
+}
+
+const NON_BEHAVIORAL_LOCALITY_SEGMENTS = new Set([
+  "common", "helper", "helpers", "internal", "shared", "util", "utils", "utilities",
+]);
+
+function pathLocalityTokens(paths: readonly string[]): Set<string> {
+  return semanticTokens(paths.flatMap((repositoryPath) =>
+    localitySegments(repositoryPath).filter((segment) =>
+      !NON_BEHAVIORAL_LOCALITY_SEGMENTS.has(segment.toLowerCase())
+    )
+  ).join(" "));
+}
+
+function pathLocalityDepth(paths: readonly string[]): number {
+  return Math.max(...paths.map((repositoryPath) =>
+    localitySegments(repositoryPath).filter((segment) =>
+      !NON_BEHAVIORAL_LOCALITY_SEGMENTS.has(segment.toLowerCase())
+    ).length
+  ), 0);
 }
 
 function matchingTokenCount(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
@@ -922,16 +947,23 @@ function rejectionHasGroundedDisposition(
   );
 }
 
+function concernExclusionPaths(candidate: AttachmentConcernCandidate): string[] {
+  return [...candidate.concern.excludes.matchAll(
+    /(?:^|[\s(])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.*-]+)+)/g,
+  )].flatMap((match) => match[1] ? [match[1].replace(/\*+$/, "").replace(/\/$/, "")] : []);
+}
+
 function attachmentConflictsWithExclusions(
   candidate: AttachmentConcernCandidate,
   paths: readonly string[],
   label: string,
   inferred = false,
 ): boolean {
-  const clusterTokens = pathSemanticTokens(paths, label);
-  const exclusionPaths = [...candidate.concern.excludes.matchAll(
-    /(?:^|[\s(])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.*-]+)+)/g,
-  )].flatMap((match) => match[1] ? [match[1].replace(/\*+$/, "").replace(/\/$/, "")] : []);
+  const clusterTokens = new Set([
+    ...pathSemanticTokens(paths, label),
+    ...pathLocalityTokens(paths),
+  ]);
+  const exclusionPaths = concernExclusionPaths(candidate);
   const pathExclusionApplies = exclusionPaths.some((excludedPath) =>
     paths.some((repositoryPath) => (
       repositoryPath === excludedPath || repositoryPath.startsWith(`${excludedPath}/`)
@@ -944,7 +976,11 @@ function attachmentConflictsWithExclusions(
   const matched = [...clusterTokens].filter((token) =>
     [...effectiveExcludedTokens].some((excluded) => tokensRelated(token, excluded))
   );
-  if (inferred && matched.length > 0) return true;
+  if (pathExclusionApplies) return true;
+  if (inferred && [...clusterTokens].some((token) =>
+    !WEAK_ATTACHMENT_TOKENS.has(token) && effectiveExcludedTokens.has(token)
+  )) return true;
+  if (inferred && matched.length >= 2) return true;
   if (matched.length >= 2) return true;
   if (
     matched.length > 0
@@ -952,6 +988,17 @@ function attachmentConflictsWithExclusions(
   ) return true;
   return matched.some((token) =>
     ![...candidate.tokens].some((positive) => tokensRelated(token, positive))
+  );
+}
+
+function attachmentHasPathExclusion(
+  candidate: AttachmentConcernCandidate,
+  paths: readonly string[],
+): boolean {
+  return concernExclusionPaths(candidate).some((excludedPath) =>
+    paths.some((repositoryPath) => (
+      repositoryPath === excludedPath || repositoryPath.startsWith(`${excludedPath}/`)
+    ))
   );
 }
 
@@ -983,6 +1030,8 @@ function selectUniqueConcern(input: {
   mode: "cluster" | "high-signal";
 }): AttachmentConcernCandidate | null {
   const candidateTokens = pathSemanticTokens(input.paths, input.label);
+  const localityTokens = pathLocalityTokens(input.paths);
+  const localityDepth = pathLocalityDepth(input.paths);
   const ranked = input.candidates.map((candidate) => {
     const pathScore = Math.max(
       ...input.paths.flatMap((repositoryPath) =>
@@ -991,11 +1040,20 @@ function selectUniqueConcern(input: {
       0,
     );
     const semanticMatches = matchingTokenCount(candidateTokens, candidate.tokens);
+    const distinctiveSemanticMatches = [...candidateTokens].filter((token) =>
+      !WEAK_ATTACHMENT_TOKENS.has(token) && candidate.tokens.has(token)
+    ).length;
+    const localityMatches = matchingTokenCount(localityTokens, candidate.tokens);
     return {
       candidate,
       pathScore,
       semanticMatches,
-      score: pathScore + Math.min(semanticMatches, 4) * 160,
+      distinctiveSemanticMatches,
+      localityMatches,
+      score: pathScore
+        + Math.min(semanticMatches, 4) * 160
+        + Math.min(distinctiveSemanticMatches, 2) * 240
+        + Math.min(localityMatches, 3) * 200,
     };
   }).filter((entry) => !attachmentConflictsWithExclusions(
     entry.candidate,
@@ -1004,7 +1062,13 @@ function selectUniqueConcern(input: {
     true,
   ) && (
     input.mode === "cluster"
-      ? entry.semanticMatches > 0 && (entry.pathScore >= 40 || entry.semanticMatches >= 2)
+      ? (localityDepth >= 2 && entry.pathScore >= 850 && entry.localityMatches >= 2)
+        || (localityDepth >= 2
+          && entry.pathScore >= 40
+          && entry.semanticMatches > 0
+          && entry.localityMatches > 0)
+        || (entry.pathScore >= 40 && entry.distinctiveSemanticMatches > 0)
+        || (entry.pathScore >= 40 && entry.semanticMatches >= 2)
       : entry.pathScore >= 850
   )).sort((left, right) => right.score - left.score
     || left.candidate.concern.concern.localeCompare(right.candidate.concern.concern));
@@ -1052,16 +1116,21 @@ function inferRepositoryConcernAttachments(input: {
   for (const cluster of input.clusters) {
     const clusterPaths = [...cluster.implementation_paths, ...cluster.test_paths]
       .filter((repositoryPath) => !rejected(repositoryPath));
-    const direct = candidates.filter((candidate) =>
-      !attachmentConflictsWithExclusions(
-        candidate,
-        cluster.implementation_paths,
-        cluster.cluster_key,
-      )
-      && clusterPaths.some((repositoryPath) =>
+    const direct = candidates.filter((candidate) => {
+      const explicitImplementation = cluster.implementation_paths.some((repositoryPath) =>
         candidate.assessment.contextPaths.includes(repositoryPath)
-      )
-    );
+      );
+      const conflicts = explicitImplementation
+        ? attachmentHasPathExclusion(candidate, cluster.implementation_paths)
+        : attachmentConflictsWithExclusions(
+          candidate,
+          cluster.implementation_paths,
+          cluster.cluster_key,
+        );
+      return !conflicts && clusterPaths.some((repositoryPath) =>
+        candidate.assessment.contextPaths.includes(repositoryPath)
+      );
+    });
     if (direct.length > 0) {
       for (const candidate of direct) {
         add(candidate.concern.concern, clusterPaths, "tracked path-local implementation/test mirror");

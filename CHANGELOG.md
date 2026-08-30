@@ -6,6 +6,12 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Deterministic implementation/test attachment now strips locality suffixes
+  from behavioral labels, requires independent semantic and behavioral-path
+  signals, and leaves shallow generic matches unresolved. Exact implementation
+  evidence still carries its mirrored test unless the exclusion names that
+  path, preventing unrelated utilities and same-name subtrees from being
+  assigned to the wrong specialist.
 - Concern discovery now rejects generic catalogs and framework layers that
   merge unrelated failure domains through a shared API or subtree, and forbids
   shared integration files from substituting for behavior-specific core owners.
