@@ -77,6 +77,11 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Coverage citations in Git repositories are now resolved against regular
+  tracked files at exact HEAD instead of mutable working-tree existence.
+  Agentify-generated paths cannot establish repository coverage, and untracked
+  dirty files cannot invalidate an exact-HEAD absence citation.
+
 - Locked dependency provisioning now runs before repository validation in the
   same disposable exact-HEAD checkout and repeats before post-install checks.
   Node installs disable lifecycle scripts, provisioning failure prevents test

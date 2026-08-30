@@ -120,6 +120,9 @@ identity, languages and formats, tracked topography, verified test commands,
 build metadata, and documentation metrics without trusting dirty working-tree
 content. Semantic contracts and specialist concerns still require traced,
 current-HEAD evidence; deterministic seeding cannot close them by inference.
+Positive coverage citations must likewise name regular files tracked at exact
+HEAD. Agentify-generated paths cannot establish repository facts, and absence
+citations ignore dirty or generated working-tree bytes.
 
 Audit resource limits are finite by default and may be raised for an unusually
 large repository through the optional `auditBudgets` object in
