@@ -423,6 +423,31 @@ test("specialist compilation leaves disjoint shared-symbol claims unresolved", (
   }
 });
 
+test("a path-backed rejection cannot delegate behavior to a nonexistent concern", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    write(cwd, "scripts/common/__init__.py");
+    write(cwd, "scripts/tests/__init__.py");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "add mirrored package files");
+    const map = aqaShapedMap();
+    map.concern_evidence!.not_concerns = [{
+      candidate: "init",
+      why_rejected: "The tracked files are subsumed by the accepted package initialization concern; scripts/common/__init__.py and scripts/tests/__init__.py do not warrant a duplicate specialist.",
+    }];
+    map.concern_evidence!.concerns[1]!.touchpoints[0]!.centrality = "supporting";
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.status, "incomplete");
+    assert.ok(compiled.reasons.some((reason) =>
+      reason.includes("accepted package initialization concern")
+    ));
+    assert.ok(compiled.reasons.some((reason) => reason.includes("scripts/common/__init__.py")));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("path-backed rejection labels close only their exact tracked cluster", () => {
   const cwd = createAqaShapedRepository();
   try {
