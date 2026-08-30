@@ -161,7 +161,10 @@ directories up to four levels deep; root ecosystem order wins equal-ranked
 candidates. Nested command working directories, manifests, and locks remain
 repository-relative. A fully pinned pip requirements file whose entries carry
 SHA-256 hashes is a reproducible lock, and Python test trees without a pytest
-contract use `python -m unittest discover`.
+contract use `python -m unittest discover`. If a tracked test's bounded local
+import graph reaches a network client, broad discovery is not deterministic;
+Agentify may instead use a tracked individual unittest explicitly documented in
+the nested README only when that test's local import graph is offline.
 
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30

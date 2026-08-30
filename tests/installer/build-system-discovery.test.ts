@@ -293,7 +293,8 @@ async function testDocumentedOfflineUnittestOutranksNetworkDependentDiscovery():
       path.join(cwd, "tests", "test_remote.py"),
       "from remote_status import fetch_status\n",
     );
-    fs.writeFileSync(path.join(cwd, "remote_status.py"), "import requests\n");
+    fs.writeFileSync(path.join(cwd, "remote_status.py"), "from network_client import fetch\n");
+    fs.writeFileSync(path.join(cwd, "network_client.py"), "import requests\n");
     fs.writeFileSync(
       path.join(cwd, "tests", "test_parser.py"),
       "from parser import parse\nfrom unittest import TestCase\nclass TestParser(TestCase):\n    def test_parse(self): self.assertEqual(parse('ok'), 'ok')\n",
@@ -317,6 +318,28 @@ async function testDocumentedOfflineUnittestOutranksNetworkDependentDiscovery():
   }
 }
 
+async function testUnittestFixtureUrlsDoNotImplyNetworkExecution(): Promise<void> {
+  const cwd = tempDir("agentify-build-python-url-fixture-");
+  try {
+    fs.mkdirSync(path.join(cwd, "tests"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "pyproject.toml"), "[project]\nname='tool'\n");
+    fs.writeFileSync(
+      path.join(cwd, "tests", "test_parser.py"),
+      "from unittest import TestCase\nclass TestParser(TestCase):\n    def test_url(self): self.assertEqual('https://example.invalid', 'https://example.invalid')\n",
+    );
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "fixture");
+
+    const { commands } = discoverRepositoryCommands(cwd, fakeRunner(cwd), false);
+    assert.ok(commands.some((command) => command.argv.join(" ") === "python -m unittest discover tests"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 const tests = [
   { name: "python pyproject discovery", fn: testPythonPyprojectDiscovery },
   { name: "rust cargo discovery", fn: testRustCargoDiscovery },
@@ -330,6 +353,7 @@ const tests = [
   { name: "tracked nested Python tests outrank root build-only shell", fn: testTrackedNestedPythonTestsOutrankRootBuildOnlyShell },
   { name: "untracked nested manifest cannot change build selection", fn: testUntrackedNestedManifestCannotChangeBuildSelection },
   { name: "documented offline unittest outranks network-dependent discovery", fn: testDocumentedOfflineUnittestOutranksNetworkDependentDiscovery },
+  { name: "unittest fixture URLs do not imply network execution", fn: testUnittestFixtureUrlsDoNotImplyNetworkExecution },
 ];
 
 let passed = 0;

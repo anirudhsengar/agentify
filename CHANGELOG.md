@@ -62,7 +62,9 @@ All notable changes to Agentify are documented here.
   behavioral test when the root exposes only build or syntax checks. The scan
   is Git-bound and capped at 64 manifest directories four levels deep; root
   ecosystem precedence wins ties. Hash-pinned pip requirements are recognized
-  as a lock, and Python test trees without pytest use stdlib unittest discovery.
+  as a lock. Python test trees without pytest use stdlib unittest discovery
+  unless a tracked local import graph reaches a network client; then only a
+  tracked README-documented offline individual unittest is eligible.
 
 - The bounded default audit envelope now permits 240 model calls/turns, eight million input/cache tokens, and 24 explorer spawns so a complete evidence-backed portfolio and final obligation-focused repair can fit while duration, output, cost, convergence, and artifact caps remain enforced.
 

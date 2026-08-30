@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import type { InstallerCommand } from "../contracts.ts";
 import {
   fileExists,
@@ -60,6 +61,78 @@ function mypyHasConfiguredScope(cwd: string, pyprojectContent: string): boolean 
   return /\[mypy\][\s\S]*?^\s*files\s*=/m.test(setupCfg);
 }
 
+const NETWORK_MODULE = /^(?:aiohttp|http\.client|httpx|requests|socket|urllib3|urllib\.request)(?:\.|$)/;
+
+function headText(cwd: string, relativePath: string): string | null {
+  const result = spawnSync("git", ["-C", cwd, "show", `HEAD:./${relativePath}`], {
+    encoding: "utf8",
+    maxBuffer: 256 * 1024,
+  });
+  return result.status === 0 ? result.stdout : null;
+}
+
+function importedModules(source: string): string[] {
+  const modules = new Set<string>();
+  for (const match of source.matchAll(/^\s*from\s+([A-Za-z_][\w.]*)\s+import\s+/gm)) {
+    if (match[1]) modules.add(match[1]);
+  }
+  for (const match of source.matchAll(/^\s*import\s+([^#\n]+)/gm)) {
+    for (const entry of (match[1] ?? "").split(",")) {
+      const module = entry.trim().split(/\s+as\s+/)[0];
+      if (module) modules.add(module);
+    }
+  }
+  return [...modules];
+}
+
+function pythonTestUsesNetwork(
+  cwd: string,
+  sourcePath: string,
+  trackedSources: ReadonlySet<string>,
+  visited = new Set<string>(),
+): boolean {
+  if (visited.has(sourcePath) || visited.size >= 128) return false;
+  visited.add(sourcePath);
+  const source = headText(cwd, sourcePath);
+  if (source === null) return true;
+  const imports = importedModules(source);
+  if (imports.some((module) => NETWORK_MODULE.test(module))) return true;
+  return imports.some((module) => {
+    const modulePath = module.replaceAll(".", "/");
+    const localPath = [`${modulePath}.py`, `${modulePath}/__init__.py`]
+      .find((candidate) => trackedSources.has(candidate));
+    return localPath !== undefined && pythonTestUsesNetwork(cwd, localPath, trackedSources, visited);
+  });
+}
+
+function trackedPythonSources(cwd: string): string[] | null {
+  const result = spawnSync(
+    "git",
+    ["-C", cwd, "ls-tree", "-r", "--name-only", "-z", "HEAD", "--"],
+    { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
+  );
+  if (result.status !== 0) return null;
+  return result.stdout.split("\0").filter((entry) => entry.endsWith(".py")).slice(0, 1_024);
+}
+
+function documentedOfflineUnittest(
+  cwd: string,
+  testPaths: readonly string[],
+  trackedSources: ReadonlySet<string>,
+): string | null {
+  const candidates = new Set(testPaths);
+  for (const readme of ["README.md", "README.rst", "README.txt"]) {
+    const content = headText(cwd, readme);
+    if (content === null) continue;
+    for (const line of content.split(/\r?\n/)) {
+      const match = /^(?:\$\s*)?(?:python|python3)\s+-m\s+unittest\s+(tests?\/test[^\s]*\.py)\s*$/.exec(line.trim());
+      const testPath = match?.[1];
+      if (testPath && candidates.has(testPath) && !pythonTestUsesNetwork(cwd, testPath, trackedSources)) return testPath;
+    }
+  }
+  return null;
+}
+
 function pythonToolCommands(cwd: string, runner: ReturnType<typeof pythonRunner>): InstallerCommand[] {
   const content = readText(cwd, "pyproject.toml") ?? "";
   const commands: InstallerCommand[] = [];
@@ -75,12 +148,29 @@ function pythonToolCommands(cwd: string, runner: ReturnType<typeof pythonRunner>
       detail: "Python pytest validation discovered",
     }));
   } else if (hasTests) {
-    commands.push(makeCommand({
-      kind: "test",
-      label: "unittest",
-      argv: [...runner.prefix, "python", "-m", "unittest", "discover", fileExists(cwd, "tests") ? "tests" : "test"],
-      detail: "Python standard-library unittest discovery found tracked tests",
-    }));
+    const testDirectory = fileExists(cwd, "tests") ? "tests" : "test";
+    const pythonSources = trackedPythonSources(cwd);
+    const trackedSources = new Set(pythonSources ?? []);
+    const trackedTests = pythonSources?.filter((entry) => (
+      new RegExp(`^${testDirectory}/test[^/]*\\.py$`).test(entry)
+    )) ?? null;
+    const broadSuiteUsesNetwork = trackedTests !== null
+      && trackedTests.some((testPath) => pythonTestUsesNetwork(cwd, testPath, trackedSources));
+    const focusedTest = broadSuiteUsesNetwork
+      ? documentedOfflineUnittest(cwd, trackedTests, trackedSources)
+      : null;
+    if (!broadSuiteUsesNetwork || focusedTest !== null) {
+      commands.push(makeCommand({
+        kind: "test",
+        label: "unittest",
+        argv: [...runner.prefix, "python", "-m", "unittest", ...(focusedTest === null
+          ? ["discover", testDirectory]
+          : [focusedTest])],
+        detail: focusedTest === null
+          ? "Python standard-library unittest discovery found tracked tests"
+          : "README-documented offline Python unittest selected because broad discovery imports a network client",
+      }));
+    }
   }
   if (hasRuff) {
     commands.push(makeCommand({
