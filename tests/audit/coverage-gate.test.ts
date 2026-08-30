@@ -735,6 +735,63 @@ async function testAttachSkipsAuditOnlyWhenSpecialistEvidenceRecorded(): Promise
   }
 }
 
+async function testAttachNormalizesRecordedSpecialistEvidenceBeforeAudit(): Promise<void> {
+  const cwd = tempDir("gate-attach-normalizable");
+  try {
+    fs.mkdirSync(path.join(cwd, "src"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "src/index.ts"), "export { run } from './lib.js';\n");
+    fs.writeFileSync(path.join(cwd, "src/lib.ts"), "export const run = () => true;\n");
+    const head = ensureGitRepository(cwd);
+    const map = makeValidCodebaseMap();
+    delete map.expert_evidence;
+    map.concern_evidence = {
+      concerns: [{
+        concern: "Request execution",
+        one_line: "Owns request dispatch into the repository runtime.",
+        covers: "Request dispatch and execution through the tracked runtime entry point.",
+        excludes: "Documentation and release procedure.",
+        flows: [{
+          name: "Dispatch request",
+          description: "A request enters the public dispatcher and reaches runtime execution.",
+          steps: [
+            { path: "src/index.ts", what_happens: "Accepts and forwards the request." },
+            { path: "src/lib.ts", what_happens: "Executes the requested operation." },
+          ],
+        }],
+        touchpoints: [
+          { path: "src/index.ts", symbol: "run", role: "Public dispatch entry.", line_range: null, centrality: "core" },
+          { path: "src/lib.ts", symbol: "run", role: "Runtime implementation.", line_range: null, centrality: "core" },
+        ],
+        invariants: [{ rule: "Dispatch reaches runtime execution.", why: "Requests must not be dropped.", reference: "src/index.ts" }],
+        pitfalls: [],
+        entry_questions: ["Does this change alter request execution?"],
+        validation: [],
+        spans_subtrees: ["src"],
+        stability: "high",
+        recurrence: "high",
+        confidence: "high",
+        last_updated: "2026-08-30T00:00:00.000Z",
+      }],
+      not_concerns: [{
+        candidate: "Request execution as a generic runtime helper",
+        why_rejected: "Not rejected: retained because request dispatch is an accepted repository behavior.",
+      }],
+    };
+    writeMap(
+      cwd,
+      ".agentify/runtime/audit",
+      attestCodebaseMap(map, head),
+    );
+
+    const ui = await runWithRuntime(cwd, new FailIfAuditRuntime());
+    assert.ok(ui.infos.some((message) => message.includes("no model audit was rerun")));
+    const normalized = loadCanonicalMapAt(cwd, ".agentify/runtime/audit");
+    assert.deepEqual(normalized?.concern_evidence?.not_concerns, []);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function testAuditFailsWhenSpecialistEvidenceNeverRecorded(): Promise<void> {
   const cwd = tempDir("gate-specialist-missing");
   try {
@@ -769,6 +826,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "specialistEvidenceRequiredForCompletion", fn: testSpecialistEvidenceRequiredForCompletion },
   { name: "writeMapGuidesSpecialistEvidence", fn: testWriteMapGuidesSpecialistEvidence },
   { name: "attachSkipsAuditOnlyWhenSpecialistEvidenceRecorded", fn: testAttachSkipsAuditOnlyWhenSpecialistEvidenceRecorded },
+  { name: "attachNormalizesRecordedSpecialistEvidenceBeforeAudit", fn: testAttachNormalizesRecordedSpecialistEvidenceBeforeAudit },
   { name: "auditFailsWhenSpecialistEvidenceNeverRecorded", fn: testAuditFailsWhenSpecialistEvidenceNeverRecorded },
   { name: "failedAuditRetainsApplicationAttestedExplorerCheckpoint", fn: testFailedAuditRetainsApplicationAttestedExplorerCheckpoint },
   { name: "parentAuditSessionHasApplicationOwnedDeadline", fn: testParentAuditSessionHasApplicationOwnedDeadline },
