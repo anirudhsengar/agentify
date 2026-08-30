@@ -1328,6 +1328,15 @@ export function assessSpecialistEvidence(
     ownershipResolutionByPath.set(resolution.path, resolution);
     coreOwnershipResolutions.push(resolution);
   };
+  const retainsUnsharedCoreImplementation = (
+    concernName: string,
+    sharedPath: string,
+  ): boolean => accepted.find((assessment) => assessment.concern === concernName)
+    ?.corePaths.some((candidate) =>
+      candidate !== sharedPath
+      && independentCoreImplementationPath(candidate)
+      && (coreOwnersByPath.get(candidate)?.length ?? 0) === 1
+    ) === true;
   for (const [repositoryPath, owners] of coreOwnersByPath) {
     if (owners.length <= 1) continue;
     const symbolClaims = owners.map((owner) => {
@@ -1369,6 +1378,9 @@ export function assessSpecialistEvidence(
     if (
       eligibleImplementationPath(repositoryPath)
       && soleDependentOwners.length === 1
+      && owners
+        .filter((owner) => owner !== soleDependentOwners[0]!.concern)
+        .every((owner) => retainsUnsharedCoreImplementation(owner, repositoryPath))
     ) {
       addOwnershipResolution({
         concern: soleDependentOwners[0]!.concern,
@@ -1384,9 +1396,7 @@ export function assessSpecialistEvidence(
       && !assessment.corePaths.some(independentCoreImplementationPath)
     );
     const everyCurrentOwnerRetainsImplementation = owners.every((owner) =>
-      accepted.find((assessment) => assessment.concern === owner)?.corePaths.some((candidate) =>
-        candidate !== repositoryPath && independentCoreImplementationPath(candidate)
-      ) === true
+      retainsUnsharedCoreImplementation(owner, repositoryPath)
     );
     if (
       eligibleImplementationPath(repositoryPath)

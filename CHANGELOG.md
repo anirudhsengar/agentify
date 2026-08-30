@@ -4,6 +4,13 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Shared-core normalization now requires each displaced concern to retain a
+  uniquely owned implementation path, preventing mutually dependent ownership
+  resolutions from erasing an accepted behavior while preserving resolution
+  when a genuinely independent core path exists.
+
 ### Added
 
 - An executable nine-repository stabilization corpus now compiles eight

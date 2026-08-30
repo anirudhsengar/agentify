@@ -562,11 +562,14 @@ test("ownership normalization cannot cyclically remove every core implementation
     );
 
     const cyclic = assessSpecialistEvidence(map, { cwd });
-    assert.ok(cyclic.core_ownership_resolutions.some((entry) =>
-      entry.path === "src/command.ts" && entry.concern === suggestions.concern
+    assert.ok(!cyclic.core_ownership_resolutions.some((entry) =>
+      entry.path === "src/command.ts" || entry.path === "src/cobra.ts"
     ));
-    assert.ok(cyclic.core_ownership_resolutions.some((entry) =>
-      entry.path === "src/cobra.ts" && entry.concern === help.concern
+    assert.ok(cyclic.reasons.some((reason) =>
+      /src\/command\.ts.*multiple core owners/i.test(reason)
+    ));
+    assert.ok(cyclic.reasons.some((reason) =>
+      /src\/cobra\.ts.*multiple core owners/i.test(reason)
     ));
     const compiled = compileSpecialistEvidence(map, { cwd });
     assert.ok(

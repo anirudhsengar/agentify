@@ -139,8 +139,11 @@ ordinary ownership normalization.
 The compiler resolves one narrow shared-file case deterministically: exactly
 one concern has no other core implementation path while every adjacent concern
 does. That sole-dependent concern keeps core ownership and the other mentions
-become supporting. If zero or multiple owners depend exclusively on the shared
-path, the compiler preserves the ambiguity as an unresolved obligation.
+become supporting. An adjacent path counts as independent only when it is
+uniquely core-owned; another concurrently shared path cannot justify a cyclic
+pair of resolutions that removes every implementation path from the adjacent
+concern. If zero or multiple owners depend exclusively on the shared path, the
+compiler preserves the ambiguity as an unresolved obligation.
 It also resolves a shared file when one core claimant cites a strict superset
 of every competing non-empty concrete symbol set. This is exact symbol evidence,
 not a filename or repository heuristic; disjoint, tied, empty, and incomparable
