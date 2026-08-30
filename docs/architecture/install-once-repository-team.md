@@ -69,7 +69,9 @@ The local installer performs these steps in order:
    verified-validation, build, and documentation facts; dirty working-tree
    bytes are excluded and every semantic claim remains a gap. Positive coverage
    citations must resolve to regular tracked files at that HEAD; generated
-   Agentify paths are never repository evidence, and absence is HEAD-relative;
+   Agentify paths are never repository evidence, and absence is HEAD-relative.
+   Same-HEAD continuation maps preserve semantic evidence but refresh placeholder
+   identity and empty topography from this immutable snapshot before attachment;
 8. initialize persistent identity and self-update policy;
 9. run a read-only structured repository audit and persist application-authored
    scout/tracer receipts bound to the exact audited commit;

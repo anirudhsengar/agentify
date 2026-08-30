@@ -83,6 +83,8 @@ All notable changes to Agentify are documented here.
   already-verified installer preflight. Repository identity, languages and
   formats, tracked topography, verified behavioral validation, build metadata,
   and README metrics are recorded deterministically before model exploration;
+  same-HEAD continuation maps now receive missing immutable defaults without
+  discarding accumulated semantic evidence or spending another model call;
   semantic contracts, conventions, pitfalls, operations, security, and process
   remain gaps until separately proven. Internal tracked README symlinks resolve
   through Git objects, while dirty working-tree bytes and stale preflight SHAs

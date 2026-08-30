@@ -12,6 +12,7 @@ import {
 import { AUDIT_STATE_RELATIVE_DIR } from "./audit/paths.ts";
 import { rollbackPendingInstallation } from "./installer/installation-transaction.ts";
 import { assessExplorerReceiptAttestation } from "./audit/explorer-receipts.ts";
+import { createRepositoryEvidenceDraft } from "./audit/repository-evidence-bootstrap.ts";
 import type {
   AgentifyConfig,
   AgentifyUi,
@@ -106,7 +107,21 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<Fo
     }
     const config = options.configOverride
       ?? await ensureAgentifyConfig(defaultConfigDir(), options.ui);
-    const existingMap = loadCanonicalMapAt(options.cwd, AUDIT_STATE_RELATIVE_DIR);
+    let existingMap = loadCanonicalMapAt(options.cwd, AUDIT_STATE_RELATIVE_DIR);
+    if (existingMap !== null && options.repositoryPreflight !== undefined) {
+      const refreshed = createRepositoryEvidenceDraft(
+        options.cwd,
+        options.repositoryPreflight,
+        existingMap,
+      );
+      if (refreshed !== existingMap) {
+        writeCanonicalMap(options.cwd, refreshed, {
+          stateDir: AUDIT_STATE_RELATIVE_DIR,
+          mapFilename: DEFAULT_MAP_FILENAME,
+        });
+        existingMap = refreshed;
+      }
+    }
     if (existingMap !== null) {
       const completion = assessAuditCompletion(existingMap, { cwd: options.cwd });
       const evidenceRecorded = specialistEvidenceRecorded(existingMap);

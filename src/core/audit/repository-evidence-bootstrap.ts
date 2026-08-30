@@ -220,6 +220,7 @@ function cover(
 export function createRepositoryEvidenceDraft(
   cwd: string,
   preflight: RepositoryInstallationPreflight,
+  existing?: CodebaseMap,
 ): CodebaseMap {
   const map = createGapDraftMap();
   const commit = gitHead(cwd);
@@ -317,5 +318,29 @@ export function createRepositoryEvidenceDraft(
     target: ".",
     observation: `Seeded ${paths.length} tracked paths and ${preflight.commands.length} classified installer commands before model exploration.`,
   });
-  return map;
+  if (existing === undefined) return map;
+
+  const refreshed = structuredClone(existing);
+  if (!refreshed.meta.project_type.trim() || refreshed.meta.project_type.trim().toLowerCase() === "unknown") {
+    refreshed.meta.project_type = map.meta.project_type;
+  }
+  if (
+    refreshed.meta.languages.length === 0
+    || refreshed.meta.languages.every((language) => language.trim().toLowerCase() === "unknown")
+  ) {
+    refreshed.meta.languages = map.meta.languages;
+  }
+  if (!refreshed.meta.domain_hypothesis.trim() || refreshed.meta.domain_hypothesis.trim().toLowerCase() === "unknown") {
+    refreshed.meta.domain_hypothesis = map.meta.domain_hypothesis;
+  }
+  if (refreshed.skeleton.top_level_tree.length === 0) {
+    refreshed.skeleton.top_level_tree = map.skeleton.top_level_tree;
+  }
+  if (refreshed.skeleton.entry_points.length === 0) {
+    refreshed.skeleton.entry_points = map.skeleton.entry_points;
+  }
+  if (refreshed.skeleton.first_5_files_for_fresh_agent.length === 0) {
+    refreshed.skeleton.first_5_files_for_fresh_agent = map.skeleton.first_5_files_for_fresh_agent;
+  }
+  return JSON.stringify(refreshed) === JSON.stringify(existing) ? existing : refreshed;
 }

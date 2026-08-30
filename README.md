@@ -120,6 +120,9 @@ identity, languages and formats, tracked topography, verified test commands,
 build metadata, and documentation metrics without trusting dirty working-tree
 content. Semantic contracts and specialist concerns still require traced,
 current-HEAD evidence; deterministic seeding cannot close them by inference.
+Same-HEAD continuation maps retain their accumulated semantic evidence while
+placeholder identity and empty topography are refreshed from the same immutable
+preflight snapshot before any provider call.
 Positive coverage citations must likewise name regular files tracked at exact
 HEAD. Agentify-generated paths cannot establish repository facts, and absence
 citations ignore dirty or generated working-tree bytes.

@@ -19,6 +19,7 @@ import type {
   AgentifyConfig,
   AgentifyUi,
 } from "../../src/core/types.ts";
+import type { RepositoryInstallationPreflight } from "../../src/core/installer/contracts.ts";
 import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
 type Concern = NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
@@ -357,10 +358,29 @@ test("an existing tracked-complete map reconciles without rerunning the model", 
   try {
     const mapPath = path.join(repository.cwd, ".agentify", "runtime", "audit", "codebase_map.json");
     fs.mkdirSync(path.dirname(mapPath), { recursive: true });
-    fs.writeFileSync(
-      mapPath,
-      `${JSON.stringify(attestCodebaseMap(aqaShapedMap(), repository.head), null, 2)}\n`,
-    );
+    const existing = attestCodebaseMap(aqaShapedMap(), repository.head);
+    existing.meta.project_type = "unknown";
+    existing.meta.languages = [];
+    fs.writeFileSync(mapPath, `${JSON.stringify(existing, null, 2)}\n`);
+    const repositoryPreflight: RepositoryInstallationPreflight = {
+      disposition: "ready",
+      analysis_allowed: true,
+      identity: {
+        repository_id: "fixture",
+        full_name: "fixture/aqa-tests",
+        default_branch: "main",
+        current_commit: repository.head,
+        current_branch: "main",
+        origin_url: "https://github.com/fixture/aqa-tests.git",
+        actor_login: "fixture",
+        actor_permission: "write",
+        default_branch_policy: "unknown",
+      },
+      commands: [],
+      allowed_write_paths: [],
+      protected_paths: [".git"],
+      blockers: [],
+    };
 
     const runtime = new FailIfModelRuns();
     const ui = new RepairUi();
@@ -370,6 +390,7 @@ test("an existing tracked-complete map reconciles without rerunning the model", 
       ui,
       runtime,
       configOverride: { schemaVersion: 1, provider: "openai", thinkingLevel: "high", models: {} },
+      repositoryPreflight,
     });
 
     assert.equal(runtime.calls, 0);
@@ -377,6 +398,8 @@ test("an existing tracked-complete map reconciles without rerunning the model", 
     assert.ok(ui.messages.some((message) => /no model audit was rerun/i.test(message)));
 
     const persisted = JSON.parse(fs.readFileSync(mapPath, "utf8")) as CodebaseMap;
+    assert.notEqual(persisted.meta.project_type.toLowerCase(), "unknown");
+    assert.ok(persisted.meta.languages.length > 0);
     assert.equal(persisted.concern_evidence?.concerns.length, 4);
     assert.ok(persisted.concern_evidence?.not_concerns.some((entry) =>
       entry.candidate === "TKG playlist compilation and generated Make topology"
