@@ -373,6 +373,11 @@ function independentCoreImplementationPath(repositoryPath: string): boolean {
     .some((segment) => AUXILIARY_DIRECTORY_NAMES.has(segment.toLowerCase()));
 }
 
+function auxiliaryRepositoryPath(repositoryPath: string): boolean {
+  return repositoryPath.split("/").slice(0, -1)
+    .some((segment) => AUXILIARY_DIRECTORY_NAMES.has(segment.toLowerCase()));
+}
+
 const PACKAGE_MANIFEST_NAMES = new Set([
   "build.gradle",
   "build.gradle.kts",
@@ -1154,6 +1159,50 @@ export function assessSpecialistEvidence(
       concern: assessment.concern,
       reasons: assessment.reasons,
     }));
+  const concernsByName = new Map(
+    map.concern_evidence.concerns.map((concern) => [concern.concern, concern]),
+  );
+  const portfolioTokens = new Map(accepted.flatMap((assessment) => {
+    const concern = concernsByName.get(assessment.concern);
+    return concern === undefined ? [] : [[
+      assessment.concern,
+      semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`),
+    ] as const];
+  }));
+  for (const assessment of accepted) {
+    if (
+      assessment.corePaths.length === 0
+      || !assessment.corePaths.every(auxiliaryRepositoryPath)
+    ) {
+      continue;
+    }
+    const tokens = portfolioTokens.get(assessment.concern);
+    if (tokens === undefined) continue;
+    const overlapping = accepted.filter((candidate) => {
+      if (
+        candidate.concern === assessment.concern
+        || !candidate.corePaths.some(independentCoreImplementationPath)
+      ) {
+        return false;
+      }
+      const other = portfolioTokens.get(candidate.concern);
+      if (other === undefined) return false;
+      const thirdPartyTokens = accepted
+        .filter((entry) =>
+          entry.concern !== assessment.concern && entry.concern !== candidate.concern
+        )
+        .flatMap((entry) => [...(portfolioTokens.get(entry.concern) ?? [])]);
+      return [...tokens].filter((token) =>
+        [...other].some((otherToken) => tokensRelated(token, otherToken))
+        && !thirdPartyTokens.some((otherToken) => tokensRelated(token, otherToken))
+      ).length >= 2;
+    });
+    if (overlapping.length > 0) {
+      reasons.push(
+        `auxiliary-only accepted concern "${assessment.concern}" overlaps implementation-owned concern(s) ${overlapping.map((candidate) => `"${candidate.concern}"`).join(", ")}; attach the auxiliary evidence to the implementing behavior or reject the narrower candidate substantively`,
+      );
+    }
+  }
   // Inferred attachments depend on an exact tracked repository tree. Without
   // one (for example schema-only callers and degraded non-Git fixtures), only
   // explicit concern evidence may satisfy semantic closure. This prevents
@@ -1231,9 +1280,7 @@ export function assessSpecialistEvidence(
       });
     }
   }
-  const concernByName = new Map(
-    map.concern_evidence.concerns.map((concern) => [concern.concern, concern]),
-  );
+  const concernByName = concernsByName;
   const explicitTouchpointsByConcern = new Map(accepted.map((assessment) => {
     const concern = concernByName.get(assessment.concern);
     const paths = new Set((concern?.touchpoints ?? []).flatMap((touchpoint) => {
