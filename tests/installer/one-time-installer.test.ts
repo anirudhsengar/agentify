@@ -440,26 +440,31 @@ async function testValidationEnvironmentRemovesCredentials(): Promise<void> {
   const cwd = tempRepo("agentify-installer-sanitized-env-");
   const beforeProvider = process.env.MINIMAX_API_KEY;
   const beforeGitHub = process.env.GH_TOKEN;
+  const beforeNoColor = process.env.NO_COLOR;
   try {
     process.env.MINIMAX_API_KEY = "provider-secret-placeholder";
     process.env.GH_TOKEN = "github-secret-placeholder";
+    delete process.env.NO_COLOR;
     const result = DEFAULT_INSTALLER_PROCESS_RUNNER.run({
       program: process.execPath,
       args: [
         "--input-type=module",
         "--eval",
-        "process.exit(process.env.MINIMAX_API_KEY || process.env.GH_TOKEN ? 1 : 0)",
+        "process.stdout.write(JSON.stringify({ secret: Boolean(process.env.MINIMAX_API_KEY || process.env.GH_TOKEN), noColor: process.env.NO_COLOR ?? null, ci: process.env.CI ?? null }))",
       ],
       cwd,
       timeoutMs: 10_000,
     });
     assert.equal(result.status, 0);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /secret-placeholder/);
+    assert.deepEqual(JSON.parse(result.stdout), { secret: false, noColor: null, ci: "1" });
   } finally {
     if (beforeProvider === undefined) delete process.env.MINIMAX_API_KEY;
     else process.env.MINIMAX_API_KEY = beforeProvider;
     if (beforeGitHub === undefined) delete process.env.GH_TOKEN;
     else process.env.GH_TOKEN = beforeGitHub;
+    if (beforeNoColor === undefined) delete process.env.NO_COLOR;
+    else process.env.NO_COLOR = beforeNoColor;
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 }
