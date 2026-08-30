@@ -19,6 +19,33 @@ test("audit budget defaults bound every aggregate resource", () => {
   assert.ok(limits.maxTracerDurationMs <= limits.maxSessionDurationMs);
 });
 
+test("session deadlines leave bounded headroom for terminal cleanup", () => {
+  const budget = new AuditResourceBudget(
+    undefined,
+    Date.now(),
+    {
+      elapsed_ms: DEFAULT_AUDIT_BUDGETS.maxTotalDurationMs - 1_500,
+      model_calls: 0,
+      turns: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      cost_usd: 0,
+      explorer_spawns: 0,
+      coverage_recovery_passes: 0,
+      semantic_repair_passes: 0,
+    },
+  );
+  assert.ok(
+    budget.remainingDurationMs() <= 500,
+    "the final provider session must stop before the total deadline so cleanup and terminal audit accounting remain within budget",
+  );
+
+  const early = new AuditResourceBudget(
+    { maxSessionDurationMs: 1_000 },
+  );
+  assert.equal(early.remainingDurationMs(), 1_000);
+});
+
 test("default budgets retain bounded capacity for a final obligation-focused repair pass", () => {
   const budget = new AuditResourceBudget(undefined, Date.now(), {
     elapsed_ms: 997_918,
