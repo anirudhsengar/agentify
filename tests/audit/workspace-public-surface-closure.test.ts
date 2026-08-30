@@ -190,7 +190,7 @@ test("an observed public type trace inherits one unambiguous runtime core owner"
       run_command: "npm test",
     }];
     map.skeleton.first_5_files_for_fresh_agent = [{ path: "lib/command.js", why: "runtime API" }];
-    map.operational_surface.build.recipe_file = null;
+    map.operational_surface.build.recipe_file = "lib/command.js";
     map.concern_evidence = { concerns: [concern({
       name: "command routing",
       core: "lib/command.js",
@@ -203,7 +203,6 @@ test("an observed public type trace inherits one unambiguous runtime core owner"
     }];
     map.type_contract_surface.one_type_trace = {
       name: "Command",
-      path: "typings/index.d.ts",
       flow: ["typings/index.d.ts: declaration", "lib/command.js: runtime implementation"],
     };
 
@@ -216,7 +215,7 @@ test("an observed public type trace inherits one unambiguous runtime core owner"
     );
 
     map.concern_evidence.concerns.push(concern({ name: "option values", core: "lib/option.js" }));
-    map.type_contract_surface.one_type_trace.flow.push("lib/option.js: adjacent runtime implementation");
+    map.type_contract_surface.one_type_trace!.flow.push("lib/option.js: adjacent runtime implementation");
     const ambiguous = compileSpecialistEvidence(map, { cwd });
     assert.equal(ambiguous.complete, false);
     assert.ok(ambiguous.reasons.some((reason) => /typings\/index\.d\.ts/i.test(reason)));

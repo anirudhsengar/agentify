@@ -167,6 +167,10 @@ All notable changes to Agentify are documented here.
   from one generic token already present in the concern's positive evidence,
   preventing unrelated mirrored clusters from being vetoed by broad wording.
 
+- Public declaration surfaces now inherit one core specialist owner from an
+  observed type trace only when the named type path and every traced runtime
+  owner are unambiguous; competing owners remain unresolved.
+
 - Explorer sessions now run serially with hard mode-specific repository-read
   and provider-call limits. Aggregate exhaustion reports the exact unresolved
   semantic obligations and fingerprint; complete reports at the limit survive.

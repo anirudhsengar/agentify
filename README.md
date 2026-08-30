@@ -206,6 +206,10 @@ test-only; tied implementation candidates remain unresolved. A mirrored implemen
 when one accepted concern explicitly cites the complete pair and every competing
 concern cites a strict subset. Ambiguous shared files and tied cluster claims
 remain unresolved.
+An observed public type trace can assign a declaration file only when its named
+type resolves to one tracked declaration path and every traced runtime file
+resolves to the same normalized core owner. The declaration becomes that
+specialist's core public surface; competing runtime owners remain unresolved.
 Exclusions block deterministic attachment only when they match at least two
 behavioral tokens, or one token that is not already part of the concern's
 positive evidence. A generic shared word cannot veto an otherwise exact local

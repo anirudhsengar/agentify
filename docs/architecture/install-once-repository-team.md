@@ -172,6 +172,10 @@ tied dependent claimants remain unresolved.
 Negative evidence remains authoritative without allowing a generic domain word
 to veto unrelated local mirrors: an exclusion conflict requires two behavioral
 token matches, or one matched token absent from the concern's positive evidence.
+Observed public type traces deterministically bind a uniquely resolved tracked
+declaration to one specialist only when all traced runtime files have the same
+normalized core owner. The declaration becomes a core touchpoint; multiple type
+paths or runtime owners remain unresolved.
 The application checkpoints cumulative usage in the diagnostic map, bound to
 the audited commit. Same-HEAD CLI continuations resume the remaining budget
 rather than resetting counters; a new commit begins a new evidence lineage.

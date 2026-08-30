@@ -1289,6 +1289,49 @@ export function assessSpecialistEvidence(
         "the selected concern is the only accepted concern that cites this tracked implementation while its prior core evidence is test-only",
     });
   }
+  const typeTrace = map.type_contract_surface.one_type_trace;
+  const typeTracePaths = typeTrace === null ? [] : [...new Set([
+    ...(map.type_contract_surface.type_definitions ?? []),
+    ...map.type_contract_surface.typescript_interfaces,
+    ...map.type_contract_surface.pydantic_models,
+    ...map.type_contract_surface.db_models,
+  ].filter((entry) => entry.name === typeTrace.name)
+    .flatMap((entry) => {
+      const repositoryPath = resolvePath(entry.path);
+      return repositoryPath === null ? [] : [repositoryPath];
+    }))];
+  const typeTracePath = typeTracePaths.length === 1 ? typeTracePaths[0]! : null;
+  if (typeTrace !== null && typeTracePath !== null) {
+    const runtimeOwners = new Set(typeTrace.flow.flatMap((step) => {
+      const cited = resolvePath(step.match(/^([^:]+?)(?::(?:\s|$)|$)/)?.[1]);
+      if (cited === null || cited === typeTracePath) return [];
+      const normalizedOwner = ownershipResolutionByPath.get(cited)?.concern;
+      if (normalizedOwner !== undefined) return [normalizedOwner];
+      const owners = coreOwnersByPath.get(cited) ?? [];
+      return owners.length === 1 ? owners : [];
+    }));
+    if (runtimeOwners.size === 1) {
+      const concern = [...runtimeOwners][0]!;
+      addOwnershipResolution({
+        concern,
+        path: typeTracePath,
+        reason:
+          "the observed public type trace reaches runtime files with one unambiguous normalized core owner",
+      });
+      const attachment = attachments.find((entry) => entry.concern === concern);
+      if (attachment === undefined) {
+        attachments.push({
+          concern,
+          paths: [typeTracePath],
+          reason: "observed public type trace to one runtime core owner",
+        });
+      } else if (!attachment.paths.includes(typeTracePath)) {
+        attachment.paths.push(typeTracePath);
+        attachment.paths.sort((left, right) => left.localeCompare(right));
+      }
+      contextualPaths.add(typeTracePath);
+    }
+  }
   for (const [repositoryPath, owners] of coreOwnersByPath) {
     if (owners.length <= 1 || ownershipResolutionByPath.has(repositoryPath)) continue;
     reasons.push(
