@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import type { Concern } from "../../src/core/audit/schema/concerns.ts";
 import {
   checkpointExplorerConcernEvidence,
 } from "../../src/core/audit/explorer-receipts.ts";
@@ -252,6 +253,59 @@ test("the tracer submits its concern through an application-owned typed tool", a
   const concern = submitted as unknown as { concern: string; spans_subtrees: string[] };
   assert.equal(concern.concern, "Request extraction and rejection contracts");
   assert.deepEqual(concern.spans_subtrees, ["src"]);
+});
+
+test("submission and compilation reject unsupported tracked-file symbol claims", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-symbol-grounding-"));
+  try {
+    fs.mkdirSync(path.join(cwd, "src"));
+    fs.writeFileSync(path.join(cwd, "src/auth.ts"), "export function verify() {}\nexport function sign() {}\n");
+    fs.writeFileSync(path.join(cwd, "src/index.ts"), "export { verify, sign } from './auth'\n");
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "tracked symbols");
+    const original = parseStructuredConcernReport(
+      REPORT.replaceAll("src/extract/mod.rs", "src/auth.ts")
+        .replaceAll("src/extract/rejection.rs", "src/index.ts")
+        .replace('"FromRequest"', '"verify, sign"')
+        .replace('"rejections"', '"verify / sign"'),
+      "2026-08-29T00:00:00.000Z",
+    );
+    assert.ok(original);
+    for (const scenario of ["valid", "missing-core-symbol", "missing-supporting-symbol", "untracked-step"]) {
+      const invalid = scenario !== "valid";
+      const report: Concern = structuredClone(original);
+      if (scenario === "missing-core-symbol") report.touchpoints[0]!.symbol = "moduleMap";
+      if (scenario === "missing-supporting-symbol") {
+        report.touchpoints[1]!.symbol = "JWKRegistrar";
+        report.touchpoints[1]!.centrality = "supporting";
+      }
+      if (scenario === "untracked-step") {
+        fs.writeFileSync(path.join(cwd, "src/generated.ts"), "export function sign() {}\n");
+        report.flows[0]!.steps.splice(1, 0, { path: "src/generated.ts", what_happens: "Signs the request." });
+      }
+      let recorded = false;
+      const map = makeValidCodebaseMap({ concern_evidence: { concerns: [], not_concerns: [] }, expert_evidence: undefined });
+      const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", () => {
+        recorded = true;
+      }, cwd, report.concern, [], map);
+      // A dirty shadow must not make a nonexistent HEAD symbol appear grounded.
+      fs.appendFileSync(path.join(cwd, "src/auth.ts"), "export const moduleMap = {}\n");
+      const result = await tool.execute("submit", { report_json: JSON.stringify(report) } as never,
+        undefined, undefined, {} as never) as { isError?: boolean; content: Array<{ text?: string }> };
+      assert.equal(recorded, !invalid, `${scenario}: unsupported claims must never reach the receipt callback`);
+      assert.equal(result.isError === true, invalid);
+      if (scenario === "missing-core-symbol") assert.match(result.content[0]?.text ?? "", /moduleMap.*src\/auth\.ts|src\/auth\.ts.*moduleMap/);
+      map.concern_evidence!.concerns = [report];
+      const assessment = assessSpecialistEvidence(map, { cwd });
+      assert.equal(assessment.accepted_concerns.includes(report.concern), !invalid,
+        "compiler re-entry must enforce the same immutable symbol binding");
+    }
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
 });
 
 test("the tracer cannot rename its application-bound concern identity", async () => {
