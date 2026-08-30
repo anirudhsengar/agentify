@@ -418,6 +418,28 @@ test("supporting dependencies and arbitrary consumers cannot seed inferred owner
   }
 });
 
+test("slash-separated exclusion prose remains negative evidence unless it names a tracked path", () => {
+  const cwd = repository([
+    "src/adapter/node/server.ts", "src/adapter/node/server.test.ts",
+    "src/router/trie/node.ts", "src/router/trie/node.test.ts",
+  ]);
+  try {
+    const adapters = concern({
+      name: "Node request adapters",
+      covers: "Node request translation and response materialization.",
+      excludes: "Router/middleware internals.",
+      core: "src/adapter/node/server.ts",
+      test: "src/adapter/node/server.test.ts",
+    });
+    const assessment = assessSpecialistEvidence(mapWithConcerns(["src/adapter/node/server.ts"], [adapters]), { cwd });
+    assert.ok(assessment.uncovered_paths.includes("src/router/trie/node.ts"));
+    assert.ok(!assessment.attachments.some((attachment) => attachment.paths.includes("src/router/trie/node.ts")));
+    assert.ok(assessment.attachments.some((attachment) => attachment.paths.includes("src/adapter/node/server.test.ts")));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("test-only repositories may own their executable test behavior as core", () => {
   const cwd = repository([
     "tests/orchestration",
