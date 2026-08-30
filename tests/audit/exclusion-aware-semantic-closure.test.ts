@@ -469,6 +469,52 @@ test("entry questions do not establish positive ownership of an unrelated cluste
   }
 });
 
+test("rejection explanations cannot reject cited files or suppress their mirrored tests", () => {
+  const cwd = repository([
+    "src/context.ts",
+    "src/context.test.ts",
+    "src/render.ts",
+    "src/render.test.ts",
+  ]);
+  try {
+    const context = concern({
+      name: "Request context lifecycle",
+      covers: "Constructs per-request state and finalizes the response.",
+      excludes: "HTML rendering algorithms.",
+      core: "src/context.ts",
+      test: "src/context.test.ts",
+    });
+    context.touchpoints = context.touchpoints.filter((entry) => entry.centrality === "core");
+    context.flows[0]!.steps = [
+      { path: "src/context.ts", what_happens: "Creates isolated state for the incoming request." },
+      { path: "src/context.ts", what_happens: "Finalizes response status and headers from that state." },
+    ];
+    const map = mapWithConcerns(["src/context.ts"], [context]);
+    map.concern_evidence!.not_concerns = [
+      {
+        candidate: "variable store",
+        grouped_into: context.concern,
+        why_rejected: "Subsumed by Request context lifecycle: src/context.ts implements this small map-backed mechanism.",
+      },
+      {
+        candidate: "documentation authoring",
+        why_rejected: "Documentation is not an independent runtime specialty; src/render.ts is cited only as an example of the documented behavior.",
+      },
+    ];
+    const assessment = assessSpecialistEvidence(map, { cwd });
+
+    assert.ok(assessment.attachments.some((attachment) =>
+      attachment.concern === context.concern
+      && attachment.paths.includes("src/context.test.ts")
+    ), JSON.stringify(assessment.attachments));
+    assert.ok(!assessment.uncovered_paths.includes("src/context.test.ts"));
+    assert.ok(assessment.uncovered_paths.includes("src/render.ts"));
+    assert.ok(!assessment.exempted_paths.includes("src/render.ts"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("an auxiliary-only concern cannot duplicate implementation-owned behavior", () => {
   const cwd = repository([
     "src/command.ts",
