@@ -69,7 +69,6 @@ function sanitizedEnvironment(
     output[name] = value;
   }
   output.CI = "1";
-  output.NO_COLOR = "1";
   if (!preserveGitHubAuthentication) {
     delete output.GITHUB_TOKEN;
     delete output.GH_TOKEN;

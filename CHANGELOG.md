@@ -81,6 +81,8 @@ All notable changes to Agentify are documented here.
   same disposable exact-HEAD checkout and repeats before post-install checks.
   Node installs disable lifecycle scripts, provisioning failure prevents test
   execution, and no dependency or validation residue reaches the target.
+  Validation also no longer injects `NO_COLOR`, which changed repositories'
+  observable color-contract behavior and could create false test failures.
 
 - Bounded tracked-policy and diagnostic-map reads now open without following
   the final symlink, verify and read through one descriptor, and enforce the
