@@ -6,6 +6,9 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Specialist discovery no longer rewards directory scatter or rejects local
+  public contracts as generic mechanics. Portfolio screening reviews those
+  scout rejections instead of merging independent behavior into a catalog.
 - README-derived identity strips dangling markup and separates removed HTML
   comments, so removal cannot reconstruct markup across adjacent fragments.
 - Public/workspace and inline-tested surfaces require core ownership or a

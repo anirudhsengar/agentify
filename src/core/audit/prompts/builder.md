@@ -97,6 +97,11 @@ would specialize in to work on it well.
    Reject a catalog or framework layer that combines unrelated failure domains
    through a shared integration API or subtree. Split only evidence-backed
    behaviors with coherent invariants and independent implementation ownership.
+   Review the scout's rejections as well as its proposals: size, locality, and
+   cross-cutting use are not reasons for rejection. Public lifecycle and
+   continuation contracts may be the library's primary product behavior.
+   Check the cited invariant before copying a rejection of such behavior;
+   do not absorb it into a catalog merely because both use one interface.
    Merge overlapping behavioral candidates by rejecting the narrower names as
    subsumed, then trace the coherent concern that owns their shared flow.
    In particular, when multiple candidates have the same sole tracked

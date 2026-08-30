@@ -245,6 +245,10 @@ Catalogs and framework layers that combine unrelated failure domains through a
 shared integration API or subtree are rejected before tracing. A traced concern
 must core-own its behavior-specific implementation; shared integration files
 remain supporting when those implementations exist.
+Scout locality and file count are not specialist eligibility tests. A local
+public lifecycle or continuation contract can be a repository's primary product
+behavior. Portfolio screening reviews scout rejections against actual invariants
+instead of accepting size or cross-cutting use as proof of generic mechanics.
 Normalization may promote a supporting implementation file to core without a
 model call only when exactly one accepted concern cites it and that concern's
 existing core evidence is test-only. Multiple eligible implementation paths or
