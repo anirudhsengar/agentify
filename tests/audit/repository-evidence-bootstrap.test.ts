@@ -7,6 +7,7 @@ import test from "node:test";
 import { assessCoverageClosure } from "../../src/core/audit/schema.ts";
 import { createRepositoryEvidenceDraft } from "../../src/core/audit/repository-evidence-bootstrap.ts";
 import type { RepositoryInstallationPreflight } from "../../src/core/installer/contracts.ts";
+import type { CodebaseMap } from "../../src/core/audit/schema.ts";
 
 function git(cwd: string, ...args: string[]): string {
   const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
@@ -104,6 +105,19 @@ test("immutable preflight evidence seeds identity, topography, validation, and d
     assert.equal(map.skeleton.top_level_tree.some((entry) => entry.startsWith(".agentify")), false);
     assert.equal(fs.existsSync(path.join(cwd, ".agentify")), false);
     assert.equal(git(cwd, "status", "--short"), before);
+
+    const existing = structuredClone(map);
+    existing.meta.project_type = "unknown";
+    existing.meta.languages = [];
+    existing.open_questions = ["Preserve accumulated semantic evidence."];
+    const refreshed = (createRepositoryEvidenceDraft as unknown as (
+      cwd: string,
+      preflight: RepositoryInstallationPreflight,
+      existing: CodebaseMap,
+    ) => CodebaseMap)(cwd, preflight, existing);
+    assert.notEqual(refreshed.meta.project_type.toLowerCase(), "unknown");
+    assert.ok(refreshed.meta.languages.includes("JavaScript"));
+    assert.deepEqual(refreshed.open_questions, existing.open_questions);
 
     git(cwd, "add", "docs/overview.md");
     git(cwd, "commit", "-qm", "advance fixture head");
