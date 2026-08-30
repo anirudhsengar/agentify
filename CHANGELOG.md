@@ -14,6 +14,9 @@ All notable changes to Agentify are documented here.
   identity. Existing concerns must be replaced through the application-bound
   tracer checkpoint, preventing repair from appending duplicate specialists or
   bypassing scope and monotonicity checks.
+- Audit session deadlines now reserve one second for checkpointing, rollback,
+  and terminal accounting, preventing timeout cleanup from reporting aggregate
+  elapsed usage just beyond the configured total wall-time limit.
 
 ### Added
 

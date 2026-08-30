@@ -70,6 +70,8 @@ export const DEFAULT_AUDIT_BUDGETS: Readonly<ResolvedAuditBudgets> = Object.free
   maxExplorerSpawns: 24,
 });
 
+const TERMINAL_CLEANUP_RESERVE_MS = 1_000;
+
 const AUDIT_BUDGET_MAXIMUMS: Readonly<ResolvedAuditBudgets> = Object.freeze({
   maxTotalDurationMs: 24 * 60 * 60 * 1000,
   maxSessionDurationMs: 24 * 60 * 60 * 1000,
@@ -205,8 +207,13 @@ export class AuditResourceBudget {
     const remaining = this.limits.maxTotalDurationMs
       - this.#priorElapsedMs
       - (Date.now() - this.#startedAt);
-    if (remaining <= 0) this.fail(`elapsed time reached ${this.limits.maxTotalDurationMs}ms`);
-    return Math.max(1, Math.min(sessionLimitMs, remaining));
+    if (remaining <= TERMINAL_CLEANUP_RESERVE_MS) {
+      this.fail(
+        `elapsed time reached the ${this.limits.maxTotalDurationMs}ms limit's `
+        + `${TERMINAL_CLEANUP_RESERVE_MS}ms terminal cleanup reserve`,
+      );
+    }
+    return Math.max(1, Math.min(sessionLimitMs, remaining - TERMINAL_CLEANUP_RESERVE_MS));
   }
 
   remainingOutputTokens(perRequestLimit: number): number {

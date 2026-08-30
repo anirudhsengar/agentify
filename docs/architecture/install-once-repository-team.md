@@ -187,6 +187,9 @@ cost. Per-scout and per-tracer deadlines are three minutes. Repair state is
 measured by a canonical unresolved-obligation fingerprint and terminates after
 repeated no-progress states. Strict optional `auditBudgets` config overrides
 support unusually large repositories without permitting unbounded values.
+Provider and explorer deadlines retain one second of the total wall-time budget
+for abort propagation, checkpointing, rollback, and the single terminal audit
+event; model work cannot consume the cleanup interval itself.
 Semantic-repair parents receive the current unresolved obligations directly and
 may only dispatch bounded explorers or apply a concern delta; repository reads
 remain confined to those explorers, preventing broad map and tree rereads.
