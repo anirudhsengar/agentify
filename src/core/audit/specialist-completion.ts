@@ -1710,6 +1710,75 @@ export function reconcileExplicitlyRetainedCandidates(map: CodebaseMap): Codebas
   };
 }
 
+/**
+ * Retire an accepted concern only after a grounded delegated rejection names
+ * one retained owner that already preserves its core paths and verified flow
+ * structure. This makes model-requested grouping a checked normalization, not
+ * a deletion mechanism.
+ */
+export function reconcileSubsumedConcernEvidence(map: CodebaseMap): CodebaseMap {
+  const evidence = map.concern_evidence;
+  if (evidence === undefined) return map;
+  const retired = new Set<string>();
+  for (const rejection of evidence.not_concerns) {
+    if (!isSubstantiveConcernRejection(rejection.why_rejected)) continue;
+    const source = evidence.concerns.find((concern) =>
+      concern.concern.trim().toLowerCase() === rejection.candidate.trim().toLowerCase()
+    );
+    const delegatedOwner = delegatedOwnerDescription(rejection.why_rejected);
+    if (source === undefined || delegatedOwner === null) continue;
+    const delegatedTokens = semanticTokens(delegatedOwner);
+    const owners = evidence.concerns.filter((concern) =>
+      concern !== source
+      && matchingTokenCount(
+        delegatedTokens,
+        semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`),
+      ) >= 2
+    );
+    if (owners.length !== 1) continue;
+    const owner = owners[0]!;
+    if (
+      matchingTokenCount(
+        semanticTokens(`${source.concern} ${source.one_line} ${source.covers}`),
+        semanticTokens(owner.excludes),
+      ) >= 2
+    ) continue;
+    const ownerPaths = new Set(owner.touchpoints.flatMap((touchpoint) => {
+      const repositoryPath = normalizeRepositoryPathSyntax(touchpoint.path);
+      return repositoryPath === null ? [] : [repositoryPath];
+    }));
+    const sourceCorePaths = source.touchpoints.flatMap((touchpoint) => {
+      const repositoryPath = normalizeRepositoryPathSyntax(touchpoint.path);
+      return touchpoint.centrality === "core" && repositoryPath !== null ? [repositoryPath] : [];
+    });
+    if (!sourceCorePaths.every((repositoryPath) => ownerPaths.has(repositoryPath))) continue;
+    const ownerFlows = new Map(owner.flows.map((flow) => [
+      flow.name.trim().toLowerCase(),
+      flow.steps.map((step) => normalizeRepositoryPathSyntax(step.path) ?? step.path),
+    ]));
+    const flowsPreserved = source.flows.every((flow) => {
+      const retained = ownerFlows.get(flow.name.trim().toLowerCase());
+      const sourcePaths = flow.steps.map((step) =>
+        normalizeRepositoryPathSyntax(step.path) ?? step.path
+      );
+      return retained !== undefined
+        && retained.length === sourcePaths.length
+        && retained.every((repositoryPath, index) => repositoryPath === sourcePaths[index]);
+    });
+    if (flowsPreserved) retired.add(source.concern.trim().toLowerCase());
+  }
+  if (retired.size === 0) return map;
+  return {
+    ...map,
+    concern_evidence: {
+      ...evidence,
+      concerns: evidence.concerns.filter((concern) =>
+        !retired.has(concern.concern.trim().toLowerCase())
+      ),
+    },
+  };
+}
+
 export function reconcileAuxiliaryDuplicateConcerns(
   map: CodebaseMap,
   assessment: SpecialistEvidenceAssessment,

@@ -416,11 +416,13 @@ class ProgressiveRepairRuntime implements AgentRuntime {
   baseCalls = 0;
   repairCalls = 0;
   repairToolSets: string[][] = [];
+  repairPrompts: string[] = [];
 
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     if (/trusted semantic-quality gate/i.test(options.userPrompt)) {
       this.repairCalls += 1;
       this.repairToolSets.push([...options.tools]);
+      this.repairPrompts.push(options.userPrompt);
       if (this.repairCalls <= 3) {
         const destination = path.join(
           options.cwd,
@@ -524,6 +526,11 @@ test("progressive semantic repair may exceed two passes while each pass closes t
 
     assert.equal(runtime.baseCalls, 1);
     assert.equal(runtime.repairCalls, 3);
+    assert.ok(runtime.repairPrompts.every((prompt) =>
+      /group the inseparable behaviors/i.test(prompt)
+      && /preserves every exact prior flow name and ordered step-path sequence/i.test(prompt)
+      && /trusted normalization refuses the retirement/i.test(prompt)
+    ));
     assert.deepEqual(
       runtime.repairToolSets,
       Array.from({ length: 3 }, () => ["write_map_delta", "spawn_explorer"]),

@@ -7,6 +7,7 @@ import {
   reconcileExplicitlyRetainedCandidates,
   reconcileScoutConcernIdentities,
   reconcileSpecialistEvidence,
+  reconcileSubsumedConcernEvidence,
   type SpecialistEvidenceAssessment,
 } from "./specialist-completion.ts";
 
@@ -66,6 +67,12 @@ export function compileSpecialistEvidence(
     const withoutRetainedCandidates = reconcileExplicitlyRetainedCandidates(current);
     if (withoutRetainedCandidates !== current) {
       current = withoutRetainedCandidates;
+      normalized = true;
+      continue;
+    }
+    const withoutSafelySubsumedConcerns = reconcileSubsumedConcernEvidence(current);
+    if (withoutSafelySubsumedConcerns !== current) {
+      current = withoutSafelySubsumedConcerns;
       normalized = true;
       continue;
     }

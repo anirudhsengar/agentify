@@ -55,6 +55,7 @@ function rotatingWindow<T>(values: readonly T[], limit: number, pass: number): T
 }
 
 function repairPrompt(
+  map: CodebaseMap,
   assessment: SpecialistEvidenceAssessment,
   pass: number,
   maxRepairPasses: number,
@@ -62,6 +63,20 @@ function repairPrompt(
   compilationReasons: ReadonlyArray<string> = [],
 ): string {
   const currentFailures = [...assessment.reasons, ...compilationReasons];
+  const coreConflictReasons = currentFailures.filter((reason) =>
+    /multiple core owners/i.test(reason)
+  );
+  const coreConflictObligations = (map.concern_evidence?.concerns ?? [])
+    .filter((concern) => coreConflictReasons.some((reason) => reason.includes(concern.concern)))
+    .map((concern) => {
+      const core = concern.touchpoints
+        .filter((touchpoint) => touchpoint.centrality === "core")
+        .map((touchpoint) => touchpoint.path);
+      const flows = concern.flows.map((flow) =>
+        `${flow.name} [${flow.steps.map((step) => step.path).join(" > ")}]`
+      );
+      return `${concern.concern}: core ${core.join(", ")}; flows ${flows.join(" | ")}`;
+    });
   const needsBroadDiscovery = pass === 1 && (
     assessment.accepted_concerns.length === 0
     || currentFailures.some((reason) => /thin specialist portfolio/i.test(reason))
@@ -93,7 +108,7 @@ function repairPrompt(
     "The repository's coverage map is complete, but its specialist portfolio failed the trusted semantic-quality gate.",
     `Repair pass ${pass}/${maxRepairPasses}; ${assessment.uncovered_paths.length} tracked paths and ${assessment.uncovered_clusters.length} local implementation/test clusters remain in total.`,
     `Current failures: ${currentFailures.slice(0, 12).join("; ")}.`,
-    `Accepted concerns to preserve: ${assessment.accepted_concerns.join(", ") || "none"}.`,
+    `Accepted concerns to preserve or safely subsume: ${assessment.accepted_concerns.join(", ") || "none"}.`,
     `Current tracked-path batch: ${uncovered}.`,
     `Current local implementation/test-cluster batch: ${uncoveredClusters}.`,
     "If a listed uncovered cluster is a distinct maintainer behavior omitted by every scout proposal, run one concern_scout with focus naming its exact cluster key and tracked paths, then trace the resulting proposal. Do not rerun broad scouting or reject a real behavior merely to close the cluster.",
@@ -111,7 +126,8 @@ function repairPrompt(
     "Workspace package facades, exported module roots, and inline-tested implementation files are behavioral obligations even when no separate test file exists.",
     "A concern_tracer timeout is unresolved evidence, not grounds for not_concerns. Retry a narrower target with the same focus until a successful report is returned.",
     "Every concern_tracer call must pass the exact intended identity in concern. When repairing an accepted concern, reuse its name verbatim; do not create a renamed or narrower duplicate.",
-    "Shared files must appear under every concern they serve with the role they play in that concern; overlap is expected and must never cause merging.",
+    "Shared supporting files should appear under every concern they serve. When the compiler names multiple core owners that cannot retain independent file-level implementation ownership, group the inseparable behaviors instead of guessing an owner: retrace one existing broader concern identity so it preserves every exact prior flow name and ordered step-path sequence plus every retired core path, remove exclusions that contradict the grouped scope, then add each narrower exact identity to not_concerns with 'Subsumed by the accepted <owner> concern because ...'. Trusted normalization refuses the retirement unless those structural obligations are present.",
+    `Current core-conflict preservation obligations: ${coreConflictObligations.join(" || ") || "none"}.`,
     "Do not include .agentify/** or .github/agentify/** as repository architecture, specialists, or application evidence.",
     "Agentify validates and checkpoints complete concern_tracer bodies directly. Never retranscribe or resend accepted concern bodies through write_map_delta. Use write_map_delta only to record rejected candidates in not_concerns, or submit an empty concern list when no rejection is needed. Omit the dimension parameter because concern evidence closes no D1-D10 dimension.",
     "Do not modify application files, workflows, dependencies, prompts, or documentation. Do not return prose instead of the structured write_map_delta call.",
@@ -344,6 +360,7 @@ async function repairSpecialistPortfolio(
       config: context.config,
       systemPrompt,
       userPrompt: repairPrompt(
+        map,
         assessment,
         pass,
         maxRepairPasses,

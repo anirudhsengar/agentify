@@ -119,6 +119,13 @@ Typed tracer checkpoints are the only path that may replace an existing concern
 body. Incremental map deltas may append a new concern or replay an identical
 checkpoint, but reject a changed body with the same semantic identity so repair
 cannot bypass scope and monotonicity validation or create duplicate specialists.
+When multiple accepted concerns cannot have independent file-level core owners,
+repair may retrace one existing broader identity and record the narrower exact
+identities as subsumed. Deterministic normalization retires a narrower body only
+when the delegated rejection resolves to exactly one retained concern, that body
+cites every retired core path, preserves every prior flow name and ordered
+tracked step-path sequence, and does not exclude the absorbed scope. Otherwise
+the shared-core obligation remains unresolved.
 
 The installation transaction is captured before recognized runtime repair or
 final compilation can persist any managed path or normalized map. The

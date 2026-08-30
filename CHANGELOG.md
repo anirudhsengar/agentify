@@ -17,6 +17,10 @@ All notable changes to Agentify are documented here.
 - Audit session deadlines now reserve one second for checkpointing, rollback,
   and terminal accounting, preventing timeout cleanup from reporting aggregate
   elapsed usage just beyond the configured total wall-time limit.
+- Semantic repair can now group inseparable accepted concerns without weakening
+  closure. Trusted normalization retires a grounded subsumed concern only when
+  one retained owner preserves every prior flow name and ordered step-path
+  sequence, cites every retired core path, and no longer excludes that scope.
 
 ### Added
 
