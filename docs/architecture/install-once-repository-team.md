@@ -163,8 +163,8 @@ repository-relative. A fully pinned pip requirements file whose entries carry
 SHA-256 hashes is a reproducible lock, and Python test trees without a pytest
 contract use `python -m unittest discover`. If a tracked test's bounded local
 import graph reaches a network client, broad discovery is not deterministic;
-Agentify may instead use a tracked individual unittest explicitly documented in
-the nested README only when that test's local import graph is offline.
+Agentify may instead use the first tracked offline module only when the nested
+README explicitly documents the individual-unittest command form.
 
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30

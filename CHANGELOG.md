@@ -64,7 +64,8 @@ All notable changes to Agentify are documented here.
   ecosystem precedence wins ties. Hash-pinned pip requirements are recognized
   as a lock. Python test trees without pytest use stdlib unittest discovery
   unless a tracked local import graph reaches a network client; then only a
-  tracked README-documented offline individual unittest is eligible.
+  tracked offline module is eligible, and only when the README documents the
+  individual-unittest command form.
 
 - The bounded default audit envelope now permits 240 model calls/turns, eight million input/cache tokens, and 24 explorer spawns so a complete evidence-backed portfolio and final obligation-focused repair can fit while duration, output, cost, convergence, and artifact caps remain enforced.
 

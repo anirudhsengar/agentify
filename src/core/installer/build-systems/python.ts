@@ -121,16 +121,20 @@ function documentedOfflineUnittest(
   trackedSources: ReadonlySet<string>,
 ): string | null {
   const candidates = new Set(testPaths);
+  let individualFormDocumented = false;
   for (const readme of ["README.md", "README.rst", "README.txt"]) {
     const content = headText(cwd, readme);
     if (content === null) continue;
     for (const line of content.split(/\r?\n/)) {
       const match = /^(?:\$\s*)?(?:python|python3)\s+-m\s+unittest\s+(tests?\/test[^\s]*\.py)\s*$/.exec(line.trim());
       const testPath = match?.[1];
-      if (testPath && candidates.has(testPath) && !pythonTestUsesNetwork(cwd, testPath, trackedSources)) return testPath;
+      if (testPath && candidates.has(testPath)) individualFormDocumented = true;
     }
   }
-  return null;
+  if (!individualFormDocumented) return null;
+  return [...testPaths].sort().find((testPath) => (
+    !pythonTestUsesNetwork(cwd, testPath, trackedSources)
+  )) ?? null;
 }
 
 function pythonToolCommands(cwd: string, runner: ReturnType<typeof pythonRunner>): InstallerCommand[] {
