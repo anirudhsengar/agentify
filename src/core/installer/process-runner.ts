@@ -15,7 +15,7 @@ function resolveWindowsCmdScript(
   program: string,
   args: readonly string[],
   cwd: string,
-): { program: string; args: string[] } | null {
+): string[] | null {
   if (process.platform !== "win32") return null;
   if (!/\.(?:bat|cmd)$/i.test(path.basename(program))) return null;
   const resolved = path.isAbsolute(program) ? path.normalize(program) : path.resolve(cwd, program);
@@ -30,10 +30,7 @@ function resolveWindowsCmdScript(
   }
   // Node cannot spawn .bat/.cmd directly (EINVAL). Route through cmd.exe without shell:true
   // so argv stays discrete and is not concatenated into an injectable shell string.
-  return {
-    program: "cmd.exe",
-    args: ["/d", "/s", "/c", resolved, ...args],
-  };
+  return ["/d", "/s", "/c", resolved, ...args];
 }
 
 function resolveInvocation(request: InstallerProcessRequest): {
@@ -44,8 +41,6 @@ function resolveInvocation(request: InstallerProcessRequest): {
     const npmCli = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
     if (fs.existsSync(npmCli)) return { program: process.execPath, args: [npmCli, ...request.args] };
   }
-  const windowsScript = resolveWindowsCmdScript(request.program, request.args, request.cwd);
-  if (windowsScript) return windowsScript;
   return { program: request.program, args: [...request.args] };
 }
 
@@ -81,17 +76,22 @@ function sanitizedEnvironment(
 
 export const DEFAULT_INSTALLER_PROCESS_RUNNER: InstallerProcessRunner = {
   run(request: InstallerProcessRequest): InstallerProcessResult {
-    const invocation = resolveInvocation(request);
-    const result = spawnSync(invocation.program, invocation.args, {
+    const windowsScript = resolveWindowsCmdScript(request.program, request.args, request.cwd);
+    const options = {
       cwd: request.cwd,
-      encoding: "utf-8",
+      encoding: "utf-8" as const,
       env: sanitizedEnvironment(request.env, request.program === "gh"),
       input: request.input,
       timeout: request.timeoutMs,
       maxBuffer: MAX_PROCESS_OUTPUT_BYTES,
       windowsHide: true,
       shell: false,
-    });
+    };
+    // Keep shell-script arguments separate from direct executables, including npm's Node entry point.
+    const invocation = resolveInvocation(request);
+    const result = windowsScript
+      ? spawnSync("cmd.exe", windowsScript, options)
+      : spawnSync(invocation.program, invocation.args, options);
     const code = (result.error as NodeJS.ErrnoException | undefined)?.code;
     return {
       status: result.status,
