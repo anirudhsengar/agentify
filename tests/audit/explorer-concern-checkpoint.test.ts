@@ -272,6 +272,20 @@ test("a retracer cannot trade one covered repository obligation for another", as
       line_range: null,
       centrality: "supporting",
     });
+    currentConcern.flows.push({
+      name: "Previously verified rejection fallback",
+      description: "A distinct verified path that shares already covered files.",
+      steps: [
+        {
+          path: "src/extract/mod.rs",
+          what_happens: "Attempts request extraction.",
+        },
+        {
+          path: "src/extract/rejection.rs",
+          what_happens: "Converts extraction failure into the public rejection.",
+        },
+      ],
+    });
     const currentMap = makeValidCodebaseMap({
       skeleton: {
         ...makeValidCodebaseMap().skeleton,
@@ -290,6 +304,7 @@ test("a retracer cannot trade one covered repository obligation for another", as
     let submissions = 0;
     const parsed = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null") as {
       touchpoints: Array<Record<string, unknown>>;
+      flows: Array<Record<string, unknown>>;
     };
     const regressiveConcern = parseStructuredConcernReport(REPORT, "2026-08-29T00:00:00.000Z");
     assert.ok(regressiveConcern);
@@ -330,8 +345,20 @@ test("a retracer cannot trade one covered repository obligation for another", as
       line_range: null,
       centrality: "supporting",
     });
-    const monotonic = await tool.execute(
+    const flowRegressive = await tool.execute(
       "submit-monotonic",
+      { report_json: JSON.stringify(parsed) } as never,
+      undefined,
+      undefined,
+      {} as never,
+    ) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    assert.equal(flowRegressive.isError, true);
+    assert.match(flowRegressive.content[0]?.text ?? "", /preserve.*verified flow.*Previously verified rejection fallback/i);
+    assert.equal(submissions, 0);
+
+    parsed.flows.push(structuredClone(currentConcern.flows.at(-1)!));
+    const monotonic = await tool.execute(
+      "submit-flow-monotonic",
       { report_json: JSON.stringify(parsed) } as never,
       undefined,
       undefined,
