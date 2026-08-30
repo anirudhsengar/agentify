@@ -344,10 +344,11 @@ Parent sessions are terminated by an
 application-owned timer at the configured session deadline. SIGINT and SIGTERM
 run the same synchronous pending-installation rollback before process exit, so
 only the permitted diagnostic map can survive an interrupted fresh install.
-Audit events append synchronously. On exit, charged usage is checkpointed into
-the retained map before the logger emits its single aborted terminal result;
-normal completion removes these exit fallbacks. A checkpoint failure is logged
-as an error, never a successful audit.
+Audit events append synchronously. Prepended signal handlers checkpoint charged
+usage inside the pending transaction before rollback, so generated map history
+is removed along with operational state. The logger then emits its single
+aborted terminal result on exit. Normal completion removes these fallbacks.
+A checkpoint failure is logged as an error, never a successful audit.
 On re-entry, installation preparation captures the transaction first, then
 temporarily lifts only the exact non-symlink diagnostic-map topology whose
 application receipt ledger matches current HEAD. Memory initialization occurs

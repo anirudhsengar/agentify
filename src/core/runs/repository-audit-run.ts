@@ -508,7 +508,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     budgetCheckpointPersisted = true;
   };
   let terminalWritten = false;
-  const checkpointOnExit = (exitCode: number): void => {
+  const checkpointOnSignal = (exitCode: number): void => {
     try {
       persistBudgetCheckpoint();
       log.auditBudget({
@@ -524,8 +524,11 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       });
     }
   };
-  // Run before the logger's terminal fallback, after signal rollback retained the map.
-  process.prependOnceListener("exit", checkpointOnExit);
+  // Checkpoint inside the pending transaction so rollback also removes its history.
+  const checkpointOnSigint = (): void => checkpointOnSignal(130);
+  const checkpointOnSigterm = (): void => checkpointOnSignal(143);
+  process.prependOnceListener("SIGINT", checkpointOnSigint);
+  process.prependOnceListener("SIGTERM", checkpointOnSigterm);
   try {
     const result = await runBaseRepositoryAudit({
       ...context,
@@ -631,7 +634,8 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     }
     throw error;
   } finally {
-    process.removeListener("exit", checkpointOnExit);
+    process.removeListener("SIGINT", checkpointOnSigint);
+    process.removeListener("SIGTERM", checkpointOnSigterm);
     await log.close();
   }
 }
