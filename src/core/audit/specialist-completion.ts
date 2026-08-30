@@ -902,10 +902,26 @@ function attachmentConflictsWithExclusions(
   label: string,
 ): boolean {
   const clusterTokens = pathSemanticTokens(paths, label);
+  const exclusionPaths = [...candidate.concern.excludes.matchAll(
+    /(?:^|[\s(])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.*-]+)+)/g,
+  )].flatMap((match) => match[1] ? [match[1].replace(/\*+$/, "").replace(/\/$/, "")] : []);
+  const pathExclusionApplies = exclusionPaths.some((excludedPath) =>
+    paths.some((repositoryPath) => (
+      repositoryPath === excludedPath || repositoryPath.startsWith(`${excludedPath}/`)
+    ))
+  );
+  const pathTokens = semanticTokens(exclusionPaths.join(" "));
+  const effectiveExcludedTokens = pathExclusionApplies
+    ? candidate.excludedTokens
+    : new Set([...candidate.excludedTokens].filter((token) => !pathTokens.has(token)));
   const matched = [...clusterTokens].filter((token) =>
-    [...candidate.excludedTokens].some((excluded) => tokensRelated(token, excluded))
+    [...effectiveExcludedTokens].some((excluded) => tokensRelated(token, excluded))
   );
   if (matched.length >= 2) return true;
+  if (
+    matched.length > 0
+    && /\bother\b[^.]{0,160}\b(?:remain|kept)\s+separate\b/i.test(candidate.concern.excludes)
+  ) return true;
   return matched.some((token) =>
     ![...candidate.tokens].some((positive) => tokensRelated(token, positive))
   );
@@ -947,15 +963,17 @@ function selectUniqueConcern(input: {
       0,
     );
     const semanticMatches = matchingTokenCount(candidateTokens, candidate.tokens);
-    const exclusionMatches = matchingTokenCount(candidateTokens, candidate.excludedTokens);
     return {
       candidate,
       pathScore,
       semanticMatches,
-      exclusionMatches,
       score: pathScore + Math.min(semanticMatches, 4) * 160,
     };
-  }).filter((entry) => entry.exclusionMatches === 0 && (
+  }).filter((entry) => !attachmentConflictsWithExclusions(
+    entry.candidate,
+    input.paths,
+    input.label,
+  ) && (
     input.mode === "cluster"
       ? entry.semanticMatches > 0 && (entry.pathScore >= 40 || entry.semanticMatches >= 2)
       : entry.pathScore >= 850
@@ -1668,6 +1686,53 @@ export function reconcileAuxiliaryDuplicateConcerns(
       not_concerns: notConcerns,
     },
   };
+}
+
+export function reconcileScoutConcernIdentities(map: CodebaseMap): CodebaseMap {
+  const evidence = map.concern_evidence;
+  const proposals = map.explorer_receipts?.receipts
+    .filter((receipt) => receipt.mode === "concern_scout" && receipt.success)
+    .flatMap((receipt) => receipt.proposed_concerns ?? []) ?? [];
+  if (evidence === undefined || proposals.length === 0) return map;
+  let changed = false;
+  const occupied = new Set(evidence.concerns.map((concern) => concern.concern.trim().toLowerCase()));
+  const concerns = evidence.concerns.map((concern) => {
+    const current = concern.concern.trim();
+    const matches = proposals.filter((proposal) => {
+      const canonical = proposal.trim();
+      return canonical.length > 0
+        && current.toLowerCase().startsWith(`${canonical.toLowerCase()};`);
+    });
+    if (matches.length !== 1) return concern;
+    const canonical = matches[0]!.trim();
+    if (occupied.has(canonical.toLowerCase())) return concern;
+    changed = true;
+    return {
+      ...concern,
+      concern: canonical,
+      touchpoints: concern.touchpoints.map((touchpoint) => (
+        touchpoint.role.includes("Trusted ownership normalization")
+          ? { ...touchpoint, role: touchpoint.role.replaceAll(current, canonical) }
+          : touchpoint
+      )),
+    };
+  });
+  return changed ? { ...map, concern_evidence: { ...evidence, concerns } } : map;
+}
+
+export function removeTrustedInferredAttachments(map: CodebaseMap): CodebaseMap {
+  const evidence = map.concern_evidence;
+  if (evidence === undefined) return map;
+  let changed = false;
+  const concerns = evidence.concerns.map((concern) => {
+    const touchpoints = concern.touchpoints.filter((touchpoint) => (
+      !touchpoint.role.startsWith("Trusted semantic closure attached this tracked dependency:")
+    ));
+    if (touchpoints.length === concern.touchpoints.length) return concern;
+    changed = true;
+    return { ...concern, touchpoints };
+  });
+  return changed ? { ...map, concern_evidence: { ...evidence, concerns } } : map;
 }
 
 /**

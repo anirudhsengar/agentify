@@ -96,6 +96,12 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Specialist compilation now restores uniquely matched scout identities and
+  recomputes application-inferred touchpoints from explicit evidence. Stale
+  inferred implementation/test ownership can no longer survive later compiler
+  passes, while ambiguous identities and explicit separation exclusions remain
+  unresolved instead of being guessed.
+
 - Coverage citations in Git repositories are now resolved against regular
   tracked files at exact HEAD instead of mutable working-tree existence.
   Agentify-generated paths cannot establish repository coverage, and untracked

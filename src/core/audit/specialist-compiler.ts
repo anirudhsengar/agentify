@@ -2,8 +2,10 @@ import type { CoverageClosureOptions } from "./coverage.ts";
 import type { CodebaseMap } from "./schema/index.ts";
 import {
   assessSpecialistEvidence,
+  removeTrustedInferredAttachments,
   reconcileAuxiliaryDuplicateConcerns,
   reconcileExplicitlyRetainedCandidates,
+  reconcileScoutConcernIdentities,
   reconcileSpecialistEvidence,
   type SpecialistEvidenceAssessment,
 } from "./specialist-completion.ts";
@@ -50,14 +52,36 @@ export function compileSpecialistEvidence(
 ): SpecialistCompilationResult {
   let current = map;
   let normalized = false;
+  let inferredAttachmentsRecomputed = false;
   const seen = new Set<string>();
 
   for (let iteration = 1; iteration <= MAX_SPECIALIST_COMPILATION_ITERATIONS; iteration += 1) {
+    const withCanonicalConcernIdentities = reconcileScoutConcernIdentities(current);
+    if (withCanonicalConcernIdentities !== current) {
+      current = withCanonicalConcernIdentities;
+      normalized = true;
+      continue;
+    }
     const withoutRetainedCandidates = reconcileExplicitlyRetainedCandidates(current);
     if (withoutRetainedCandidates !== current) {
       current = withoutRetainedCandidates;
       normalized = true;
       continue;
+    }
+    const withoutTrustedAttachments = inferredAttachmentsRecomputed
+      ? current
+      : removeTrustedInferredAttachments(current);
+    inferredAttachmentsRecomputed = true;
+    if (withoutTrustedAttachments !== current) {
+      const baseAssessment = assessSpecialistEvidence(withoutTrustedAttachments, options);
+      if (baseAssessment.complete) {
+        const rebuilt = reconcileSpecialistEvidence(withoutTrustedAttachments, baseAssessment);
+        if (mapFingerprint(rebuilt) !== mapFingerprint(current)) {
+          current = rebuilt;
+          normalized = true;
+          continue;
+        }
+      }
     }
     const assessment = assessSpecialistEvidence(current, options);
     if (!assessment.complete) {

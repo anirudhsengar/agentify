@@ -360,6 +360,7 @@ test("specialist compilation rejects normalization-created ownership gaps and re
     );
     assert.ok(vetTouchpoint);
     vetTouchpoint.centrality = "core";
+    vetTouchpoint.role = "Explicitly owns the shared Vet representation contract.";
 
     const fixedPoint = compileSpecialistEvidence(compiled.map, { cwd });
     assert.equal(fixedPoint.complete, true, fixedPoint.reasons.join("; "));
@@ -464,7 +465,7 @@ test("specialist compilation canonicalizes scout names and recomputes trusted in
     const inventory = concern({
       name: "Disabled and excluded test inventory maintenance",
       covers: "ProblemList exclusion parsing and its mirrored regression behavior.",
-      excludes: "Playlist-to-Make generation and dependency acquisition.",
+      excludes: "Playlist-to-Make generation, dependency acquisition, and openjdk/excludes inputs owned by test suites.",
       touchpoints: [
         {
           path: "scripts/disabled_tests/exclude_openjdk.py",
@@ -518,6 +519,16 @@ test("specialist compilation canonicalizes scout names and recomputes trusted in
         ],
       }],
     };
+
+    const ambiguous = structuredClone(map);
+    ambiguous.concern_evidence!.concerns.push({
+      ...structuredClone(acquisition),
+      concern: "Test dependency and external material acquisition",
+    });
+    const ambiguousCompilation = compileSpecialistEvidence(ambiguous, { cwd });
+    assert.ok(ambiguousCompilation.map.concern_evidence!.concerns.some((entry) =>
+      entry.concern.includes("seed paths:")
+    ));
 
     const compiled = compileSpecialistEvidence(map, { cwd });
     assert.equal(compiled.status, "compiled", compiled.reasons.join("; "));
