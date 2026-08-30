@@ -8,7 +8,7 @@ import {
   readGitCommitTimestamp,
   synchronizeRepositorySpecialists,
 } from "../../src/core/specialists/index.ts";
-import { makeSpecialistFixtureMap } from "../fixtures/specialist-map.ts";
+import { makeSpecialistFixtureMap, SPECIALIST_FIXTURE_TRACKED_FILES, SPECIALIST_FIXTURE_SOURCES } from "../fixtures/specialist-map.ts";
 import { installSelfUpdatePolicy } from "../learning/installation-fixture.ts";
 
 const cwd = path.resolve(process.argv[2] ?? "");
@@ -31,12 +31,12 @@ write("package.json", `${JSON.stringify({ name: "installed-learning-fixture", pr
 for (const relativePath of [
   "src/index.ts",
   "src/lib.ts",
-  "src/billing/index.ts",
+  ...SPECIALIST_FIXTURE_TRACKED_FILES,
   "src/billing/types.ts",
   "tests/billing.test.ts",
   "scripts/prime-db.sh",
 ]) {
-  write(relativePath, `${relativePath}\n`);
+  write(relativePath, SPECIALIST_FIXTURE_SOURCES[relativePath] ?? `${relativePath}\n`);
 }
 
 git("init", "-q");
