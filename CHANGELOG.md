@@ -48,6 +48,11 @@ All notable changes to Agentify are documented here.
 
 ### Changed
 
+- Existing-concern retraces now compare the candidate portfolio with the exact
+  current map before typed checkpointing. A submission that reopens any tracked
+  path already covered or substantively exempted is rejected with the regressed
+  paths, so repair cannot trade one unresolved obligation for another while
+  retaining a stable concern name.
 - Path-backed rejected candidates that claim behavior is accepted, existing,
   or subsumed elsewhere now exempt tracked obligations only when their named
   disposition semantically binds to a real accepted concern. Independent

@@ -60,6 +60,7 @@ import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { capProviderOutputTokens, forceProviderToolChoice } from "../pi-sdk-runtime.ts";
 import { ConcernSchema, type Concern } from "./schema/concerns.ts";
+import type { CodebaseMap } from "./schema/index.ts";
 import { assessSpecialistEvidence } from "./specialist-completion.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
@@ -529,6 +530,7 @@ export function createConcernSubmissionTool(
     repositoryRoot?: string,
     expectedConcern?: string,
     requiredScopePaths: readonly string[] = [],
+    existingMap?: CodebaseMap,
 ): ToolDefinition {
     return defineTool({
         name: "submit_concern_report",
@@ -586,6 +588,38 @@ export function createConcernSubmissionTool(
                     isError: true,
                     details: { recorded: false, concern: null },
                 };
+            }
+            if (repositoryRoot !== undefined && expectedConcern !== undefined && existingMap?.concern_evidence) {
+                const concernIndex = existingMap.concern_evidence.concerns.findIndex((concern) =>
+                    concern.concern === expectedConcern
+                );
+                if (concernIndex >= 0) {
+                    const baseline = assessSpecialistEvidence(existingMap, { cwd: repositoryRoot });
+                    const concerns = [...existingMap.concern_evidence.concerns];
+                    concerns[concernIndex] = decoded.concern;
+                    const candidate = assessSpecialistEvidence({
+                        ...existingMap,
+                        concern_evidence: { ...existingMap.concern_evidence, concerns },
+                    }, { cwd: repositoryRoot });
+                    const previouslyClosed = new Set([
+                        ...baseline.covered_paths,
+                        ...baseline.exempted_paths,
+                    ]);
+                    const newlyUncovered = candidate.uncovered_paths.filter((repositoryPath) =>
+                        previouslyClosed.has(repositoryPath)
+                    );
+                    if (newlyUncovered.length > 0) {
+                        return {
+                            content: [{
+                                type: "text",
+                                text:
+                                    `Error: retracing an existing concern cannot make tracked obligations newly uncovered: ${newlyUncovered.join(", ")}; retain that verified evidence while repairing the requested gap.`,
+                            }],
+                            isError: true,
+                            details: { recorded: false, concern: null },
+                        };
+                    }
+                }
             }
             const canonicalReport = `## Report\n\`\`\`json\n${JSON.stringify(decoded.concern, null, 2)}\n\`\`\``;
             if (Buffer.byteLength(canonicalReport, "utf8") > MAX_REPORT_BYTES) {
@@ -858,9 +892,12 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 stateDir,
             );
         }
-        const requiredScopePaths = mode === "concern_tracer" && expectedConcern
+        const existingMap = mode === "concern_tracer" && expectedConcern
+            ? loadCanonicalMapAt(ctx.cwd, stateDir)
+            : null;
+        const requiredScopePaths = existingMap && expectedConcern
             ? [...new Set(
-                (loadCanonicalMapAt(ctx.cwd, stateDir)?.concern_evidence?.concerns.find((concern) =>
+                (existingMap.concern_evidence?.concerns.find((concern) =>
                     concern.concern === expectedConcern
                 )?.touchpoints ?? [])
                     .filter((touchpoint) => touchpoint.centrality === "core")
@@ -1115,7 +1152,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const concernSubmissionTool = mode === "concern_tracer"
                 ? createConcernSubmissionTool(concernObservedAt as string, (concern) => {
                     submission.concern = concern;
-                }, ctx.cwd, expectedConcern, requiredScopePaths)
+                }, ctx.cwd, expectedConcern, requiredScopePaths, existingMap ?? undefined)
                 : null;
             const sessionTools = concernSubmissionTool
                 ? [...toolsForMode, concernSubmissionTool.name]

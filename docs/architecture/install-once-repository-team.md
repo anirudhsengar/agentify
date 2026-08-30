@@ -268,7 +268,10 @@ unrecognized user state and fails closed.
 If a bounded continuation fails, rollback retains the newest map from that
 transaction rather than restoring its older diagnostic snapshot. A successful
 tracer receipt without a matching persisted concern body remains an explicit
-retrace obligation. Aggregate provider turns are counted from assistant
+retrace obligation. Before an existing-concern tracer submission is
+checkpointed, the application compares its candidate map with the current
+tracked assessment and rejects any replacement that makes a previously covered
+or substantively exempted path newly unresolved. Aggregate provider turns are counted from assistant
 provider responses, not user or tool-result transport messages. Concern deltas
 default to recursive append with structural deduplication; an explicit merge
 strategy remains available for an intentional repair.

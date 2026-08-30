@@ -16,6 +16,7 @@ import {
   parseStructuredConcernReport,
   shouldForceConcernSubmission,
 } from "../../src/core/audit/spawn-explorer-tool.ts";
+import { assessSpecialistEvidence } from "../../src/core/audit/specialist-completion.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
 const REPORT = `## Report
@@ -245,13 +246,14 @@ test("a retracer cannot trade one covered repository obligation for another", as
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-concern-monotonic-"));
   try {
     fs.mkdirSync(path.join(cwd, "src/extract"), { recursive: true });
+    fs.mkdirSync(path.join(cwd, "src/model"), { recursive: true });
     for (const repositoryPath of [
       "README.md",
       "src/index.ts",
       "src/lib.ts",
       "src/extract/mod.rs",
       "src/extract/rejection.rs",
-      "src/extract/person.rs",
+      "src/model/person.rs",
     ]) {
       fs.writeFileSync(path.join(cwd, repositoryPath), "fixture\n");
     }
@@ -264,7 +266,7 @@ test("a retracer cannot trade one covered repository obligation for another", as
     const currentConcern = parseStructuredConcernReport(REPORT, "2026-08-29T00:00:00.000Z");
     assert.ok(currentConcern);
     currentConcern.touchpoints.push({
-      path: "src/extract/person.rs",
+      path: "src/model/person.rs",
       symbol: "Person",
       role: "Carries the previously verified request identity.",
       line_range: null,
@@ -274,17 +276,30 @@ test("a retracer cannot trade one covered repository obligation for another", as
       skeleton: {
         ...makeValidCodebaseMap().skeleton,
         first_5_files_for_fresh_agent: [{
-          path: "src/extract/person.rs",
+          path: "src/model/person.rs",
           why: "Previously covered public request identity.",
         }],
       },
       concern_evidence: { concerns: [currentConcern], not_concerns: [] },
       expert_evidence: undefined,
     });
+    assert.ok(
+      assessSpecialistEvidence(currentMap, { cwd }).covered_paths.includes("src/model/person.rs"),
+      "the baseline fixture must close the tracked Person obligation",
+    );
     let submissions = 0;
     const parsed = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null") as {
       touchpoints: Array<Record<string, unknown>>;
     };
+    const regressiveConcern = parseStructuredConcernReport(REPORT, "2026-08-29T00:00:00.000Z");
+    assert.ok(regressiveConcern);
+    assert.ok(
+      assessSpecialistEvidence({
+        ...currentMap,
+        concern_evidence: { concerns: [regressiveConcern], not_concerns: [] },
+      }, { cwd }).uncovered_paths.includes("src/model/person.rs"),
+      "the replacement fixture must reopen the tracked Person obligation",
+    );
     const factory = createConcernSubmissionTool as unknown as (
       observedAt: string,
       onSubmit: () => void,
@@ -305,11 +320,11 @@ test("a retracer cannot trade one covered repository obligation for another", as
       {} as never,
     ) as { content: Array<{ type: string; text: string }>; isError?: boolean };
     assert.equal(regressive.isError, true);
-    assert.match(regressive.content[0]?.text ?? "", /newly uncovered.*src\/extract\/person\.rs/iu);
+    assert.match(regressive.content[0]?.text ?? "", /newly uncovered.*src\/model\/person\.rs/iu);
     assert.equal(submissions, 0);
 
     parsed.touchpoints.push({
-      path: "src/extract/person.rs",
+      path: "src/model/person.rs",
       symbol: "Person",
       role: "Retains the previously verified request identity.",
       line_range: null,
