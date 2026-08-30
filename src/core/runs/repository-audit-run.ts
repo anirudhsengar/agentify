@@ -113,7 +113,7 @@ function repairPrompt(
     "Every concern_tracer call must pass the exact intended identity in concern. When repairing an accepted concern, reuse its name verbatim; do not create a renamed or narrower duplicate.",
     "Shared files must appear under every concern they serve with the role they play in that concern; overlap is expected and must never cause merging.",
     "Do not include .agentify/** or .github/agentify/** as repository architecture, specialists, or application evidence.",
-    "Agentify validates and checkpoints complete concern_tracer bodies directly. Use write_map_delta to preserve accepted concerns while recording rejected candidates in not_concerns, without retranscribing tracer reports. Omit the dimension parameter because concern evidence closes no D1-D10 dimension.",
+    "Agentify validates and checkpoints complete concern_tracer bodies directly. Never retranscribe or resend accepted concern bodies through write_map_delta. Use write_map_delta only to record rejected candidates in not_concerns, or submit an empty concern list when no rejection is needed. Omit the dimension parameter because concern evidence closes no D1-D10 dimension.",
     "Do not modify application files, workflows, dependencies, prompts, or documentation. Do not return prose instead of the structured write_map_delta call.",
   ].join(" ");
 }
@@ -369,7 +369,7 @@ async function repairSpecialistPortfolio(
         requiredToolName: "write_map_delta",
         maxAttempts: 2,
         userPrompt:
-          "Submit the repaired concern_evidence through write_map_delta now. Do not return prose.",
+          "Checkpoint only new not_concerns decisions through write_map_delta now; pass an empty concern list when tracer checkpoints already contain the repair. Do not retranscribe concern bodies or return prose.",
         shouldRecover: () => {
           const current = loadCanonicalMapAt(context.cwd, stateDir);
           return current !== null

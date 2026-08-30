@@ -115,6 +115,10 @@ Finalization independently requires a current explorer receipt attestation.
 Missing or stale receipts, failed tracers, and accepted concerns without a
 successful tracer abort the transaction and remove Agentify-managed persistent
 artifacts instead of leaving a partial team.
+Typed tracer checkpoints are the only path that may replace an existing concern
+body. Incremental map deltas may append a new concern or replay an identical
+checkpoint, but reject a changed body with the same semantic identity so repair
+cannot bypass scope and monotonicity validation or create duplicate specialists.
 
 The installation transaction is captured before recognized runtime repair or
 final compilation can persist any managed path or normalized map. The

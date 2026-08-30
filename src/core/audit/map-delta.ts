@@ -27,7 +27,7 @@ function deepMerge(
     return result;
 }
 
-function stableArrayEntryIdentity(value: unknown): string {
+export function stableMapValueIdentity(value: unknown): string {
     const canonicalize = (candidate: unknown): unknown => {
         if (Array.isArray(candidate)) return candidate.map(canonicalize);
         if (!isPlainObject(candidate)) return candidate;
@@ -49,9 +49,9 @@ function appendArrays(
         const existing = result[key];
         if (Array.isArray(value) && Array.isArray(existing)) {
             const appended = [...existing];
-            const seen = new Set(existing.map(stableArrayEntryIdentity));
+            const seen = new Set(existing.map(stableMapValueIdentity));
             for (const entry of value) {
-                const identity = stableArrayEntryIdentity(entry);
+                const identity = stableMapValueIdentity(entry);
                 if (seen.has(identity)) continue;
                 seen.add(identity);
                 appended.push(entry);

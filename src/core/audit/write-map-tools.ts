@@ -13,7 +13,11 @@ import {
     formatCoverageClosure,
     type FormattedCoverageClosure,
 } from "./map-coverage.ts";
-import { applyMapDelta, type MapMergeStrategy } from "./map-delta.ts";
+import {
+    applyMapDelta,
+    stableMapValueIdentity,
+    type MapMergeStrategy,
+} from "./map-delta.ts";
 import {
   mergeEvidenceIntoGapDraft,
   mergeEvidenceIntoMap,
@@ -1351,6 +1355,35 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                     },
                 )
                 : prepared.delta as UnknownRecord;
+
+            const submittedConcerns = (delta.concern_evidence as UnknownRecord | undefined)?.concerns;
+            if (Array.isArray(submittedConcerns)) {
+                const recorded = new Map<string, string>();
+                for (const concern of existing.concern_evidence?.concerns ?? []) {
+                    recorded.set(concern.concern.trim().toLowerCase(), stableMapValueIdentity(concern));
+                }
+                for (const concern of submittedConcerns) {
+                    if (concern === null || typeof concern !== "object" || Array.isArray(concern)) continue;
+                    const name = (concern as UnknownRecord).concern;
+                    if (typeof name !== "string" || name.trim() === "") continue;
+                    const identity = name.trim().toLowerCase();
+                    const body = stableMapValueIdentity(concern);
+                    const existingBody = recorded.get(identity);
+                    if (existingBody !== undefined && existingBody !== body) {
+                        return {
+                            content: [{
+                                type: "text",
+                                text:
+                                    `Error: concern ${JSON.stringify(name)} already exists with a different body. `
+                                    + "Use concern_tracer with that exact application-bound identity so Agentify can validate and checkpoint the replacement.",
+                            }],
+                            isError: true,
+                            details: undefined as unknown as Record<string, unknown>,
+                        };
+                    }
+                    recorded.set(identity, body);
+                }
+            }
 
             let reserveWarning: string | undefined;
             if (dimension) {

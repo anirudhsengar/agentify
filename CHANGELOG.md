@@ -10,6 +10,10 @@ All notable changes to Agentify are documented here.
   uniquely owned implementation path, preventing mutually dependent ownership
   resolutions from erasing an accepted behavior while preserving resolution
   when a genuinely independent core path exists.
+- Concern-evidence deltas now reject changed bodies for an existing semantic
+  identity. Existing concerns must be replaced through the application-bound
+  tracer checkpoint, preventing repair from appending duplicate specialists or
+  bypassing scope and monotonicity checks.
 
 ### Added
 
