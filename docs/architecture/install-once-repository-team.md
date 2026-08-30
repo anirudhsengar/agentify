@@ -258,10 +258,12 @@ behavioral locality, two semantic matches, or an exact multi-segment behavioral
 directory already owned by the concern. Locality suffixes used to distinguish
 same-name files are never treated as behavioral words. A single generic word
 plus a shared source root cannot establish ownership, and ties remain
-unresolved. Repository-relative subtree exclusions such as `router/*` apply
-below source roots. An explicitly cited implementation carries its mirrored
-test unless the exclusion names that path; merely citing a test does not
-override behavioral negative evidence.
+unresolved. Locality affinity must match the concern's declared name and scope;
+entry questions and supporting roles may route adjacent work but do not
+establish positive tracked-file ownership. Repository-relative subtree
+exclusions such as `router/*` apply below source roots. An explicitly cited
+implementation carries its mirrored test unless the exclusion names that path;
+merely citing a test does not override behavioral negative evidence.
 Observed public type traces deterministically bind a uniquely resolved tracked
 declaration to one specialist only when all traced runtime files have the same
 normalized core owner. The declaration becomes a core touchpoint; multiple type

@@ -882,7 +882,6 @@ function concernSemanticTokens(
     concern.concern,
     concern.one_line,
     concern.covers,
-    ...concern.entry_questions,
     ...concern.flows.flatMap((flow) => [flow.name, flow.description]),
     ...concern.touchpoints.flatMap((touchpoint) => [
       touchpoint.path,
@@ -1030,6 +1029,7 @@ interface AttachmentConcernCandidate {
   concern: NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
   assessment: AssessedConcern;
   tokens: Set<string>;
+  scopeTokens: Set<string>;
   excludedTokens: Set<string>;
 }
 
@@ -1053,7 +1053,7 @@ function selectUniqueConcern(input: {
     const distinctiveSemanticMatches = [...candidateTokens].filter((token) =>
       !WEAK_ATTACHMENT_TOKENS.has(token) && candidate.tokens.has(token)
     ).length;
-    const localityMatches = matchingTokenCount(localityTokens, candidate.tokens);
+    const localityMatches = matchingTokenCount(localityTokens, candidate.scopeTokens);
     return {
       candidate,
       pathScore,
@@ -1336,6 +1336,7 @@ function inferRepositoryConcernAttachments(input: {
       concern,
       assessment,
       tokens: concernSemanticTokens(concern),
+      scopeTokens: semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`),
       excludedTokens: semanticTokens(concern.excludes),
     }];
   });
@@ -1881,6 +1882,7 @@ export function assessSpecialistEvidence(
       concern,
       assessment,
       tokens: concernSemanticTokens(concern),
+      scopeTokens: semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`),
       excludedTokens: semanticTokens(concern.excludes),
     };
     for (const repositoryPath of assessment.contextPaths) {

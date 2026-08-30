@@ -6,6 +6,10 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Specialist entry questions no longer act as positive deterministic ownership
+  evidence, and locality affinity must match the concern's declared scope;
+  boundary questions and supporting roles may name adjacent behaviors without
+  claiming their implementation and tests.
 - Repository-relative subtree exclusions such as `router/*` now remain negative
   ownership evidence below source roots, so a supporting citation cannot
   compete for implementation or mirrored-test ownership that it excludes.
