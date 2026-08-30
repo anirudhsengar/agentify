@@ -450,3 +450,84 @@ test("path-backed rejection labels close only their exact tracked cluster", () =
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test("specialist compilation canonicalizes scout names and recomputes trusted inferred attachments", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    write(cwd, "scripts/disabled_tests/exclude_openjdk.py");
+    write(cwd, "scripts/disabled_tests/tests/test_exclude_openjdk.py");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "add exclusion maintenance fixture");
+    const map = aqaShapedMap();
+    const acquisition = map.concern_evidence!.concerns[0]!;
+    acquisition.concern = "Test dependency and external material acquisition; seed paths: get.sh and Jenkins. Trace sources, branches, credentials, and tracked descriptors only.";
+    const inventory = concern({
+      name: "Disabled and excluded test inventory maintenance",
+      covers: "ProblemList exclusion parsing and its mirrored regression behavior.",
+      excludes: "Playlist-to-Make generation and dependency acquisition.",
+      touchpoints: [
+        {
+          path: "scripts/disabled_tests/exclude_openjdk.py",
+          symbol: "parse_exclude_command",
+          role: "Implements exclusion maintenance.",
+          line_range: null,
+          centrality: "core",
+        },
+        {
+          path: "scripts/disabled_tests/tests/test_exclude_openjdk.py",
+          symbol: "TestParseExcludeCommand",
+          role: "Mirrored exclusion regression coverage.",
+          line_range: null,
+          centrality: "supporting",
+        },
+      ],
+      flow: [
+        "scripts/disabled_tests/exclude_openjdk.py",
+        "scripts/disabled_tests/tests/test_exclude_openjdk.py",
+      ],
+    });
+    map.concern_evidence!.concerns.push(inventory);
+    const playlist = map.concern_evidence!.concerns[1]!;
+    for (const repositoryPath of [
+      "scripts/disabled_tests/exclude_openjdk.py",
+      "scripts/disabled_tests/tests/test_exclude_openjdk.py",
+    ]) {
+      playlist.touchpoints.push({
+        path: repositoryPath,
+        symbol: null,
+        role: "Trusted semantic closure attached this tracked dependency: unique path-local and semantic match to accepted concern evidence.",
+        line_range: null,
+        centrality: "supporting",
+      });
+    }
+    map.explorer_receipts = {
+      repository_commit: git(cwd, "rev-parse", "HEAD"),
+      run_id: "fixture-run",
+      receipts: [{
+        sequence: 1,
+        mode: "concern_scout",
+        success: true,
+        target_path: ".",
+        focus: "discover repository concerns",
+        report_concern: null,
+        failure_kind: null,
+        proposed_concerns: [
+          "Test dependency and external material acquisition",
+          "Playlist-to-Make target generation",
+          "Disabled and excluded test inventory maintenance",
+        ],
+      }],
+    };
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.status, "compiled", compiled.reasons.join("; "));
+    const concerns = compiled.map.concern_evidence!.concerns;
+    assert.ok(concerns.some((entry) => entry.concern === "Test dependency and external material acquisition"));
+    assert.ok(!concerns.some((entry) => entry.concern.includes("seed paths:")));
+    const normalizedPlaylist = concerns.find((entry) => entry.concern === "Playlist-to-Make target generation")!;
+    assert.ok(!normalizedPlaylist.touchpoints.some((entry) => entry.path.includes("exclude_openjdk")));
+    assert.strictEqual(compileSpecialistEvidence(compiled.map, { cwd }).map, compiled.map);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
