@@ -192,17 +192,35 @@ export const STABILIZATION_PORTFOLIOS: Record<string, StabilizationPortfolioFixt
         excludes: "Route matching algorithms and concrete middleware policy behavior.",
         flow: { name: "execute a middleware chain", steps: [
           { path: "src/compose.ts", what_happens: "Runs middleware in order and wires next calls." },
-          { path: "src/middleware/method-override/index.ts", what_happens: "Applies a concrete middleware transformation." },
+          { path: "src/compose.test.ts", what_happens: "Pins single-use next, error propagation, and response finalization." },
         ] },
         core: [
           { path: "src/compose.ts", symbol: "compose", role: "Owns middleware continuation and error propagation." },
-          { path: "src/middleware/method-override/index.ts", symbol: "methodOverride", role: "Exercises middleware request mutation." },
+          { path: "src/compose.test.ts", symbol: "compose tests", role: "Owns continuation and error propagation regression coverage." },
         ],
         invariant: { rule: "Every chain either returns a Response or calls next.", why: "Otherwise the request remains unfinalized." },
         entry_question: "Does this alter middleware order, next semantics, or response finalization?",
       },
+      {
+        name: "Request context and response lifecycle",
+        covers: "Lazy request body access, per-request variables, response construction, and finalization state.",
+        excludes: "Routing algorithms, middleware continuation order, and individual authentication or response-header policies.",
+        flow: { name: "construct a response from request state", steps: [
+          { path: "src/request.ts", what_happens: "Exposes lazy request access and caches consumed body representations." },
+          { path: "src/context.ts", what_happens: "Constructs a Response using pending headers and request-scoped state, then records finalization." },
+        ] },
+        core: [
+          { path: "src/request.ts", symbol: "HonoRequest", role: "Owns request access and body caching semantics." },
+          { path: "src/context.ts", symbol: "Context", role: "Owns request-scoped variables and Response finalization." },
+        ],
+        invariant: { rule: "Assigning the response finalizes the Context while preserving pending headers.", why: "Handlers depend on consistent response state after middleware returns." },
+        entry_question: "Does this change body consumption, per-request state, headers, or finalization?",
+      },
     ],
-    rejected: [{ candidate: "utils", why: "Utility folders support concerns but are not specialists themselves." }],
+    rejected: [
+      { candidate: "utils", why: "Utility folders support concerns but are not specialists themselves." },
+      { candidate: "Built-in middleware library (auth, security, transport)", why: "A catalog joined by the middleware API combines independent JWT, CSRF, CORS, and security-header invariants rather than one body of knowledge." },
+    ],
   },
   gin: {
     project_type: "Go HTTP web framework",

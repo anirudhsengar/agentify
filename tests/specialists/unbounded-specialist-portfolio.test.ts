@@ -68,3 +68,16 @@ test("concern discovery rejects generic catalogs built from unrelated behaviors"
     /never mark a shared integration file `core` while behavior-specific implementations are only `supporting`/i,
   );
 });
+
+test("specialist discovery does not mistake local public behavior for generic mechanics", () => {
+  const scout = fs.readFileSync(
+    new URL("../../src/core/audit/prompts/explorers/concern_scout.md", import.meta.url), "utf8",
+  );
+  const builder = fs.readFileSync(
+    new URL("../../src/core/audit/prompts/builder.md", import.meta.url), "utf8",
+  );
+  assert.doesNotMatch(scout, /two unrelated top-level areas|Names that appear in exactly one.*usually modules/s);
+  assert.match(scout, /single (?:file|subtree).*independent.*invariants/is);
+  assert.match(scout, /public.*(?:lifecycle|continuation).*product behavior/is);
+  assert.match(builder, /review.*scout.*rejections.*(?:size|locality).*not.*rejection/is);
+});
