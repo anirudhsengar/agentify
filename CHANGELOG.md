@@ -28,6 +28,9 @@ All notable changes to Agentify are documented here.
 - Rejection validation now treats only explicit transfer language such as
   `subsumed by` as delegation, so negative hypotheticals about attaching
   governance files to an accepted concern remain independent rejections.
+- Failed tracer receipts now retain their application-bound concern identity,
+  so a later successful exact-identity retrace clears that failure without
+  treating unrelated or still-unretraced timeouts as resolved.
 
 ### Added
 

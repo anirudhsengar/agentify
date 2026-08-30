@@ -1421,6 +1421,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     target_path: params.target_path,
                     resolved_target_path: resolvedTarget,
                     focus: params.focus ?? null,
+                    expected_concern: expectedConcern ?? null,
                     summary: params.summary ?? null,
                     error_message: msg,
                     failure_kind: /timeout|timed out/i.test(msg)

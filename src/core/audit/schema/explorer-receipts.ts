@@ -8,6 +8,7 @@ export const ExplorerReceiptSchema = Type.Object({
   success: Type.Boolean(),
   target_path: SafeRelativePathSchema,
   focus: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  expected_concern: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
   report_concern: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
   failure_kind: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
   proposed_concerns: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 256 }), {

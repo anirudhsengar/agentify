@@ -127,6 +127,11 @@ flows, touchpoints, invariants, pitfalls, questions, validation, and scope, and
 derives exclusions from the remaining accepted portfolio. Conflicting same-name
 flows or unrelated bodies remain unresolved; no model retranscribes evidence.
 
+Tracer receipts retain the exact application-bound concern identity separately
+from their free-form focus. A failed or timed-out tracer remains unresolved
+until a later successful tracer for that same identity is attested; verbose
+repair wording cannot create a separate receipt obligation.
+
 The installation transaction is captured before recognized runtime repair or
 final compilation can persist any managed path or normalized map. The
 specialist synchronizer then independently requires that

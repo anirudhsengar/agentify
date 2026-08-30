@@ -16,6 +16,7 @@ interface ExplorerReceipt {
   success: boolean;
   targetPath: string;
   focus: string | null;
+  expectedConcern: string | null;
   reportConcern: string | null;
   failureKind: string | null;
   proposedConcerns: string[];
@@ -158,7 +159,7 @@ function semanticallyRelated(left: string, right: string): boolean {
 }
 
 function receiptIdentity(receipt: ExplorerReceipt): string {
-  return receipt.reportConcern ?? receipt.focus ?? receipt.targetPath;
+  return receipt.expectedConcern ?? receipt.reportConcern ?? receipt.focus ?? receipt.targetPath;
 }
 
 function failureDescription(receipt: ExplorerReceipt): string {
@@ -189,6 +190,7 @@ export class ExplorerReceiptTracker {
       ?? text.match(/\b(?:explored|for)\s+(.+?)\s+(?:in\s+\d+ms|failed:)/i)?.[1]?.trim()
       ?? ".";
     const focus = stringField(details.focus) ?? focusFromText(text);
+    const expectedConcern = stringField(details.expected_concern);
     const reportConcern = stringField(details.report_concern)
       ?? (mode === "concern_tracer" ? reportConcernFromText(text) : null);
     const success = event.isError !== true
@@ -205,6 +207,7 @@ export class ExplorerReceiptTracker {
       success,
       targetPath,
       focus,
+      expectedConcern,
       reportConcern,
       failureKind,
       proposedConcerns: mode === "concern_scout" && success
@@ -224,6 +227,7 @@ export class ExplorerReceiptTracker {
         success: receipt.success,
         target_path: receipt.targetPath,
         focus: receipt.focus,
+        ...(receipt.expectedConcern === null ? {} : { expected_concern: receipt.expectedConcern }),
         report_concern: receipt.reportConcern,
         failure_kind: receipt.failureKind,
         ...(receipt.proposedConcerns.length > 0
@@ -243,6 +247,7 @@ export class ExplorerReceiptTracker {
         success: receipt.success,
         targetPath: receipt.target_path,
         focus: receipt.focus,
+        expectedConcern: receipt.expected_concern ?? null,
         reportConcern: receipt.report_concern,
         failureKind: receipt.failure_kind,
         proposedConcerns: [...(receipt.proposed_concerns ?? [])],
