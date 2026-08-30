@@ -214,7 +214,9 @@ Uncovered JavaScript and TypeScript clusters are ordered by the number of
 distinct tracked modules connected through current-HEAD relative dependency
 edges, with cluster identity as the stable tie-break. Repair handles central
 missing behavior before disconnected leaf utilities unless stronger evidence
-shows another obligation blocks it.
+shows another obligation blocks it. Each pass dispositions every obligation in
+its bounded window and batches exact non-concern decisions instead of consuming
+one pass per cluster.
 Concern-tracer dispatch binds an exact application-owned concern identity. The
 typed submission must preserve it verbatim, so a model cannot rename one scout
 proposal into an alias that later forces a duplicate specialist. Retracing an

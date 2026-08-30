@@ -6,6 +6,9 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Each semantic-repair pass now exhausts its bounded ordered obligation batch
+  and checkpoints exact rejections together instead of spending one of only a
+  few convergence passes on a single cluster.
 - Specialist entry questions no longer act as positive deterministic ownership
   evidence, and locality affinity must match the concern's declared scope;
   boundary questions and supporting roles may name adjacent behaviors without
