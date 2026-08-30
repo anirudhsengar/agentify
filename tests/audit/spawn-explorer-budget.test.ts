@@ -98,6 +98,10 @@ async function testRefusesDuplicateCurrentHeadConcernScout(): Promise<void> {
   let sessionCreated = false;
   try {
     fs.writeFileSync(path.join(cwd, "README.md"), "# fixture\n");
+    fs.mkdirSync(path.join(cwd, "src"), { recursive: true });
+    fs.mkdirSync(path.join(cwd, "tests"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "src", "checkout.ts"), "export function checkout() { return true; }\n");
+    fs.writeFileSync(path.join(cwd, "tests", "checkout.test.ts"), "import { checkout } from '../src/checkout.js';\ncheckout();\n");
     git(cwd, "init", "-q");
     git(cwd, "config", "user.name", "Agentify Test");
     git(cwd, "config", "user.email", "agentify@example.invalid");
@@ -145,6 +149,30 @@ async function testRefusesDuplicateCurrentHeadConcernScout(): Promise<void> {
     assert.equal((result as { isError?: boolean }).isError, true);
     assert.match(textFrom(result), /successful current-HEAD concern_scout already exists/i);
     assert.equal(sessionCreated, false, "duplicate scout must be refused before model execution");
+
+    const unrelatedFocus = await tool.execute(
+      "test-unrelated-supplemental-scout",
+      { mode: "concern_scout", target_path: ".", focus: "Search for deployment behavior" } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((unrelatedFocus as { isError?: boolean }).isError, true);
+    assert.equal(sessionCreated, false, "a supplemental scout must name a current compiler obligation");
+
+    const focusedResult = await tool.execute(
+      "test-focused-supplemental-scout",
+      {
+        mode: "concern_scout",
+        target_path: ".",
+        focus: "Identify the missing behavior owning checkout [src/checkout.ts, tests/checkout.test.ts]",
+      } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((focusedResult as { isError?: boolean }).isError, undefined);
+    assert.equal(sessionCreated, true, "a focused scout may expand an omitted compiler obligation");
 
     fs.writeFileSync(path.join(cwd, "README.md"), "# advanced fixture\n");
     git(cwd, "add", ".");
