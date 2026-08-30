@@ -441,23 +441,33 @@ async function testValidationEnvironmentRemovesCredentials(): Promise<void> {
   const beforeProvider = process.env.MINIMAX_API_KEY;
   const beforeGitHub = process.env.GH_TOKEN;
   const beforeNoColor = process.env.NO_COLOR;
+  const beforeForceColor = process.env.FORCE_COLOR;
+  const beforeCliColorForce = process.env.CLICOLOR_FORCE;
   try {
     process.env.MINIMAX_API_KEY = "provider-secret-placeholder";
     process.env.GH_TOKEN = "github-secret-placeholder";
-    delete process.env.NO_COLOR;
+    process.env.NO_COLOR = "1";
+    process.env.FORCE_COLOR = "3";
+    process.env.CLICOLOR_FORCE = "1";
     const result = DEFAULT_INSTALLER_PROCESS_RUNNER.run({
       program: process.execPath,
       args: [
         "--input-type=module",
         "--eval",
-        "process.stdout.write(JSON.stringify({ secret: Boolean(process.env.MINIMAX_API_KEY || process.env.GH_TOKEN), noColor: process.env.NO_COLOR ?? null, ci: process.env.CI ?? null }))",
+        "process.stdout.write(JSON.stringify({ secret: Boolean(process.env.MINIMAX_API_KEY || process.env.GH_TOKEN), noColor: process.env.NO_COLOR ?? null, forceColor: process.env.FORCE_COLOR ?? null, cliColorForce: process.env.CLICOLOR_FORCE ?? null, ci: process.env.CI ?? null }))",
       ],
       cwd,
       timeoutMs: 10_000,
     });
     assert.equal(result.status, 0);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /secret-placeholder/);
-    assert.deepEqual(JSON.parse(result.stdout), { secret: false, noColor: null, ci: "1" });
+    assert.deepEqual(JSON.parse(result.stdout), {
+      secret: false,
+      noColor: null,
+      forceColor: null,
+      cliColorForce: null,
+      ci: "1",
+    });
   } finally {
     if (beforeProvider === undefined) delete process.env.MINIMAX_API_KEY;
     else process.env.MINIMAX_API_KEY = beforeProvider;
@@ -465,6 +475,10 @@ async function testValidationEnvironmentRemovesCredentials(): Promise<void> {
     else process.env.GH_TOKEN = beforeGitHub;
     if (beforeNoColor === undefined) delete process.env.NO_COLOR;
     else process.env.NO_COLOR = beforeNoColor;
+    if (beforeForceColor === undefined) delete process.env.FORCE_COLOR;
+    else process.env.FORCE_COLOR = beforeForceColor;
+    if (beforeCliColorForce === undefined) delete process.env.CLICOLOR_FORCE;
+    else process.env.CLICOLOR_FORCE = beforeCliColorForce;
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 }
