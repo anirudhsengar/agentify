@@ -271,6 +271,94 @@ test("inferred attachments require behavioral locality instead of one generic to
   }
 });
 
+test("direct module dependencies attach only to one non-excluded concern", () => {
+  const cwd = repository([
+    "src/auth/check.ts",
+    "src/auth/check.test.ts",
+    "src/crypto/signature.ts",
+    "src/crypto/signature.test.ts",
+    "src/plumbing/table.ts",
+    "src/plumbing/table.test.ts",
+    "src/preset/quick.ts",
+    "src/preset/quick.test.ts",
+    "src/render/response.ts",
+    "src/render/response.test.ts",
+    "src/router/trie.ts",
+    "src/router/trie.test.ts",
+    "src/shared/state.ts",
+    "src/shared/state.test.ts",
+  ]);
+  try {
+    fs.writeFileSync(path.join(cwd, "src/router/trie.ts"), [
+      'import { table } from "../plumbing/table.js";',
+      'import { signature } from "../crypto/signature.js";',
+      'import { state } from "../shared/state.js";',
+      "export const route = () => [table, signature, state];",
+      "",
+    ].join("\n"));
+    fs.writeFileSync(path.join(cwd, "src/auth/check.ts"), [
+      'import { state } from "../shared/state.js";',
+      "export const check = () => state;",
+      "",
+    ].join("\n"));
+    fs.writeFileSync(path.join(cwd, "src/render/response.ts"), [
+      'import { state } from "../shared/state.js";',
+      "export const render = () => state;",
+      "",
+    ].join("\n"));
+    fs.writeFileSync(path.join(cwd, "src/preset/quick.ts"), [
+      'export { route } from "../router/trie.js";',
+      "",
+    ].join("\n"));
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "record module edges");
+
+    const routing = concern({
+      name: "request routing",
+      covers: "Selects a route and dispatches the matched handler.",
+      excludes: "Cryptographic signing in src/crypto/signature.ts is a separate specialty.",
+      core: "src/router/trie.ts",
+      test: "src/router/trie.test.ts",
+    });
+    const authentication = concern({
+      name: "authentication",
+      covers: "Verifies credentials and establishes authenticated request state.",
+      excludes: "Routing, rendering, and shared state lifecycle are separate.",
+      core: "src/auth/check.ts",
+      test: "src/auth/check.test.ts",
+    });
+    const rendering = concern({
+      name: "response rendering",
+      covers: "Serializes response values and commits output.",
+      excludes: "Routing, authentication, and shared state lifecycle are separate.",
+      core: "src/render/response.ts",
+      test: "src/render/response.test.ts",
+    });
+    const assessment = assessSpecialistEvidence(
+      mapWithConcerns(
+        [routing.touchpoints[0]!.path, authentication.touchpoints[0]!.path, rendering.touchpoints[0]!.path],
+        [routing, authentication, rendering],
+      ),
+      { cwd },
+    );
+    const routingPaths = assessment.attachments
+      .find((attachment) => attachment.concern === routing.concern)?.paths ?? [];
+
+    assert.ok(routingPaths.includes("src/plumbing/table.ts"));
+    assert.ok(routingPaths.includes("src/plumbing/table.test.ts"));
+    assert.ok(routingPaths.includes("src/preset/quick.ts"));
+    assert.ok(routingPaths.includes("src/preset/quick.test.ts"));
+    assert.ok(!routingPaths.includes("src/crypto/signature.ts"));
+    assert.ok(assessment.uncovered_paths.includes("src/crypto/signature.ts"));
+    assert.ok(!assessment.attachments.some((attachment) =>
+      attachment.paths.includes("src/shared/state.ts")
+    ));
+    assert.ok(assessment.uncovered_paths.includes("src/shared/state.ts"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("test-only repositories may own their executable test behavior as core", () => {
   const cwd = repository([
     "tests/orchestration",
