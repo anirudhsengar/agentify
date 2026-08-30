@@ -280,6 +280,39 @@ function testClosureRejectsExistingAbsenceEvidence(): void {
   }
 }
 
+function testClosureUsesImmutableTrackedEvidence(): void {
+  const cwd = tempDir("evidence-tracked-head");
+  try {
+    ensureGitRepository(cwd);
+    fs.mkdirSync(path.join(cwd, ".agentify", "agents"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, ".agentify", "manifest.json"), "{}\n");
+    fs.writeFileSync(path.join(cwd, ".env"), "dirty working-tree secret\n");
+    const map = makeValidCodebaseMap();
+    map.coverage.D9_process = {
+      status: "covered",
+      confidence: "high",
+      evidence_summary: "Generated Agentify state describes the process.",
+      evidence: [{
+        path: ".agentify/manifest.json",
+        excerpt: "agentify_team_memory",
+        kind: "positive",
+      }],
+    };
+    map.coverage.D8_security = {
+      status: "covered",
+      confidence: "high",
+      evidence_summary: "No environment file is tracked at HEAD.",
+      evidence: [{ path: ".env", excerpt: "No tracked .env file.", kind: "absence" }],
+    };
+    const result = assessCoverageClosure(map, { cwd });
+    assert.ok(result.unresolved.includes("D9_process"));
+    assert.match(result.reasons.D9_process ?? "", /Agentify-generated evidence path/i);
+    assert.ok(!result.unresolved.includes("D8_security"), result.reasons.D8_security);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 function testClosureRejectsEscapingEvidenceCitation(): void {
   const cwd = tempDir("evidence-escaping");
   try {
@@ -720,6 +753,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "closureRejectsMissingEvidenceCitations", fn: testClosureRejectsMissingEvidenceCitations },
   { name: "closureRejectsNonExistentPositiveEvidence", fn: testClosureRejectsNonExistentPositiveEvidence },
   { name: "closureRejectsExistingAbsenceEvidence", fn: testClosureRejectsExistingAbsenceEvidence },
+  { name: "closureUsesImmutableTrackedEvidence", fn: testClosureUsesImmutableTrackedEvidence },
   { name: "closureRejectsEscapingEvidenceCitation", fn: testClosureRejectsEscapingEvidenceCitation },
   { name: "closureRejectsPitfallsWithoutSubstance", fn: testClosureRejectsPitfallsWithoutSubstance },
   { name: "closureRejectsGapStatus", fn: testClosureRejectsGapStatus },
