@@ -121,6 +121,11 @@ Typed tracer checkpoints are the only path that may replace an existing concern
 body. Incremental map deltas may append a new concern or replay an identical
 checkpoint, but reject a changed body with the same semantic identity so repair
 cannot bypass scope and monotonicity validation or create duplicate specialists.
+Each successful tracer also returns at most 4 KiB of fresh compiler feedback
+computed through the same prospective merge used by its trusted checkpoint.
+Exact remaining path/cluster previews and total counts supersede stale repair
+snapshots without another model call. This is semantic feedback only: receipt
+attestation and installation readiness still have independent gates.
 When multiple accepted concerns cannot have independent file-level core owners,
 repair may record a narrower exact identity as subsumed with `grouped_into`
 naming one exact existing broader identity. Deterministic normalization groups

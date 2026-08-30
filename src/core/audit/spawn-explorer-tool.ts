@@ -54,7 +54,7 @@ import {
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { Model, Api } from "@earendil-works/pi-ai";
 import type { AuditResourceBudget } from "./resource-budget.ts";
-import { currentRepositoryCommit } from "./explorer-receipts.ts";
+import { currentRepositoryCommit, mergeExplorerConcernEvidence } from "./explorer-receipts.ts";
 import { loadCanonicalMapAt } from "./map-storage.ts";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
@@ -62,6 +62,7 @@ import { capProviderOutputTokens, forceProviderToolChoice } from "../pi-sdk-runt
 import { ConcernSchema, type Concern } from "./schema/concerns.ts";
 import type { CodebaseMap } from "./schema/index.ts";
 import { assessSpecialistEvidence } from "./specialist-completion.ts";
+import { compileSpecialistEvidence } from "./specialist-compiler.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
 import {
@@ -72,10 +73,9 @@ import {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXPLORERS_DIR = path.join(HERE, "prompts", "explorers");
 
-// A 32 KB report cap is enough
-// for a structured ## Report; anything larger is truncated to
-// prevent context overflow.
+// Reject oversized concern reports; bound compiler feedback separately.
 const MAX_REPORT_BYTES = 16_000;
+const MAX_COMPILER_FEEDBACK_BYTES = 4_096;
 // A repository audit must finish in a useful amount of time even when a
 // provider stalls. These are deliberately conservative defaults: the parent
 // can synthesize from its own scouts and honest gaps after bounded attempts.
@@ -769,6 +769,32 @@ function roundCost(costUsd: number): number {
     return Number(costUsd.toFixed(12));
 }
 
+function currentCompilerFeedback(cwd: string, stateDir: string, concern: Concern) {
+    const map = loadCanonicalMapAt(cwd, stateDir);
+    if (map === null) return null;
+    const compiled = compileSpecialistEvidence(mergeExplorerConcernEvidence(map, concern), { cwd });
+    const assessment = compiled.assessment;
+    const feedback = {
+        status: compiled.status,
+        uncovered_path_count: assessment.uncovered_paths.length,
+        uncovered_cluster_count: assessment.uncovered_clusters.length,
+        reason_count: compiled.reasons.length,
+        uncovered_paths: assessment.uncovered_paths.slice(0, 12),
+        uncovered_clusters: assessment.uncovered_clusters.slice(0, 8).map((cluster) => ({
+            cluster_key: cluster.cluster_key,
+            paths: [...cluster.implementation_paths, ...cluster.test_paths],
+        })),
+        reasons: compiled.reasons.slice(0, 4),
+    };
+    // Keep exact identities; omit whole entries instead of truncating paths.
+    while (Buffer.byteLength(JSON.stringify(feedback), "utf8") > MAX_COMPILER_FEEDBACK_BYTES) {
+        if (feedback.reasons.length > 0) feedback.reasons.pop();
+        else if (feedback.uncovered_clusters.length > 0) feedback.uncovered_clusters.pop();
+        else feedback.uncovered_paths.pop();
+    }
+    return feedback;
+}
+
 function successfulCurrentHeadScouts(cwd: string, stateDir: string) {
     const map = loadCanonicalMapAt(cwd, stateDir);
     const currentCommit = currentRepositoryCommit(cwd);
@@ -1360,6 +1386,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 }
             }
 
+            const compilerFeedback = submittedConcern
+                ? currentCompilerFeedback(ctx.cwd, stateDir, submittedConcern)
+                : null;
             const durationMs = Date.now() - start;
             const stepWarning =
                 readCount > maxReads || bashCount > maxBash
@@ -1378,6 +1407,10 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     ? " [WARNING: 80% of sub-agent cost budget used]"
                     : "";
 
+            const feedbackText = compilerFeedback === null ? "" :
+                "\n\nTrusted compiler feedback after this submission (bounded preview; receipts and readiness are checked separately). " +
+                "Replan from these current obligations instead of the earlier snapshot:\n" + JSON.stringify(compilerFeedback);
+
             return {
                 content: [
                     {
@@ -1386,7 +1419,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                             `Sub-agent (mode=${mode}, model=${subAgentModelLabel}) explored ${params.target_path} in ${durationMs}ms. ` +
                             `provider_calls=${providerCalls}/${maxProviderCalls}, reads=${readCount}/${maxReads}, ` +
                             `bash=${bashCount}/${maxBash}, ${costText}${stepWarning}${costWarning}.\n\n` +
-                            report,
+                            report + feedbackText,
                     },
                 ],
                 details: {
@@ -1405,6 +1438,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     report_truncated_path: truncatedPath || null,
                     report_concern: structuredConcern?.concern?.concern ?? null,
                     structured_concern: structuredConcern?.concern ?? null,
+                    compiler_feedback: compilerFeedback,
                     reads: readCount,
                     bash: bashCount,
                     cost_usd: sessionCostUsd,

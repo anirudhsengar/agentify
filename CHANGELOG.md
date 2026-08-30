@@ -6,6 +6,9 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Successful concern tracers return a bounded fresh compiler-obligation preview
+  from the exact prospective checkpoint merge, preventing repairs from acting
+  on stale clusters without adding model calls or changing readiness gates.
 - Slash-separated exclusion prose remains negative semantic evidence unless it
   actually names a tracked file or subtree; nonexistent path interpretations
   can no longer discard words such as routing or middleware exclusions.

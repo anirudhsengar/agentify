@@ -364,8 +364,20 @@ export function checkpointExplorerConcernEvidence(
   const concernName = stringField(concern.concern);
   if (!concernName) return false;
   const identity = concernName.toLowerCase();
+  const merged = mergeExplorerConcernEvidence(map, concern);
+  if (!merged.concern_evidence?.concerns.some((candidate) => candidate.concern.trim().toLowerCase() === identity)) {
+    return false;
+  }
+  writeCanonicalMap(cwd, merged, { stateDir, mapFilename: "codebase_map.json" });
+  return true;
+}
+
+/** Shared prospective merge for compiler feedback and the trusted checkpoint. */
+export function mergeExplorerConcernEvidence(map: CodebaseMap, concern: Record<string, unknown>): CodebaseMap {
+  const identity = stringField(concern.concern)?.toLowerCase();
+  if (!identity) return map;
   const current = map.concern_evidence ?? { concerns: [], not_concerns: [] };
-  const merged = mergeEvidenceIntoMap({
+  return mergeEvidenceIntoMap({
     concern_evidence: {
       concerns: [
         ...current.concerns.filter((candidate) => candidate.concern.trim().toLowerCase() !== identity),
@@ -374,11 +386,6 @@ export function checkpointExplorerConcernEvidence(
       not_concerns: current.not_concerns.filter((candidate) => candidate.candidate.trim().toLowerCase() !== identity),
     },
   }, map);
-  if (!merged.concern_evidence?.concerns.some((candidate) => candidate.concern.trim().toLowerCase() === identity)) {
-    return false;
-  }
-  writeCanonicalMap(cwd, merged, { stateDir, mapFilename: "codebase_map.json" });
-  return true;
 }
 
 function trackerFromAttestation(attestation: ExplorerReceiptAttestation): ExplorerReceiptTracker {
