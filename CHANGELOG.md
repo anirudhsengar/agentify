@@ -6,6 +6,9 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Tracer submissions receive bounded, actionable schema and size feedback
+  together. Validation and delivery share compact serialization under the same
+  16 KB cap, preserving flow steps without whitespace-induced rejection.
 - Parent audit cancellation stops active explorers, refuses cancelled dispatches,
   and prevents late provider requests or concern checkpoints after rollback.
 - Tracer receipts now persist successful source-read/grep observations. Listings,

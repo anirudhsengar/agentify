@@ -395,6 +395,10 @@ function currentRepositoryTimestamp(cwd: string): string | null {
     return timestamp && Number.isFinite(Date.parse(timestamp)) ? timestamp : null;
 }
 
+function formatConcernReport(concern: unknown): string {
+    return `## Report\n\`\`\`json\n${JSON.stringify(concern)}\n\`\`\``;
+}
+
 function decodeStructuredConcernObject(
     parsed: unknown,
     observedAt: string,
@@ -409,16 +413,27 @@ function decodeStructuredConcernObject(
         return [touchpoint.path.includes("/") ? touchpoint.path.split("/", 1)[0] : "."];
     }))].sort();
     const concern = { ...fields, spans_subtrees: spansSubtrees, last_updated: observedAt };
+    const failures: string[] = [];
     if (!Value.Check(ConcernSchema, concern)) {
-        const first = [...Value.Errors(ConcernSchema, concern)][0] as {
+        const errors = [...Value.Errors(ConcernSchema, concern)] as Array<{
             instancePath?: string;
             message?: string;
-        } | undefined;
-        return {
-            concern: null,
-            error: `concern_tracer JSON report failed schema validation at ${first?.instancePath || "/"}: ${first?.message ?? "invalid concern"}`,
-        };
+        }>;
+        const details = errors.slice(0, 8).map((error) => {
+            const field = error.instancePath || "/";
+            const remedy = /\/(reference|path)$/u.test(field)
+                ? "use one repository-relative file path only; move symbols and line numbers into prose"
+                : error.message ?? "invalid concern";
+            return `${field}: ${remedy}`;
+        });
+        const more = errors.length >= 8 ? " (more errors may remain; correct all fields of the same shape)" : "";
+        failures.push(`concern_tracer JSON report failed schema validation at ${details.join("; ")}${more}`);
     }
+    const reportBytes = Buffer.byteLength(formatConcernReport(concern), "utf8");
+    if (reportBytes > MAX_REPORT_BYTES) {
+        failures.push(`concern report exceeds ${MAX_REPORT_BYTES} bytes (${reportBytes}); remove redundant prose and resubmit concisely without dropping verified flow steps`);
+    }
+    if (failures.length > 0) return { concern: null, error: failures.join(". ") };
     return { concern: concern as Concern, error: null };
 }
 
@@ -662,17 +677,6 @@ export function createConcernSubmissionTool(
                         };
                     }
                 }
-            }
-            const canonicalReport = `## Report\n\`\`\`json\n${JSON.stringify(decoded.concern, null, 2)}\n\`\`\``;
-            if (Buffer.byteLength(canonicalReport, "utf8") > MAX_REPORT_BYTES) {
-                return {
-                    content: [{
-                        type: "text",
-                        text: `Error: validated concern exceeds ${MAX_REPORT_BYTES} bytes; remove redundant evidence and resubmit concisely.`,
-                    }],
-                    isError: true,
-                    details: { recorded: false, concern: null },
-                };
             }
             onSubmit(decoded.concern);
             return {
@@ -1415,7 +1419,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 throw new Error("concern_tracer did not call submit_concern_report with a valid typed concern");
             }
             const rawReport = submittedConcern
-                ? `## Report\n\`\`\`json\n${JSON.stringify(submittedConcern, null, 2)}\n\`\`\``
+                ? formatConcernReport(submittedConcern)
                 : extractFinalAssistantText(
                     session.messages as ReadonlyArray<{ role?: string; content?: unknown }>,
                 );

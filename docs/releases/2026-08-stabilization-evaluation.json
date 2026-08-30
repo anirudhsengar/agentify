@@ -7,6 +7,24 @@
   "evidence_scope": "Candidate and changed-file inventory below are archived observations, not qualification of the current branch. Results cannot carry forward to changed production code.",
   "product_qualification_rule": "All eight non-policy historical teams and at least five of six non-policy held-outs in each of two unchanged-production rounds must install. Diagnostic-only fails unless required tooling is unavailable.",
   "evaluation_scope": "specialist compiler stabilization",
+  "latest_development_evidence": {
+    "release_ready": false,
+    "deterministic_sha": "49c4a90babcccff74270468badfe71a0860daa09",
+    "deterministic_status": "passed_local_97_files_10_corpus_cases_and_CI_Node22_Node24_package_scaffold_audit_CodeQL",
+    "live_sha": "74d23647fa777133e573b588a495f4d7d80bea8b",
+    "package_sha256": "27c24b386a297797c5026ca1fc353af46b2d12c7a27a21da641effb565143562",
+    "node": "22.19.0",
+    "models_and_budgets": "Unchanged configured models, high thinking, default budgets",
+    "cases": [
+      {"repository":"hono","target_sha":"e2740d5a1bd0b4254e517e3af8b60789284bc7bd","invocation":1,"disposition":"diagnostic_only","qualification":"failed","draft_concerns":4,"elapsed_ms":903958,"terminal_events":1,"original_file_hashes_unchanged":true},
+      {"repository":"gin","target_sha":"dcaa4296d111981ffb31ac3eba90bb63e1eb5ab9","invocation":1,"disposition":"diagnostic_only","qualification":"failed","draft_concerns":7,"elapsed_ms":758061,"terminal_events":1,"original_file_hashes_unchanged":true}
+    ],
+    "persistent_artifacts": [".agentify/runtime/audit/codebase_map.json"],
+    "resource_accounting": "Incomplete: an explorer ignored parent cancellation and continued after the terminal event. No complete-run token, call, cost, or runtime budget pass is claimed.",
+    "manual_quality": "Hono draft rejected: incorrect Quick preset fallback and matcher-finalization claims despite observed source paths. This does not count toward installed-team review.",
+    "artifact_directory": "/home/anirudh/Projects/agentify-evaluation/74d23647fa777133e573b588a495f4d7d80bea8b/artifacts",
+    "carry_forward": false
+  },
   "candidate": {
     "production_sha": "e1186861095ac543b4bef9e4f97ca09a76918be8",
     "base_sha": "f2df9eb8563bfcb26919d82c7bf28c9fb7c19e8b",

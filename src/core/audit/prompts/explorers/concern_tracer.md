@@ -128,7 +128,11 @@ The `report_json` argument must be a compact JSON object with exactly this shape
 `path` and `what_happens`; touchpoint line ranges use a two-number array or
 null. Do not add `name`, `summary`, `id`, `validation_commands`, or other
 aliases. Every evidence path and reference must be relative to the repository
-root, never absolute and never suffixed with a line number. Every flow needs at
+root, never absolute and never suffixed with a line number. A `reference` names exactly one file, such as
+`src/entry.ts`, not `src/entry.ts:handle` or two files joined with `/` or `and`.
+Put symbols and line numbers in the accompanying prose. If submission returns
+multiple errors, correct every reported field and other fields with the same
+shape together; do not spend a submission on each individual error. Every flow needs at
 least two ordered tracked steps. Prefer the
 strongest 4–8 touchpoints, 2–5 invariants, 2–5 pitfalls, and 2–5 entry
 questions so the complete object stays near 8 KB without dropping a distinct

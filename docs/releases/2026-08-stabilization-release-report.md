@@ -22,13 +22,15 @@ The archived 80-file inventory in the machine-readable report is not the current
 
 ## Current development evidence
 
-- Exact `985f5ea18a381bab7b222ce59155d0cd848a689c` passed `npm run test:all` on Node 26.7.0: build, all 97 discovered test files, executable portfolio corpus, documentation/package links, and product invariants. This is not the supported-Node, package, CI, CodeQL, or live release gate.
-- Latest Hono lineage on `3ccb4e8014ac5a436b072f85b02f4f8ec6d3b5e9` failed installation: seven concern bodies, remaining clusters, an adapter tracer timeout, and an untraced scout proposal. Aggregate use was 204 calls, 179,430 output tokens, 24 explorers, 1,799,203 audit milliseconds, and $0.47485284 reported model cost. Only the permitted diagnostic map remained; tracked application bytes were unchanged.
+- Exact `49c4a90babcccff74270468badfe71a0860daa09` passed all 97 test files and the ten-case executable corpus locally. Its CI passed on Node 22.19.0 and Node 24, including typecheck, packed-package/scaffold qualification, full dependency audit, and CodeQL. Subsequent production changes require fresh qualification.
+- Fresh Hono and Gin invocation-one evaluations on `74d23647fa777133e573b588a495f4d7d80bea8b` both failed installation at the session deadline: four and seven draft concerns respectively. Wall-clock durations were 903,958 ms and 758,061 ms. Each emitted one terminal audit result and retained only the permitted diagnostic map; original file hashes were unchanged.
+- That candidate's terminal usage counters are not complete-run proof: Hono's last tracer continued after the parent terminal event. The ignored cancellation signal is corrected in `49c4a90`, with pre-dispatch, creation, active-work, completion-race, and late-checkpoint regressions. Live verification of the correction remains required.
+- Source observation receipts do not prove narrative correctness. Manual inspection of Hono's draft found an incorrect Quick preset fallback chain and an incorrect matcher-finalization claim. This is a quality failure, not an accepted installed-team review.
 - Development installations on earlier commits do not qualify later production code. No final candidate or two clean qualification rounds have been established.
 
 ## Known limitations
 
-- Hono still fails convergence and has exposed false attachment and generic-portfolio risks. Safe failure remains necessary but is not successful product qualification.
+- Hono still fails convergence and has exposed false attachment, generic-portfolio, and unsupported narrative risks. Safe failure remains necessary but is not successful product qualification.
 - The reduced corpus now exercises real compilation, installation, readiness canaries, and validation-failure rollback, with only GitHub operations replayed. It does not replace live generation or maintainer-quality review.
 - Validation commands execute in disposable exact-HEAD checkouts with scrubbed credentials, but Agentify does not provide container or network isolation.
 - Live model outcomes are nondeterministic. The executable replay corpus, compiler invariants, and package qualification remain the authoritative repeatable release gates.
