@@ -14,6 +14,7 @@ import {
   assessExplorerReceiptAttestation,
   ExplorerReceiptTracker,
 } from "../../src/core/audit/explorer-receipts.ts";
+import { makeSpecialistFixtureMap } from "../fixtures/specialist-map.ts";
 
 function mapWithConcerns(...concerns: string[]): CodebaseMap {
   return {
@@ -33,6 +34,7 @@ function explorerEvent(input: {
   targetPath?: string;
   failureKind?: string;
   scoutConcerns?: string[];
+  observedPaths?: string[];
 }): unknown {
   const text = input.success
     ? `Sub-agent (mode=${input.mode}) explored ${input.targetPath ?? "."} in 10ms.\n\n`
@@ -52,6 +54,7 @@ function explorerEvent(input: {
       expected_concern: input.expectedConcern ?? null,
       report_concern: input.reportConcern ?? null,
       failure_kind: input.failureKind ?? (input.success ? null : "timeout"),
+      ...(input.observedPaths === undefined ? {} : { observed_paths: input.observedPaths }),
     },
   };
 }
@@ -95,6 +98,34 @@ test("every scout proposal remains an obligation until traced or substantively r
   };
   assessment = tracker.assess(map);
   assert.equal(assessment.complete, true, assessment.reasons.join("; "));
+});
+
+test("source observation survives receipt persistence and cannot be silently inferred", () => {
+  const map = makeSpecialistFixtureMap();
+  map.concern_evidence!.concerns = map.concern_evidence!.concerns.slice(0, 1);
+  const observed = ["src/auth/verify.ts", "src/routes/login.ts", "src/middleware/session.ts", "tests/auth.test.ts"];
+  for (const observedPaths of [undefined, observed.slice(0, 1), observed]) {
+    const tracker = new ExplorerReceiptTracker();
+    tracker.observe(explorerEvent({ mode: "concern_scout", success: true }));
+    tracker.observe(explorerEvent({
+      mode: "concern_tracer", success: true, reportConcern: "authentication", observedPaths,
+    }));
+    const persisted = tracker.attestation("a".repeat(40), "source-replay");
+    assert.equal(Value.Check(ExplorerReceiptAttestationSchema, persisted), true, "old receipts remain readable");
+    const resumed = new ExplorerReceiptTracker();
+    resumed.loadAttestation(persisted);
+    const assessment = resumed.assess(map);
+    assert.equal(assessment.complete, observedPaths === observed, assessment.reasons.join("; "));
+    if (observedPaths !== observed) {
+      assert.match(assessment.reasons.join("; "), /observ|source/i);
+    } else {
+      const changed = structuredClone(map);
+      changed.concern_evidence!.concerns[0]!.flows[0]!.steps.push({
+        path: "src/unobserved/session.ts", what_happens: "Claims an unobserved intermediate operation.",
+      });
+      assert.equal(resumed.assess(changed).complete, false, "a name-only receipt cannot attest newly invented flow steps");
+    }
+  }
 });
 
 test("scout proposal parsing strips structured prose and never authors an invalid receipt", () => {

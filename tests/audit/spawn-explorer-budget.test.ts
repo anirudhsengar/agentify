@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { Model, Api } from "@earendil-works/pi-ai";
+import { createReadTool, createGrepTool } from "@earendil-works/pi-coding-agent";
 import { AuditResourceBudget } from "../../src/core/audit/resource-budget.ts";
 import { createSpawnExplorerTool } from "../../src/core/audit/spawn-explorer-tool.ts";
 import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
@@ -794,7 +795,9 @@ async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
   }
 }
 
-async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(): Promise<void> {
+async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
+  observation: "read" | "grep-directory" | "grep-file" | "listing" | "failed-read" | "no-matches" | "none",
+): Promise<void> {
   const cwd = tempDir("spawn-budget-concern-portfolio");
   try {
     fs.writeFileSync(path.join(cwd, "README.md"), "# fixture\n");
@@ -823,6 +826,26 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(): Promise<vo
           session: {
             messages: [],
             async prompt(): Promise<void> {
+              if (observation !== "none") {
+                const isGrep = observation.startsWith("grep-") || observation === "no-matches";
+                const input = isGrep
+                  ? { path: observation === "grep-file" ? "README.md" : ".", pattern: observation === "no-matches" ? "absentPattern" : "fixture" }
+                  : { path: "README.md" };
+                const observed = observation === "listing"
+                  ? { content: [{ type: "text" as const, text: "README.md" }], details: undefined }
+                  : isGrep
+                    ? await createGrepTool(cwd).execute("observe", input as never)
+                    : await createReadTool(cwd).execute("observe", input);
+                for (const extension of sessionOptions.resourceLoader!.getExtensions().extensions) {
+                  for (const handler of extension.handlers.get("tool_result") ?? []) {
+                    await handler({
+                      type: "tool_result", toolCallId: "observe",
+                      toolName: observation === "listing" ? "ls" : isGrep ? "grep" : "read",
+                      input, ...observed, isError: observation === "failed-read",
+                    }, { cwd } as never);
+                  }
+                }
+              }
               const reportJson = report.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null";
               await submissionTool.execute(
                 "submit",
@@ -849,7 +872,9 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(): Promise<vo
       undefined,
       { cwd } as never,
     );
-    assert.equal((result as { isError?: boolean }).isError, undefined);
+    const backedBySource = observation === "read" || observation.startsWith("grep-");
+    assert.equal((result as { isError?: boolean }).isError, backedBySource ? undefined : true, observation);
+    if (!backedBySource) return;
     const details = result.details as { max_reads?: number; max_provider_calls?: number } | undefined;
     assert.equal(details?.max_reads, 6);
     assert.equal(details?.max_provider_calls, 8);
@@ -871,6 +896,8 @@ await testLiveExplorerUsageAbortsAtAggregateTokenLimit();
 await testOversizedReportsFailInsteadOfBecomingReceipts();
 await testDefaultsBoundSmallRepositoryAudits();
 await testSubagentTimeoutReturnsControlToAudit();
-await testConcernTracerDefaultsLeaveRoomForARealPortfolio();
+for (const observation of ["read", "grep-directory", "grep-file", "listing", "failed-read", "no-matches", "none"] as const) {
+  await testConcernTracerDefaultsLeaveRoomForARealPortfolio(observation);
+}
 
 console.log("spawn-explorer budget tests passed.");
