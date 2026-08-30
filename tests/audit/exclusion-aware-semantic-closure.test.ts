@@ -609,3 +609,61 @@ test("ownership normalization cannot cyclically remove every core implementation
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test("normalization subsumes core-conflicting concerns only after their verified flows survive", () => {
+  const cwd = repository([
+    "src/command.ts",
+    "src/cobra.ts",
+    "tests/dispatch.test.ts",
+    "tests/help.test.ts",
+  ]);
+  try {
+    const dispatch = concern({
+      name: "command dispatch lifecycle",
+      covers: "Command discovery, execution, initialization, finalization, and adjacent rendering reached by dispatch.",
+      excludes: "Shell completion generation.",
+      core: "src/command.ts",
+      test: "tests/dispatch.test.ts",
+      supporting: ["src/cobra.ts"],
+    });
+    dispatch.touchpoints.find((entry) => entry.path === "src/cobra.ts")!.centrality = "core";
+    const help = concern({
+      name: "help and usage rendering",
+      covers: "Help and usage templates reached by command dispatch.",
+      excludes: "Shell completion generation.",
+      core: "src/cobra.ts",
+      test: "tests/help.test.ts",
+      supporting: ["src/command.ts"],
+    });
+    help.touchpoints.find((entry) => entry.path === "src/command.ts")!.centrality = "core";
+    const map = mapWithConcerns(["src/command.ts", "src/cobra.ts"], [dispatch, help]);
+    map.concern_evidence!.not_concerns.push({
+      candidate: help.concern,
+      why_rejected:
+        "Subsumed by the accepted command dispatch lifecycle concern because both behaviors share the same file-level implementation owner and cannot form independent specialists.",
+    });
+
+    const unsafe = compileSpecialistEvidence(map, { cwd });
+    assert.equal(unsafe.complete, false);
+    assert.ok(unsafe.map.concern_evidence!.concerns.some((entry) => entry.concern === help.concern));
+
+    dispatch.flows.push(...structuredClone(help.flows));
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.complete, true, compiled.reasons.join("; "));
+    assert.deepEqual(
+      compiled.map.concern_evidence!.concerns.map((entry) => entry.concern),
+      [dispatch.concern],
+    );
+    assert.ok(compiled.map.concern_evidence!.concerns[0]!.flows.some((flow) =>
+      flow.name === help.flows[0]!.name
+      && flow.steps.map((step) => step.path).join("\0")
+        === help.flows[0]!.steps.map((step) => step.path).join("\0")
+    ));
+
+    const repeated = compileSpecialistEvidence(compiled.map, { cwd });
+    assert.equal(repeated.complete, true, repeated.reasons.join("; "));
+    assert.strictEqual(repeated.map, compiled.map);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
