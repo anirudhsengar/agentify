@@ -241,6 +241,94 @@ test("a retracer cannot replace the application-bound concern scope", async () =
   assert.equal(submissions, 1);
 });
 
+test("a retracer cannot trade one covered repository obligation for another", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-concern-monotonic-"));
+  try {
+    fs.mkdirSync(path.join(cwd, "src/extract"), { recursive: true });
+    for (const repositoryPath of [
+      "README.md",
+      "src/index.ts",
+      "src/lib.ts",
+      "src/extract/mod.rs",
+      "src/extract/rejection.rs",
+      "src/extract/person.rs",
+    ]) {
+      fs.writeFileSync(path.join(cwd, repositoryPath), "fixture\n");
+    }
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "fixture");
+
+    const currentConcern = parseStructuredConcernReport(REPORT, "2026-08-29T00:00:00.000Z");
+    assert.ok(currentConcern);
+    currentConcern.touchpoints.push({
+      path: "src/extract/person.rs",
+      symbol: "Person",
+      role: "Carries the previously verified request identity.",
+      line_range: null,
+      centrality: "supporting",
+    });
+    const currentMap = makeValidCodebaseMap({
+      skeleton: {
+        ...makeValidCodebaseMap().skeleton,
+        first_5_files_for_fresh_agent: [{
+          path: "src/extract/person.rs",
+          why: "Previously covered public request identity.",
+        }],
+      },
+      concern_evidence: { concerns: [currentConcern], not_concerns: [] },
+      expert_evidence: undefined,
+    });
+    let submissions = 0;
+    const parsed = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null") as {
+      touchpoints: Array<Record<string, unknown>>;
+    };
+    const factory = createConcernSubmissionTool as unknown as (
+      observedAt: string,
+      onSubmit: () => void,
+      repositoryRoot: string,
+      expectedConcern: string,
+      requiredScopePaths: readonly string[],
+      existingMap: typeof currentMap,
+    ) => ReturnType<typeof createConcernSubmissionTool>;
+    const tool = factory("2026-08-29T00:00:00.000Z", () => {
+      submissions += 1;
+    }, cwd, currentConcern.concern, ["src/extract/mod.rs"], currentMap);
+
+    const regressive = await tool.execute(
+      "submit-regressive",
+      { report_json: JSON.stringify(parsed) } as never,
+      undefined,
+      undefined,
+      {} as never,
+    ) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    assert.equal(regressive.isError, true);
+    assert.match(regressive.content[0]?.text ?? "", /newly uncovered.*src\/extract\/person\.rs/iu);
+    assert.equal(submissions, 0);
+
+    parsed.touchpoints.push({
+      path: "src/extract/person.rs",
+      symbol: "Person",
+      role: "Retains the previously verified request identity.",
+      line_range: null,
+      centrality: "supporting",
+    });
+    const monotonic = await tool.execute(
+      "submit-monotonic",
+      { report_json: JSON.stringify(parsed) } as never,
+      undefined,
+      undefined,
+      {} as never,
+    );
+    assert.equal((monotonic as { isError?: boolean }).isError, undefined);
+    assert.equal(submissions, 1);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("the tracer envelope rejects malformed and oversized JSON before recording", async () => {
   let submissions = 0;
   const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", () => {
