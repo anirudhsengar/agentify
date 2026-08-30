@@ -522,3 +522,87 @@ test("normalization gives shared orchestration to its unique dependent supportin
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test("ownership normalization cannot cyclically remove every core implementation from a concern", () => {
+  const cwd = repository([
+    "src/command.ts",
+    "src/cobra.ts",
+    "src/lifecycle.ts",
+    "tests/dispatch.test.ts",
+    "tests/suggestions.test.ts",
+    "tests/help.test.ts",
+  ]);
+  try {
+    const dispatch = concern({
+      name: "command dispatch lifecycle",
+      covers: "Command discovery, execution, initialization, and finalization.",
+      excludes: "Suggestion scoring and help rendering presentation.",
+      core: "src/command.ts",
+      test: "tests/dispatch.test.ts",
+      supporting: ["src/cobra.ts"],
+    });
+    dispatch.touchpoints.find((entry) => entry.path === "src/cobra.ts")!.centrality = "core";
+    const suggestions = concern({
+      name: "unknown-command suggestions",
+      covers: "Scores and renders typo suggestions for unknown commands.",
+      excludes: "Command execution and help rendering.",
+      core: "src/command.ts",
+      test: "tests/suggestions.test.ts",
+    });
+    const help = concern({
+      name: "help rendering",
+      covers: "Renders command help and usage output.",
+      excludes: "Command execution and suggestion scoring.",
+      core: "src/cobra.ts",
+      test: "tests/help.test.ts",
+    });
+    const map = mapWithConcerns(
+      ["src/command.ts", "src/cobra.ts"],
+      [dispatch, suggestions, help],
+    );
+
+    const cyclic = assessSpecialistEvidence(map, { cwd });
+    assert.ok(cyclic.core_ownership_resolutions.some((entry) =>
+      entry.path === "src/command.ts" && entry.concern === suggestions.concern
+    ));
+    assert.ok(cyclic.core_ownership_resolutions.some((entry) =>
+      entry.path === "src/cobra.ts" && entry.concern === help.concern
+    ));
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.ok(
+      compiled.map.concern_evidence?.concerns.some((entry) => entry.concern === dispatch.concern),
+      "normalization must not erase the command dispatch lifecycle",
+    );
+
+    dispatch.touchpoints.push({
+      path: "src/lifecycle.ts",
+      symbol: null,
+      role: "Independent command initialization and finalization hooks.",
+      line_range: null,
+      centrality: "core",
+    });
+    dispatch.flows[0]!.steps.push({
+      path: "src/lifecycle.ts",
+      what_happens: "Runs command initialization and finalization hooks.",
+    });
+    map.skeleton.entry_points.push({
+      path: "src/lifecycle.ts",
+      role: "fixture entry point",
+      language: "TypeScript",
+      run_command: "npm test",
+    });
+    map.skeleton.first_5_files_for_fresh_agent.push({
+      path: "src/lifecycle.ts",
+      why: "fixture behavioral entry point",
+    });
+    const resolvable = assessSpecialistEvidence(map, { cwd });
+    assert.ok(resolvable.core_ownership_resolutions.some((entry) =>
+      entry.path === "src/command.ts" && entry.concern === suggestions.concern
+    ));
+    assert.ok(resolvable.core_ownership_resolutions.some((entry) =>
+      entry.path === "src/cobra.ts" && entry.concern === help.concern
+    ));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
