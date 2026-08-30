@@ -6,6 +6,9 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Initial concern scouting now refuses parent-authored focus and numeric
+  portfolio caps, so portfolio size always follows repository evidence while
+  focused supplemental scouts remain limited to exact compiler obligations.
 - Shared-core normalization now requires each displaced concern to retain a
   uniquely owned implementation path, preventing mutually dependent ownership
   resolutions from erasing an accepted behavior while preserving resolution

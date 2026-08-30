@@ -891,6 +891,25 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             : [];
         if (
             mode === "concern_scout"
+            && currentHeadScouts.length === 0
+            && params.focus?.trim()
+        ) {
+            return {
+                content: [{
+                    type: "text",
+                    text:
+                        "Error: the initial concern_scout must derive portfolio size from evidence; omit focus. " +
+                        "Focused concern scouting is reserved for an exact compiler-uncovered cluster after a successful current-HEAD scout.",
+                }],
+                isError: true,
+                details: {
+                    initial_scout_focus_refused: true,
+                    state_file: `${stateDir}/codebase_map.json`,
+                },
+            };
+        }
+        if (
+            mode === "concern_scout"
             && currentHeadScouts.length > 0
             && !supplementalScoutMatchesUncoveredCluster(ctx.cwd, stateDir, params.focus)
         ) {

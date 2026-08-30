@@ -82,7 +82,8 @@ This is the part of the audit the whole installation exists for. Everything
 above establishes how the repository is built; this establishes what a person
 would specialize in to work on it well.
 
-1. Run `concern_scout` against the repository root exactly once, unless the
+1. Run `concern_scout` against the repository root exactly once with no
+   `focus`, unless the
    application reports a successful current-HEAD scout receipt to resume. It returns
    candidate concerns with seed paths, plus the candidates it rejected.
    After compilation, the application may permit one focused supplemental scout

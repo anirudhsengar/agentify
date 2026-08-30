@@ -75,6 +75,8 @@ The local installer performs these steps in order:
 8. initialize persistent identity and self-update policy;
 9. run a read-only structured repository audit and persist application-authored
    scout/tracer receipts bound to the exact audited commit;
+   the initial scout accepts no parent-authored focus or numeric portfolio
+   target, so portfolio size follows repository evidence;
    duplicate broad scouts are refused, while a focused supplemental scout may
    expand the proposal set only for an exact compiler-uncovered behavioral
    cluster omitted by the initial scout;
