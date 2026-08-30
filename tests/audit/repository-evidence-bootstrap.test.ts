@@ -21,6 +21,35 @@ function write(cwd: string, repositoryPath: string, content: string): void {
   fs.writeFileSync(destination, content);
 }
 
+test("README-derived identity cannot retain dangling or reconstructed HTML markup", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-readme-identity-"));
+  try {
+    write(cwd, "src/index.js", "export const value = 1;\n");
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    const preflight: RepositoryInstallationPreflight = {
+      disposition: "analyzable-only", analysis_allowed: true, identity: null,
+      commands: [], allowed_write_paths: ["src"], protected_paths: [".git"], blockers: [],
+    };
+    for (const content of [
+      "# Checkout <script\n\nA request-handling library for status mapping.\n",
+      "# Checkout\n\nA request-handling library with <!<!-- hidden -->--unfinished markup.\n",
+      "# **Checkout** <small>Fixture</small>\n\nA request-handling library for status mapping.\n",
+    ]) {
+      write(cwd, "README.md", content);
+      git(cwd, "add", ".");
+      git(cwd, "commit", "-qm", "README boundary fixture");
+      const map = createRepositoryEvidenceDraft(cwd, preflight);
+      assert.match(map.meta.project_type, /Checkout/);
+      assert.doesNotMatch(map.meta.project_type, /[<>]/);
+      assert.doesNotMatch(map.meta.domain_hypothesis, /[<>]/);
+    }
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("immutable preflight evidence seeds identity, topography, validation, and documentation", () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-evidence-bootstrap-"));
   try {
