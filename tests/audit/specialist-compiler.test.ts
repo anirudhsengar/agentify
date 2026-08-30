@@ -532,6 +532,7 @@ test("path-backed rejection labels close only their exact tracked cluster", () =
 test("specialist compilation canonicalizes scout names and recomputes trusted inferred attachments", () => {
   const cwd = createAqaShapedRepository();
   try {
+    write(cwd, "openjdk/excludes/ProblemList.txt", "# Suite-owned exclusion inputs.\n");
     write(cwd, "scripts/disabled_tests/exclude_openjdk.py");
     write(cwd, "scripts/disabled_tests/inventory.py");
     write(cwd, "scripts/disabled_tests/issue_filter.py");
