@@ -31,6 +31,9 @@ All notable changes to Agentify are documented here.
 - Failed tracer receipts now retain their application-bound concern identity,
   so a later successful exact-identity retrace clears that failure without
   treating unrelated or still-unretraced timeouts as resolved.
+- Explorer receipts now canonicalize domain-locked absolute targets to safe
+  repository-relative paths, keeping trusted checkpoints schema-valid and free
+  of checkout-specific host paths.
 
 ### Added
 

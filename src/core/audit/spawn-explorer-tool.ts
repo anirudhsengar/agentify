@@ -883,6 +883,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 details: undefined as unknown as Record<string, unknown>,
             };
         }
+        const receiptTargetPath = path.relative(ctx.cwd, resolvedTarget)
+            .split(path.sep)
+            .join("/") || ".";
         const currentHeadScouts = mode === "concern_scout"
             ? successfulCurrentHeadScouts(ctx.cwd, stateDir)
             : [];
@@ -1370,7 +1373,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 details: {
                     mode,
                     prompt_source: promptSource,
-                    target_path: params.target_path,
+                    target_path: receiptTargetPath,
                     resolved_target_path: resolvedTarget,
                     focus: params.focus ?? null,
                     expected_concern: expectedConcern ?? null,
@@ -1418,7 +1421,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 isError: true,
                 details: {
                     mode,
-                    target_path: params.target_path,
+                    target_path: receiptTargetPath,
                     resolved_target_path: resolvedTarget,
                     focus: params.focus ?? null,
                     expected_concern: expectedConcern ?? null,

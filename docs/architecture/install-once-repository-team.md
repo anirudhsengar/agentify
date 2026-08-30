@@ -131,6 +131,9 @@ Tracer receipts retain the exact application-bound concern identity separately
 from their free-form focus. A failed or timed-out tracer remains unresolved
 until a later successful tracer for that same identity is attested; verbose
 repair wording cannot create a separate receipt obligation.
+Receipt targets are canonical repository-relative paths even when the parent
+supplies an absolute path inside the domain lock; host checkout paths never
+enter the persisted attestation.
 
 The installation transaction is captured before recognized runtime repair or
 final compilation can persist any managed path or normalized map. The
