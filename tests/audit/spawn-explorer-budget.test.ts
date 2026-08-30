@@ -844,7 +844,7 @@ async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
 }
 
 async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
-  observation: "read" | "grep-directory" | "grep-file" | "wrong-subtree" | "listing" | "failed-read" | "no-matches" | "none" | "cancelled",
+  observation: "read" | "grep-directory" | "grep-file" | "wrong-subtree" | "listing" | "failed-read" | "no-matches" | "none" | "cancelled" | "compact",
 ): Promise<void> {
   const cwd = tempDir("spawn-budget-concern-portfolio");
   const controller = new AbortController();
@@ -898,7 +898,14 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
                 }
               }
               if (observation === "cancelled") controller.abort();
-              const reportJson = report.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null";
+              let reportJson = report.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null";
+              if (observation === "compact") {
+                const body = JSON.parse(reportJson) as { covers: string };
+                while (Buffer.byteLength(JSON.stringify(body)) < 15_700) body.covers += " Observed entry contract.";
+                assert.ok(Buffer.byteLength(JSON.stringify(body, null, 2)) > 16_000,
+                  "whitespace alone must reproduce the historical cap failure");
+                reportJson = JSON.stringify(body);
+              }
               await submissionTool.execute(
                 "submit",
                 { report_json: reportJson },
@@ -924,13 +931,21 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
       undefined,
       { cwd } as never,
     );
-    const backedBySource = observation === "read" || observation.startsWith("grep-");
+    const backedBySource = observation === "read" || observation === "compact" || observation.startsWith("grep-");
     assert.equal((result as { isError?: boolean }).isError, backedBySource ? undefined : true, observation);
     if (observation === "cancelled") {
       assert.equal(fs.existsSync(path.join(cwd, ".agentify/runtime/audit/codebase_map.json")), false,
         "a cancelled tracer must not checkpoint a late report after parent rollback");
     }
     if (!backedBySource) return;
+    if (observation === "compact") {
+      const emitted = textFrom(result).match(/## Report\n```json\n([\s\S]*?)\n```/u);
+      assert.ok(emitted);
+      assert.ok(Buffer.byteLength(emitted[0]) <= 16_000, "the actual emitted report must satisfy the same cap");
+      const original = JSON.parse(report.match(/```json\s*([\s\S]*?)```/u)![1]!) as { flows: unknown };
+      const returned = JSON.parse(emitted[1]!) as { flows: unknown };
+      assert.deepEqual(returned.flows, original.flows, "compact transport must preserve every flow step");
+    }
     const details = result.details as { max_reads?: number; max_provider_calls?: number } | undefined;
     assert.equal(details?.max_reads, 6);
     assert.equal(details?.max_provider_calls, 8);
@@ -953,7 +968,7 @@ await testOversizedReportsFailInsteadOfBecomingReceipts();
 await testDefaultsBoundSmallRepositoryAudits();
 await testParentCancellationStopsExplorer();
 await testSubagentTimeoutReturnsControlToAudit();
-for (const observation of ["read", "grep-directory", "grep-file", "wrong-subtree", "listing", "failed-read", "no-matches", "none", "cancelled"] as const) {
+for (const observation of ["read", "grep-directory", "grep-file", "wrong-subtree", "listing", "failed-read", "no-matches", "none", "cancelled", "compact"] as const) {
   await testConcernTracerDefaultsLeaveRoomForARealPortfolio(observation);
 }
 

@@ -557,6 +557,48 @@ test("the tracer envelope rejects malformed and oversized JSON before recording"
   assert.equal(submissions, 0);
 });
 
+test("one rejected submission explains multiple reference defects and its output cap", async () => {
+  let submissions = 0;
+  const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", () => { submissions += 1; });
+  const parsed = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)![1]!) as {
+    invariants: Array<{ reference: string }>;
+    pitfalls: Array<{ reference: string }>;
+    covers: string;
+  };
+  parsed.invariants[0].reference = "src/extract/mod.rs:FromRequest";
+  parsed.pitfalls[0].reference = "src/extract/rejection.rs Rejection";
+  parsed.covers = "observed evidence ".repeat(1_100);
+  const result = await tool.execute("submit", { report_json: JSON.stringify(parsed) } as never,
+    undefined, undefined, {} as never);
+  const feedback = result.content.filter((block) => block.type === "text").map((block) => block.text).join("\n");
+  assert.equal((result as { isError?: boolean }).isError, true);
+  assert.match(feedback, /\/invariants\/0\/reference/);
+  assert.match(feedback, /\/pitfalls\/0\/reference/);
+  assert.match(feedback, /one repository-relative file path/i);
+  assert.match(feedback, /symbols.*line numbers.*prose/i);
+  assert.match(feedback, /16000 bytes/);
+  assert.ok(Buffer.byteLength(feedback) < 4_096, "repair feedback must remain bounded");
+  assert.equal(submissions, 0);
+});
+
+test("schema feedback bounds large batches without accepting unresolved references", async () => {
+  const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", () => {
+    assert.fail("invalid references cannot be checkpointed");
+  });
+  const parsed = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)![1]!) as {
+    invariants: Array<{ rule: string; why: string; reference: string }>;
+  };
+  parsed.invariants = Array.from({ length: 100 }, () => ({
+    rule: "One body consumer", why: "Streams cannot replay", reference: "src/extract/mod.rs:FromRequest",
+  }));
+  const result = await tool.execute("submit", { report_json: JSON.stringify(parsed) } as never,
+    undefined, undefined, {} as never);
+  const feedback = result.content.filter((block) => block.type === "text").map((block) => block.text).join("\n");
+  assert.equal((result as { isError?: boolean }).isError, true);
+  assert.match(feedback, /more/);
+  assert.ok(Buffer.byteLength(feedback) < 4_096);
+});
+
 test("the tracer normalizes domain-locked absolute evidence paths", async (t) => {
   const cwd = groundedExtractionRepository();
   t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
