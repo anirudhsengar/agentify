@@ -211,6 +211,63 @@ test("a generic exclusion token does not veto a distinct mirrored behavior clust
   }
 });
 
+test("inferred attachments require behavioral locality instead of one generic token", () => {
+  const cwd = repository([
+    "src/adapter/aws/handler.ts",
+    "src/adapter/aws/handler.test.ts",
+    "src/adapter/vercel/handler.ts",
+    "src/adapter/vercel/handler.test.ts",
+    "src/auth/check.ts",
+    "src/auth/check.test.ts",
+    "src/client/accept.ts",
+    "src/client/accept.test.ts",
+    "src/jsx/dom/client.ts",
+    "src/jsx/dom/client.test.ts",
+    "src/jsx/dom/server.ts",
+    "src/jsx/dom/server.test.ts",
+  ]);
+  try {
+    const adapters = concern({
+      name: "multi-runtime adapter system",
+      covers: "Serverless runtime adapter handlers translate platform requests and responses.",
+      excludes: "JSX DOM rendering and authentication are separate.",
+      core: "src/adapter/aws/handler.ts",
+      test: "src/adapter/aws/handler.test.ts",
+    });
+    const authentication = concern({
+      name: "authentication and access control",
+      covers: "Accepts authorization headers and verifies request credentials.",
+      excludes: "RPC client response helpers, JSX, and runtime adapters are separate.",
+      core: "src/auth/check.ts",
+      test: "src/auth/check.test.ts",
+    });
+    const jsx = concern({
+      name: "JSX rendering",
+      covers: "Client hydration and DOM rendering for JSX trees.",
+      excludes: "Runtime adapters and authentication are separate.",
+      core: "src/jsx/dom/client.ts",
+      test: "src/jsx/dom/client.test.ts",
+    });
+    const map = mapWithConcerns(
+      [adapters.touchpoints[0]!.path, authentication.touchpoints[0]!.path, jsx.touchpoints[0]!.path],
+      [adapters, authentication, jsx],
+    );
+    const assessment = assessSpecialistEvidence(map, { cwd });
+    const pathsFor = (name: string): readonly string[] =>
+      assessment.attachments.find((attachment) => attachment.concern === name)?.paths ?? [];
+
+    assert.ok(pathsFor(jsx.concern).includes("src/jsx/dom/server.ts"));
+    assert.ok(!pathsFor(adapters.concern).includes("src/jsx/dom/server.ts"));
+    assert.ok(pathsFor(adapters.concern).includes("src/adapter/vercel/handler.ts"));
+    assert.ok(!assessment.attachments.some((attachment) =>
+      attachment.paths.includes("src/client/accept.ts")
+    ));
+    assert.ok(assessment.uncovered_paths.includes("src/client/accept.ts"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("test-only repositories may own their executable test behavior as core", () => {
   const cwd = repository([
     "tests/orchestration",
