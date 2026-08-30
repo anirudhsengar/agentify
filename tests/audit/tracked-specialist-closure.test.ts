@@ -530,6 +530,9 @@ test("progressive semantic repair may exceed two passes while each pass closes t
       /group the already-attested bodies/i.test(prompt)
       && /grouped_into set to one exact existing broader concern identity/i.test(prompt)
       && /unions their flows, touchpoints, invariants, pitfalls, questions, and validation/i.test(prompt)
+      && /resolve every obligation in the current bounded cluster batch/i.test(prompt)
+      && /batch exact not_concerns decisions into one write_map_delta/i.test(prompt)
+      && !/resolve the earliest distinct behavior/i.test(prompt)
     ));
     assert.deepEqual(
       runtime.repairToolSets,
