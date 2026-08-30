@@ -908,6 +908,9 @@ function rejectionHasGroundedDisposition(
   rejection: RejectionRecord,
   acceptedConcerns: readonly ConcernRecord[],
 ): boolean {
+  if (rejection.grouped_into !== undefined) {
+    return acceptedConcerns.some((concern) => concern.concern === rejection.grouped_into);
+  }
   const delegatedOwner = delegatedOwnerDescription(rejection.why_rejected);
   if (delegatedOwner === null) return true;
   const delegatedTokens = semanticTokens(delegatedOwner);
@@ -1607,7 +1610,7 @@ export function assessSpecialistEvidence(
       );
     } else if (!rejectionHasGroundedDisposition(rejection, acceptedConcernRecords)) {
       reasons.push(
-        `not_concerns candidate "${rejection.candidate}" delegates behavior to "${delegatedOwnerDescription(rejection.why_rejected)}", but no accepted concern semantically matches that disposition`,
+        `not_concerns candidate "${rejection.candidate}" delegates behavior to "${rejection.grouped_into ?? delegatedOwnerDescription(rejection.why_rejected)}", but no accepted concern semantically matches that disposition`,
       );
     }
   }

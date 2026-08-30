@@ -6,6 +6,8 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Structured `grouped_into` rejection ownership now takes precedence over
+  ambiguous prose aliases while still rejecting nonexistent concern identities.
 - Initial concern scouting now refuses parent-authored focus and numeric
   portfolio caps, so portfolio size always follows repository evidence while
   focused supplemental scouts remain limited to exact compiler obligations.

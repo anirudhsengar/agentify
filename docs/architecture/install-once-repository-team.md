@@ -286,7 +286,9 @@ boundaries preventing substring matches. A rejection that explicitly says
 behavior is subsumed elsewhere must also bind its named disposition to a real
 accepted concern; merely discussing an accepted concern does not delegate
 ownership, and a nonexistent delegated owner remains an unresolved
-obligation. Parent sessions are terminated by an
+obligation. When `grouped_into` is present, that exact structured identity is
+authoritative; semantic parsing of explanatory prose is only a legacy fallback.
+Parent sessions are terminated by an
 application-owned timer at the configured session deadline. SIGINT and SIGTERM
 run the same synchronous pending-installation rollback before process exit, so
 only the permitted diagnostic map can survive an interrupted fresh install.
