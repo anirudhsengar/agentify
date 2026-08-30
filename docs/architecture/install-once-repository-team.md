@@ -155,6 +155,13 @@ an existing installation is restored rather than deleted.
 Repository validation residue is confined to disposable system-temporary
 checkouts and removed after success, failure, timeout, or validator exception;
 it never enters the installation target or its rollback surface.
+Build discovery prefers a required behavioral test over build-only candidates.
+If the root has no test, it may inspect at most 64 Git-tracked manifest
+directories up to four levels deep; root ecosystem order wins equal-ranked
+candidates. Nested command working directories, manifests, and locks remain
+repository-relative. A fully pinned pip requirements file whose entries carry
+SHA-256 hashes is a reproducible lock, and Python test trees without a pytest
+contract use `python -m unittest discover`.
 
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30

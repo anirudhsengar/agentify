@@ -33,6 +33,18 @@ function pythonRunner(cwd: string): { prefix: string[]; install: string[] | null
   return { prefix: [], install: fileExists(cwd, "requirements.txt") ? ["pip", "install", "-r", "requirements.txt"] : null };
 }
 
+function hashLockedRequirements(cwd: string): boolean {
+  const content = readText(cwd, "requirements.txt");
+  if (content === null) return false;
+  const entries = content.replace(/\\\r?\n\s*/g, " ").split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#") && !line.startsWith("--"));
+  return entries.length > 0 && entries.every((entry) =>
+    /^[A-Za-z0-9_.-]+==[^\s]+\b/.test(entry)
+    && /(?:^|\s)--hash=sha256:[a-f0-9]{64}(?:\s|$)/i.test(entry)
+  );
+}
+
 /**
  * A project that configures mypy's `files` scope (pyproject `[tool.mypy]`, a
  * mypy ini, or setup.cfg) has deliberately chosen what gets type-checked.
@@ -51,7 +63,8 @@ function mypyHasConfiguredScope(cwd: string, pyprojectContent: string): boolean 
 function pythonToolCommands(cwd: string, runner: ReturnType<typeof pythonRunner>): InstallerCommand[] {
   const content = readText(cwd, "pyproject.toml") ?? "";
   const commands: InstallerCommand[] = [];
-  const hasPytest = /\bpytest\b/.test(content) || fileExists(cwd, "tests") || fileExists(cwd, "test");
+  const hasTests = fileExists(cwd, "tests") || fileExists(cwd, "test");
+  const hasPytest = /\bpytest\b/.test(content);
   const hasRuff = /\bruff\b/.test(content);
   const hasMypy = /\bmypy\b/.test(content);
   if (hasPytest) {
@@ -60,6 +73,13 @@ function pythonToolCommands(cwd: string, runner: ReturnType<typeof pythonRunner>
       label: "pytest",
       argv: [...runner.prefix, "pytest"],
       detail: "Python pytest validation discovered",
+    }));
+  } else if (hasTests) {
+    commands.push(makeCommand({
+      kind: "test",
+      label: "unittest",
+      argv: [...runner.prefix, "python", "-m", "unittest", "discover", fileExists(cwd, "tests") ? "tests" : "test"],
+      detail: "Python standard-library unittest discovery found tracked tests",
     }));
   }
   if (hasRuff) {
@@ -109,7 +129,8 @@ export function discoverPythonBuildSystem(cwd: string): BuildSystemDiscovery | n
   commands.push(...makefileCommands(cwd));
   const lockfile = ["uv.lock", "poetry.lock", "Pipfile.lock"]
     .map((name) => (fileExists(cwd, name) ? { path: name } : null))
-    .find((entry) => entry !== null) ?? null;
+    .find((entry) => entry !== null)
+    ?? (hashLockedRequirements(cwd) ? { path: "requirements.txt" } : null);
   return {
     manifest: { path: manifest, ecosystem: "python" },
     commands: mergeValidationCommands(commands),

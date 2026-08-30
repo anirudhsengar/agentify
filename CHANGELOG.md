@@ -58,6 +58,11 @@ All notable changes to Agentify are documented here.
   deterministic compilation before provider probing or budgeted audit repair,
   so a normalizable map is not mislabeled as legacy evidence or blocked by an
   already exhausted model budget.
+- Validation discovery now prefers a tracked nested project with a required
+  behavioral test when the root exposes only build or syntax checks. The scan
+  is Git-bound and capped at 64 manifest directories four levels deep; root
+  ecosystem precedence wins ties. Hash-pinned pip requirements are recognized
+  as a lock, and Python test trees without pytest use stdlib unittest discovery.
 
 - The bounded default audit envelope now permits 240 model calls/turns, eight million input/cache tokens, and 24 explorer spawns so a complete evidence-backed portfolio and final obligation-focused repair can fit while duration, output, cost, convergence, and artifact caps remain enforced.
 
