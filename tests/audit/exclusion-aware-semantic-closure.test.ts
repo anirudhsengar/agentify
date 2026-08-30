@@ -434,6 +434,41 @@ test("a supporting citation cannot compete for ownership of behavior it explicit
   }
 });
 
+test("entry questions do not establish positive ownership of an unrelated cluster", () => {
+  const cwd = repository([
+    "src/utils/jwt/jwt.ts",
+    "src/utils/jwt/jwt.test.ts",
+    "src/middleware/serve-static/path.ts",
+    "src/middleware/serve-static/path.test.ts",
+  ]);
+  try {
+    const jwt = concern({
+      name: "JWT signing and verification",
+      covers: "Token encoding, algorithm dispatch through WebCrypto, key import, header validation, claim enforcement, and key-set verification.",
+      excludes: "HTTP request dispatch and middleware integration concerns covered separately by `middleware/jwt` and `middleware/jwk`.",
+      core: "src/utils/jwt/jwt.ts",
+      test: "src/utils/jwt/jwt.test.ts",
+    });
+    jwt.entry_questions = [
+      "Is this change to the JWT layer itself, or only to the `middleware/jwt` and `middleware/jwk` wrappers, and which side should carry the invariant?",
+      "For sign-side changes: must the new code path preserve base64url and utf8-boundary semantics?",
+    ];
+    const assessment = assessSpecialistEvidence(
+      mapWithConcerns([jwt.touchpoints[0]!.path], [jwt]),
+      { cwd },
+    );
+
+    assert.ok(assessment.uncovered_paths.includes("src/middleware/serve-static/path.ts"));
+    assert.ok(assessment.uncovered_paths.includes("src/middleware/serve-static/path.test.ts"));
+    assert.ok(!assessment.attachments.some((attachment) =>
+      attachment.concern === jwt.concern
+      && attachment.paths.some((repositoryPath) => repositoryPath.includes("serve-static"))
+    ), JSON.stringify(assessment.attachments));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("an auxiliary-only concern cannot duplicate implementation-owned behavior", () => {
   const cwd = repository([
     "src/command.ts",
