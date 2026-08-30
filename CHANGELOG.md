@@ -6,6 +6,9 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Concern discovery now rejects generic catalogs and framework layers that
+  merge unrelated failure domains through a shared API or subtree, and forbids
+  shared integration files from substituting for behavior-specific core owners.
 - Structured `grouped_into` rejection ownership now takes precedence over
   ambiguous prose aliases while still rejecting nonexistent concern identities.
 - Initial concern scouting now refuses parent-authored focus and numeric

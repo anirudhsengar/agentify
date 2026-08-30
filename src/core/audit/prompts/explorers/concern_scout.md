@@ -117,6 +117,12 @@ focus_acknowledged: <echo of FOCUS>
  Sometimes a directory genuinely is a concern — but only say so after
  confirming the concern does not also live somewhere else.
 
+- **The catalog test.** Catalogs and framework layers are not concerns. Reject
+ a catalog or framework layer that combines unrelated failure domains merely
+ because they use one shared API or subtree. Split only behaviors with their
+ own coherent invariant set and implementation owner; otherwise reject the
+ individual modules rather than inventing a generic specialist.
+
 - **The overlap test.** Two concerns that both touch the same file are
  normal and expected. Auth and checkout both touch the request
  middleware; auth cares about who the caller is, checkout cares about

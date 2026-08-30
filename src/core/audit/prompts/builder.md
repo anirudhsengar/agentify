@@ -94,6 +94,9 @@ would specialize in to work on it well.
    that is subsumed by a broader behavioral concern, is only a public type surface,
    or is only a release or contribution process. Record each exact candidate and
    a repository-specific reason in `not_concerns`; generic labels are insufficient.
+   Reject a catalog or framework layer that combines unrelated failure domains
+   through a shared integration API or subtree. Split only evidence-backed
+   behaviors with coherent invariants and independent implementation ownership.
    Merge overlapping behavioral candidates by rejecting the narrower names as
    subsumed, then trace the coherent concern that owns their shared flow.
    In particular, when multiple candidates have the same sole tracked

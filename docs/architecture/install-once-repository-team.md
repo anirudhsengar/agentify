@@ -224,6 +224,10 @@ implementation file and no independent implementation owner are grouped into
 the broader behavioral concern before tracing; separate symbols cannot create
 multiple file-level core owners. Tracers prefer concern-specific implementation
 files as core and retain shared orchestration as supporting evidence.
+Catalogs and framework layers that combine unrelated failure domains through a
+shared integration API or subtree are rejected before tracing. A traced concern
+must core-own its behavior-specific implementation; shared integration files
+remain supporting when those implementations exist.
 Normalization may promote a supporting implementation file to core without a
 model call only when exactly one accepted concern cites it and that concern's
 existing core evidence is test-only. Multiple eligible implementation paths or
