@@ -365,3 +365,67 @@ test("normalization gives a shared core path to the sole concern that depends on
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test("normalization gives shared orchestration to its unique dependent supporting claimant", () => {
+  const cwd = repository([
+    "src/command.ts",
+    "src/argument.ts",
+    "src/error.ts",
+    "tests/routing.test.ts",
+    "tests/argument.test.ts",
+    "tests/error.test.ts",
+  ]);
+  try {
+    const routing = concern({
+      name: "routing and dispatch",
+      covers: "Routes commands through the shared dispatcher.",
+      excludes: "Argument coercion and error formatting.",
+      core: "tests/routing.test.ts",
+      test: "tests/routing.test.ts",
+      supporting: ["src/command.ts"],
+    });
+    const argumentsConcern = concern({
+      name: "argument coercion",
+      covers: "Coerces positional arguments through command integration.",
+      excludes: "Routing and error formatting.",
+      core: "src/argument.ts",
+      test: "tests/argument.test.ts",
+      supporting: ["src/command.ts"],
+    });
+    argumentsConcern.touchpoints.find((entry) => entry.path === "src/command.ts")!.centrality = "core";
+    const errors = concern({
+      name: "error formatting",
+      covers: "Formats errors through command integration.",
+      excludes: "Routing and argument coercion.",
+      core: "src/error.ts",
+      test: "tests/error.test.ts",
+      supporting: ["src/command.ts"],
+    });
+    errors.touchpoints.find((entry) => entry.path === "src/command.ts")!.centrality = "core";
+    const map = mapWithConcerns(["src/command.ts", "src/argument.ts", "src/error.ts"], [
+      routing,
+      argumentsConcern,
+      errors,
+    ]);
+
+    const resolved = assessSpecialistEvidence(map, { cwd });
+    assert.ok(resolved.core_ownership_resolutions.some((entry) =>
+      entry.path === "src/command.ts" && entry.concern === "routing and dispatch"
+    ));
+    assert.ok(!resolved.reasons.some((reason) => /src\/command\.ts.*multiple core owners/i.test(reason)));
+
+    map.concern_evidence!.concerns.push(concern({
+      name: "alternate routing",
+      covers: "Duplicates routing through the same dispatcher.",
+      excludes: "Argument coercion and error formatting.",
+      core: "tests/routing.test.ts",
+      test: "tests/routing.test.ts",
+      supporting: ["src/command.ts"],
+    }));
+    const tied = assessSpecialistEvidence(map, { cwd });
+    assert.ok(!tied.core_ownership_resolutions.some((entry) => entry.path === "src/command.ts"));
+    assert.ok(tied.reasons.some((reason) => /src\/command\.ts.*multiple core owners/i.test(reason)));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
