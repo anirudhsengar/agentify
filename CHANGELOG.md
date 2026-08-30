@@ -103,6 +103,10 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Existing-concern tracer repairs now preserve application-bound behavioral
+  scope as well as the exact concern name. A typed replacement body that drops
+  every prior core path is rejected and must be proposed as a new concern.
+
 - Inferred implementation/test attachments now treat explicit concern
   exclusions as authoritative negative evidence. An incidental positive mention
   can no longer absorb a separately excluded sibling behavior; direct tracked

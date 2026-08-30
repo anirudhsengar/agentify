@@ -528,6 +528,7 @@ export function createConcernSubmissionTool(
     onSubmit: (concern: Concern) => void,
     repositoryRoot?: string,
     expectedConcern?: string,
+    requiredScopePaths: readonly string[] = [],
 ): ToolDefinition {
     return defineTool({
         name: "submit_concern_report",
@@ -563,6 +564,24 @@ export function createConcernSubmissionTool(
                     content: [{
                         type: "text",
                         text: `Error: concern must exactly match the application-bound identity ${JSON.stringify(expectedConcern)}; resubmit without renaming it.`,
+                    }],
+                    isError: true,
+                    details: { recorded: false, concern: null },
+                };
+            }
+            const submittedPaths = new Set([
+                ...decoded.concern.touchpoints.map((touchpoint) => touchpoint.path),
+                ...decoded.concern.flows.flatMap((flow) => flow.steps.map((step) => step.path)),
+            ]);
+            if (
+                requiredScopePaths.length > 0
+                && !requiredScopePaths.some((repositoryPath) => submittedPaths.has(repositoryPath))
+            ) {
+                return {
+                    content: [{
+                        type: "text",
+                        text:
+                            "Error: retracing an existing concern must preserve its application-bound behavioral scope by retaining at least one prior core path; use a new scout proposal for a distinct behavior.",
                     }],
                     isError: true,
                     details: { recorded: false, concern: null },
@@ -839,6 +858,15 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 stateDir,
             );
         }
+        const requiredScopePaths = mode === "concern_tracer" && expectedConcern
+            ? [...new Set(
+                (loadCanonicalMapAt(ctx.cwd, stateDir)?.concern_evidence?.concerns.find((concern) =>
+                    concern.concern === expectedConcern
+                )?.touchpoints ?? [])
+                    .filter((touchpoint) => touchpoint.centrality === "core")
+                    .map((touchpoint) => touchpoint.path),
+            )]
+            : [];
 
         const subAgentModel = toolOptions.explorerModel;
         const subAgentModelLabel = `${subAgentModel.provider}/${subAgentModel.id}`;
@@ -963,7 +991,10 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             `\n\n# Constraints (from parent)\n` +
             `- Model: ${subAgentModelLabel}\n` +
             `- Provider-call cap: ${maxProviderCalls} (${maxReads} repository reads, ${maxBash} bash invocations max)\n` +
-            `- Return ## Report within ~${mode === "concern_tracer" ? 3_000 : maxSteps * 1_000} tokens.`;
+            `- Return ## Report within ~${mode === "concern_tracer" ? 3_000 : maxSteps * 1_000} tokens.` +
+            (requiredScopePaths.length > 0
+                ? `\n- Preserve the existing concern scope by retaining at least one prior core path: ${requiredScopePaths.join(", ")}.`
+                : "");
         const task = mode === "custom"
             ? `${params.target_path}${summarySuffix}${constraintsBlock}`
             : `${params.target_path} ${params.focus ?? ""}${summarySuffix}${constraintsBlock}` +
@@ -1084,7 +1115,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const concernSubmissionTool = mode === "concern_tracer"
                 ? createConcernSubmissionTool(concernObservedAt as string, (concern) => {
                     submission.concern = concern;
-                }, ctx.cwd, expectedConcern)
+                }, ctx.cwd, expectedConcern, requiredScopePaths)
                 : null;
             const sessionTools = concernSubmissionTool
                 ? [...toolsForMode, concernSubmissionTool.name]
