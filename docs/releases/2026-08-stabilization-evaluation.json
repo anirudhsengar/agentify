@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-29T15:21:52Z",
+  "generated_at": "2026-08-30T19:30:38Z",
+  "report_status": "superseded_failed_qualification",
+  "release_ready": false,
+  "final_candidate_sha": null,
+  "evidence_scope": "Candidate and changed-file inventory below are archived observations, not qualification of the current branch. Results cannot carry forward to changed production code.",
+  "product_qualification_rule": "All eight non-policy historical teams and at least five of six non-policy held-outs in each of two unchanged-production rounds must install. Diagnostic-only fails unless required tooling is unavailable.",
   "evaluation_scope": "specialist compiler stabilization",
   "candidate": {
     "production_sha": "e1186861095ac543b4bef9e4f97ca09a76918be8",
@@ -51,8 +56,8 @@
   },
   "historical_live_provenance": {
     "production_sha": "b35b17e492bda6bbbd2d1cc90453da30e568b367",
-    "carried_forward_to": "e1186861095ac543b4bef9e4f97ca09a76918be8",
-    "basis": "Later production deltas open the installation transaction before recognized-runtime repair and harden installer reads and subprocess selection against filesystem races and untrusted environment-selected executables. Exact-candidate deterministic and package tests exercise ready and fail-closed recognized-runtime fixtures, rollback of newly repaired policy and workflow files, bounded no-follow reads, and fixed executable selection; exact-candidate CodeQL reports no alerts. Historical cases are diagnostic-only or policy-refusal cases and do not enter recognized-runtime repair."
+    "carried_forward_to": null,
+    "basis": "These diagnostic-only observations failed product qualification. Later production candidates require fresh exact-SHA evaluation."
   },
   "historical_live": [
     {"repository":"commander.js","target_sha":"ba6d13ddb4243e5913367734f8c159089ffe7834","disposition":"diagnostic_only","calls":96,"turns":96,"input_tokens":1506564,"output_tokens":60599,"cost_usd":0.17969776,"elapsed_ms":809931,"fingerprint":"43e428a1f591176b3c03f8886318ce4fb373ab411ebb8c8899c1e309af67f617"},
@@ -177,10 +182,10 @@
   ],
   "acceptance": {
     "historical_replay": "passed",
-    "historical_live": "passed_on_b35b17e_with_exact-candidate_transaction_and_security_qualification",
-    "held_out_round_1": "passed",
-    "held_out_round_2": "passed",
-    "two_consecutive_held_out_rounds_without_production_changes": true,
+    "historical_live": "failed_0_of_8_non_policy_installations",
+    "held_out_round_1": "failed_0_of_6_non_policy_installations",
+    "held_out_round_2": "failed_0_of_6_non_policy_installations",
+    "two_consecutive_held_out_rounds_without_production_changes": false,
     "normalization_idempotent": true,
     "installation_atomic": true,
     "restrictive_policy_no_write": true,
@@ -189,7 +194,7 @@
     "resource_budget_violations": 0,
     "production_repository_specific_hacks": 0
   },
-  "qualification_outcome": "release_ready_pending_exact_report_head_ci",
+  "qualification_outcome": "not_release_ready",
   "known_limitations": [
     "Default budgets intentionally reject repositories whose semantic closure cannot be completed within the configured call, token, or duration ceilings.",
     "Repository validation commands run in disposable Git checkouts but are not containerized or network-isolated.",

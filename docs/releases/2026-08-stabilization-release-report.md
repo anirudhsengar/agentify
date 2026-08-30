@@ -1,14 +1,16 @@
 # Specialist compiler stabilization release report
 
-Agentify is ready for the exact pull-request-head release gate. The evaluated production candidate is `e1186861095ac543b4bef9e4f97ca09a76918be8`, built from base `f2df9eb8563bfcb26919d82c7bf28c9fb7c19e8b`. Its Node 22.19.0 packed artifact is 8,060,372 bytes with SHA-256 `acf4a0f09b6739249b5418f7f1bc21ca4f99d98baa2d1c3286cf23dab0c5bb1e`.
+Not release-ready. Do not merge PR #13. The earlier release recommendation is withdrawn: bounded, atomic failure does not qualify specialist-team generation.
+
+The archived candidate below is `e1186861095ac543b4bef9e4f97ca09a76918be8`, built from base `f2df9eb8563bfcb26919d82c7bf28c9fb7c19e8b`. Its Node 22.19.0 packed artifact is 8,060,372 bytes with SHA-256 `acf4a0f09b6739249b5418f7f1bc21ca4f99d98baa2d1c3286cf23dab0c5bb1e`. This is historical evidence, not qualification of the current branch.
 
 The implementation now treats specialist generation as a bounded, fail-closed compiler. Repository evidence and application-attested explorer receipts feed concern proposals; deterministic normalization resolves ownership; validation checks normalized closure and fixed-point idempotence; only the exact validated output can materialize; and the installation transaction rolls back every operational artifact on failure or termination. Restrictive tracked policy is evaluated before persistent mutation. Repository validation runs in disposable checkouts.
 
-## Qualification result
+## Archived qualification: failed
 
 - `mise exec node@22.19.0 -- npm run verify:release` passed on the evaluated production SHA: delivery-integrity inspection, strict typecheck, 95 recursively discovered source test files, nine executable historical replay cases, documentation/package contracts, focused invariants, scaffold E2E, exact packed-package qualification, and a zero-vulnerability full dependency audit.
-- All nine historical live repositories reached an allowed terminal disposition on `b35b17e492bda6bbbd2d1cc90453da30e568b367`. Lobsters refused all writes because tracked policy prohibited AI-authored persistence. Commander.js, aqa-tests, Click, Cobra, Hono, Gin, Axum, and Spring Petclinic failed safely with precise unresolved obligations and only the explicitly permitted diagnostic map. This historical evidence is carried forward rather than presented as an exact-candidate rerun. Later production deltas open the installation transaction before recognized-runtime repair and harden filesystem reads and executable selection; exact-candidate tests and CodeQL cover those paths.
-- Two fresh consecutive held-out rounds ran on exact `e118686` without production-code changes across Vitest, ItsDangerous, Groupcache, Anyhow, JUnit4, Rack, and Emacs. Emacs refused all persistent writes in both rounds. The other six cases remained diagnostic-only; none installed a partial team or operational workflow.
+- The historical matrix on `b35b17e492bda6bbbd2d1cc90453da30e568b367` installed **0/8 non-policy teams**. Commander.js, aqa-tests, Click, Cobra, Hono, Gin, Axum, and Spring Petclinic were diagnostic-only: all failed product qualification. Lobsters correctly refused writes. These results cannot be carried forward as exact-candidate qualification.
+- Both unchanged-production held-out rounds on `e118686` installed **0/6 non-policy teams**. Vitest, ItsDangerous, Groupcache, Anyhow, JUnit4, and Rack were diagnostic-only. Both rounds failed the required minimum of five installations. Emacs correctly refused writes.
 - Every accepted live invocation stayed at or below 96 calls, 96 turns, two million input/cache tokens, 200,000 output tokens, USD 20, 16 explorers, and 1.8 million aggregate audit milliseconds. Every audit invocation emitted one budget event and one terminal result.
 - Exact target comparisons found no application-code mutation or build/cache residue. Failed analyzable runs retained only `.agentify/runtime/audit/codebase_map.json`; restrictive-policy cases retained nothing.
 
@@ -16,16 +18,21 @@ The complete machine-readable evidence summary is [`2026-08-stabilization-evalua
 
 ## Changed-file policy
 
-The branch is restricted to 80 intentional production source, prompt, documentation, deterministic fixture, and test files. It contains no apply/export/materialization workflow, encoded payload, patch archive, generated source archive, retry workflow, one-shot qualification workflow, or staging machinery.
+The archived 80-file inventory in the machine-readable report is not the current branch inventory. A complete fresh changed-file enumeration and forbidden-artifact inspection are still required on the final candidate.
 
-The complete changed-file list is recorded in the machine-readable report under `changed_files`. It covers four repository-root files, five release/index/architecture documents, 40 production source and prompt files under `src/`, and 31 deterministic test/fixture files under `tests/`. The exact list is also regenerated by the delivery-integrity gate before the pull request is updated.
+## Current development evidence
+
+- Exact `985f5ea18a381bab7b222ce59155d0cd848a689c` passed `npm run test:all` on Node 26.7.0: build, all 97 discovered test files, executable portfolio corpus, documentation/package links, and product invariants. This is not the supported-Node, package, CI, CodeQL, or live release gate.
+- Latest Hono lineage on `3ccb4e8014ac5a436b072f85b02f4f8ec6d3b5e9` failed installation: seven concern bodies, remaining clusters, an adapter tracer timeout, and an untraced scout proposal. Aggregate use was 204 calls, 179,430 output tokens, 24 explorers, 1,799,203 audit milliseconds, and $0.47485284 reported model cost. Only the permitted diagnostic map remained; tracked application bytes were unchanged.
+- Development installations on earlier commits do not qualify later production code. No final candidate or two clean qualification rounds have been established.
 
 ## Known limitations
 
-- Default budgets deliberately prefer a precise no-installation result over an under-grounded team. Larger repositories may require explicitly raised bounded configuration.
+- Hono still fails convergence and has exposed false attachment and generic-portfolio risks. Safe failure remains necessary but is not successful product qualification.
+- The corpus compiles and materializes portfolios, but its readiness/disposition assertions still need to exercise actual installer results instead of fixture constants.
 - Validation commands execute in disposable exact-HEAD checkouts with scrubbed credentials, but Agentify does not provide container or network isolation.
 - Live model outcomes are nondeterministic. The executable replay corpus, compiler invariants, and package qualification remain the authoritative repeatable release gates.
 
 ## Recommendation
 
-Update the existing non-draft pull request and merge only if its exact report head passes Node 22.19.0 and Node 24 tests, typecheck, package/scaffold qualification, full dependency audit, delivery-integrity inspection, and CodeQL. Do not merge without explicit authorization.
+Do not merge. Keep the existing branch and non-draft PR. One exact final SHA must install all eight non-policy historical teams and at least five of six non-policy held-outs in each of two unchanged-production rounds, pass manual team review on three materially different repositories, and pass supported-Node, package/scaffold, dependency-audit, delivery-integrity, CI, and CodeQL gates. Diagnostic-only counts as failure unless required tooling is unavailable. No merge is authorized.
