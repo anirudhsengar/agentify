@@ -159,6 +159,10 @@ All notable changes to Agentify are documented here.
   implementation path when a concern would otherwise have test-only core
   ownership; ambiguous or multiply cited candidates still fail closed.
 
+- Shared orchestration ownership now moves to one sole dependent supporting
+  claimant when every existing core owner retains an independent implementation
+  core. Examples, fixtures, tests, and tied claimants cannot prove this rule.
+
 - Explorer sessions now run serially with hard mode-specific repository-read
   and provider-call limits. Aggregate exhaustion reports the exact unresolved
   semantic obligations and fingerprint; complete reports at the limit survive.

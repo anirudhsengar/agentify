@@ -206,6 +206,10 @@ test-only; tied implementation candidates remain unresolved. A mirrored implemen
 when one accepted concern explicitly cites the complete pair and every competing
 concern cites a strict subset. Ambiguous shared files and tied cluster claims
 remain unresolved.
+When one supporting claimant lacks an independent core implementation and every
+current core owner of the shared orchestration file retains another independent
+implementation core, normalization assigns the shared file to that sole
+dependent claimant. Multiple dependent claimants remain unresolved.
 
 ### 2. Run the one-time installer
 

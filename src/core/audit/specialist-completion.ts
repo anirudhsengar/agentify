@@ -59,6 +59,7 @@ const DOCUMENTATION_DIRECTORY_NAMES = new Set([
   "man",
   "manual",
 ]);
+const AUXILIARY_DIRECTORY_NAMES = new Set(["example", "examples", "fixture", "fixtures"]);
 const GENERATED_DIRECTORY_NAMES = new Set([
   ".cache",
   ".venv",
@@ -361,8 +362,15 @@ function eligibleImplementationPath(repositoryPath: string): boolean {
   if (isTestRepositoryPath(repositoryPath) || isGenericPlumbing(repositoryPath)) return false;
   const directories = repositoryPath.split("/").slice(0, -1).map((segment) => segment.toLowerCase());
   return !directories.some((segment) =>
-    DOCUMENTATION_DIRECTORY_NAMES.has(segment) || GENERATED_DIRECTORY_NAMES.has(segment)
+    DOCUMENTATION_DIRECTORY_NAMES.has(segment)
+    || GENERATED_DIRECTORY_NAMES.has(segment)
   );
+}
+
+function independentCoreImplementationPath(repositoryPath: string): boolean {
+  if (!eligibleImplementationPath(repositoryPath)) return false;
+  return !repositoryPath.split("/").slice(0, -1)
+    .some((segment) => AUXILIARY_DIRECTORY_NAMES.has(segment.toLowerCase()));
 }
 
 const PACKAGE_MANIFEST_NAMES = new Set([
@@ -1193,6 +1201,29 @@ export function assessSpecialistEvidence(
         path: repositoryPath,
         reason:
           "the selected concern has no other core implementation path while every adjacent concern retains independent core ownership",
+      });
+      continue;
+    }
+    const dependentSupportingClaimants = accepted.filter((assessment) =>
+      !owners.includes(assessment.concern)
+      && assessment.contextPaths.includes(repositoryPath)
+      && !assessment.corePaths.some(independentCoreImplementationPath)
+    );
+    const everyCurrentOwnerRetainsImplementation = owners.every((owner) =>
+      accepted.find((assessment) => assessment.concern === owner)?.corePaths.some((candidate) =>
+        candidate !== repositoryPath && independentCoreImplementationPath(candidate)
+      ) === true
+    );
+    if (
+      eligibleImplementationPath(repositoryPath)
+      && dependentSupportingClaimants.length === 1
+      && everyCurrentOwnerRetainsImplementation
+    ) {
+      addOwnershipResolution({
+        concern: dependentSupportingClaimants[0]!.concern,
+        path: repositoryPath,
+        reason:
+          "the selected concern is the sole supporting claimant without another core implementation while every current core owner retains independent implementation ownership",
       });
     }
   }

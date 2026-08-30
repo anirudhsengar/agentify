@@ -164,6 +164,11 @@ Normalization may promote a supporting implementation file to core without a
 model call only when exactly one accepted concern cites it and that concern's
 existing core evidence is test-only. Multiple eligible implementation paths or
 competing concern citations remain unresolved.
+For a multiply core-owned orchestration file, normalization may instead select
+one supporting claimant only when it is the sole claimant without another
+independent implementation core and every current owner retains one. Examples,
+fixtures, and tests do not establish that independent implementation ownership;
+tied dependent claimants remain unresolved.
 The application checkpoints cumulative usage in the diagnostic map, bound to
 the audited commit. Same-HEAD CLI continuations resume the remaining budget
 rather than resetting counters; a new commit begins a new evidence lineage.
