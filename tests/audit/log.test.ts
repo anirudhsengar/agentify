@@ -48,6 +48,7 @@ async function testOnlyProviderResponsesCountAsTurns(): Promise<void> {
     recordMessageEnd!.call(log, "toolResult");
     recordMessageEnd!.call(log, "assistant", { input: 3, output: 2 });
     log.runEnd({ exit_code: 0, status: "success" });
+    log.runEnd({ exit_code: -1, status: "error" });
     const logPath = log.logPath;
     await log.close();
 
@@ -56,6 +57,7 @@ async function testOnlyProviderResponsesCountAsTurns(): Promise<void> {
       payload: string;
     });
     const terminal = lines.find((entry) => entry.event === "agentify.run_end");
+    assert.equal(lines.filter((entry) => entry.event === "agentify.run_end").length, 1);
     assert.ok(terminal);
     const payload = JSON.parse(terminal.payload) as {
       total_turns: number;

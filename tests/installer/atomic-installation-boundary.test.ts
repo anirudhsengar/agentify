@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { Value } from "typebox/value";
 import { runAgentifyApp } from "../../src/core/agentify-app.ts";
-import { CodebaseMapSchema } from "../../src/core/audit/schema.ts";
+import { CodebaseMapSchema, type CodebaseMap } from "../../src/core/audit/schema.ts";
 import {
   finalizeOneTimeInstallation,
   prepareOneTimeInstallationState,
@@ -291,6 +291,64 @@ test("SIGTERM rolls a pending installation back to diagnostic-map-only state", a
     assert.deepEqual(retainedFiles, ["codebase_map.json"]);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("SIGTERM preserves one terminal audit result and charged budget through rollback", () => {
+  const { cwd } = createRepository();
+  const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-signal-audit-"));
+  try {
+    const moduleUrl = (relative: string): string => pathToFileURL(path.resolve(relative)).href;
+    const script = `
+      import fs from "node:fs";
+      import os from "node:os";
+      import path from "node:path";
+      import { syncBuiltinESMExports } from "node:module";
+      import { beginPendingInstallation } from ${JSON.stringify(moduleUrl("src/core/installer/installation-transaction.ts"))};
+      import { runRepositoryAudit } from ${JSON.stringify(moduleUrl("src/core/runs/repository-audit-run.ts"))};
+      const [cwd, configRoot] = process.argv.slice(1);
+      os.homedir = () => configRoot;
+      syncBuiltinESMExports();
+      beginPendingInstallation(cwd);
+      fs.mkdirSync(path.join(cwd, ".agentify"), { recursive: true });
+      fs.writeFileSync(path.join(cwd, ".agentify/manifest.json"), "partial install");
+      await runRepositoryAudit({
+        cwd,
+        config: { schemaVersion: 1, thinkingLevel: "high", models: {} },
+        ui: { info() {}, status() {}, error() {} },
+        runtime: { async runSession(options) {
+          options.onEvent({ type: "message_end", message: {
+            role: "assistant", usage: { input: 3, output: 2, cost: { total: 0.01 } }
+          } });
+          setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
+          await new Promise(() => {});
+        } }
+      });
+    `;
+    const child = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script, cwd, configRoot], {
+      cwd: path.resolve("."), encoding: "utf8", timeout: 20_000,
+    });
+    assert.equal(child.status, 143, child.stderr);
+    const logDir = path.join(configRoot, ".agentify/logs/agentify");
+    const files = fs.readdirSync(logDir);
+    assert.equal(files.length, 1);
+    const events = fs.readFileSync(path.join(logDir, files[0]!), "utf8").trim().split("\n").map((line) => (
+      JSON.parse(line) as { event: string; payload: string }
+    ));
+    const terminal = events.filter((event) => event.event === "agentify.run_end");
+    assert.equal(terminal.length, 1, "SIGTERM must retain exactly one terminal audit result");
+    assert.equal(JSON.parse(terminal[0]!.payload).exit_code, 143);
+    assert.equal(JSON.parse(terminal[0]!.payload).status, "aborted");
+    assert.equal(events.at(-1)?.event, "agentify.run_end");
+    const map = JSON.parse(fs.readFileSync(path.join(cwd, ".agentify/runtime/audit/codebase_map.json"), "utf8")) as CodebaseMap;
+    assert.equal(map.audit_budget_checkpoint?.usage.model_calls, 1);
+    assert.equal(map.audit_budget_checkpoint?.usage.input_tokens, 3);
+    assert.equal(map.audit_budget_checkpoint?.usage.output_tokens, 2);
+    assert.equal(map.audit_budget_checkpoint?.usage.cost_usd, 0.01);
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify/manifest.json")), false);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(configRoot, { recursive: true, force: true });
   }
 });
 
