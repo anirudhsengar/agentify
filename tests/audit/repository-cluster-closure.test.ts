@@ -169,6 +169,65 @@ test("repository-wide implementation/test mirrors prevent false specialist closu
   }
 });
 
+test("uncovered module clusters prioritize dependency centrality with stable ties", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-cluster-priority-"));
+  for (const repositoryPath of [
+    "README.md",
+    "package.json",
+    "src/a-leaf.test.ts",
+    "src/a-leaf.ts",
+    "src/b-leaf.test.ts",
+    "src/b-leaf.ts",
+    "src/importer-one.test.ts",
+    "src/importer-two.test.ts",
+    "src/owned.test.ts",
+    "src/owned.ts",
+    "src/z-core.test.ts",
+    "src/z-core.ts",
+  ]) write(cwd, repositoryPath);
+  fs.writeFileSync(
+    path.join(cwd, "src/importer-one.ts"),
+    'import { core } from "./z-core.js";\nexport const one = core;\n',
+  );
+  fs.writeFileSync(
+    path.join(cwd, "src/importer-two.ts"),
+    'import { core } from "./z-core.js";\nexport const two = core;\n',
+  );
+  git(cwd, "init", "-q");
+  git(cwd, "config", "user.name", "Agentify Test");
+  git(cwd, "config", "user.email", "agentify@example.invalid");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "priority fixture");
+  try {
+    const map = clickShapedMap();
+    map.meta.project_type = "TypeScript library";
+    map.meta.languages = ["TypeScript"];
+    map.skeleton.entry_points = [{
+      path: "src/owned.ts",
+      role: "owned fixture entry point",
+      language: "TypeScript",
+      run_command: "npm test",
+    }];
+    map.skeleton.first_5_files_for_fresh_agent = [{
+      path: "src/owned.ts",
+      why: "owned fixture behavior",
+    }];
+    map.pitfalls = [];
+    map.operational_surface.build.recipe_file = "package.json";
+    map.concern_evidence = {
+      concerns: [concern("owned behavior", "src/owned.ts", "src/owned.test.ts")],
+      not_concerns: [],
+    };
+
+    const keys = assessSpecialistEvidence(map, { cwd }).uncovered_clusters
+      .map((cluster) => cluster.cluster_key);
+    assert.equal(keys[0], "z-core");
+    assert.ok(keys.indexOf("a-leaf") < keys.indexOf("b-leaf"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("normalization keeps an explicitly excluded sibling behavior unresolved", () => {
   const cwd = createRepository();
   try {
