@@ -179,6 +179,38 @@ test("excluded behavior cannot be attached to a concern as positive semantic evi
   }
 });
 
+test("a generic exclusion token does not veto a distinct mirrored behavior cluster", () => {
+  const cwd = repository([
+    "lib/option.js",
+    "examples/options-env.js",
+    "tests/options.env.test.js",
+  ]);
+  try {
+    const options = concern({
+      name: "option value resolution",
+      covers: "Resolves defaults, environment values, conflicts, and implied option values.",
+      excludes: "Unknown-option suggestion logic and help rendering.",
+      core: "lib/option.js",
+      test: "tests/options.env.test.js",
+    });
+    const map = mapWithConcerns(["lib/option.js"], [options]);
+    const attachable = assessSpecialistEvidence(map, { cwd });
+    assert.ok(attachable.attachments.some((attachment) =>
+      attachment.concern === options.concern
+      && attachment.paths.includes("examples/options-env.js")
+      && attachment.paths.includes("tests/options.env.test.js")
+    ));
+
+    options.excludes = "Environment-backed option value behavior is a separate specialty.";
+    const excluded = assessSpecialistEvidence(map, { cwd });
+    assert.ok(!excluded.attachments.some((attachment) =>
+      attachment.paths.includes("examples/options-env.js")
+    ));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("test-only repositories may own their executable test behavior as core", () => {
   const cwd = repository([
     "tests/orchestration",
