@@ -120,6 +120,11 @@ have exactly one accepted core owner; other specialists may retain it only as a
 supporting touchpoint until deterministic ownership is resolved. Test-only core
 ownership is refused when the same concern cites tracked implementation
 behavior, without rejecting repositories whose product is itself a test suite.
+After that validation, an auxiliary-only example or fixture candidate is
+normalized into a path-backed rejection only when portfolio-distinct semantic
+evidence overlaps a concern with independent implementation core. Unrelated
+example products remain eligible, and the repaired map is revalidated before
+ordinary ownership normalization.
 The compiler resolves one narrow shared-file case deterministically: exactly
 one concern has no other core implementation path while every adjacent concern
 does. That sole-dependent concern keeps core ownership and the other mentions

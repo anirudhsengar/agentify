@@ -2,6 +2,7 @@ import type { CoverageClosureOptions } from "./coverage.ts";
 import type { CodebaseMap } from "./schema/index.ts";
 import {
   assessSpecialistEvidence,
+  reconcileAuxiliaryDuplicateConcerns,
   reconcileSpecialistEvidence,
   type SpecialistEvidenceAssessment,
 } from "./specialist-completion.ts";
@@ -53,6 +54,12 @@ export function compileSpecialistEvidence(
   for (let iteration = 1; iteration <= MAX_SPECIALIST_COMPILATION_ITERATIONS; iteration += 1) {
     const assessment = assessSpecialistEvidence(current, options);
     if (!assessment.complete) {
+      const repaired = reconcileAuxiliaryDuplicateConcerns(current, assessment);
+      if (repaired !== current) {
+        current = repaired;
+        normalized = true;
+        continue;
+      }
       return {
         status: "incomplete",
         complete: false,

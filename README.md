@@ -205,7 +205,11 @@ that path is cited by exactly one accepted concern whose prior core evidence is
 test-only; tied implementation candidates remain unresolved. A mirrored implementation/test cluster is assigned only
 when one accepted concern explicitly cites the complete pair and every competing
 concern cites a strict subset. Ambiguous shared files and tied cluster claims
-remain unresolved.
+remain unresolved. An example- or fixture-only candidate is rejected as an
+independent specialist when at least two portfolio-distinct behavioral tokens
+overlap a concern with independent implementation core. The rejection retains
+its exact tracked paths; an unrelated example product and a repository whose
+product is tests remain eligible.
 An observed public type trace can assign a declaration file only when its named
 type resolves to one tracked declaration path and every traced runtime file
 resolves to the same normalized core owner. The declaration becomes that

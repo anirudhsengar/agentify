@@ -117,9 +117,10 @@ All notable changes to Agentify are documented here.
   it only as supporting context until ownership is resolved. A concern cannot
   assign only tests as core while citing tracked implementation behavior as
   supporting; repositories whose executable product is test-only remain valid.
-  An auxiliary-only example or fixture concern also remains unresolved when
-  its repository-specific semantic evidence overlaps a concern with independent
-  implementation ownership; distinct example products remain eligible.
+  An auxiliary-only example or fixture concern is deterministically recorded
+  as a path-backed rejection when its repository-specific semantic evidence
+  overlaps a concern with independent implementation ownership; distinct
+  example products remain eligible.
   When exactly one concern depends on a shared implementation file for its only
   core path, deterministic normalization retains that concern as owner and
   downgrades adjacent mentions to supporting; genuinely ambiguous ownership

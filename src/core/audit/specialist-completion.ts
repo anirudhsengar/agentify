@@ -98,6 +98,12 @@ export interface RejectedSpecialistConcern {
   reasons: string[];
 }
 
+export interface AuxiliaryDuplicateConcern {
+  concern: string;
+  paths: string[];
+  overlapping_concerns: string[];
+}
+
 export interface RepositoryBehaviorCluster {
   cluster_key: string;
   implementation_paths: string[];
@@ -127,6 +133,7 @@ export interface SpecialistEvidenceAssessment {
   uncovered_paths: string[];
   accepted_concerns: string[];
   rejected_concerns: RejectedSpecialistConcern[];
+  auxiliary_duplicate_concerns: AuxiliaryDuplicateConcern[];
   repository_clusters: RepositoryBehaviorCluster[];
   uncovered_clusters: RepositoryBehaviorCluster[];
   attachments: RepositoryConcernAttachment[];
@@ -1125,6 +1132,7 @@ export function assessSpecialistEvidence(
       uncovered_paths: [],
       accepted_concerns: [],
       rejected_concerns: [],
+      auxiliary_duplicate_concerns: [],
       repository_clusters: [],
       uncovered_clusters: [],
       attachments: [],
@@ -1169,6 +1177,7 @@ export function assessSpecialistEvidence(
       semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`),
     ] as const];
   }));
+  const auxiliaryDuplicateConcerns: AuxiliaryDuplicateConcern[] = [];
   for (const assessment of accepted) {
     if (
       assessment.corePaths.length === 0
@@ -1198,6 +1207,11 @@ export function assessSpecialistEvidence(
       ).length >= 2;
     });
     if (overlapping.length > 0) {
+      auxiliaryDuplicateConcerns.push({
+        concern: assessment.concern,
+        paths: [...assessment.contextPaths],
+        overlapping_concerns: overlapping.map((candidate) => candidate.concern),
+      });
       reasons.push(
         `auxiliary-only accepted concern "${assessment.concern}" overlaps implementation-owned concern(s) ${overlapping.map((candidate) => `"${candidate.concern}"`).join(", ")}; attach the auxiliary evidence to the implementing behavior or reject the narrower candidate substantively`,
       );
@@ -1544,10 +1558,47 @@ export function assessSpecialistEvidence(
     accepted_concerns: accepted.map((assessment) => assessment.concern)
       .sort((left, right) => left.localeCompare(right)),
     rejected_concerns: rejected.sort((left, right) => left.concern.localeCompare(right.concern)),
+    auxiliary_duplicate_concerns: auxiliaryDuplicateConcerns,
     repository_clusters: repositoryClusters,
     uncovered_clusters: uncoveredClusters,
     attachments,
     core_ownership_resolutions: coreOwnershipResolutions,
+  };
+}
+
+export function reconcileAuxiliaryDuplicateConcerns(
+  map: CodebaseMap,
+  assessment: SpecialistEvidenceAssessment,
+): CodebaseMap {
+  if (
+    assessment.source !== "concern_evidence"
+    || map.concern_evidence === undefined
+    || assessment.auxiliary_duplicate_concerns.length === 0
+  ) {
+    return map;
+  }
+  const duplicateNames = new Set(
+    assessment.auxiliary_duplicate_concerns.map((duplicate) => duplicate.concern),
+  );
+  const concerns = map.concern_evidence.concerns.filter((concern) =>
+    !duplicateNames.has(concern.concern)
+  );
+  const notConcerns = [...map.concern_evidence.not_concerns];
+  const existing = new Set(notConcerns.map((entry) => entry.candidate.trim().toLowerCase()));
+  for (const duplicate of assessment.auxiliary_duplicate_concerns) {
+    if (existing.has(duplicate.concern.trim().toLowerCase())) continue;
+    notConcerns.push({
+      candidate: duplicate.concern,
+      why_rejected:
+        `Trusted normalization rejected this auxiliary-only candidate because its tracked evidence (${duplicate.paths.join(", ")}) overlaps implementation-owned concern(s) ${duplicate.overlapping_concerns.join(", ")}; examples and fixtures are supporting evidence, not independent specialist ownership.`,
+    });
+  }
+  return {
+    ...map,
+    concern_evidence: {
+      concerns,
+      not_concerns: notConcerns,
+    },
   };
 }
 
