@@ -201,9 +201,11 @@ one supporting claimant only when it is the sole claimant without another
 independent implementation core and every current owner retains one. Examples,
 fixtures, and tests do not establish that independent implementation ownership;
 tied dependent claimants remain unresolved.
-Negative evidence remains authoritative without allowing a generic domain word
-to veto unrelated local mirrors: an exclusion conflict requires two behavioral
-token matches, or one matched token absent from the concern's positive evidence.
+Negative evidence remains authoritative. Direct tracked concern evidence may
+still establish an implementation/test attachment under the ordinary exclusion
+rule, but inference alone cannot attach a cluster whose behavioral tokens match
+an explicit exclusion. Incidental positive mentions cannot erase that boundary;
+the cluster remains unresolved until separately traced or substantively rejected.
 Observed public type traces deterministically bind a uniquely resolved tracked
 declaration to one specialist only when all traced runtime files have the same
 normalized core owner. The declaration becomes a core touchpoint; multiple type

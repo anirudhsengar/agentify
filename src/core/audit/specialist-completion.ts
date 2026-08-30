@@ -900,6 +900,7 @@ function attachmentConflictsWithExclusions(
   candidate: AttachmentConcernCandidate,
   paths: readonly string[],
   label: string,
+  inferred = false,
 ): boolean {
   const clusterTokens = pathSemanticTokens(paths, label);
   const exclusionPaths = [...candidate.concern.excludes.matchAll(
@@ -917,6 +918,7 @@ function attachmentConflictsWithExclusions(
   const matched = [...clusterTokens].filter((token) =>
     [...effectiveExcludedTokens].some((excluded) => tokensRelated(token, excluded))
   );
+  if (inferred && matched.length > 0) return true;
   if (matched.length >= 2) return true;
   if (
     matched.length > 0
@@ -973,6 +975,7 @@ function selectUniqueConcern(input: {
     entry.candidate,
     input.paths,
     input.label,
+    true,
   ) && (
     input.mode === "cluster"
       ? entry.semanticMatches > 0 && (entry.pathScore >= 40 || entry.semanticMatches >= 2)

@@ -82,6 +82,10 @@ export function compileSpecialistEvidence(
           normalized = true;
           continue;
         }
+      } else {
+        current = withoutTrustedAttachments;
+        normalized = true;
+        continue;
       }
     }
     const assessment = assessSpecialistEvidence(current, options);

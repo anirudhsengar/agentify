@@ -103,6 +103,11 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Inferred implementation/test attachments now treat explicit concern
+  exclusions as authoritative negative evidence. An incidental positive mention
+  can no longer absorb a separately excluded sibling behavior; direct tracked
+  evidence remains eligible and ambiguous clusters stay unresolved.
+
 - Specialist compilation now restores uniquely matched scout identities and
   recomputes application-inferred touchpoints from explicit evidence. Stale
   inferred implementation/test ownership can no longer survive later compiler
