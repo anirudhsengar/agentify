@@ -6,10 +6,9 @@
 // audited in the same minute. The log is user-global (not project-
 // local) so it survives across projects and is never auto-committed.
 //
-// Lifecycle: open `fs.createWriteStream` on `run_start`; write one
-// JSON line per event with serialize → redact → truncate; flush +
-// close on `run_end` / `user_abort`. The stream is append-only and
-// crash-safe (a crash mid-run preserves everything written so far).
+// Lifecycle: synchronously append each bounded, redacted JSON line so process
+// exit cannot discard buffered evidence. An unfinished started run records one
+// terminal result on exit; close removes that fallback after normal completion.
 //
 // Event types (see AgentifyEventType below):
 //   run_start, session_event, map_written, gap_detected,
@@ -236,7 +235,17 @@ function serializeEvent(event: AgentifyEvent): string {
 }
 
 export class AgentifyLog {
-  private readonly stream: fs.WriteStream;
+  private readonly filePath: string;
+  private started = false;
+  private terminalWritten = false;
+  private readonly onExit = (exitCode: number): void => {
+    if (!this.started || this.terminalWritten) return;
+    this.runEnd({
+      exit_code: exitCode,
+      status: exitCode === 130 || exitCode === 143 ? "aborted" : "error",
+      error_message: "Process exited before the audit completed; semantic closure was not established.",
+    });
+  };
   private readonly runIdLocal: string;
   private filesWritten = 0;
   private turns = 0;
@@ -255,8 +264,10 @@ export class AgentifyLog {
 
   constructor(opts: { cwd: string; configDir: string }) {
     this.runIdLocal = `agentify-${safeFilename(nowIso())}-${hashCwd(opts.cwd)}`;
-    this.stream = fs.createWriteStream(makeLogPath(opts.cwd, opts.configDir), { flags: "a" });
+    this.filePath = makeLogPath(opts.cwd, opts.configDir);
+    fs.appendFileSync(this.filePath, "");
     this.startTime = Date.now();
+    process.once("exit", this.onExit);
   }
 
   get runId(): string {
@@ -264,7 +275,7 @@ export class AgentifyLog {
   }
 
   get logPath(): string {
-    return this.stream.path.toString();
+    return this.filePath;
   }
 
   get costUsd(): number {
@@ -294,11 +305,12 @@ export class AgentifyLog {
       event,
       payload,
     });
-    this.stream.write(`${line}\n`);
+    fs.appendFileSync(this.filePath, `${line}\n`);
   }
 
   runStart(payload: RunStartPayload): void {
     this.write("agentify.run_start", payload);
+    this.started = true;
   }
 
   sessionEvent(payload: SessionEventPayload): void {
@@ -439,6 +451,7 @@ export class AgentifyLog {
       | "mean_turn_latency_ms"
     >,
   ): void {
+    if (this.terminalWritten) return;
     // Close any still-open turn so its latency counts.
     if (this.currentTurnStart !== null) {
       this.turnLatencies.push(Date.now() - this.currentTurnStart);
@@ -460,11 +473,11 @@ export class AgentifyLog {
       total_cost_usd: this.totalCostUsd,
       mean_turn_latency_ms: meanLatency === null ? null : Math.round(meanLatency),
     });
+    this.terminalWritten = true;
   }
 
   close(): Promise<void> {
-    return new Promise((resolve) => {
-      this.stream.end(() => resolve());
-    });
+    process.removeListener("exit", this.onExit);
+    return Promise.resolve();
   }
 }

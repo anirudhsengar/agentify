@@ -508,6 +508,24 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     budgetCheckpointPersisted = true;
   };
   let terminalWritten = false;
+  const checkpointOnExit = (exitCode: number): void => {
+    try {
+      persistBudgetCheckpoint();
+      log.auditBudget({
+        status: "failed",
+        limits: { ...resourceBudget.limits },
+        usage: resourceBudget.snapshot(),
+      });
+    } catch (error) {
+      log.runEnd({
+        exit_code: exitCode,
+        status: "error",
+        error_message: `Could not checkpoint interrupted audit usage: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  };
+  // Run before the logger's terminal fallback, after signal rollback retained the map.
+  process.prependOnceListener("exit", checkpointOnExit);
   try {
     const result = await runBaseRepositoryAudit({
       ...context,
@@ -613,6 +631,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     }
     throw error;
   } finally {
+    process.removeListener("exit", checkpointOnExit);
     await log.close();
   }
 }

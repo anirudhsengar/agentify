@@ -6,6 +6,9 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Interrupted audits synchronously retain one terminal result and checkpoint
+  already charged resource usage after rollback, preventing signal retries
+  from resetting the aggregate budget.
 - Specialist discovery no longer rewards directory scatter or rejects local
   public contracts as generic mechanics. Portfolio screening reviews those
   scout rejections instead of merging independent behavior into a catalog.
