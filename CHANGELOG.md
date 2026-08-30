@@ -77,6 +77,11 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Locked dependency provisioning now runs before repository validation in the
+  same disposable exact-HEAD checkout and repeats before post-install checks.
+  Node installs disable lifecycle scripts, provisioning failure prevents test
+  execution, and no dependency or validation residue reaches the target.
+
 - Bounded tracked-policy and diagnostic-map reads now open without following
   the final symlink, verify and read through one descriptor, and enforce the
   byte cap while reading. Installation rollback therefore cannot retain bytes

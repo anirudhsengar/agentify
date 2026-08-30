@@ -184,6 +184,7 @@ function fakeRunner(cwd: string, options: FakeRunnerOptions = {}): InstallerProc
         if (options.protection === "unprotected") return failed("HTTP 404: Not Found");
         return ok("{}");
       }
+      if (key === "npm ci --ignore-scripts --no-audit --no-fund") return ok("dependencies ready\n");
       if (key.startsWith("npm run ")) {
         const status = options.validationFailsAfterInstall
           && fs.existsSync(path.join(cwd, ".github", "agentify", "task-runtime.mjs"))
@@ -215,8 +216,16 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
       requests,
     });
     const postInstallValidationCwds: string[] = [];
+    const postInstallProvisioningCwds: string[] = [];
     const runner: InstallerProcessRunner = {
       run(request): InstallerProcessResult {
+        if (
+          request.program === "npm"
+          && request.args[0] === "ci"
+          && fs.existsSync(path.join(cwd, ".github", "agentify", "task-runtime.mjs"))
+        ) {
+          postInstallProvisioningCwds.push(request.cwd);
+        }
         if (
           request.program === "npm"
           && request.args[0] === "run"
@@ -269,6 +278,7 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
     assert.equal(fs.existsSync(path.join(cwd, "SETUP.md")), false);
     assert.equal(fs.existsSync(path.join(cwd, ".github")), false);
     assert.ok(postInstallValidationCwds.length > 0);
+    assert.deepEqual(postInstallProvisioningCwds, [postInstallValidationCwds[0]!]);
     assert.ok(postInstallValidationCwds.every((validationCwd) => validationCwd !== cwd));
     assert.ok(postInstallValidationCwds.every((validationCwd) => !fs.existsSync(validationCwd)));
     assert.equal(fs.existsSync(path.join(cwd, ".pytest_cache")), false);
@@ -335,7 +345,7 @@ async function testEligibleRepositoryAndPolicy(): Promise<void> {
     assert.equal(preflight.identity?.current_commit, HEAD);
     assert.equal(preflight.identity?.actor_login, "maintainer");
     assert.deepEqual(preflight.allowed_write_paths, ["src", "tests"]);
-    assert.ok(preflight.commands.some((command) => command.kind === "install" && command.assessment === "characterized"));
+    assert.ok(preflight.commands.some((command) => command.kind === "install" && command.assessment === "verified"));
     assert.ok(preflight.commands.filter((command) => command.required).every((command) => command.assessment === "verified"));
 
     const configuration = approvedConfiguration(cwd, preflight).configuration;

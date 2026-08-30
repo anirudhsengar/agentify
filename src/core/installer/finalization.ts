@@ -48,6 +48,7 @@ import {
   trustedValidationArgv,
 } from "./validation-contract.ts";
 import { runInDisposableValidationCheckout } from "./validation-isolation.ts";
+import { runValidationCommandSet } from "./build-systems/shared.ts";
 
 export interface FinalizeOneTimeInstallationInput {
   cwd: string;
@@ -442,19 +443,22 @@ export function finalizeOneTimeInstallation(
 
   if (effectivePreflight.disposition === "ready") {
     const verified = effectivePreflight.commands.filter(isVerifiedValidationCommand);
+    const install = effectivePreflight.commands.find((command) => (
+      command.kind === "install" && command.assessment === "verified"
+    ));
+    const validationCommands = [
+      ...(install === undefined ? [] : [{ ...install, assessment: "characterized" as const }]),
+      ...verified.map((command) => ({ ...command, assessment: "characterized" as const })),
+    ];
     const runner = input.runner ?? DEFAULT_INSTALLER_PROCESS_RUNNER;
     const isolated = runInDisposableValidationCheckout({
       cwd: input.cwd,
       overlayPaths: MANAGED_INSTALLATION_PATHS,
-      operation: (checkoutCwd) => verified.map((cmd) => ({
-        cmd,
-        result: runner.run({
-          program: cmd.argv[0]!,
-          args: cmd.argv.slice(1),
-          cwd: path.resolve(checkoutCwd, cmd.cwd),
-          timeoutMs: cmd.timeout_ms,
-        }),
-      })),
+      operation: (checkoutCwd) => runValidationCommandSet(
+        checkoutCwd,
+        runner,
+        validationCommands,
+      ),
     });
     if (!isolated.ok) {
       withBlocker(
@@ -463,12 +467,12 @@ export function finalizeOneTimeInstallation(
         `Post-install repository validation could not run in a disposable checkout: ${isolated.error}`,
         "Ensure local Git can clone and materialize the committed HEAD in the system temporary directory, then rerun installation.",
       );
-    } else for (const { cmd, result } of isolated.value) {
-      if (result.status !== 0 || result.timedOut || result.errorMessage !== null) {
+    } else for (const command of isolated.value) {
+      if (command.assessment !== "verified") {
         withBlocker(
           blockers,
           "validation_failed",
-          `Validation command failed after Agentify installed its managed files: ${cmd.argv.join(" ")}`,
+          `${command.kind === "install" ? "Dependency provisioning" : "Validation command"} failed after Agentify installed its managed files: ${command.argv.join(" ")}`,
           "Configure repository validation to accept or explicitly exclude Agentify-owned generated assets, then rerun the installer.",
         );
       }

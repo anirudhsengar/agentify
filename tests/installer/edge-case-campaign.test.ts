@@ -144,7 +144,7 @@ async function nodePnpmLock(): Promise<void> {
       "pnpm-lock.yaml": "lockfileVersion: 6\n",
     });
     const { commands } = discoverRepositoryCommands(cwd, fakeRunner(cwd), false);
-    assert.ok(commands.some((c) => c.argv.join(" ") === "pnpm install --frozen-lockfile"));
+    assert.ok(commands.some((c) => c.argv.join(" ") === "pnpm install --frozen-lockfile --ignore-scripts"));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -158,7 +158,7 @@ async function nodeYarnLock(): Promise<void> {
       "yarn.lock": "# yarn lockfile v1\n",
     });
     const { commands } = discoverRepositoryCommands(cwd, fakeRunner(cwd), false);
-    assert.ok(commands.some((c) => c.argv.join(" ") === "yarn install --frozen-lockfile"));
+    assert.ok(commands.some((c) => c.argv.join(" ") === "yarn install --frozen-lockfile --ignore-scripts"));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

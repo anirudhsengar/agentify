@@ -61,6 +61,9 @@ never automatic.
 
 Repository validation uses fixed argv vectors without a shell at the controller
 boundary, but package managers may invoke their own shell or indirect programs.
+Locked dependencies are provisioned only inside disposable exact-HEAD validation
+checkouts; Node package-manager lifecycle scripts are disabled. Provisioning is
+repeated for post-install validation and never reuses target dependency state.
 The installer scans visible root script text for obvious production credentials
 and deployment, publication, release, cloud, or infrastructure mutation. This
 is a guardrail, not proof that indirect code is safe. Running `agentify` in the

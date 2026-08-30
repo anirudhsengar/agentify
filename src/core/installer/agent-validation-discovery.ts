@@ -11,7 +11,12 @@ import type {
   RepositoryValidationApproval,
 } from "./contracts.ts";
 import { DEFAULT_INSTALLER_PROCESS_RUNNER } from "./process-runner.ts";
-import { commandId, COMMAND_TIMEOUTS, unsafeReason } from "./build-systems/shared.ts";
+import {
+  commandId,
+  COMMAND_TIMEOUTS,
+  runValidationCommandSet,
+  unsafeReason,
+} from "./build-systems/shared.ts";
 import { createRepositoryValidationApproval } from "./task-policy.ts";
 import { packageRoot } from "../pi-sdk-runtime.ts";
 import {
@@ -153,6 +158,7 @@ export function testAuditedValidationCommand(
   commandStr: string,
   runner: InstallerProcessRunner,
   kind: InstallerCommandKind = "test",
+  dependencyCommand?: InstallerCommand,
 ): InstallerCommand | null {
   if (INSTALL_SCRIPT_PATTERN.test(commandStr) || PACKAGE_INSTALL_PATTERN.test(commandStr)) {
     return null;
@@ -168,6 +174,13 @@ export function testAuditedValidationCommand(
     program: string;
     result: InstallerProcessResult;
   } | null => {
+    if (dependencyCommand !== undefined) {
+      const [provisioned] = runValidationCommandSet(checkoutCwd, runner, [{
+        ...dependencyCommand,
+        assessment: "characterized",
+      }]);
+      if (provisioned?.assessment !== "verified") return null;
+    }
     const executionCwd = path.resolve(checkoutCwd, parsed.cwdRelative);
     if (!fs.existsSync(executionCwd)) return null;
     const result = runner.run({
@@ -311,6 +324,9 @@ export function refinePreflightWithAudit(input: {
 
   if (!hasPassingRequiredTest && input.map) {
     const candidates = extractAuditedCommandCandidates(input.map);
+    const dependencyCommand = commands.find((command) => (
+      command.kind === "install" && command.assessment === "verified"
+    ));
     for (const candidate of candidates) {
       if (candidate.kind !== "test") continue;
       const verified = testAuditedValidationCommand(
@@ -318,6 +334,7 @@ export function refinePreflightWithAudit(input: {
         candidate.command,
         runner,
         candidate.kind,
+        dependencyCommand,
       );
       if (verified) {
         commands = [

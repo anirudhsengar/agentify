@@ -55,13 +55,15 @@ The local installer performs these steps in order:
    any repository mutation when they explicitly prohibit AI/LLM-authored
    persistent work;
 4. verify maintainer permission and default-branch policy;
-5. discover validation commands without executing them and require a committed
-   npm lockfile when validation has package dependencies;
+5. discover validation and dependency-provisioning commands without executing
+   them and require a committed lockfile when the ecosystem needs one;
 6. screen discovered commands for obvious production credentials and mutation,
-   then execute required validation in a disposable local checkout of the exact
-   committed HEAD; post-install validation overlays only the Agentify-managed
-   output into another disposable checkout. Validation still has no OS sandbox
-   or network isolation, and running `agentify` records that remaining posture;
+   provision locked dependencies and execute required validation in a disposable
+   local checkout of the exact committed HEAD. Node provisioning disables
+   lifecycle scripts. Post-install validation repeats provisioning and overlays
+   only the Agentify-managed output into another disposable checkout. Validation
+   still has no OS sandbox or network isolation, and running `agentify` records
+   that remaining posture;
 7. collect immutable repository evidence from the exact preflight commit and
    seed only deterministically provable identity, language/format, topography,
    verified-validation, build, and documentation facts; dirty working-tree

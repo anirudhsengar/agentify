@@ -139,19 +139,11 @@ export function runDiscoveredCommands(
     // Installer preflight has already established a real repository before it
     // reaches this boundary, so production validation always takes this branch
     // with a disposable checkout.
-    return commands.map((command) => (
-      command.assessment === "characterized" && command.kind !== "install"
-        ? runCommand(cwd, runner, command)
-        : command
-    ));
+    return runValidationCommandSet(cwd, runner, commands);
   }
   const isolated = runInDisposableValidationCheckout({
     cwd,
-    operation: (checkoutCwd) => commands.map((command) => (
-      command.assessment === "characterized" && command.kind !== "install"
-        ? runCommand(checkoutCwd, runner, command)
-        : command
-    )),
+    operation: (checkoutCwd) => runValidationCommandSet(checkoutCwd, runner, commands),
   });
   if (isolated.ok) return isolated.value;
   return commands.map((command) => {
@@ -163,6 +155,39 @@ export function runDiscoveredCommands(
       output_digest: crypto.createHash("sha256").update(isolated.error).digest("hex"),
       detail: isolated.error,
     };
+  });
+}
+
+export function runValidationCommandSet(
+  cwd: string,
+  runner: InstallerProcessRunner,
+  commands: InstallerCommand[],
+): InstallerCommand[] {
+  const install = commands.find((command) => (
+    command.kind === "install"
+    && (command.assessment === "characterized" || command.assessment === "verified")
+  ));
+  const provisioned = install === undefined
+    ? null
+    : runCommand(path.resolve(cwd, install.cwd), runner, { ...install, assessment: "characterized" });
+  if (provisioned?.assessment === "failed") {
+    return commands.map((command) => {
+      if (command === install) return provisioned;
+      if (command.kind === "install" || command.assessment !== "characterized") return command;
+      return {
+        ...command,
+        assessment: "failed",
+        exit_code: null,
+        output_digest: provisioned.output_digest,
+        detail: `dependency provisioning failed before validation: ${provisioned.detail}`,
+      };
+    });
+  }
+  return commands.map((command) => {
+    if (command === install) return provisioned!;
+    return command.assessment === "characterized" && command.kind !== "install"
+      ? runCommand(path.resolve(cwd, command.cwd), runner, command)
+      : command;
   });
 }
 

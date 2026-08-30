@@ -53,12 +53,12 @@ export function discoverNodeBuildSystem(cwd: string): BuildSystemDiscovery | nul
     .find((name) => fileExists(cwd, name));
   if (lockName) {
     const installArgv = lockName === "pnpm-lock.yaml"
-      ? ["pnpm", "install", "--frozen-lockfile"]
+      ? ["pnpm", "install", "--frozen-lockfile", "--ignore-scripts"]
       : lockName === "yarn.lock"
-        ? ["yarn", "install", "--frozen-lockfile"]
+        ? ["yarn", "install", "--frozen-lockfile", "--ignore-scripts"]
         : lockName === "bun.lock"
-          ? ["bun", "install", "--frozen-lockfile"]
-          : ["npm", "ci"];
+          ? ["bun", "install", "--frozen-lockfile", "--ignore-scripts"]
+          : ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"];
     commands.push({
       command_id: commandId("install", "install"),
       kind: "install",
