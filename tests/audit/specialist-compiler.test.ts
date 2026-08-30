@@ -210,6 +210,117 @@ function createSpringRepository(): string {
   return cwd;
 }
 
+function createAqaShapedRepository(): string {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-specialist-reconcile-"));
+  git(cwd, "init", "-q");
+  git(cwd, "config", "user.name", "Agentify Test");
+  git(cwd, "config", "user.email", "agentify@example.invalid");
+  for (const relativePath of [
+    "README.md",
+    "get.sh",
+    "buildenv/jenkins/getDependency",
+    "openjdk/playlist.xml",
+    "openjdk/openjdk.mk",
+  ]) {
+    write(cwd, relativePath);
+  }
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "fixture");
+  return cwd;
+}
+
+function aqaShapedMap(): CodebaseMap {
+  const map = makeValidCodebaseMap();
+  delete map.expert_evidence;
+  map.skeleton.top_level_tree = ["buildenv/", "get.sh", "openjdk/"];
+  map.skeleton.entry_points = [{
+    path: "get.sh",
+    role: "material acquisition",
+    language: "shell",
+    run_command: "./get.sh",
+  }];
+  map.skeleton.first_5_files_for_fresh_agent = [{
+    path: "get.sh",
+    why: "Tracked acquisition entry point.",
+  }];
+  map.skeleton.code_test_mirror = { observed: false, pattern: null };
+  map.module_graph.edges = [
+    { from: "get.sh", to: "buildenv/jenkins/getDependency", kind: "delegates acquisition" },
+    { from: "get.sh", to: "openjdk/playlist.xml", kind: "stages playlist" },
+    { from: "openjdk/playlist.xml", to: "openjdk/openjdk.mk", kind: "generates make targets" },
+  ];
+  map.module_graph.parallelizable_subtrees = [];
+  map.module_graph.shared_abstractions = [];
+  map.module_graph.shared_state = [];
+  map.pitfalls = [{
+    module: "get.sh",
+    what: "Branch selection controls fetched test material.",
+    consequence: "The wrong test inputs run.",
+    line_ref: 1,
+  }];
+  map.operational_surface.build.recipe_file = "get.sh";
+  map.concern_evidence = {
+    concerns: [
+      concern({
+        name: "Test dependency and external material acquisition",
+        covers: "JDK, TKG, vendor material, and Jenkins dependency acquisition.",
+        excludes: "Playlist interpretation and generated Make targets.",
+        touchpoints: [
+          {
+            path: "get.sh",
+            symbol: "getBinaryOpenjdk / getTestKitGen / getVendorTestMaterial / executeCmdWithRetry",
+            role: "Central tracked acquisition entry point.",
+            line_range: null,
+            centrality: "core",
+          },
+          {
+            path: "buildenv/jenkins/getDependency",
+            symbol: "getDependency",
+            role: "Jenkins dependency acquisition.",
+            line_range: null,
+            centrality: "core",
+          },
+        ],
+        flow: ["get.sh", "buildenv/jenkins/getDependency"],
+      }),
+      concern({
+        name: "Playlist-to-Make target generation",
+        covers: "Tracked playlist interpretation and Make target generation after TKG bootstrap.",
+        excludes: "SDK and vendor dependency acquisition.",
+        touchpoints: [
+          {
+            path: "get.sh",
+            symbol: "getTestKitGen / main driver",
+            role: "Bootstraps the external generator.",
+            line_range: null,
+            centrality: "core",
+          },
+          {
+            path: "openjdk/playlist.xml",
+            symbol: "playlist",
+            role: "Defines test targets consumed by the generator.",
+            line_range: null,
+            centrality: "core",
+          },
+          {
+            path: "openjdk/openjdk.mk",
+            symbol: "make targets",
+            role: "Provides repository-owned generated target inputs.",
+            line_range: null,
+            centrality: "core",
+          },
+        ],
+        flow: ["get.sh", "openjdk/playlist.xml", "openjdk/openjdk.mk"],
+      }),
+    ],
+    not_concerns: [{
+      candidate: "Playlist-to-Make behavior as merely get.sh",
+      why_rejected: "Not rejected: retained because tracked playlist and Make inputs establish an independent behavior.",
+    }],
+  };
+  return map;
+}
+
 test("specialist compilation rejects normalization-created ownership gaps and reaches an idempotent fixed point", () => {
   const cwd = createSpringRepository();
   try {
@@ -262,6 +373,79 @@ test("specialist compilation rejects normalization-created ownership gaps and re
       fixedPoint.map,
       "compiling an already compiled portfolio must be idempotent",
     );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("specialist compilation removes stale retained-candidate entries and resolves strict symbol-superset ownership", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    const compiled = compileSpecialistEvidence(aqaShapedMap(), { cwd });
+    assert.equal(compiled.status, "compiled", compiled.reasons.join("; "));
+    assert.equal(compiled.complete, true);
+    assert.equal(compiled.map.concern_evidence?.not_concerns.length, 0);
+    const concerns = compiled.map.concern_evidence?.concerns ?? [];
+    const acquisition = concerns.find((entry) =>
+      entry.concern === "Test dependency and external material acquisition"
+    );
+    const playlist = concerns.find((entry) =>
+      entry.concern === "Playlist-to-Make target generation"
+    );
+    assert.equal(
+      acquisition?.touchpoints.find((entry) => entry.path === "get.sh")?.centrality,
+      "core",
+    );
+    assert.equal(
+      playlist?.touchpoints.find((entry) => entry.path === "get.sh")?.centrality,
+      "supporting",
+    );
+    assert.strictEqual(compileSpecialistEvidence(compiled.map, { cwd }).map, compiled.map);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("specialist compilation leaves disjoint shared-symbol claims unresolved", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    const map = aqaShapedMap();
+    map.concern_evidence!.not_concerns = [];
+    map.concern_evidence!.concerns[1]!.touchpoints[0]!.symbol = "generateTargets";
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.status, "incomplete");
+    assert.ok(compiled.reasons.some((reason) =>
+      reason.includes("get.sh has multiple core owners")
+    ));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("path-backed rejection labels close only their exact tracked cluster", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    write(cwd, "scripts/common/__init__.py");
+    write(cwd, "scripts/tests/__init__.py");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "add empty mirrored package files");
+    const map = aqaShapedMap();
+    map.concern_evidence!.not_concerns = [{
+      candidate: "implementation/test cluster init [scripts/common/__init__.py, scripts/tests/__init__.py]",
+      why_rejected: "Both tracked files are empty package initializers with no independent behavior or specialist ownership.",
+    }];
+    map.concern_evidence!.concerns[1]!.touchpoints[0]!.centrality = "supporting";
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.status, "compiled", compiled.reasons.join("; "));
+    assert.equal(compiled.complete, true);
+
+    write(cwd, "other/__init__.py");
+    write(cwd, "other/tests/__init__.py");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "add unrelated empty mirrored package files");
+    const counterexample = compileSpecialistEvidence(map, { cwd });
+    assert.equal(counterexample.status, "incomplete");
+    assert.ok(counterexample.reasons.some((reason) => reason.includes("other/__init__.py")));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
