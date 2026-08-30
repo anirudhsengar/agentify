@@ -157,6 +157,11 @@ An attached map with recorded concern evidence enters deterministic compilation
 before provider reachability or audit-budget admission. Only an absent concern
 section is a legacy top-up; a normalizable current-HEAD map can reach its fixed
 point without another model call.
+Workspace/public APIs, inline-tested modules, and recorded type-contract
+surfaces need core ownership or a substantive rejection. A sole supporting
+citation is still an unresolved ownership obligation. Inline implementation
+and tests in the same file count as one path, not a complete two-file claim
+that can silently promote supporting evidence to core.
 After that validation, an auxiliary-only example or fixture candidate is
 normalized into a path-backed rejection only when portfolio-distinct semantic
 evidence overlaps a concern with independent implementation core. Unrelated

@@ -6,6 +6,9 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Public/workspace and inline-tested surfaces require core ownership or a
+  substantive rejection; supporting mentions alone no longer close them.
+  Inline tests in one file cannot manufacture a two-file ownership claim.
 - Successful concern tracers return a bounded fresh compiler-obligation preview
   from the exact prospective checkpoint merge, preventing repairs from acting
   on stale clusters without adding model calls or changing readiness gates.

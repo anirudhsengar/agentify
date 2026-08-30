@@ -1792,7 +1792,7 @@ export function assessSpecialistEvidence(
     return [assessment.concern, paths] as const;
   }));
   for (const cluster of repositoryClusters) {
-    const clusterPaths = [...cluster.implementation_paths, ...cluster.test_paths];
+    const clusterPaths = [...new Set([...cluster.implementation_paths, ...cluster.test_paths])];
     if (clusterPaths.length < 2) continue;
     const completeClaimants = accepted.filter((assessment) => {
       const explicitPaths = explicitTouchpointsByConcern.get(assessment.concern);
@@ -1932,11 +1932,25 @@ export function assessSpecialistEvidence(
     }
   }
 
+  const requiredCorePaths = new Set([
+    ...repositoryClusters.filter((cluster) => cluster.kind !== undefined)
+      .flatMap((cluster) => cluster.implementation_paths),
+    ...[
+      ...(map.type_contract_surface.type_definitions ?? []),
+      ...map.type_contract_surface.typescript_interfaces,
+      ...map.type_contract_surface.pydantic_models,
+      ...map.type_contract_surface.db_models,
+      ...(map.type_contract_surface.api_contracts ?? []),
+    ].flatMap((entry) => {
+      const repositoryPath = resolvePath(entry.path);
+      return repositoryPath === null ? [] : [repositoryPath];
+    }),
+  ]);
   const coveredSet = new Set<string>();
   for (const cluster of repositoryClusters) {
     const implementationsCovered = cluster.implementation_paths.every((repositoryPath) => {
       const explicitOwnerCount = explicitOwnersByPath.get(repositoryPath)?.size ?? 0;
-      return explicitOwnerCount > 1
+      return explicitOwnerCount > 1 || requiredCorePaths.has(repositoryPath)
         ? coreOwnedPaths.has(repositoryPath)
         : contextualPaths.has(repositoryPath);
     });
@@ -1947,7 +1961,11 @@ export function assessSpecialistEvidence(
     }
   }
   for (const repositoryPath of structuralHighSignal) {
-    if (!isGenericPlumbing(repositoryPath) && contextualPaths.has(repositoryPath)) {
+    if (
+      requiredCorePaths.has(repositoryPath)
+        ? coreOwnedPaths.has(repositoryPath)
+        : !isGenericPlumbing(repositoryPath) && contextualPaths.has(repositoryPath)
+    ) {
       coveredSet.add(repositoryPath);
     }
   }
@@ -1957,8 +1975,15 @@ export function assessSpecialistEvidence(
   const uncovered = highSignal.filter((candidate) =>
     !coveredSet.has(candidate)
     && !exemptedSet.has(candidate)
-    && (!isGenericPlumbing(candidate) || clusterObligationPaths.has(candidate))
+    && (!isGenericPlumbing(candidate) || clusterObligationPaths.has(candidate) || requiredCorePaths.has(candidate))
   );
+  const unownedSurfaces = uncovered.filter((repositoryPath) => requiredCorePaths.has(repositoryPath));
+  if (unownedSurfaces.length > 0) {
+    reasons.push(
+      `${unownedSurfaces.length} public/workspace surfaces require a core owner or substantive rejection: `
+      + `${unownedSurfaces.slice(0, 12).join(", ")}; supporting touchpoints alone do not establish core ownership`,
+    );
+  }
   const uncoveredSet = new Set(uncovered);
   const uncoveredClusters = prioritizeRepositoryClusters({
     clusters: repositoryClusters.filter((cluster) =>
