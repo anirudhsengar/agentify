@@ -21,6 +21,7 @@ import type {
 } from "../../src/core/types.ts";
 import type { RepositoryInstallationPreflight } from "../../src/core/installer/contracts.ts";
 import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import { concernEvidencePaths } from "../../src/core/audit/specialist-completion.ts";
 
 type Concern = NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
 type Centrality = Concern["touchpoints"][number]["centrality"];
@@ -459,6 +460,7 @@ class ProgressiveRepairRuntime implements AgentRuntime {
               target_path: ".",
               focus: concern.concern,
               report_concern: concern.concern,
+              observed_paths: concernEvidencePaths(concern),
             },
           } as never);
         }
@@ -492,6 +494,7 @@ class ProgressiveRepairRuntime implements AgentRuntime {
             target_path: ".",
             focus: concern.concern,
             report_concern: concern.concern,
+            observed_paths: concernEvidencePaths(concern),
           },
         } as never);
       }
@@ -643,6 +646,7 @@ class InterruptedRepairRuntime implements AgentRuntime {
           target_path: "external",
           focus: concern,
           report_concern: concern,
+          observed_paths: concernEvidencePaths(repaired.concern_evidence!.concerns.find((candidate) => candidate.concern === concern)!),
         },
       } as never);
       throw new Error("simulated repair interruption");
@@ -669,6 +673,7 @@ class InterruptedRepairRuntime implements AgentRuntime {
           target_path: ".",
           focus: concern.concern,
           report_concern: concern.concern,
+          observed_paths: concernEvidencePaths(concern),
         },
       } as never);
     }

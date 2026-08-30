@@ -7,6 +7,7 @@ import type {
 import { isSubstantiveConcernRejection } from "./concern-rejection.ts";
 import { mergeEvidenceIntoMap } from "./map-draft.ts";
 import { loadCanonicalMapAt, writeCanonicalMap } from "./map-storage.ts";
+import { concernEvidencePaths, removeTrustedInferredAttachments } from "./specialist-completion.ts";
 
 type ExplorerMode = "concern_scout" | "concern_tracer";
 
@@ -21,6 +22,7 @@ interface ExplorerReceipt {
   failureKind: string | null;
   proposedConcerns: string[];
   sourceRunId: string | null;
+  observedPaths: string[];
 }
 
 export interface ExplorerReceiptAssessment {
@@ -214,6 +216,9 @@ export class ExplorerReceiptTracker {
         ? scoutConcernsFromText(text)
         : [],
       sourceRunId: null,
+      observedPaths: Array.isArray(details.observed_paths)
+        ? details.observed_paths.filter((candidate): candidate is string => typeof candidate === "string").slice(0, 512)
+        : [],
     });
   }
 
@@ -234,6 +239,7 @@ export class ExplorerReceiptTracker {
           ? { proposed_concerns: receipt.proposedConcerns }
           : {}),
         source_run_id: receipt.sourceRunId ?? runId,
+        ...(receipt.observedPaths.length > 0 ? { observed_paths: receipt.observedPaths } : {}),
       })),
     };
   }
@@ -252,6 +258,7 @@ export class ExplorerReceiptTracker {
         failureKind: receipt.failure_kind,
         proposedConcerns: [...(receipt.proposed_concerns ?? [])],
         sourceRunId: receipt.source_run_id ?? attestation.run_id,
+        observedPaths: [...(receipt.observed_paths ?? [])],
       });
     }
   }
@@ -268,7 +275,7 @@ export class ExplorerReceiptTracker {
       receipt.mode === "concern_scout" && receipt.success
     );
     const successfulTracers = this.#receipts.filter((receipt) =>
-      receipt.mode === "concern_tracer" && receipt.success
+      receipt.mode === "concern_tracer" && receipt.success && receipt.observedPaths.length > 0
     );
     const failedTracers = this.#receipts.filter((receipt) =>
       receipt.mode === "concern_tracer" && !receipt.success
@@ -311,6 +318,16 @@ export class ExplorerReceiptTracker {
     );
 
     const reasons: string[] = [];
+    const observedPaths = new Set(successfulTracers.flatMap((receipt) => receipt.observedPaths));
+    // Normalization may attach dependencies proven from immutable source, or
+    // combine already-traced bodies. Neither invents a new model observation.
+    const authored = map === null ? null : removeTrustedInferredAttachments(map);
+    for (const concern of authored?.concern_evidence?.concerns ?? []) {
+      const unobserved = concernEvidencePaths(concern).filter((candidate) => !observedPaths.has(candidate));
+      if (unobserved.length > 0) {
+        reasons.push(`concern "${concern.concern}" cites source without an observed read/grep receipt: ${unobserved.slice(0, 12).join(", ")}; retrace the missing evidence`);
+      }
+    }
     if (requireScout && scouts.length === 0) {
       reasons.push("successful concern_scout receipt is missing");
     }

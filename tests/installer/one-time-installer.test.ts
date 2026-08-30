@@ -25,6 +25,7 @@ import {
   makeSpecialistFixtureMap,
 } from "../fixtures/specialist-map.ts";
 import { attestCodebaseMap } from "../fixtures/codebase-map.ts";
+import { concernEvidencePaths } from "../../src/core/audit/specialist-completion.ts";
 import { runAgentifyApp } from "../../src/core/agentify-app.ts";
 import { installScaffoldRuntime } from "../../src/core/scaffold-installer.ts";
 import { packageRoot as installedPackageRoot } from "../../src/core/pi-sdk-runtime.ts";
@@ -99,6 +100,7 @@ class InstallerAuditRuntime implements AgentRuntime {
           target_path: ".",
           focus: concern.concern,
           report_concern: concern.concern,
+          observed_paths: concernEvidencePaths(concern),
         },
       } as never);
     }

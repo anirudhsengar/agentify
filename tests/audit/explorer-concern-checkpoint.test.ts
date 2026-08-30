@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { createReadTool } from "@earendil-works/pi-coding-agent";
 import type { Concern } from "../../src/core/audit/schema/concerns.ts";
 import {
   checkpointExplorerConcernEvidence,
@@ -183,6 +184,15 @@ test("successful tracers return bounded current compiler obligations without ext
         return { session: {
           messages: [], dispose(): void {},
           async prompt(): Promise<void> {
+            for (const repositoryPath of ["src/extract/request.ts", "src/extract/rejection.ts"]) {
+              const input = { path: repositoryPath };
+              const result = await createReadTool(cwd).execute("observe", input);
+              for (const extension of options!.resourceLoader!.getExtensions().extensions) {
+                for (const handler of extension.handlers.get("tool_result") ?? []) {
+                  await handler({ type: "tool_result", toolCallId: "observe", toolName: "read", input, ...result, isError: false }, { cwd } as never);
+                }
+              }
+            }
             const submitted = await submit.execute("submit", {
               report_json: report.match(/```json\s*([\s\S]*?)```/u)![1]!,
             }, undefined, undefined, { cwd } as never);

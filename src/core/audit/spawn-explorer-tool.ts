@@ -61,7 +61,7 @@ import { Value } from "typebox/value";
 import { capProviderOutputTokens, forceProviderToolChoice } from "../pi-sdk-runtime.ts";
 import { ConcernSchema, type Concern } from "./schema/concerns.ts";
 import type { CodebaseMap } from "./schema/index.ts";
-import { assessConcernGrounding, assessSpecialistEvidence } from "./specialist-completion.ts";
+import { assessConcernGrounding, assessSpecialistEvidence, concernEvidencePaths } from "./specialist-completion.ts";
 import { compileSpecialistEvidence } from "./specialist-compiler.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
@@ -531,6 +531,7 @@ export function createConcernSubmissionTool(
     expectedConcern?: string,
     requiredScopePaths: readonly string[] = [],
     existingMap?: CodebaseMap,
+    observedPaths?: ReadonlySet<string>,
 ): ToolDefinition {
     return defineTool({
         name: "submit_concern_report",
@@ -576,6 +577,16 @@ export function createConcernSubmissionTool(
                 if (grounding.length > 0) {
                     return {
                         content: [{ type: "text", text: `Error: ungrounded concern evidence: ${grounding.slice(0, 8).join("; ")}. Correct the cited files/symbols from observed source; do not guess.` }],
+                        isError: true,
+                        details: { recorded: false, concern: null },
+                    };
+                }
+            }
+            if (observedPaths !== undefined) {
+                const unobserved = concernEvidencePaths(decoded.concern).filter((candidate) => !observedPaths.has(candidate));
+                if (unobserved.length > 0) {
+                    return {
+                        content: [{ type: "text", text: `Error: source was not observed for ${unobserved.slice(0, 8).join(", ")}. Read source or grep actual matches before citing it; directory listings and failed reads are not evidence.` }],
                         isError: true,
                         details: { recorded: false, concern: null },
                     };
@@ -1133,7 +1144,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         const submission: { concern: Concern | null } = { concern: null };
 
         try {
-            const toolsForMode: ReadonlyArray<string> = params.tools ?? READ_ONLY_TOOLS;
+            const toolsForMode: ReadonlyArray<string> = params.tools
+                ?? (mode === "concern_tracer" ? ["read", "grep"] : READ_ONLY_TOOLS);
             const readOnlySet = new Set<string>(READ_ONLY_TOOLS);
             const unsupportedTools = toolsForMode.filter((tool) => !readOnlySet.has(tool));
             if (unsupportedTools.length > 0) {
@@ -1147,6 +1159,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 tools: toolsForMode,
             });
             let repositoryReadCalls = 0;
+            const observedPaths = new Set<string>();
             const defenseHook = makeDefenseHook({ executionPolicy });
 
             // Build a clean resource loader for the sub-agent:
@@ -1170,6 +1183,34 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 // repository-root policy as the parent audit.
                 extensionFactories: [
                     (pi) => {
+                        pi.on("tool_result", (event) => {
+                            if (mode !== "concern_tracer" || event.isError) return;
+                            if (event.toolName !== "read" && event.toolName !== "grep") return;
+                            const target = path.resolve(ctx.cwd, typeof event.input.path === "string" ? event.input.path : ".");
+                            const record = (absolute: string): void => {
+                                if (!isPathInside(absolute, ctx.cwd)) return;
+                                const relative = path.relative(ctx.cwd, absolute).split(path.sep).join("/");
+                                if (relative && !/[\r\n]/.test(relative)) observedPaths.add(relative);
+                            };
+                            if (event.toolName === "read") {
+                                record(target);
+                            } else {
+                                // SDK grep reports matched paths relative to its search directory,
+                                // or a basename when searching one file. Listings never enter here.
+                                let base: string;
+                                try { base = fs.statSync(target).isDirectory() ? target : path.dirname(target); }
+                                catch { return; }
+                                for (const block of event.content) {
+                                    if (block.type !== "text") continue;
+                                    for (const line of block.text.split("\n")) {
+                                        const matched = /^(.+?):[1-9][0-9]*: /.exec(line)?.[1];
+                                        if (matched !== undefined && !line.endsWith(": (unable to read file)")) {
+                                            record(path.resolve(base, matched));
+                                        }
+                                    }
+                                }
+                            }
+                        });
                         pi.on("before_provider_request", (event) => {
                             let payload = mode === "concern_tracer"
                                 ? capProviderOutputTokens(
@@ -1241,7 +1282,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const concernSubmissionTool = mode === "concern_tracer"
                 ? createConcernSubmissionTool(concernObservedAt as string, (concern) => {
                     submission.concern = concern;
-                }, ctx.cwd, expectedConcern, requiredScopePaths, existingMap ?? undefined)
+                }, ctx.cwd, expectedConcern, requiredScopePaths, existingMap ?? undefined, observedPaths)
                 : null;
             const sessionTools = concernSubmissionTool
                 ? [...toolsForMode, concernSubmissionTool.name]
@@ -1448,6 +1489,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     report_truncated_path: truncatedPath || null,
                     report_concern: structuredConcern?.concern?.concern ?? null,
                     structured_concern: structuredConcern?.concern ?? null,
+                    ...(structuredConcern?.concern ? { observed_paths: concernEvidencePaths(structuredConcern.concern) } : {}),
                     compiler_feedback: compilerFeedback,
                     reads: readCount,
                     bash: bashCount,

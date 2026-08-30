@@ -331,6 +331,15 @@ these checks for persisted evidence. This rejects definite source contradictions
 lexical presence alone does not prove the described behavior. Valid evidence is
 checkpointed before receipt attestation;
 the builder records scout screening but does not retranscribe tracer evidence.
+Tracer defaults expose `read` and `grep`, with the same six-read/eight-call cap.
+Successful content reads and actual grep-match paths form an application-owned
+observation ledger; directory listings, failures, unmatched searches, and another
+subtree's same-name file cannot attest source. Every submitted citation must have
+been observed. Bounded `observed_paths` persist on tracer receipts, and resumed
+audits check authored citations against successful current-HEAD observations.
+Trusted compiler attachments and unions of independently traced bodies retain
+their deterministic provenance. Older receipts still parse and are preserved,
+but missing observation proof requires retracing rather than silent migration.
 Contradictions in a concern with tracked core ownership remain unresolved rather
 than silently retiring that specialist. Candidates with no tracked core, such as
 fetched dependencies outside the repository, remain ineligible for installation.

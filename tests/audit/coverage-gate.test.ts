@@ -21,6 +21,7 @@ import type {
   AgentifyUi,
 } from "../../src/core/types.ts";
 import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import { concernEvidencePaths } from "../../src/core/audit/specialist-completion.ts";
 
 function tempDir(name: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `agentify-${name}-`));
@@ -84,6 +85,7 @@ function emitExplorerReceipts(
         target_path: ".",
         focus: concern.concern,
         report_concern: concern.concern,
+        observed_paths: concernEvidencePaths(concern),
       },
     } as never);
   }

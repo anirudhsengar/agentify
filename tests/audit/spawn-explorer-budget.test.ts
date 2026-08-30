@@ -796,11 +796,13 @@ async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
 }
 
 async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
-  observation: "read" | "grep-directory" | "grep-file" | "listing" | "failed-read" | "no-matches" | "none",
+  observation: "read" | "grep-directory" | "grep-file" | "wrong-subtree" | "listing" | "failed-read" | "no-matches" | "none",
 ): Promise<void> {
   const cwd = tempDir("spawn-budget-concern-portfolio");
   try {
     fs.writeFileSync(path.join(cwd, "README.md"), "# fixture\n");
+    fs.mkdirSync(path.join(cwd, "other"));
+    fs.writeFileSync(path.join(cwd, "other/README.md"), "# fixture\n");
     git(cwd, "init", "-q");
     git(cwd, "config", "user.name", "Agentify Test");
     git(cwd, "config", "user.email", "agentify@example.invalid");
@@ -827,9 +829,9 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
             messages: [],
             async prompt(): Promise<void> {
               if (observation !== "none") {
-                const isGrep = observation.startsWith("grep-") || observation === "no-matches";
+                const isGrep = observation.startsWith("grep-") || observation === "no-matches" || observation === "wrong-subtree";
                 const input = isGrep
-                  ? { path: observation === "grep-file" ? "README.md" : ".", pattern: observation === "no-matches" ? "absentPattern" : "fixture" }
+                  ? { path: observation === "grep-file" ? "README.md" : observation === "wrong-subtree" ? "other" : ".", pattern: observation === "no-matches" ? "absentPattern" : "fixture" }
                   : { path: "README.md" };
                 const observed = observation === "listing"
                   ? { content: [{ type: "text" as const, text: "README.md" }], details: undefined }
@@ -896,7 +898,7 @@ await testLiveExplorerUsageAbortsAtAggregateTokenLimit();
 await testOversizedReportsFailInsteadOfBecomingReceipts();
 await testDefaultsBoundSmallRepositoryAudits();
 await testSubagentTimeoutReturnsControlToAudit();
-for (const observation of ["read", "grep-directory", "grep-file", "listing", "failed-read", "no-matches", "none"] as const) {
+for (const observation of ["read", "grep-directory", "grep-file", "wrong-subtree", "listing", "failed-read", "no-matches", "none"] as const) {
   await testConcernTracerDefaultsLeaveRoomForARealPortfolio(observation);
 }
 

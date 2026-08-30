@@ -6,6 +6,10 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Tracer receipts now persist successful source-read/grep observations. Listings,
+  failed reads, unmatched searches, and same-name files in another subtree cannot
+  attest a report. Legacy receipts remain readable but require retracing missing
+  source proof; default tracers use content-reading tools within unchanged caps.
 - Tracer submission and compilation reject untracked citations and concrete
   symbol claims absent from immutable HEAD bytes, including supporting
   touchpoints and intermediate flow steps. Dirty working files cannot supply

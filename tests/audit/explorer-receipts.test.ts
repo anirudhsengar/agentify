@@ -19,7 +19,7 @@ import { makeSpecialistFixtureMap } from "../fixtures/specialist-map.ts";
 function mapWithConcerns(...concerns: string[]): CodebaseMap {
   return {
     concern_evidence: {
-      concerns: concerns.map((concern) => ({ concern })),
+      concerns: concerns.map((concern) => ({ concern, touchpoints: [], flows: [], invariants: [], pitfalls: [] })),
       not_concerns: [],
     },
   } as unknown as CodebaseMap;
@@ -54,7 +54,7 @@ function explorerEvent(input: {
       expected_concern: input.expectedConcern ?? null,
       report_concern: input.reportConcern ?? null,
       failure_kind: input.failureKind ?? (input.success ? null : "timeout"),
-      ...(input.observedPaths === undefined ? {} : { observed_paths: input.observedPaths }),
+      observed_paths: input.observedPaths ?? ["README.md"],
     },
   };
 }
@@ -104,7 +104,7 @@ test("source observation survives receipt persistence and cannot be silently inf
   const map = makeSpecialistFixtureMap();
   map.concern_evidence!.concerns = map.concern_evidence!.concerns.slice(0, 1);
   const observed = ["src/auth/verify.ts", "src/routes/login.ts", "src/middleware/session.ts", "tests/auth.test.ts"];
-  for (const observedPaths of [undefined, observed.slice(0, 1), observed]) {
+  for (const observedPaths of [[], observed.slice(0, 1), observed]) {
     const tracker = new ExplorerReceiptTracker();
     tracker.observe(explorerEvent({ mode: "concern_scout", success: true }));
     tracker.observe(explorerEvent({

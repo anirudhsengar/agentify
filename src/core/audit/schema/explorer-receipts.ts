@@ -15,6 +15,7 @@ export const ExplorerReceiptSchema = Type.Object({
     maxItems: 128,
   })),
   source_run_id: Type.Optional(Type.String({ minLength: 1, maxLength: 256 })),
+  observed_paths: Type.Optional(Type.Array(SafeRelativePathSchema, { minItems: 1, maxItems: 512 })),
 });
 
 export const ExplorerReceiptAttestationSchema = Type.Object({

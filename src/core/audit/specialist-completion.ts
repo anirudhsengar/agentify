@@ -1513,14 +1513,18 @@ function concreteTouchpointSymbols(value: string | null): Set<string> {
   ));
 }
 
-/** Reject definite contradictions; lexical presence is not a semantic proof. */
-export function assessConcernGrounding(concern: ConcernRecord, cwd: string): string[] {
-  const citedPaths = [...new Set([
+export function concernEvidencePaths(concern: ConcernRecord): string[] {
+  return [...new Set([
     ...concern.touchpoints.map((touchpoint) => touchpoint.path),
     ...concern.flows.flatMap((flow) => flow.steps.map((step) => step.path)),
     ...concern.invariants.map((invariant) => invariant.reference),
     ...concern.pitfalls.map((pitfall) => pitfall.reference),
-  ])];
+  ])].sort((left, right) => left.localeCompare(right));
+}
+
+/** Reject definite contradictions; lexical presence is not a semantic proof. */
+export function assessConcernGrounding(concern: ConcernRecord, cwd: string): string[] {
+  const citedPaths = concernEvidencePaths(concern);
   const tracked = trackedRegularFilesAtHead(cwd, citedPaths);
   if (tracked === null) return ["cannot verify concern evidence against repository HEAD"];
   const reasons = citedPaths.filter((repositoryPath) => {

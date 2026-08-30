@@ -4,6 +4,7 @@
 // builder run produces. The module self-checks at import.
 
 import { Value } from "typebox/value";
+import { concernEvidencePaths } from "../../src/core/audit/specialist-completion.ts";
 import {
   CodebaseMapSchema,
   COVERAGE_DIMENSIONS,
@@ -232,6 +233,7 @@ export function attestCodebaseMap(
           focus: concern,
           report_concern: concern,
           failure_kind: null,
+          observed_paths: concernEvidencePaths(map.concern_evidence!.concerns[index]!),
         })),
       ],
     },
