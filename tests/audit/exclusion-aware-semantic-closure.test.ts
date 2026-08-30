@@ -388,6 +388,52 @@ test("test-only repositories may own their executable test behavior as core", ()
   }
 });
 
+test("a supporting citation cannot compete for ownership of behavior it explicitly excludes", () => {
+  const cwd = repository([
+    "src/router/index.ts",
+    "src/router/index.test.ts",
+    "src/router/reg-exp-router/router.ts",
+    "src/router/reg-exp-router/router.test.ts",
+    "src/utils/url.ts",
+    "src/utils/url.test.ts",
+  ]);
+  try {
+    const routing = concern({
+      name: "pluggable router backends",
+      covers: "Selects routes through concrete regular-expression and trie router algorithms.",
+      excludes: "URL parsing and request dispatch.",
+      core: "src/router/index.ts",
+      test: "src/router/index.test.ts",
+      supporting: ["src/router/reg-exp-router/router.ts"],
+    });
+    const urls = concern({
+      name: "URL parsing and path normalization",
+      covers: "Parses request URLs and normalizes route paths consumed by routers.",
+      excludes: "Router matching decisions and concrete router algorithms under src/router/.",
+      core: "src/utils/url.ts",
+      test: "src/utils/url.test.ts",
+      supporting: ["src/router/reg-exp-router/router.ts"],
+    });
+    const assessment = assessSpecialistEvidence(
+      mapWithConcerns([routing.touchpoints[0]!.path, urls.touchpoints[0]!.path], [routing, urls]),
+      { cwd },
+    );
+
+    assert.ok(!assessment.uncovered_paths.includes("src/router/reg-exp-router/router.ts"));
+    assert.ok(!assessment.uncovered_paths.includes("src/router/reg-exp-router/router.test.ts"));
+    assert.ok(assessment.attachments.some((attachment) =>
+      attachment.concern === routing.concern
+      && attachment.paths.includes("src/router/reg-exp-router/router.test.ts")
+    ));
+    assert.ok(!assessment.attachments.some((attachment) =>
+      attachment.concern === urls.concern
+      && attachment.paths.includes("src/router/reg-exp-router/router.test.ts")
+    ));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("an auxiliary-only concern cannot duplicate implementation-owned behavior", () => {
   const cwd = repository([
     "src/command.ts",
