@@ -6,6 +6,9 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Slash-separated exclusion prose remains negative semantic evidence unless it
+  actually names a tracked file or subtree; nonexistent path interpretations
+  can no longer discard words such as routing or middleware exclusions.
 - Direct dependency attachment now starts from owned core implementations, not
   supporting citations or arbitrary consumers of shared APIs. Pure relative
   re-export facades still attach when every target has the same core owner;

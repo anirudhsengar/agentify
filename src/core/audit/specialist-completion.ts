@@ -953,10 +953,13 @@ function rejectionHasGroundedDisposition(
   );
 }
 
-function concernExclusionPaths(candidate: AttachmentConcernCandidate): string[] {
-  return [...candidate.concern.excludes.matchAll(
+function concernExclusionPaths(concern: ConcernRecord, trackedFiles?: ReadonlySet<string>): string[] {
+  return [...concern.excludes.matchAll(
     /(?:^|[^A-Za-z0-9_.-])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.*-]+)+)/g,
-  )].flatMap((match) => match[1] ? [match[1].replace(/\*+$/, "").replace(/\/$/, "")] : []);
+  )].flatMap((match) => match[1] ? [match[1].replace(/\*+$/, "").replace(/\/$/, "")] : [])
+    .filter((excludedPath) => trackedFiles === undefined || [...trackedFiles].some((repositoryPath) =>
+      excludedPathCoversRepositoryPath(excludedPath, repositoryPath)
+    ));
 }
 
 function excludedPathCoversRepositoryPath(excludedPath: string, repositoryPath: string): boolean {
@@ -976,7 +979,7 @@ function attachmentConflictsWithExclusions(
     ...pathSemanticTokens(paths, label),
     ...pathLocalityTokens(paths),
   ]);
-  const exclusionPaths = concernExclusionPaths(candidate);
+  const exclusionPaths = candidate.exclusionPaths;
   const pathExclusionApplies = exclusionPaths.some((excludedPath) =>
     paths.some((repositoryPath) => excludedPathCoversRepositoryPath(excludedPath, repositoryPath))
   );
@@ -1006,7 +1009,7 @@ function attachmentHasPathExclusion(
   candidate: AttachmentConcernCandidate,
   paths: readonly string[],
 ): boolean {
-  return concernExclusionPaths(candidate).some((excludedPath) =>
+  return candidate.exclusionPaths.some((excludedPath) =>
     paths.some((repositoryPath) => excludedPathCoversRepositoryPath(excludedPath, repositoryPath))
   );
 }
@@ -1031,6 +1034,7 @@ interface AttachmentConcernCandidate {
   tokens: Set<string>;
   scopeTokens: Set<string>;
   excludedTokens: Set<string>;
+  exclusionPaths: string[];
 }
 
 function selectUniqueConcern(input: {
@@ -1364,6 +1368,7 @@ function inferRepositoryConcernAttachments(input: {
       tokens: concernSemanticTokens(concern),
       scopeTokens: semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`),
       excludedTokens: semanticTokens(concern.excludes),
+      exclusionPaths: concernExclusionPaths(concern, input.trackedFiles),
     }];
   });
   const acceptedConcernRecords = candidates.map((candidate) => candidate.concern);
@@ -1910,6 +1915,7 @@ export function assessSpecialistEvidence(
       tokens: concernSemanticTokens(concern),
       scopeTokens: semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`),
       excludedTokens: semanticTokens(concern.excludes),
+      exclusionPaths: concernExclusionPaths(concern, repository.trackedFiles),
     };
     for (const repositoryPath of assessment.contextPaths) {
       const touchpoint = concern?.touchpoints.find((entry) =>

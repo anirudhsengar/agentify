@@ -266,7 +266,9 @@ plus a shared source root cannot establish ownership, and ties remain
 unresolved. Locality affinity must match the concern's declared name and scope;
 entry questions and supporting roles may route adjacent work but do not
 establish positive tracked-file ownership. Repository-relative subtree
-exclusions such as `router/*` apply below source roots. An explicitly cited
+exclusions such as `router/*` apply below source roots. A slash-separated phrase
+is treated as a path only when it matches a tracked file or subtree; otherwise
+its words remain negative semantic evidence. An explicitly cited
 implementation carries its mirrored test unless the exclusion names that path;
 merely citing a test does not override behavioral negative evidence.
 Only a path named in a rejection's candidate field disposes of that file;
