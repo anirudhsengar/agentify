@@ -203,6 +203,44 @@ test("the tracer cannot rename its application-bound concern identity", async ()
   assert.equal(submissions, 0);
 });
 
+test("a retracer cannot replace the application-bound concern scope", async () => {
+  let submissions = 0;
+  const parsed = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null") as Record<string, unknown>;
+  const factory = createConcernSubmissionTool as unknown as (
+    observedAt: string,
+    onSubmit: () => void,
+    repositoryRoot: string | undefined,
+    expectedConcern: string,
+    requiredScopePaths: readonly string[],
+  ) => ReturnType<typeof createConcernSubmissionTool>;
+  const tool = factory("2026-08-29T00:00:00.000Z", () => {
+    submissions += 1;
+  }, undefined, "Request extraction and rejection contracts", ["src/owner/controller.ts"]);
+  const replaced = await tool.execute(
+    "submit-replacement",
+    { report_json: JSON.stringify(parsed) } as never,
+    undefined,
+    undefined,
+    {} as never,
+  ) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+  assert.equal(replaced.isError, true);
+  assert.match(replaced.content[0]?.text ?? "", /preserve.*application-bound.*scope/i);
+  assert.equal(submissions, 0);
+
+  const preserving = factory("2026-08-29T00:00:00.000Z", () => {
+    submissions += 1;
+  }, undefined, "Request extraction and rejection contracts", ["src/extract/mod.rs"]);
+  const accepted = await preserving.execute(
+    "submit-preserving",
+    { report_json: JSON.stringify(parsed) } as never,
+    undefined,
+    undefined,
+    {} as never,
+  );
+  assert.equal((accepted as { isError?: boolean }).isError, undefined);
+  assert.equal(submissions, 1);
+});
+
 test("the tracer envelope rejects malformed and oversized JSON before recording", async () => {
   let submissions = 0;
   const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", () => {
