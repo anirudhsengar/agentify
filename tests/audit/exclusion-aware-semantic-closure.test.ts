@@ -643,11 +643,6 @@ test("normalization subsumes core-conflicting concerns only after their verified
         "Subsumed by the accepted command dispatch lifecycle concern because both behaviors share the same file-level implementation owner and cannot form independent specialists.",
     });
 
-    const unsafe = compileSpecialistEvidence(map, { cwd });
-    assert.equal(unsafe.complete, false);
-    assert.ok(unsafe.map.concern_evidence!.concerns.some((entry) => entry.concern === help.concern));
-
-    dispatch.flows.push(...structuredClone(help.flows));
     const compiled = compileSpecialistEvidence(map, { cwd });
     assert.equal(compiled.complete, true, compiled.reasons.join("; "));
     assert.deepEqual(
@@ -658,6 +653,19 @@ test("normalization subsumes core-conflicting concerns only after their verified
       flow.name === help.flows[0]!.name
       && flow.steps.map((step) => step.path).join("\0")
         === help.flows[0]!.steps.map((step) => step.path).join("\0")
+    ));
+
+    const excludedDispatch = structuredClone(dispatch);
+    excludedDispatch.excludes = "Help and usage rendering remains an independent adjacent concern.";
+    const contradicted = mapWithConcerns(
+      ["src/command.ts", "src/cobra.ts"],
+      [excludedDispatch, structuredClone(help)],
+    );
+    contradicted.concern_evidence!.not_concerns = structuredClone(map.concern_evidence!.not_concerns);
+    const unresolved = compileSpecialistEvidence(contradicted, { cwd });
+    assert.equal(unresolved.complete, false);
+    assert.ok(unresolved.map.concern_evidence!.concerns.some((entry) =>
+      entry.concern === help.concern
     ));
 
     const repeated = compileSpecialistEvidence(compiled.map, { cwd });
