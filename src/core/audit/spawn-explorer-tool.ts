@@ -60,6 +60,7 @@ import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { capProviderOutputTokens, forceProviderToolChoice } from "../pi-sdk-runtime.ts";
 import { ConcernSchema, type Concern } from "./schema/concerns.ts";
+import { assessSpecialistEvidence } from "./specialist-completion.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
 import {
@@ -694,14 +695,38 @@ function roundCost(costUsd: number): number {
     return Number(costUsd.toFixed(12));
 }
 
-function hasSuccessfulCurrentHeadScout(cwd: string, stateDir: string): boolean {
+function successfulCurrentHeadScouts(cwd: string, stateDir: string) {
     const map = loadCanonicalMapAt(cwd, stateDir);
     const currentCommit = currentRepositoryCommit(cwd);
     return currentCommit !== null
         && map?.explorer_receipts?.repository_commit === currentCommit
-        && map.explorer_receipts.receipts.some((receipt) =>
+        ? map.explorer_receipts.receipts.filter((receipt) =>
             receipt.mode === "concern_scout" && receipt.success
-        );
+        )
+        : [];
+}
+
+function supplementalScoutMatchesUncoveredCluster(
+    cwd: string,
+    stateDir: string,
+    focus: string | undefined,
+): boolean {
+    const normalizedFocus = focus?.trim().toLowerCase() ?? "";
+    if (!normalizedFocus) return false;
+    const map = loadCanonicalMapAt(cwd, stateDir);
+    if (map === null) return false;
+    const scouts = successfulCurrentHeadScouts(cwd, stateDir);
+    const uncovered = assessSpecialistEvidence(map, { cwd }).uncovered_clusters;
+    return uncovered.some((cluster) => {
+        const terms = [cluster.cluster_key, ...cluster.implementation_paths, ...cluster.test_paths]
+            .map((term) => term.trim().toLowerCase())
+            .filter((term) => term.length >= 4);
+        const matched = terms.filter((term) => normalizedFocus.includes(term));
+        return matched.length > 0 && !scouts.some((scout) => {
+            const priorFocus = scout.focus?.trim().toLowerCase() ?? "";
+            return matched.some((term) => priorFocus.includes(term));
+        });
+    });
 }
 
 function extractSessionCostUsd(messages: ReadonlyArray<unknown>): number | null {
@@ -748,7 +773,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         "pitfalls (git-log + grep for tribal knowledge), validation (test/lint/typecheck commands), " +
         "gap_filler (close an uncovered D1-D10 dimension; pass dimension in focus). " +
         "Two concern modes discover (`concern_scout`) and trace (`concern_tracer`) maintainer-recognizable specialties. " +
-        "A successful application-attested concern_scout on current HEAD blocks duplicate scouting. " +
+        "A successful application-attested concern_scout on current HEAD blocks duplicate broad scouting; " +
+        "one focused supplemental scout is allowed only for a named compiler-uncovered cluster. " +
         "The final mode is `custom`: the parent supplies self-contained read-only " +
         "instructions based on gathered repository evidence through `system_prompt`. " +
         `Hard dispatch budgets: max ${maxTotalSpawns} total sub-agents per audit, ` +
@@ -783,13 +809,20 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 details: undefined as unknown as Record<string, unknown>,
             };
         }
-        if (mode === "concern_scout" && hasSuccessfulCurrentHeadScout(ctx.cwd, stateDir)) {
+        const currentHeadScouts = mode === "concern_scout"
+            ? successfulCurrentHeadScouts(ctx.cwd, stateDir)
+            : [];
+        if (
+            mode === "concern_scout"
+            && currentHeadScouts.length > 0
+            && !supplementalScoutMatchesUncoveredCluster(ctx.cwd, stateDir, params.focus)
+        ) {
             return {
                 content: [{
                     type: "text",
                     text:
                         "Error: a successful current-HEAD concern_scout already exists in the application-attested receipt ledger. " +
-                        "Reuse its proposed concerns and resolve only the remaining named obligations; duplicate scouting is refused.",
+                        "Reuse its proposed concerns. A supplemental scout is allowed only when focus names an exact current compiler-uncovered cluster; broad, unrelated, and repeated scouting is refused.",
                 }],
                 isError: true,
                 details: {

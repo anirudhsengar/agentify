@@ -75,6 +75,9 @@ The local installer performs these steps in order:
 8. initialize persistent identity and self-update policy;
 9. run a read-only structured repository audit and persist application-authored
    scout/tracer receipts bound to the exact audited commit;
+   duplicate broad scouts are refused, while a focused supplemental scout may
+   expand the proposal set only for an exact compiler-uncovered behavioral
+   cluster omitted by the initial scout;
 10. if discovery did not verify a required command, refine validation from the
    audited validation surface and re-verify; when no repository command can be
    verified at all, install the Agentify-owned validation smoke

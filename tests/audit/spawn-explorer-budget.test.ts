@@ -110,9 +110,13 @@ async function testRefusesDuplicateCurrentHeadConcernScout(): Promise<void> {
     const head = git(cwd, "rev-parse", "HEAD");
     const auditDir = path.join(cwd, ".agentify", "runtime", "audit");
     fs.mkdirSync(auditDir, { recursive: true });
+    const existingMap = makeValidCodebaseMap();
+    delete existingMap.expert_evidence;
+    existingMap.concern_evidence = { concerns: [], not_concerns: [] };
+    const attestedMap = attestCodebaseMap(existingMap, head);
     fs.writeFileSync(
       path.join(auditDir, "codebase_map.json"),
-      JSON.stringify(attestCodebaseMap(makeValidCodebaseMap(), head)),
+      JSON.stringify(attestedMap),
     );
 
     const tool = createSpawnExplorerTool({
@@ -173,6 +177,32 @@ async function testRefusesDuplicateCurrentHeadConcernScout(): Promise<void> {
     );
     assert.equal((focusedResult as { isError?: boolean }).isError, undefined);
     assert.equal(sessionCreated, true, "a focused scout may expand an omitted compiler obligation");
+
+    attestedMap.explorer_receipts!.receipts.push({
+      sequence: 2,
+      mode: "concern_scout",
+      success: true,
+      target_path: ".",
+      focus: "Identify the missing behavior owning checkout [src/checkout.ts, tests/checkout.test.ts]",
+      report_concern: null,
+      failure_kind: null,
+      proposed_concerns: ["Checkout lifecycle"],
+    });
+    fs.writeFileSync(path.join(auditDir, "codebase_map.json"), JSON.stringify(attestedMap));
+    sessionCreated = false;
+    const repeatedFocus = await tool.execute(
+      "test-repeated-supplemental-scout",
+      {
+        mode: "concern_scout",
+        target_path: ".",
+        focus: "Identify the missing behavior owning checkout [src/checkout.ts, tests/checkout.test.ts]",
+      } as never,
+      undefined,
+      undefined,
+      { cwd } as never,
+    );
+    assert.equal((repeatedFocus as { isError?: boolean }).isError, true);
+    assert.equal(sessionCreated, false, "the same uncovered cluster cannot be scouted twice");
 
     fs.writeFileSync(path.join(cwd, "README.md"), "# advanced fixture\n");
     git(cwd, "add", ".");

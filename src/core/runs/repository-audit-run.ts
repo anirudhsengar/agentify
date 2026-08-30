@@ -96,6 +96,7 @@ function repairPrompt(
     `Accepted concerns to preserve: ${assessment.accepted_concerns.join(", ") || "none"}.`,
     `Current tracked-path batch: ${uncovered}.`,
     `Current local implementation/test-cluster batch: ${uncoveredClusters}.`,
+    "If a listed uncovered cluster is a distinct maintainer behavior omitted by every scout proposal, run one concern_scout with focus naming its exact cluster key and tracked paths, then trace the resulting proposal. Do not rerun broad scouting or reject a real behavior merely to close the cluster.",
     `Concern candidates rejected by trusted evidence binding: ${rejected}.`,
     `Explorer receipt failures to resolve: ${explorerReceiptReasons.join("; ") || "none"}.`,
     needsBroadDiscovery

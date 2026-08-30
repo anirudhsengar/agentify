@@ -85,6 +85,10 @@ would specialize in to work on it well.
 1. Run `concern_scout` against the repository root exactly once, unless the
    application reports a successful current-HEAD scout receipt to resume. It returns
    candidate concerns with seed paths, plus the candidates it rejected.
+   After compilation, the application may permit one focused supplemental scout
+   only when its focus names an exact uncovered implementation/test cluster that
+   the original scout omitted. Never rerun a broad scout or use this exception to
+   rename an existing concern.
 2. Before tracing, screen the candidate set as a portfolio. Reject a candidate
    that is subsumed by a broader behavioral concern, is only a public type surface,
    or is only a release or contribution process. Record each exact candidate and

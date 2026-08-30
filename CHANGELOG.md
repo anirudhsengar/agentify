@@ -79,6 +79,11 @@ All notable changes to Agentify are documented here.
   touchpoints. A 12,000-token response ceiling leaves room for model reasoning,
   while the existing 16 KB report gate remains authoritative.
 
+- Semantic repair can request one focused supplemental concern scout when its
+  focus names an exact compiler-uncovered implementation/test cluster omitted by
+  the original scout. Broad, unrelated, and repeated same-HEAD scouts remain
+  blocked, so repair can add missing real behavior without reopening discovery.
+
 - New audits begin with an immutable exact-HEAD evidence map derived from the
   already-verified installer preflight. Repository identity, languages and
   formats, tracked topography, verified behavioral validation, build metadata,
