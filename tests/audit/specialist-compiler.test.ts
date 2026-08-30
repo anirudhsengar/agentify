@@ -448,6 +448,37 @@ test("a path-backed rejection cannot delegate behavior to a nonexistent concern"
   }
 });
 
+test("a path-backed rejection trusts an exact grouped_into owner before prose aliases", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    write(cwd, "scripts/common/__init__.py");
+    write(cwd, "scripts/tests/__init__.py");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "add mirrored package files");
+    const map = aqaShapedMap();
+    map.concern_evidence!.not_concerns = [{
+      candidate: "implementation/test cluster init [scripts/common/__init__.py, scripts/tests/__init__.py]",
+      why_rejected: "These empty package markers are subsumed by the accepted orchestration family and do not define independent behavior or specialist ownership.",
+      grouped_into: map.concern_evidence!.concerns[0]!.concern,
+    }];
+    map.concern_evidence!.concerns[1]!.touchpoints[0]!.centrality = "supporting";
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.status, "compiled", compiled.reasons.join("; "));
+    assert.equal(compiled.complete, true);
+
+    const nonexistentOwner = structuredClone(map);
+    nonexistentOwner.concern_evidence!.not_concerns[0]!.grouped_into = "Missing concern";
+    const unresolved = compileSpecialistEvidence(nonexistentOwner, { cwd });
+    assert.equal(unresolved.status, "incomplete");
+    assert.ok(unresolved.reasons.some((reason) =>
+      reason.includes("no accepted concern semantically matches")
+    ));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("a negative hypothetical about an accepted concern is not a delegation", () => {
   const cwd = createAqaShapedRepository();
   try {
