@@ -5,6 +5,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import {
+  discoverRepositoryCommands,
+  type InstallerProcessRunner,
+} from "../../src/core/installer/index.ts";
+import {
   hasCommittedGitCheckout,
   runInDisposableValidationCheckout,
 } from "../../src/core/installer/validation-isolation.ts";
@@ -22,6 +26,25 @@ function repository(): string {
   git(cwd, "config", "user.email", "agentify@example.invalid");
   fs.writeFileSync(path.join(cwd, ".gitignore"), ".venv/\n.cache/\n");
   fs.writeFileSync(path.join(cwd, "tracked.txt"), "committed\n");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "fixture");
+  return cwd;
+}
+
+function lockedNodeRepository(): string {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-validation-dependencies-test-"));
+  git(cwd, "init", "-q");
+  git(cwd, "config", "user.name", "Agentify Test");
+  git(cwd, "config", "user.email", "agentify@example.invalid");
+  fs.writeFileSync(path.join(cwd, "package.json"), JSON.stringify({
+    scripts: { test: "fixture-test" },
+    devDependencies: { "fixture-tool": "1.0.0" },
+  }));
+  fs.writeFileSync(path.join(cwd, "package-lock.json"), JSON.stringify({
+    name: "fixture",
+    lockfileVersion: 3,
+    packages: {},
+  }));
   git(cwd, "add", ".");
   git(cwd, "commit", "-qm", "fixture");
   return cwd;
@@ -109,6 +132,77 @@ test("synthetic directories are not mistaken for committed repositories", () => 
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-validation-non-git-"));
   try {
     assert.equal(hasCommittedGitCheckout(cwd), false);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("locked dependencies are provisioned before validation in the same disposable checkout", () => {
+  const cwd = lockedNodeRepository();
+  try {
+    const calls: Array<{ command: string; cwd: string }> = [];
+    const provisioned = new Set<string>();
+    const runner: InstallerProcessRunner = {
+      run(request) {
+        const command = `${request.program} ${request.args.join(" ")}`;
+        calls.push({ command, cwd: request.cwd });
+        const passed = command === "npm ci --ignore-scripts --no-audit --no-fund"
+          ? (provisioned.add(request.cwd), true)
+          : command === "npm run test" && provisioned.has(request.cwd);
+        return {
+          status: passed ? 0 : 127,
+          stdout: passed ? "passed\n" : "",
+          stderr: passed ? "" : "dependency unavailable\n",
+          timedOut: false,
+          errorMessage: null,
+        };
+      },
+    };
+    const discovered = discoverRepositoryCommands(cwd, runner, true);
+    assert.deepEqual(calls.map((call) => call.command), [
+      "npm ci --ignore-scripts --no-audit --no-fund",
+      "npm run test",
+    ]);
+    assert.equal(new Set(calls.map((call) => call.cwd)).size, 1);
+    assert.notEqual(calls[0]?.cwd, cwd);
+    assert.equal(fs.existsSync(calls[0]!.cwd), false);
+    assert.ok(discovered.commands.some((command) =>
+      command.kind === "install" && command.assessment === "verified"
+    ));
+    assert.ok(discovered.commands.some((command) =>
+      command.kind === "test" && command.assessment === "verified"
+    ));
+    assert.deepEqual(discovered.blockers, []);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("failed dependency provisioning prevents validation from running", () => {
+  const cwd = lockedNodeRepository();
+  try {
+    const calls: string[] = [];
+    const runner: InstallerProcessRunner = {
+      run(request) {
+        calls.push(`${request.program} ${request.args.join(" ")}`);
+        return {
+          status: request.args[0] === "ci" ? 1 : 0,
+          stdout: "",
+          stderr: request.args[0] === "ci" ? "install failed\n" : "",
+          timedOut: false,
+          errorMessage: null,
+        };
+      },
+    };
+    const discovered = discoverRepositoryCommands(cwd, runner, true);
+    assert.deepEqual(calls, ["npm ci --ignore-scripts --no-audit --no-fund"]);
+    assert.ok(discovered.commands.some((command) =>
+      command.kind === "install" && command.assessment === "failed"
+    ));
+    assert.ok(discovered.commands.some((command) =>
+      command.kind === "test" && command.assessment === "failed"
+    ));
+    assert.ok(discovered.blockers.some((blocker) => blocker.code === "validation_failed"));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
