@@ -53,6 +53,7 @@ export function compileSpecialistEvidence(
   let current = map;
   let normalized = false;
   let inferredAttachmentsRecomputed = false;
+  const inputFingerprint = mapFingerprint(map);
   const seen = new Set<string>();
 
   for (let iteration = 1; iteration <= MAX_SPECIALIST_COMPILATION_ITERATIONS; iteration += 1) {
@@ -122,14 +123,15 @@ export function compileSpecialistEvidence(
 
     const reconciled = reconcileSpecialistEvidence(current, assessment);
     if (reconciled === current) {
+      const outputUnchanged = fingerprint === inputFingerprint;
       return {
         status: "compiled",
         complete: true,
         phase: "fixed-point",
-        map: current,
+        map: outputUnchanged ? map : current,
         assessment,
         iterations: iteration,
-        normalized,
+        normalized: normalized && !outputUnchanged,
         reasons: [],
       };
     }
@@ -151,14 +153,15 @@ export function compileSpecialistEvidence(
     }
 
     if (reconciledFingerprint === fingerprint) {
+      const outputUnchanged = reconciledFingerprint === inputFingerprint;
       return {
         status: "compiled",
         complete: true,
         phase: "fixed-point",
-        map: reconciled,
+        map: outputUnchanged ? map : reconciled,
         assessment: postNormalization,
         iterations: iteration,
-        normalized: true,
+        normalized: !outputUnchanged,
         reasons: [],
       };
     }
