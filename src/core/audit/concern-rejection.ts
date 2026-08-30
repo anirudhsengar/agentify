@@ -4,9 +4,13 @@ const ACCEPTANCE_WORDING = [
   /\bretained\s+for\s+(?:tracing|inclusion|the\s+portfolio)\b/i,
 ] as const;
 
+export function explicitlyAcceptsConcern(whyRejected: string): boolean {
+  return ACCEPTANCE_WORDING.some((pattern) => pattern.test(whyRejected));
+}
+
 /** True only when the explanation actually rejects the candidate. */
 export function isSubstantiveConcernRejection(whyRejected: string): boolean {
   const explanation = whyRejected.trim();
   return explanation.length >= 20
-    && !ACCEPTANCE_WORDING.some((pattern) => pattern.test(explanation));
+    && !explicitlyAcceptsConcern(explanation);
 }

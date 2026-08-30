@@ -132,6 +132,10 @@ one concern has no other core implementation path while every adjacent concern
 does. That sole-dependent concern keeps core ownership and the other mentions
 become supporting. If zero or multiple owners depend exclusively on the shared
 path, the compiler preserves the ambiguity as an unresolved obligation.
+It also resolves a shared file when one core claimant cites a strict superset
+of every competing non-empty concrete symbol set. This is exact symbol evidence,
+not a filename or repository heuristic; disjoint, tied, empty, and incomparable
+claims remain unresolved.
 For a mirrored implementation/test cluster, normalization may promote both
 paths to core for one concern only when that concern explicitly cites the
 complete pair and every competing concern cites a strict subset. The rule uses
@@ -222,7 +226,10 @@ aggregate call and turn counters; local tool-result delivery does not.
 Before a tool-use continuation, the same boundary reserves enough aggregate
 input capacity for another request at the just-observed input/cache size.
 The compiler and receipt gate both refuse `not_concerns` explanations that
-explicitly accept the named candidate. Parent sessions are terminated by an
+explicitly accept the named candidate. Normalization removes such an append-only
+entry only when it semantically matches an accepted concern. Exact tracked paths
+embedded in a descriptive rejection label exempt only those paths, with path
+boundaries preventing substring matches. Parent sessions are terminated by an
 application-owned timer at the configured session deadline. SIGINT and SIGTERM
 run the same synchronous pending-installation rollback before process exit, so
 only the permitted diagnostic map can survive an interrupted fresh install.

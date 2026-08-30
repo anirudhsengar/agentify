@@ -175,7 +175,11 @@ free-form prose or asking the parent model to retranscribe it.
 Nested append checkpoints retain earlier concern bodies and deduplicate exact
 cumulative resends. Tool-result delivery is not counted as a provider call or
 turn. `not_concerns` entries must actually reject their candidate; acceptance
-wording cannot close an obligation. Application timers enforce parent-session
+wording cannot close an obligation. Fixed-point normalization removes an
+append-only acceptance entry only when its candidate semantically matches an
+accepted concern; unrelated malformed screening decisions remain unresolved.
+Path-backed rejections may name exact tracked paths in a descriptive candidate
+label, but do not exempt substring-related paths. Application timers enforce parent-session
 deadlines, and an interrupted CLI rolls its pending installation back before
 exiting. A later invocation may resume only the exact diagnostic-map-only
 topology with a current-HEAD application receipt ledger; extra, stale, or
@@ -225,6 +229,10 @@ When one supporting claimant lacks an independent core implementation and every
 current core owner of the shared orchestration file retains another independent
 implementation core, normalization assigns the shared file to that sole
 dependent claimant. Multiple dependent claimants remain unresolved.
+When core claimants cite concrete symbols in the same shared file, normalization
+may instead choose the sole claimant whose symbol set is a strict superset of
+every competitor. Empty, disjoint, equal, or incomparable symbol claims remain
+unresolved.
 
 ### 2. Run the one-time installer
 

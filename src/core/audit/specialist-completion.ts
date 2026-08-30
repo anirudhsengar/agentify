@@ -2,7 +2,10 @@ import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CodebaseMap } from "./schema/index.ts";
-import { isSubstantiveConcernRejection } from "./concern-rejection.ts";
+import {
+  explicitlyAcceptsConcern,
+  isSubstantiveConcernRejection,
+} from "./concern-rejection.ts";
 import {
   assessCoverageClosure,
   type CoverageClosureOptions,
@@ -1076,7 +1079,19 @@ function rejectionCoversPath(
   ) {
     return true;
   }
-  return rejection.why_rejected.includes(candidate);
+  const escaped = candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const exactPathMention = new RegExp(`(^|[^A-Za-z0-9._/-])${escaped}(?=$|[^A-Za-z0-9._/-])`);
+  return exactPathMention.test(rejection.candidate)
+    || exactPathMention.test(rejection.why_rejected);
+}
+
+function concreteTouchpointSymbols(value: string | null): Set<string> {
+  if (value === null) return new Set();
+  return new Set(value.split(/[,/|]/).map((candidate) =>
+    candidate.trim().replace(/\(\)$/, "")
+  ).filter((candidate) =>
+    /^[A-Za-z_$][A-Za-z0-9_$]*(?:(?:::|[.#])[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(candidate)
+  ));
 }
 
 function pathsMentionedByRejections(map: CodebaseMap, candidates: readonly string[]): string[] {
@@ -1254,6 +1269,37 @@ export function assessSpecialistEvidence(
   };
   for (const [repositoryPath, owners] of coreOwnersByPath) {
     if (owners.length <= 1) continue;
+    const symbolClaims = owners.map((owner) => {
+      const concern = concernsByName.get(owner);
+      const symbols = new Set((concern?.touchpoints ?? []).flatMap((touchpoint) => {
+        if (
+          touchpoint.centrality !== "core"
+          || resolvePath(touchpoint.path) !== repositoryPath
+        ) return [];
+        return [...concreteTouchpointSymbols(touchpoint.symbol)];
+      }));
+      return { owner, symbols };
+    });
+    const dominant = symbolClaims.filter((claimant) =>
+      claimant.symbols.size > 0
+      && symbolClaims.every((other) =>
+        other.owner === claimant.owner
+        || (
+          other.symbols.size > 0
+          && claimant.symbols.size > other.symbols.size
+          && [...other.symbols].every((symbol) => claimant.symbols.has(symbol))
+        )
+      )
+    );
+    if (dominant.length === 1) {
+      addOwnershipResolution({
+        concern: dominant[0]!.owner,
+        path: repositoryPath,
+        reason:
+          "the selected concern cites a strict superset of every competing concrete symbol claim in this shared file",
+      });
+      continue;
+    }
     const soleDependentOwners = accepted.filter((assessment) =>
       owners.includes(assessment.concern)
       && assessment.corePaths.length === 1
@@ -1563,6 +1609,28 @@ export function assessSpecialistEvidence(
     uncovered_clusters: uncoveredClusters,
     attachments,
     core_ownership_resolutions: coreOwnershipResolutions,
+  };
+}
+
+export function reconcileExplicitlyRetainedCandidates(map: CodebaseMap): CodebaseMap {
+  if (map.concern_evidence === undefined) return map;
+  const concernTokens = map.concern_evidence.concerns.map((concern) =>
+    semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`)
+  );
+  const notConcerns = map.concern_evidence.not_concerns.filter((entry) => {
+    if (!explicitlyAcceptsConcern(entry.why_rejected)) return true;
+    const candidateTokens = semanticTokens(entry.candidate);
+    return !concernTokens.some((tokens) =>
+      matchingTokenCount(candidateTokens, tokens) >= 2
+    );
+  });
+  if (notConcerns.length === map.concern_evidence.not_concerns.length) return map;
+  return {
+    ...map,
+    concern_evidence: {
+      concerns: map.concern_evidence.concerns,
+      not_concerns: notConcerns,
+    },
   };
 }
 

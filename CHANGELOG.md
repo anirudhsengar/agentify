@@ -48,6 +48,13 @@ All notable changes to Agentify are documented here.
 
 ### Changed
 
+- Fixed-point specialist normalization now removes stale append-only
+  `not_concerns` entries that explicitly retain an accepted concern, recognizes
+  exact tracked paths embedded in descriptive rejection labels, and resolves a
+  shared core file only when one claimant cites a strict superset of every
+  competing concrete symbol set. Unrelated rejections and ambiguous symbol
+  claims remain unresolved.
+
 - The bounded default audit envelope now permits 240 model calls/turns, eight million input/cache tokens, and 24 explorer spawns so a complete evidence-backed portfolio and final obligation-focused repair can fit while duration, output, cost, convergence, and artifact caps remain enforced.
 
 - Concern tracers now submit their body through an application-owned typed tool

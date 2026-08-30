@@ -243,7 +243,7 @@ function aqaShapedMap(): CodebaseMap {
     path: "get.sh",
     why: "Tracked acquisition entry point.",
   }];
-  map.skeleton.code_test_mirror = { observed: false, pattern: null };
+  map.skeleton.code_test_mirror = { observed: false, pattern: "not observed" };
   map.module_graph.edges = [
     { from: "get.sh", to: "buildenv/jenkins/getDependency", kind: "delegates acquisition" },
     { from: "get.sh", to: "openjdk/playlist.xml", kind: "stages playlist" },

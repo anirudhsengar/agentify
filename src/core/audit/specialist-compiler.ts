@@ -3,6 +3,7 @@ import type { CodebaseMap } from "./schema/index.ts";
 import {
   assessSpecialistEvidence,
   reconcileAuxiliaryDuplicateConcerns,
+  reconcileExplicitlyRetainedCandidates,
   reconcileSpecialistEvidence,
   type SpecialistEvidenceAssessment,
 } from "./specialist-completion.ts";
@@ -52,6 +53,12 @@ export function compileSpecialistEvidence(
   const seen = new Set<string>();
 
   for (let iteration = 1; iteration <= MAX_SPECIALIST_COMPILATION_ITERATIONS; iteration += 1) {
+    const withoutRetainedCandidates = reconcileExplicitlyRetainedCandidates(current);
+    if (withoutRetainedCandidates !== current) {
+      current = withoutRetainedCandidates;
+      normalized = true;
+      continue;
+    }
     const assessment = assessSpecialistEvidence(current, options);
     if (!assessment.complete) {
       const repaired = reconcileAuxiliaryDuplicateConcerns(current, assessment);
