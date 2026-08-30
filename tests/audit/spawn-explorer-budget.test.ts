@@ -738,6 +738,53 @@ async function testOversizedReportsFailInsteadOfBecomingReceipts(): Promise<void
   }
 }
 
+async function testParentCancellationStopsExplorer(): Promise<void> {
+  for (const phase of ["before-dispatch", "during-creation", "during-prompt"] as const) {
+    const cwd = tempDir("spawn-parent-cancellation");
+    const controller = new AbortController();
+    let created = 0;
+    let prompted = 0;
+    let aborted = 0;
+    let disposed = 0;
+    let cleared = 0;
+    try {
+      if (phase === "before-dispatch") controller.abort();
+      const tool = createSpawnExplorerTool({
+        agentDir: cwd,
+        stateDir: ".agentify/runtime/audit",
+        maxSubagentDurationMs: 20,
+        ...stubExplorerArgs(),
+        createSession: async () => {
+          created += 1;
+          if (phase === "during-creation") controller.abort();
+          return { session: {
+            messages: [],
+            async prompt(): Promise<void> {
+              prompted += 1;
+              controller.abort();
+              await new Promise<void>(() => {});
+            },
+            async abort(): Promise<void> { aborted += 1; },
+            clearQueue(): void { cleared += 1; },
+            dispose(): void { disposed += 1; },
+          } };
+        },
+      });
+      const result = await tool.execute("cancel", { target_path: "." } as never,
+        controller.signal, undefined, { cwd } as never);
+      assert.equal((result as { isError?: boolean }).isError, true, phase);
+      assert.match(textFrom(result), /abort|cancel/i, phase);
+      assert.equal(created, phase === "before-dispatch" ? 0 : 1, phase);
+      assert.equal(prompted, phase === "during-prompt" ? 1 : 0, phase);
+      assert.equal(aborted, created, phase);
+      assert.equal(cleared, created, phase);
+      assert.equal(disposed, created, phase);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  }
+}
+
 async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
   const cwd = tempDir("spawn-budget-timeout");
   try {
@@ -796,9 +843,10 @@ async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
 }
 
 async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
-  observation: "read" | "grep-directory" | "grep-file" | "wrong-subtree" | "listing" | "failed-read" | "no-matches" | "none",
+  observation: "read" | "grep-directory" | "grep-file" | "wrong-subtree" | "listing" | "failed-read" | "no-matches" | "none" | "cancelled",
 ): Promise<void> {
   const cwd = tempDir("spawn-budget-concern-portfolio");
+  const controller = new AbortController();
   try {
     fs.writeFileSync(path.join(cwd, "README.md"), "# fixture\n");
     fs.mkdirSync(path.join(cwd, "other"));
@@ -848,6 +896,7 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
                   }
                 }
               }
+              if (observation === "cancelled") controller.abort();
               const reportJson = report.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null";
               await submissionTool.execute(
                 "submit",
@@ -870,12 +919,16 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
         concern: "Repository orientation",
         focus: "Repository orientation",
       } as never,
-      undefined,
+      controller.signal,
       undefined,
       { cwd } as never,
     );
     const backedBySource = observation === "read" || observation.startsWith("grep-");
     assert.equal((result as { isError?: boolean }).isError, backedBySource ? undefined : true, observation);
+    if (observation === "cancelled") {
+      assert.equal(fs.existsSync(path.join(cwd, ".agentify/runtime/audit/codebase_map.json")), false,
+        "a cancelled tracer must not checkpoint a late report after parent rollback");
+    }
     if (!backedBySource) return;
     const details = result.details as { max_reads?: number; max_provider_calls?: number } | undefined;
     assert.equal(details?.max_reads, 6);
@@ -897,8 +950,9 @@ await testModelOverridesMayOnlyNarrowTrustedModeCaps();
 await testLiveExplorerUsageAbortsAtAggregateTokenLimit();
 await testOversizedReportsFailInsteadOfBecomingReceipts();
 await testDefaultsBoundSmallRepositoryAudits();
+await testParentCancellationStopsExplorer();
 await testSubagentTimeoutReturnsControlToAudit();
-for (const observation of ["read", "grep-directory", "grep-file", "wrong-subtree", "listing", "failed-read", "no-matches", "none"] as const) {
+for (const observation of ["read", "grep-directory", "grep-file", "wrong-subtree", "listing", "failed-read", "no-matches", "none", "cancelled"] as const) {
   await testConcernTracerDefaultsLeaveRoomForARealPortfolio(observation);
 }
 
