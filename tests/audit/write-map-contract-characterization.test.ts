@@ -670,6 +670,22 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
     [...existingConcernNames, "response delivery"],
     "resending the full cumulative checkpoint must be idempotent",
   );
+  const changedExistingConcern = structuredClone(checkpointedConcern);
+  changedExistingConcern.covers = "A changed body for an already recorded semantic identity.";
+  const changedExistingResult = await executeTool(
+    appendTools.writeMapDeltaTool,
+    { delta: { concern_evidence: { concerns: [changedExistingConcern] } } },
+    appendCwd,
+  );
+  assert.equal(
+    isToolError(changedExistingResult),
+    true,
+    "changed existing concern bodies must use the application-bound tracer instead of appending a duplicate identity",
+  );
+  assert.deepEqual(
+    readJson(appendTools.canonicalMapPath(appendCwd)).concern_evidence?.concerns.map((concern) => concern.concern),
+    [...existingConcernNames, "response delivery"],
+  );
 
   const implicitCheckpoint = makeValidConcern({
     concern: "help rendering and formatting",
