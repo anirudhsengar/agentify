@@ -372,6 +372,9 @@ test("supporting dependencies and arbitrary consumers cannot seed inferred owner
     "src/jsx/dom/server.ts", "src/jsx/dom/server.test.ts",
     "src/adapter/conninfo.ts", "src/adapter/conninfo.test.ts",
     "src/public/entry.ts", "src/public/entry.test.ts",
+    "src/public/mixed.ts", "src/public/mixed.test.ts",
+    "src/public/missing.ts", "src/public/missing.test.ts",
+    "src/public/body.ts", "src/public/body.test.ts",
   ]);
   try {
     fs.writeFileSync(path.join(cwd, "src/jsx/dom/server.ts"),
@@ -380,6 +383,14 @@ test("supporting dependencies and arbitrary consumers cannot seed inferred owner
       'import type { Context } from "../context.js";\nexport const getConnInfo = (c: Context) => c.env.remoteAddress;\n');
     fs.writeFileSync(path.join(cwd, "src/public/entry.ts"),
       '// Stable public facade.\nexport { Context } from "../context.js";\n');
+    for (const [name, extra] of Object.entries({
+      mixed: 'export { unrelated } from "external-package";',
+      missing: 'export { absent } from "../absent.js";',
+      body: 'export const format = (value) => JSON.stringify(value);',
+    })) {
+      fs.writeFileSync(path.join(cwd, `src/public/${name}.ts`),
+        `export { Context } from "../context.js";\n${extra}\n`);
+    }
     git(cwd, "add", ".");
     git(cwd, "commit", "-qm", "record context consumers");
     const context = concern({
@@ -398,6 +409,10 @@ test("supporting dependencies and arbitrary consumers cannot seed inferred owner
     assert.ok(assessment.uncovered_paths.includes("src/adapter/conninfo.ts"));
     assert.ok(attached.includes("src/public/entry.ts"), "a pure public re-export remains deterministic");
     assert.ok(attached.includes("src/public/entry.test.ts"));
+    for (const name of ["mixed", "missing", "body"]) {
+      assert.ok(!attached.includes(`src/public/${name}.ts`), `${name} is not a pure owned facade`);
+      assert.ok(assessment.uncovered_paths.includes(`src/public/${name}.ts`));
+    }
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

@@ -1249,23 +1249,43 @@ function relativeModuleSpecifiers(source: string): string[] {
   return specifiers;
 }
 
+function isPureRelativeReexport(source: string): boolean {
+  let index = skipModuleTrivia(source, 0);
+  let exports = 0;
+  while (index < source.length) {
+    const statement = /^export\s+(?:type\s+)?(?:\{[^{};]*\}|\*(?:\s+as\s+[A-Za-z_$][\w$]*)?)\s+from\s*/.exec(source.slice(index));
+    if (statement === null) return false;
+    const specifier = readModuleString(source, index + statement[0].length);
+    if (specifier === null || !/^\.\.?\//.test(specifier.value)) return false;
+    exports += 1;
+    index = skipModuleTrivia(source, specifier.end);
+    if (source[index] === ";") index = skipModuleTrivia(source, index + 1);
+  }
+  return exports > 0;
+}
+
 function directModuleEdges(input: {
   cwd: string;
   trackedFiles: ReadonlySet<string>;
   paths: readonly string[];
-}): Map<string, Set<string>> {
+}): { edges: Map<string, Set<string>>; facades: Set<string> } {
   const blobs = repositoryBlobsAtHead(input.cwd, input.paths);
   const edges = new Map<string, Set<string>>();
+  const facades = new Set<string>();
   for (const [importer, source] of blobs) {
+    if (isPureRelativeReexport(source)) facades.add(importer);
     for (const specifier of relativeModuleSpecifiers(source)) {
       const imported = resolveRelativeModule(importer, specifier, input.trackedFiles);
-      if (imported === null) continue;
+      if (imported === null) {
+        facades.delete(importer);
+        continue;
+      }
       const imports = edges.get(importer) ?? new Set<string>();
       imports.add(imported);
       edges.set(importer, imports);
     }
   }
-  return edges;
+  return { edges, facades };
 }
 
 function prioritizeRepositoryClusters(input: {
@@ -1274,7 +1294,7 @@ function prioritizeRepositoryClusters(input: {
   trackedFiles: ReadonlySet<string> | undefined;
 }): RepositoryBehaviorCluster[] {
   if (input.cwd === undefined || input.trackedFiles === undefined) return [...input.clusters];
-  const edges = directModuleEdges({
+  const { edges } = directModuleEdges({
     cwd: input.cwd,
     trackedFiles: input.trackedFiles,
     paths: [...input.trackedFiles],
@@ -1301,13 +1321,19 @@ function selectUniqueDirectDependencyConcern(input: {
   implementationPaths: readonly string[];
   candidates: readonly AttachmentConcernCandidate[];
   edges: ReadonlyMap<string, ReadonlySet<string>>;
+  facades: ReadonlySet<string>;
   label: string;
 }): AttachmentConcernCandidate | "unresolved" | null {
   const linked = input.candidates.filter((candidate) =>
     input.implementationPaths.some((implementationPath) =>
-      candidate.assessment.contextPaths.some((contextPath) =>
-        input.edges.get(implementationPath)?.has(contextPath)
-        || input.edges.get(contextPath)?.has(implementationPath)
+      candidate.assessment.corePaths.some((corePath) =>
+        input.edges.get(corePath)?.has(implementationPath)
+      ) || (
+        input.facades.has(implementationPath)
+        && (input.edges.get(implementationPath)?.size ?? 0) > 0
+        && [...input.edges.get(implementationPath)!].every((target) =>
+          candidate.assessment.corePaths.includes(target)
+        )
       )
     )
   );
@@ -1341,7 +1367,7 @@ function inferRepositoryConcernAttachments(input: {
     }];
   });
   const acceptedConcernRecords = candidates.map((candidate) => candidate.concern);
-  const moduleEdges = directModuleEdges({
+  const { edges: moduleEdges, facades } = directModuleEdges({
     cwd: input.cwd,
     trackedFiles: input.trackedFiles,
     paths: [
@@ -1394,6 +1420,7 @@ function inferRepositoryConcernAttachments(input: {
       implementationPaths: cluster.implementation_paths,
       candidates,
       edges: moduleEdges,
+      facades,
       label: cluster.cluster_key,
     });
     if (dependencyOwner === "unresolved") continue;

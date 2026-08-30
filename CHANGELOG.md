@@ -6,6 +6,10 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Direct dependency attachment now starts from owned core implementations, not
+  supporting citations or arbitrary consumers of shared APIs. Pure relative
+  re-export facades still attach when every target has the same core owner;
+  mixed, unresolved, and independently executable consumers stay unresolved.
 - Rejection explanations no longer dispose of files merely cited as evidence.
   Whole-file rejection requires an explicit candidate path, and trusted
   auxiliary normalization now emits those path dispositions directly.
