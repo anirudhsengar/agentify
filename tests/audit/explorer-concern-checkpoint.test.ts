@@ -5,6 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import {
   checkpointExplorerConcernEvidence,
 } from "../../src/core/audit/explorer-receipts.ts";
@@ -13,10 +14,12 @@ import {
   activeExplorerToolsAfterRead,
   concernSubmissionSteerMessage,
   createConcernSubmissionTool,
+  createSpawnExplorerTool,
   parseStructuredConcernReport,
   shouldForceConcernSubmission,
 } from "../../src/core/audit/spawn-explorer-tool.ts";
 import { assessSpecialistEvidence } from "../../src/core/audit/specialist-completion.ts";
+import { compileSpecialistEvidence } from "../../src/core/audit/specialist-compiler.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
 const REPORT = `## Report
@@ -124,6 +127,77 @@ test("a valid structured tracer report is checkpointed without parent retranscri
     const persisted = loadCanonicalMapAt(cwd, ".agentify/runtime/audit");
     assert.equal(persisted?.concern_evidence?.concerns.length, 1);
     assert.deepEqual(persisted?.concern_evidence?.concerns[0], concern);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("successful tracers return bounded current compiler obligations without extra model calls", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-tracer-feedback-"));
+  const stateDir = ".agentify/runtime/audit";
+  try {
+    for (const repositoryPath of [
+      "README.md", "src/extract/request.ts", "src/extract/rejection.ts", "src/extract/rejection.test.ts",
+      "src/render/page.ts", "src/render/page.test.ts",
+      ...Array.from({ length: 64 }, (_, index) => [
+        `src/render/surface-${index}.ts`, `src/render/surface-${index}.test.ts`,
+      ]).flat(),
+    ]) {
+      fs.mkdirSync(path.dirname(path.join(cwd, repositoryPath)), { recursive: true });
+      fs.writeFileSync(path.join(cwd, repositoryPath), "// deterministic fixture\n");
+    }
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "feedback fixture");
+    writeCanonicalMap(cwd, makeValidCodebaseMap({
+      concern_evidence: { concerns: [], not_concerns: [] }, expert_evidence: undefined,
+    }), { stateDir, mapFilename: "codebase_map.json" });
+    const report = REPORT.replaceAll("src/extract/mod.rs", "src/extract/request.ts")
+      .replaceAll("src/extract/rejection.rs", "src/extract/rejection.ts");
+    let sessions = 0;
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd, stateDir,
+      explorerModel: { id: "fixture", provider: "fixture", api: "openai-completions" } as Model<Api>,
+      createSession: async (options) => {
+        sessions += 1;
+        const submit = options?.customTools?.find((candidate) => candidate.name === "submit_concern_report");
+        assert.ok(submit);
+        return { session: {
+          messages: [], dispose(): void {},
+          async prompt(): Promise<void> {
+            const submitted = await submit.execute("submit", {
+              report_json: report.match(/```json\s*([\s\S]*?)```/u)![1]!,
+            }, undefined, undefined, { cwd } as never);
+            assert.notEqual((submitted as { isError?: boolean }).isError, true);
+          },
+        } };
+      },
+    });
+    const result = await tool.execute("trace", {
+      mode: "concern_tracer", target_path: ".", concern: "Request extraction and rejection contracts",
+    } as never, undefined, undefined, { cwd } as never);
+    assert.notEqual((result as { isError?: boolean }).isError, true);
+    const feedback = (result.details as { compiler_feedback?: {
+      status: string; uncovered_path_count: number; uncovered_cluster_count: number;
+      uncovered_paths: string[]; uncovered_clusters: unknown[];
+    } }).compiler_feedback;
+    assert.ok(feedback, "parent must receive fresh compiler obligations after a tracer");
+    assert.equal(feedback.status, "incomplete");
+    assert.ok(feedback.uncovered_paths.includes("src/render/page.ts"));
+    assert.ok(!feedback.uncovered_paths.includes("src/extract/rejection.test.ts"));
+    assert.ok(feedback.uncovered_cluster_count > feedback.uncovered_clusters.length);
+    assert.ok(Buffer.byteLength(JSON.stringify(feedback), "utf8") <= 4_096);
+    assert.ok(JSON.stringify(result.content).includes("compiler feedback"));
+    assert.equal(sessions, 1, "compiler feedback must not create another model session");
+    assert.equal(loadCanonicalMapAt(cwd, stateDir)?.concern_evidence?.concerns.length, 0);
+    assert.equal(checkpointExplorerConcernEvidence(cwd, stateDir, {
+      type: "tool_execution_end", toolName: "spawn_explorer", result,
+    }), true);
+    const compilation = compileSpecialistEvidence(loadCanonicalMapAt(cwd, stateDir)!, { cwd });
+    assert.equal(feedback.uncovered_path_count, compilation.assessment.uncovered_paths.length);
+    assert.equal(feedback.uncovered_cluster_count, compilation.assessment.uncovered_clusters.length);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
