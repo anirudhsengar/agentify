@@ -909,8 +909,11 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         "additional context.",
     parameters: SpawnExplorerParams,
 
-    async execute(_id, params, _signal, _onUpdate, ctx) {
+    async execute(_id, params, signal, _onUpdate, ctx) {
         const mode = params.mode ?? "topography";
+        if (signal?.aborted) {
+            return makeBudgetError("Error: explorer cancelled by parent audit", {}, stateDir);
+        }
 
         // Validate the target-path domain lock.
         const resolvedTarget = resolveTargetPath(params.target_path, ctx.cwd);
@@ -1138,6 +1141,14 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
               (expectedConcern ? `\n- Required concern identity: ${JSON.stringify(expectedConcern)}. Use it verbatim.` : "");
 
         let session: ExplorerSubSession | undefined;
+        let stopped = false;
+        const abortSession = (): void => {
+            if (stopped) return;
+            stopped = true;
+            session?.clearQueue?.();
+            void session?.abort?.().catch(() => undefined);
+        };
+        let onParentAbort: (() => void) | undefined;
         let resourceUsageRecorded = false;
         let providerCalls = 0;
         let oversizedReportPath: string | null = null;
@@ -1212,6 +1223,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                             }
                         });
                         pi.on("before_provider_request", (event) => {
+                            if (stopped || signal?.aborted) throw new Error("explorer cancelled by parent audit");
                             let payload = mode === "concern_tracer"
                                 ? capProviderOutputTokens(
                                     event.payload,
@@ -1239,6 +1251,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                             return payload;
                         });
                         pi.on("tool_call", async (event) => {
+                            if (stopped || signal?.aborted) {
+                                return { block: true, reason: "explorer cancelled by parent audit" };
+                            }
                             const defenseResult = await defenseHook(event);
                             if (defenseResult) return defenseResult;
                             if (readOnlySet.has(event.toolName)) {
@@ -1281,12 +1296,14 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const parentThinkingLevel = getThinkingLevel();
             const concernSubmissionTool = mode === "concern_tracer"
                 ? createConcernSubmissionTool(concernObservedAt as string, (concern) => {
+                    if (stopped || signal?.aborted) throw new Error("explorer cancelled by parent audit");
                     submission.concern = concern;
                 }, ctx.cwd, expectedConcern, requiredScopePaths, existingMap ?? undefined, observedPaths)
                 : null;
             const sessionTools = concernSubmissionTool
                 ? [...toolsForMode, concernSubmissionTool.name]
                 : [...toolsForMode];
+            signal?.throwIfAborted();
             const { session: createdSession } = await createSession({
                 cwd: ctx.cwd,
                 agentDir: toolOptions.agentDir,
@@ -1297,6 +1314,10 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 resourceLoader,
             });
             session = createdSession;
+            if (signal?.aborted) {
+                abortSession();
+                signal.throwIfAborted();
+            }
 
             // Send the task and wait for the sub-agent to finish, with
             // a hard wall-clock timeout. The session is disposed in the
@@ -1309,6 +1330,13 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             let callCapReached = false;
             const callCapPromise = new Promise<never>((_resolve, reject) => {
                 rejectCallCap = reject;
+            });
+            const parentCancellation = new Promise<never>((_resolve, reject) => {
+                onParentAbort = () => {
+                    abortSession();
+                    reject(new Error("explorer cancelled by parent audit"));
+                };
+                signal?.addEventListener("abort", onParentAbort, { once: true });
             });
             if (session.subscribe) {
                 unsubscribe = session.subscribe((event: unknown) => {
@@ -1325,8 +1353,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                             );
                         } catch (error) {
                             callCapReached = true;
-                            session?.clearQueue?.();
-                            void session?.abort?.().catch(() => undefined);
+                            abortSession();
                             rejectCallCap?.(error instanceof Error ? error : new Error(String(error)));
                             return;
                         }
@@ -1337,8 +1364,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                         && !callCapReached
                     ) {
                         callCapReached = true;
-                        session?.clearQueue?.();
-                        void session?.abort?.().catch(() => undefined);
+                        abortSession();
                         rejectCallCap?.(new Error(
                             `sub-agent reached hard provider call cap of ${maxProviderCalls} while requesting continuation; ` +
                             "use the partial report, narrow the exploration, or leave the obligation unresolved",
@@ -1350,10 +1376,10 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 await Promise.race([
                     session.prompt(task),
                     callCapPromise,
+                    parentCancellation,
                     new Promise<never>((_resolve, reject) => {
                         timeout = setTimeout(() => {
-                            session?.clearQueue?.();
-                            void session?.abort?.().catch(() => undefined);
+                            abortSession();
                             reject(
                                 new Error(
                                     `sub-agent exceeded timeout of ${effectiveSubagentDurationMs}ms; ` +
@@ -1367,6 +1393,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 if (timeout) clearTimeout(timeout);
                 unsubscribe?.();
             }
+            // A synchronous completion can win Promise.race after aborting its
+            // parent. Cancellation still forbids a successful receipt.
+            if (stopped || signal?.aborted) throw new Error("explorer cancelled by parent audit");
 
             if (!session.subscribe) {
                 providerCalls = session.messages.filter((message) => (
@@ -1547,6 +1576,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 },
             };
         } finally {
+            stopped = true;
+            if (onParentAbort) signal?.removeEventListener("abort", onParentAbort);
             try {
                 session?.dispose();
             } catch {

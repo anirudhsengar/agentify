@@ -6,6 +6,8 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Parent audit cancellation stops active explorers, refuses cancelled dispatches,
+  and prevents late provider requests or concern checkpoints after rollback.
 - Tracer receipts now persist successful source-read/grep observations. Listings,
   failed reads, unmatched searches, and same-name files in another subtree cannot
   attest a report. Legacy receipts remain readable but require retracing missing

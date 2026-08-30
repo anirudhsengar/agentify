@@ -739,7 +739,7 @@ async function testOversizedReportsFailInsteadOfBecomingReceipts(): Promise<void
 }
 
 async function testParentCancellationStopsExplorer(): Promise<void> {
-  for (const phase of ["before-dispatch", "during-creation", "during-prompt"] as const) {
+  for (const phase of ["before-dispatch", "during-creation", "during-prompt", "during-completion"] as const) {
     const cwd = tempDir("spawn-parent-cancellation");
     const controller = new AbortController();
     let created = 0;
@@ -758,10 +758,11 @@ async function testParentCancellationStopsExplorer(): Promise<void> {
           created += 1;
           if (phase === "during-creation") controller.abort();
           return { session: {
-            messages: [],
+            messages: [{ role: "assistant", content: "## Report\nRepository entry documented." }],
             async prompt(): Promise<void> {
               prompted += 1;
               controller.abort();
+              if (phase === "during-completion") return;
               await new Promise<void>(() => {});
             },
             async abort(): Promise<void> { aborted += 1; },
@@ -775,7 +776,7 @@ async function testParentCancellationStopsExplorer(): Promise<void> {
       assert.equal((result as { isError?: boolean }).isError, true, phase);
       assert.match(textFrom(result), /abort|cancel/i, phase);
       assert.equal(created, phase === "before-dispatch" ? 0 : 1, phase);
-      assert.equal(prompted, phase === "during-prompt" ? 1 : 0, phase);
+      assert.equal(prompted, phase === "during-prompt" || phase === "during-completion" ? 1 : 0, phase);
       assert.equal(aborted, created, phase);
       assert.equal(cleared, created, phase);
       assert.equal(disposed, created, phase);
