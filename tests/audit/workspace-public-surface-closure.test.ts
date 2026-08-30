@@ -134,6 +134,7 @@ test("workspace public surfaces and inline-tested modules remain semantic obliga
     const incomplete = assessSpecialistEvidence(map, { cwd });
     assert.equal(incomplete.complete, false);
     for (const repositoryPath of [
+      "axum/src/routing.rs",
       "axum-extra/src/lib.rs",
       "axum-extra/src/response/mod.rs",
       "axum-macros/src/lib.rs",
@@ -160,6 +161,9 @@ test("workspace public surfaces and inline-tested modules remain semantic obliga
         core: "axum-macros/src/lib.rs",
       }),
     );
+    for (const owner of map.concern_evidence!.concerns) {
+      for (const touchpoint of owner.touchpoints) touchpoint.centrality = "core";
+    }
     const complete = assessSpecialistEvidence(map, { cwd });
     assert.equal(complete.complete, true, complete.reasons.join("; "));
   } finally {
@@ -205,6 +209,16 @@ test("an observed public type trace inherits one unambiguous runtime core owner"
       name: "Command",
       flow: ["typings/index.d.ts: declaration", "lib/command.js: runtime implementation"],
     };
+
+    const supportingOnly = structuredClone(map);
+    supportingOnly.type_contract_surface.one_type_trace = null;
+    supportingOnly.concern_evidence!.concerns[0]!.touchpoints.push({
+      path: "typings/index.d.ts", symbol: "Command", role: "Adjacent public type surface.",
+      line_range: null, centrality: "supporting",
+    });
+    const unowned = compileSpecialistEvidence(supportingOnly, { cwd });
+    assert.equal(unowned.complete, false, "supporting type mentions cannot establish public core ownership");
+    assert.ok(unowned.assessment.uncovered_paths.includes("typings/index.d.ts"));
 
     const compiled = compileSpecialistEvidence(map, { cwd });
     assert.equal(compiled.complete, true, compiled.reasons.join("; "));
