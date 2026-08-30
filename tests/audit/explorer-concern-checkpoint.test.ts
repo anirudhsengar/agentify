@@ -40,7 +40,7 @@ const REPORT = `## Report
   }],
   "touchpoints": [
     { "path": "src/extract/mod.rs", "symbol": "FromRequest", "role": "Defines extraction ordering.", "line_range": null, "centrality": "core" },
-    { "path": "src/extract/rejection.rs", "symbol": "rejections", "role": "Defines public failure behavior.", "line_range": null, "centrality": "core" }
+    { "path": "src/extract/rejection.rs", "symbol": "Rejection", "role": "Defines public failure behavior.", "line_range": null, "centrality": "core" }
   ],
   "invariants": [{ "rule": "Only one extractor consumes the body.", "why": "The body stream is not replayable.", "reference": "src/extract/mod.rs" }],
   "pitfalls": [{ "risk": "A parts extractor reads the body.", "consequence": "Later extraction fails.", "reference": "src/extract/mod.rs" }],
@@ -101,6 +101,19 @@ function git(cwd: string, ...args: string[]): string {
   return result.stdout.trim();
 }
 
+function groundedExtractionRepository(): string {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-grounded-extraction-"));
+  fs.mkdirSync(path.join(cwd, "src/extract"), { recursive: true });
+  fs.writeFileSync(path.join(cwd, "src/extract/mod.rs"), "pub trait FromRequest {}\n");
+  fs.writeFileSync(path.join(cwd, "src/extract/rejection.rs"), "pub enum Rejection {}\n");
+  git(cwd, "init", "-q");
+  git(cwd, "config", "user.name", "Agentify Test");
+  git(cwd, "config", "user.email", "agentify@example.invalid");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "tracked extraction symbols");
+  return cwd;
+}
+
 test("a valid structured tracer report is checkpointed without parent retranscription", () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-concern-checkpoint-"));
   try {
@@ -147,6 +160,8 @@ test("successful tracers return bounded current compiler obligations without ext
       fs.mkdirSync(path.dirname(path.join(cwd, repositoryPath)), { recursive: true });
       fs.writeFileSync(path.join(cwd, repositoryPath), "// deterministic fixture\n");
     }
+    fs.writeFileSync(path.join(cwd, "src/extract/request.ts"), "export interface FromRequest {}\n");
+    fs.writeFileSync(path.join(cwd, "src/extract/rejection.ts"), "export class Rejection {}\n");
     git(cwd, "init", "-q");
     git(cwd, "config", "user.name", "Agentify Test");
     git(cwd, "config", "user.email", "agentify@example.invalid");
@@ -270,7 +285,7 @@ test("submission and compilation reject unsupported tracked-file symbol claims",
       REPORT.replaceAll("src/extract/mod.rs", "src/auth.ts")
         .replaceAll("src/extract/rejection.rs", "src/index.ts")
         .replace('"FromRequest"', '"verify, sign"')
-        .replace('"rejections"', '"verify / sign"'),
+        .replace('"Rejection"', '"verify / sign"'),
       "2026-08-29T00:00:00.000Z",
     );
     assert.ok(original);
@@ -385,6 +400,9 @@ test("a retracer cannot trade one covered repository obligation for another", as
     ]) {
       fs.writeFileSync(path.join(cwd, repositoryPath), "fixture\n");
     }
+    fs.writeFileSync(path.join(cwd, "src/extract/mod.rs"), "pub trait FromRequest {}\n");
+    fs.writeFileSync(path.join(cwd, "src/extract/rejection.rs"), "pub enum Rejection {}\n");
+    fs.writeFileSync(path.join(cwd, "src/model/person.rs"), "pub struct Person;\n");
     git(cwd, "init", "-q");
     git(cwd, "config", "user.name", "Agentify Test");
     git(cwd, "config", "user.email", "agentify@example.invalid");
@@ -529,12 +547,14 @@ test("the tracer envelope rejects malformed and oversized JSON before recording"
   assert.equal(submissions, 0);
 });
 
-test("the tracer normalizes domain-locked absolute evidence paths", async () => {
+test("the tracer normalizes domain-locked absolute evidence paths", async (t) => {
+  const cwd = groundedExtractionRepository();
+  t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
   let submitted: ReturnType<typeof parseStructuredConcernReport> = null;
   const parsed = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null") as {
     touchpoints: Array<{ path: string }>;
   };
-  parsed.touchpoints[0]!.path = "/repo/src/extract/mod.rs";
+  parsed.touchpoints[0]!.path = path.join(cwd, "src/extract/mod.rs");
   const factory = createConcernSubmissionTool as unknown as (
     observedAt: string,
     onSubmit: (concern: NonNullable<typeof submitted>) => void,
@@ -542,7 +562,7 @@ test("the tracer normalizes domain-locked absolute evidence paths", async () => 
   ) => ReturnType<typeof createConcernSubmissionTool>;
   const tool = factory("2026-08-29T00:00:00.000Z", (concern) => {
     submitted = concern;
-  }, "/repo");
+  }, cwd);
   const result = await tool.execute(
     "submit",
     { report_json: JSON.stringify(parsed) } as never,
@@ -564,7 +584,9 @@ test("the tracer normalizes domain-locked absolute evidence paths", async () => 
   assert.equal((outside as { isError?: boolean }).isError, true);
 });
 
-test("the tracer reports exact validation locations and normalizes tracked path references", async () => {
+test("the tracer reports exact validation locations and normalizes tracked path references", async (t) => {
+  const cwd = groundedExtractionRepository();
+  t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
   let submitted: ReturnType<typeof parseStructuredConcernReport> = null;
   const parsed = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null") as {
     flows: Array<{ steps: unknown[] }>;
@@ -573,7 +595,7 @@ test("the tracer reports exact validation locations and normalizes tracked path 
   parsed.flows[0]!.steps = parsed.flows[0]!.steps.slice(0, 1);
   const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", (concern) => {
     submitted = concern;
-  }, "/repo");
+  }, cwd);
   const invalid = await tool.execute(
     "submit",
     { report_json: JSON.stringify(parsed) } as never,

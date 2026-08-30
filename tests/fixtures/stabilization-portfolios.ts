@@ -14,6 +14,8 @@ export interface StabilizationConcernFixture {
 export interface StabilizationPortfolioFixture {
   project_type: string;
   languages: string[];
+  /** Small source reductions, not copies of the complete historical application. */
+  sources?: Record<string, string>;
   concerns: StabilizationConcernFixture[];
   rejected: Array<{ candidate: string; why: string }>;
 }
@@ -22,6 +24,11 @@ export const STABILIZATION_PORTFOLIOS: Record<string, StabilizationPortfolioFixt
   "commander.js": {
     project_type: "JavaScript command-line parsing library",
     languages: ["JavaScript", "TypeScript declarations"],
+    sources: {
+      "lib/option.js": "export class Option { constructor(flags) { this.flags = flags } }\n",
+      "lib/argument.js": "export class Argument { constructor(name) { this.name = name } }\n",
+      "lib/help.js": "export class Help { formatHelp(command) { return command.description } }\n",
+    },
     concerns: [
       {
         name: "Option and argument semantics",
@@ -96,6 +103,11 @@ export const STABILIZATION_PORTFOLIOS: Record<string, StabilizationPortfolioFixt
   click: {
     project_type: "Python command-line application framework",
     languages: ["Python"],
+    sources: {
+      "src/click/core.py": "class Command:\n    def invoke(self, ctx):\n        return ctx.invoke(self.callback)\n",
+      "src/click/decorators.py": "def pass_context(function):\n    def wrapper(ctx, *args):\n        return function(ctx, *args)\n    return wrapper\n",
+      "src/click/shell_completion.py": "def shell_complete(command, ctx, instruction):\n    return command.shell_complete(ctx, instruction)\n",
+    },
     concerns: [
       {
         name: "Command dispatch and Context lifecycle",
@@ -133,6 +145,12 @@ export const STABILIZATION_PORTFOLIOS: Record<string, StabilizationPortfolioFixt
   cobra: {
     project_type: "Go command-line application framework",
     languages: ["Go", "Shell"],
+    sources: {
+      "command.go": "package cobra\ntype Command struct {}\nfunc (c *Command) execute(args []string) {}\n",
+      "args.go": "package cobra\ntype PositionalArgs func(*Command, []string) error\n",
+      "completions.go": "package cobra\nfunc getCompletions(args []string) []string { return args }\n",
+      "active_help.go": "package cobra\nfunc AppendActiveHelp(items []string, message string) []string { return append(items, message) }\n",
+    },
     concerns: [
       {
         name: "Command tree traversal and dispatch",
@@ -170,6 +188,13 @@ export const STABILIZATION_PORTFOLIOS: Record<string, StabilizationPortfolioFixt
   hono: {
     project_type: "Multi-runtime web framework",
     languages: ["TypeScript", "JavaScript"],
+    sources: {
+      "src/hono-base.ts": "export class HonoBase { fetch(request: Request) { return new Response(request.url) } }\n",
+      "src/router/reg-exp-router/matcher.ts": "export function match(path: string, pattern: RegExp) { return pattern.exec(path) }\n",
+      "src/compose.ts": "export async function compose(next: () => Promise<void>) { await next() }\n",
+      "src/request.ts": "export class HonoRequest { constructor(public raw: Request) {} }\n",
+      "src/context.ts": "export class Context { finalized = false; set res(value: Response) { this.finalized = true } }\n",
+    },
     concerns: [
       {
         name: "Routing and route matching",
@@ -225,6 +250,14 @@ export const STABILIZATION_PORTFOLIOS: Record<string, StabilizationPortfolioFixt
   gin: {
     project_type: "Go HTTP web framework",
     languages: ["Go"],
+    sources: {
+      "tree.go": "package gin\ntype node struct {}\nfunc (n *node) getValue(path string) string { return path }\n",
+      "gin.go": "package gin\ntype Engine struct {}\nfunc (e *Engine) handleHTTPRequest() {}\n",
+      "binding/binding.go": "package binding\nfunc Default(method, contentType string) string { return contentType }\n",
+      "binding/default_validator.go": "package binding\ntype defaultValidator struct {}\n",
+      "render/render.go": "package render\ntype Render interface { WriteContentType() }\n",
+      "response_writer.go": "package gin\ntype responseWriter struct { size int }\n",
+    },
     concerns: [
       {
         name: "Radix-tree HTTP route matching",
@@ -277,6 +310,14 @@ export const STABILIZATION_PORTFOLIOS: Record<string, StabilizationPortfolioFixt
   axum: {
     project_type: "Rust workspace web framework",
     languages: ["Rust"],
+    sources: {
+      "axum/src/routing/mod.rs": "pub struct Router;\n",
+      "axum/src/routing/route.rs": "pub struct Route;\n",
+      "axum-core/src/extract/mod.rs": "pub trait FromRequest {}\n",
+      "axum-core/src/extract/rejection.rs": "pub mod rejections {}\n",
+      "axum-macros/src/lib.rs": "pub fn derive_from_request() {}\n",
+      "axum-macros/src/from_request/mod.rs": "pub fn expand() {}\n",
+    },
     concerns: [
       {
         name: "Request routing and route composition",

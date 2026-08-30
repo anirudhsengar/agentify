@@ -6,6 +6,10 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Tracer submission and compilation reject untracked citations and concrete
+  symbol claims absent from immutable HEAD bytes, including supporting
+  touchpoints and intermediate flow steps. Dirty working files cannot supply
+  missing evidence.
 - Interrupted audits synchronously retain one terminal result and checkpoint
   already charged resource usage before rollback, preventing signal retries
   from resetting the aggregate budget or recreating map-history artifacts.

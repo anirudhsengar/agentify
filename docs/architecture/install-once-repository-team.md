@@ -324,8 +324,16 @@ after each explorer and retains its source run ID; same-HEAD retries resume that
 attested evidence. Each tracer must call an application-owned typed submission
 tool with one bounded concern body. The application validates it against the
 concern schema, binds its freshness to the exact HEAD commit timestamp, and
-checkpoints it before receipt attestation;
+requires every cited touchpoint, flow step, invariant, and pitfall path to be a
+regular tracked HEAD file. Concrete touchpoint symbols must occur in bounded
+HEAD blob reads, including compound and qualified names. The compiler repeats
+these checks for persisted evidence. This rejects definite source contradictions;
+lexical presence alone does not prove the described behavior. Valid evidence is
+checkpointed before receipt attestation;
 the builder records scout screening but does not retranscribe tracer evidence.
+Contradictions in a concern with tracked core ownership remain unresolved rather
+than silently retiring that specialist. Candidates with no tracked core, such as
+fetched dependencies outside the repository, remain ineligible for installation.
 Only provider-generated assistant messages consume the
 aggregate call and turn counters; local tool-result delivery does not.
 Before a tool-use continuation, the same boundary reserves enough aggregate

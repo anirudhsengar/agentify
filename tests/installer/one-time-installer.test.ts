@@ -21,6 +21,7 @@ import {
 } from "../../src/core/installer/index.ts";
 import {
   SPECIALIST_FIXTURE_TRACKED_FILES,
+  SPECIALIST_FIXTURE_SOURCES,
   makeSpecialistFixtureMap,
 } from "../fixtures/specialist-map.ts";
 import { attestCodebaseMap } from "../fixtures/codebase-map.ts";
@@ -203,6 +204,11 @@ function fakeRunner(cwd: string, options: FakeRunnerOptions = {}): InstallerProc
 async function testInstalledFilesMustPreserveValidation(): Promise<void> {
   const cwd = tempRepo("agentify-installer-post-install-validation-");
   try {
+    for (const relative of [...SPECIALIST_FIXTURE_TRACKED_FILES, "src/lib.ts"]) {
+      const destination = path.join(cwd, relative);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.writeFileSync(destination, SPECIALIST_FIXTURE_SOURCES[relative] ?? `${relative}\n`);
+    }
     git(cwd, "init", "-q");
     git(cwd, "config", "user.name", "Agentify Test");
     git(cwd, "config", "user.email", "agentify@example.invalid");
@@ -701,14 +707,13 @@ async function testInitialInstallationAndIdempotentAttach(): Promise<void> {
   try {
     for (const relative of [
       "src/lib.ts",
-      "src/billing/index.ts",
+      ...SPECIALIST_FIXTURE_TRACKED_FILES,
       "src/billing/types.ts",
-      "tests/billing.test.ts",
       "scripts/prime-db.sh",
     ]) {
       const destination = path.join(cwd, relative);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
-      fs.writeFileSync(destination, `${relative}\n`);
+      fs.writeFileSync(destination, SPECIALIST_FIXTURE_SOURCES[relative] ?? `${relative}\n`);
     }
     git(cwd, "init", "-q");
     git(cwd, "config", "user.name", "Agentify Test");
@@ -755,7 +760,7 @@ async function testInitialInstallationAndIdempotentAttach(): Promise<void> {
       runner,
     });
     assert.equal(first.disposition, "ready");
-    assert.equal(first.specialists_installed, 1);
+    assert.equal(first.specialists_installed, 2);
     assert.ok(first.procedures_installed > 0);
     assert.ok(fs.existsSync(path.join(cwd, ".agentify/manifest.json")));
     for (const relative of [
@@ -831,7 +836,7 @@ async function testOneCommandInitialAuditInstallation(): Promise<void> {
     ]) {
       const destination = path.join(cwd, relative);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
-      fs.writeFileSync(destination, `${relative}\n`);
+      fs.writeFileSync(destination, SPECIALIST_FIXTURE_SOURCES[relative] ?? `${relative}\n`);
     }
     git(cwd, "init", "-q");
     git(cwd, "config", "user.name", "Agentify Test");

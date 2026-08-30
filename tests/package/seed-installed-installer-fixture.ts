@@ -10,6 +10,7 @@ import {
 } from "../../src/core/specialists/index.ts";
 import {
   SPECIALIST_FIXTURE_TRACKED_FILES,
+  SPECIALIST_FIXTURE_SOURCES,
   makeSpecialistFixtureMap,
 } from "../fixtures/specialist-map.ts";
 import { attestCodebaseMap } from "../fixtures/codebase-map.ts";
@@ -66,7 +67,7 @@ const mapEvidencePaths = [
 for (const relativePath of new Set([
   ...mapEvidencePaths,
   ...(layouts[profile] ?? layouts.attached!),
-])) write(relativePath, `${relativePath}\n`);
+])) write(relativePath, SPECIALIST_FIXTURE_SOURCES[relativePath] ?? `${relativePath}\n`);
 write(".gitignore", "node_modules/\n");
 
 git("init", "-q");

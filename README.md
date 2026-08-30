@@ -137,7 +137,7 @@ large repository through the optional `auditBudgets` object in
 | `maxSessionDurationMs` | 720,000 (12 minutes) |
 | `maxScoutDurationMs` / `maxTracerDurationMs` | 180,000 each |
 | `maxExplorerDurationMs` | 120,000 |
-| `maxModelCalls` / `maxTurns` | 160 each |
+| `maxModelCalls` / `maxTurns` | 240 each |
 | `maxInputTokens` / `maxOutputTokens` | 8,000,000 / 200,000 |
 | `maxTotalCostUsd` | 20 (provider-reported) |
 | `maxCoverageRecoveryPasses` / `maxSemanticRepairPasses` | 1 / 3 |

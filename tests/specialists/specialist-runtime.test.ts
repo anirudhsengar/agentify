@@ -11,7 +11,7 @@ import {
   readGitCommitTimestamp,
   synchronizeRepositorySpecialists,
 } from "../../src/core/specialists/index.ts";
-import { makeSpecialistFixtureMap } from "../fixtures/specialist-map.ts";
+import { makeSpecialistFixtureMap, SPECIALIST_FIXTURE_TRACKED_FILES, SPECIALIST_FIXTURE_SOURCES } from "../fixtures/specialist-map.ts";
 
 function git(cwd: string, ...args: string[]): string {
   const result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf-8" });
@@ -19,7 +19,7 @@ function git(cwd: string, ...args: string[]): string {
   return result.stdout.trim();
 }
 
-function write(cwd: string, relativePath: string, content = `${relativePath}\n`): void {
+function write(cwd: string, relativePath: string, content = SPECIALIST_FIXTURE_SOURCES[relativePath] ?? `${relativePath}\n`): void {
   const destination = path.join(cwd, relativePath);
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.writeFileSync(destination, content);
@@ -45,7 +45,7 @@ test("runtime synchronization consumes the canonical map only after memory boots
       "package.json",
       "src/index.ts",
       "src/lib.ts",
-      "src/billing/index.ts",
+      ...SPECIALIST_FIXTURE_TRACKED_FILES,
       "src/billing/types.ts",
       "tests/billing.test.ts",
       "scripts/prime-db.sh",
@@ -80,7 +80,7 @@ test("runtime synchronization consumes the canonical map only after memory boots
     assert.equal(synchronized.status, "synchronized");
     if (synchronized.status !== "synchronized") return;
     assert.equal(synchronized.state_dir, ".agentify/runtime/audit");
-    assert.deepEqual(synchronized.materialized.created_specialist_ids, ["specialist-billing"]);
+    assert.deepEqual(synchronized.materialized.created_specialist_ids, ["specialist-authentication", "specialist-billing"]);
     assert.ok(fs.existsSync(path.join(
       cwd,
       ".agentify/agents/specialists/specialist-billing.json",
@@ -91,7 +91,7 @@ test("runtime synchronization consumes the canonical map only after memory boots
     if (repeated.status !== "synchronized") return;
     assert.deepEqual(repeated.materialized.created_specialist_ids, []);
     assert.deepEqual(repeated.materialized.updated_specialist_ids, []);
-    assert.deepEqual(repeated.materialized.unchanged_specialist_ids, ["specialist-billing"]);
+    assert.deepEqual(repeated.materialized.unchanged_specialist_ids, ["specialist-authentication", "specialist-billing"]);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -125,7 +125,7 @@ test("runtime refuses an uncompiled canonical map without changing the installed
       "package.json",
       "src/index.ts",
       "src/lib.ts",
-      "src/billing/index.ts",
+      ...SPECIALIST_FIXTURE_TRACKED_FILES,
       "src/billing/types.ts",
       "tests/billing.test.ts",
       "scripts/prime-db.sh",

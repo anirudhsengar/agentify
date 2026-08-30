@@ -126,7 +126,7 @@ function makePortfolioRepository(
   for (const repositoryPath of new Set(portfolio.concerns.flatMap((concern) => [
     ...concern.core.map((touchpoint) => touchpoint.path),
     ...concern.flow.steps.map((step) => step.path),
-  ]))) write(cwd, repositoryPath);
+  ]))) write(cwd, repositoryPath, portfolio.sources?.[repositoryPath]);
   write(cwd, "Makefile", `# Reduced-fixture validation, not the historical build.\ntest:\n\tnode -e "${FIXTURE_VALIDATION_ARGV[2]}"\n`);
   git(cwd, "init", "-q");
   git(cwd, "config", "user.name", "Agentify Corpus");

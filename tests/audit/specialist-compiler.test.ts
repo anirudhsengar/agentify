@@ -205,6 +205,7 @@ function createSpringRepository(): string {
   ]) {
     write(cwd, relativePath);
   }
+  write(cwd, "src/test/java/org/example/vet/VetTests.java", "class VetTests { void serialization() {} }\n");
   git(cwd, "add", ".");
   git(cwd, "commit", "-qm", "fixture");
   return cwd;
@@ -224,6 +225,7 @@ function createAqaShapedRepository(): string {
   ]) {
     write(cwd, relativePath);
   }
+  write(cwd, "get.sh", "getBinaryOpenjdk() { :; }\ngetTestKitGen() { :; }\ngetVendorTestMaterial() { :; }\nexecuteCmdWithRetry() { :; }\ngenerateTargets() { :; }\n");
   git(cwd, "add", ".");
   git(cwd, "commit", "-qm", "fixture");
   return cwd;

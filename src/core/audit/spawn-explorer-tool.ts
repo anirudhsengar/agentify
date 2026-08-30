@@ -61,7 +61,7 @@ import { Value } from "typebox/value";
 import { capProviderOutputTokens, forceProviderToolChoice } from "../pi-sdk-runtime.ts";
 import { ConcernSchema, type Concern } from "./schema/concerns.ts";
 import type { CodebaseMap } from "./schema/index.ts";
-import { assessSpecialistEvidence } from "./specialist-completion.ts";
+import { assessConcernGrounding, assessSpecialistEvidence } from "./specialist-completion.ts";
 import { compileSpecialistEvidence } from "./specialist-compiler.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
@@ -570,6 +570,16 @@ export function createConcernSubmissionTool(
                     isError: true,
                     details: { recorded: false, concern: null },
                 };
+            }
+            if (repositoryRoot !== undefined) {
+                const grounding = assessConcernGrounding(decoded.concern, repositoryRoot);
+                if (grounding.length > 0) {
+                    return {
+                        content: [{ type: "text", text: `Error: ungrounded concern evidence: ${grounding.slice(0, 8).join("; ")}. Correct the cited files/symbols from observed source; do not guess.` }],
+                        isError: true,
+                        details: { recorded: false, concern: null },
+                    };
+                }
             }
             const submittedPaths = new Set([
                 ...decoded.concern.touchpoints.map((touchpoint) => touchpoint.path),

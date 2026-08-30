@@ -1098,7 +1098,7 @@ function repositoryBlobsAtHead(
   repositoryPaths: readonly string[],
 ): Map<string, string> {
   const paths = [...new Set(repositoryPaths)]
-    .filter((repositoryPath) => MODULE_SOURCE_EXTENSION.test(repositoryPath) && !/[\r\n]/.test(repositoryPath))
+    .filter((repositoryPath) => !/[\r\n]/.test(repositoryPath))
     .sort((left, right) => left.localeCompare(right));
   if (paths.length === 0 || paths.length > MODULE_EDGE_MAX_FILES) return new Map();
   const result = spawnSync(
@@ -1273,7 +1273,7 @@ function directModuleEdges(input: {
   trackedFiles: ReadonlySet<string>;
   paths: readonly string[];
 }): { edges: Map<string, Set<string>>; facades: Set<string> } {
-  const blobs = repositoryBlobsAtHead(input.cwd, input.paths);
+  const blobs = repositoryBlobsAtHead(input.cwd, input.paths.filter((repositoryPath) => MODULE_SOURCE_EXTENSION.test(repositoryPath)));
   const edges = new Map<string, Set<string>>();
   const facades = new Set<string>();
   for (const [importer, source] of blobs) {
@@ -1513,6 +1513,43 @@ function concreteTouchpointSymbols(value: string | null): Set<string> {
   ));
 }
 
+/** Reject definite contradictions; lexical presence is not a semantic proof. */
+export function assessConcernGrounding(concern: ConcernRecord, cwd: string): string[] {
+  const citedPaths = [...new Set([
+    ...concern.touchpoints.map((touchpoint) => touchpoint.path),
+    ...concern.flows.flatMap((flow) => flow.steps.map((step) => step.path)),
+    ...concern.invariants.map((invariant) => invariant.reference),
+    ...concern.pitfalls.map((pitfall) => pitfall.reference),
+  ])];
+  const tracked = trackedRegularFilesAtHead(cwd, citedPaths);
+  if (tracked === null) return ["cannot verify concern evidence against repository HEAD"];
+  const reasons = citedPaths.filter((repositoryPath) => {
+    const normalized = normalizeRepositoryPathSyntax(repositoryPath);
+    return normalized === null || !tracked.files.has(normalized);
+  }).map((repositoryPath) => `concern evidence is not a regular tracked HEAD file: ${repositoryPath}`);
+  const claims = concern.touchpoints.flatMap((touchpoint) => {
+    const repositoryPath = normalizeRepositoryPathSyntax(touchpoint.path);
+    if (repositoryPath === null || !tracked.files.has(repositoryPath)) return [];
+    const symbols = [...concreteTouchpointSymbols(touchpoint.symbol)];
+    return symbols.length === 0 ? [] : [{ path: repositoryPath, symbols }];
+  });
+  const blobs = repositoryBlobsAtHead(cwd, claims.map((claim) => claim.path));
+  for (const claim of claims) {
+    const source = blobs.get(claim.path);
+    if (source === undefined) {
+      reasons.push(`cannot read bounded HEAD evidence for symbols in ${claim.path}`);
+      continue;
+    }
+    const identifiers = new Set(source.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) ?? []);
+    for (const symbol of claim.symbols) {
+      if (symbol.split(/::|[.#]/).some((part) => !identifiers.has(part))) {
+        reasons.push(`claimed symbol ${symbol} is absent from HEAD file ${claim.path}`);
+      }
+    }
+  }
+  return reasons;
+}
+
 function pathsMentionedByRejections(
   map: CodebaseMap,
   candidates: readonly string[],
@@ -1598,9 +1635,23 @@ export function assessSpecialistEvidence(
     ...structuralHighSignal,
     ...clusterPaths,
   ])].sort((left, right) => left.localeCompare(right));
-  const assessments = map.concern_evidence.concerns.map((concern) =>
-    assessConcern(concern, resolvePath)
-  );
+  const assessments = map.concern_evidence.concerns.map((concern) => {
+    const assessment = assessConcern(concern, resolvePath);
+    if (options?.cwd !== undefined) {
+      const grounding = assessConcernGrounding(concern, options.cwd);
+      assessment.reasons.push(...grounding);
+      if (grounding.length > 0) {
+        assessment.eligible = false;
+        // A candidate with no tracked core was already outside repository
+        // ownership. Contradictions in an otherwise owned behavior need repair,
+        // not automatic retirement and reassignment to an adjacent specialist.
+        if (assessment.corePaths.length > 0) {
+          reasons.push(`concern "${concern.concern}" has unresolved source contradictions: ${grounding.join("; ")}`);
+        }
+      }
+    }
+    return assessment;
+  });
   const accepted = assessments.filter((assessment) => assessment.eligible);
   const rejected = assessments
     .filter((assessment) => !assessment.eligible)
