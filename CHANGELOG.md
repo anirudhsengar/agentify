@@ -6,6 +6,8 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- README-derived identity strips dangling markup and separates removed HTML
+  comments, so removal cannot reconstruct markup across adjacent fragments.
 - Public/workspace and inline-tested surfaces require core ownership or a
   substantive rejection; supporting mentions alone no longer close them.
   Inline tests in one file cannot manufacture a two-file ownership claim.

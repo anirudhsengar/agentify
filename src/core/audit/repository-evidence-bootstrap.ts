@@ -90,7 +90,8 @@ function sanitizeMarkdown(value: string): string {
     .replace(/!\[[^\]]*\]\([^)]*\)/gu, "")
     .replace(/\[([^\]]*)\]\([^)]*\)/gu, "$1")
     .replace(/\[([^\]]+)\]\[[^\]]+\]/gu, "$1")
-    .replace(/<[^>]+>/gu, "")
+    .replace(/<[^>]*>?/gu, " ")
+    .replace(/>/gu, "")
     .replace(/[`*_]+/gu, "")
     .replace(/\s+/gu, " ")
     .trim();
@@ -104,7 +105,7 @@ function heading(content: string | null): string | null {
 
 function repositorySummary(content: string | null): string | null {
   if (!content) return null;
-  const withoutComments = content.replace(/<!--[\s\S]*?-->/gu, "");
+  const withoutComments = content.replace(/<!--[\s\S]*?(?:-->|$)/gu, " ");
   let inFence = false;
   for (const rawLine of withoutComments.split(/\r?\n/u)) {
     if (/^\s*```/u.test(rawLine)) {

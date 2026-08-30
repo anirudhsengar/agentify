@@ -44,6 +44,7 @@ test("README-derived identity cannot retain dangling or reconstructed HTML marku
       assert.match(map.meta.project_type, /Checkout/);
       assert.doesNotMatch(map.meta.project_type, /[<>]/);
       assert.doesNotMatch(map.meta.domain_hypothesis, /[<>]/);
+      if (content.includes("<small>")) assert.match(map.meta.project_type, /^Checkout Fixture:/);
     }
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
