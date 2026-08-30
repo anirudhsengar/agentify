@@ -23,6 +23,9 @@ const GLOB_SIGNAL = /[*?\[\]{}]/;
 const GIT_PATH_CHUNK_SIZE = 128;
 const GIT_PATH_CHUNK_CHARACTERS = 12_000;
 const GIT_PATH_MAX_BUFFER = 8 * 1024 * 1024;
+const MODULE_EDGE_MAX_FILES = 512;
+const MODULE_EDGE_MAX_BUFFER = 16 * 1024 * 1024;
+const MODULE_SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/i;
 const WELL_KNOWN_FILE_NAMES = new Set([
   "dockerfile",
   "gemfile",
@@ -154,6 +157,7 @@ type RepositoryPathResolver = (value: unknown) => string | null;
 interface RepositoryEvidenceContext {
   resolvePath: RepositoryPathResolver;
   trackedFiles: Set<string> | undefined;
+  cwd: string | undefined;
 }
 
 function normalizeRepositoryPathSyntax(value: unknown): string | null {
@@ -682,6 +686,7 @@ function createRepositoryEvidenceContext(
           && likelyFileWithoutRepository(normalized) ? normalized : null;
       },
       trackedFiles: undefined,
+      cwd: undefined,
     };
   }
 
@@ -698,6 +703,7 @@ function createRepositoryEvidenceContext(
           && tracked.files.has(normalized) ? normalized : null;
       },
       trackedFiles: tracked.complete ? tracked.files : undefined,
+      cwd: tracked.complete ? cwd : undefined,
     };
   }
 
@@ -713,6 +719,7 @@ function createRepositoryEvidenceContext(
         && regularFileOnDisk(cwd, normalized) ? normalized : null;
     },
     trackedFiles: undefined,
+    cwd: undefined,
   };
 }
 
@@ -1079,11 +1086,216 @@ function selectUniqueConcern(input: {
   return best.candidate;
 }
 
+function repositoryBlobsAtHead(
+  cwd: string,
+  repositoryPaths: readonly string[],
+): Map<string, string> {
+  const paths = [...new Set(repositoryPaths)]
+    .filter((repositoryPath) => MODULE_SOURCE_EXTENSION.test(repositoryPath) && !/[\r\n]/.test(repositoryPath))
+    .sort((left, right) => left.localeCompare(right));
+  if (paths.length === 0 || paths.length > MODULE_EDGE_MAX_FILES) return new Map();
+  const result = spawnSync(
+    "git",
+    ["-C", cwd, "cat-file", "--batch"],
+    {
+      input: `${paths.map((repositoryPath) => `HEAD:${repositoryPath}`).join("\n")}\n`,
+      maxBuffer: MODULE_EDGE_MAX_BUFFER,
+      windowsHide: true,
+    },
+  );
+  if (result.error || result.status !== 0 || !Buffer.isBuffer(result.stdout)) return new Map();
+  const blobs = new Map<string, string>();
+  let offset = 0;
+  for (const repositoryPath of paths) {
+    const headerEnd = result.stdout.indexOf(0x0a, offset);
+    if (headerEnd < 0) return new Map();
+    const header = result.stdout.subarray(offset, headerEnd).toString("utf8");
+    const size = /\sblob\s(\d+)$/.exec(header)?.[1];
+    if (size === undefined) return new Map();
+    const length = Number.parseInt(size, 10);
+    const contentStart = headerEnd + 1;
+    const contentEnd = contentStart + length;
+    if (!Number.isSafeInteger(length) || contentEnd >= result.stdout.length) return new Map();
+    blobs.set(repositoryPath, result.stdout.subarray(contentStart, contentEnd).toString("utf8"));
+    offset = contentEnd + 1;
+  }
+  return blobs;
+}
+
+function resolveRelativeModule(
+  importer: string,
+  specifier: string,
+  trackedFiles: ReadonlySet<string>,
+): string | null {
+  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(importer), specifier));
+  if (resolved === ".." || resolved.startsWith("../") || resolved.startsWith("/")) return null;
+  const extension = path.posix.extname(resolved);
+  const base = MODULE_SOURCE_EXTENSION.test(resolved) ? resolved.slice(0, -extension.length) : resolved;
+  const candidates = [
+    resolved,
+    ...[".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]
+      .flatMap((suffix) => [`${base}${suffix}`, `${base}/index${suffix}`]),
+  ];
+  return candidates.find((candidate) => trackedFiles.has(candidate)) ?? null;
+}
+
+function skipModuleTrivia(source: string, start: number): number {
+  let index = start;
+  while (index < source.length) {
+    if (/\s/.test(source[index]!)) {
+      index += 1;
+    } else if (source.startsWith("//", index)) {
+      index = source.indexOf("\n", index + 2);
+      if (index < 0) return source.length;
+    } else if (source.startsWith("/*", index)) {
+      const end = source.indexOf("*/", index + 2);
+      if (end < 0) return source.length;
+      index = end + 2;
+    } else {
+      break;
+    }
+  }
+  return index;
+}
+
+function readModuleString(
+  source: string,
+  start: number,
+): { value: string; end: number } | null {
+  const quote = source[start];
+  if (quote !== '"' && quote !== "'" && quote !== "`") return null;
+  let value = "";
+  for (let index = start + 1; index < source.length; index += 1) {
+    const character = source[index]!;
+    if (character === "\\") {
+      index += 1;
+      if (index >= source.length) return null;
+      value += source[index]!;
+    } else if (character === quote) {
+      return { value, end: index + 1 };
+    } else {
+      value += character;
+    }
+  }
+  return null;
+}
+
+function callModuleSpecifier(source: string, start: number): string | null {
+  let index = skipModuleTrivia(source, start);
+  if (source[index] !== "(") return null;
+  index = skipModuleTrivia(source, index + 1);
+  return readModuleString(source, index)?.value ?? null;
+}
+
+function staticModuleSpecifier(source: string, start: number, sideEffect: boolean): string | null {
+  let index = skipModuleTrivia(source, start);
+  if (sideEffect) {
+    const direct = readModuleString(source, index);
+    if (direct !== null) return direct.value;
+  }
+  const limit = Math.min(source.length, start + 4_096);
+  while (index < limit && source[index] !== ";") {
+    if (source.startsWith("//", index) || source.startsWith("/*", index) || /\s/.test(source[index]!)) {
+      index = skipModuleTrivia(source, index);
+      continue;
+    }
+    const quoted = readModuleString(source, index);
+    if (quoted !== null) {
+      index = quoted.end;
+      continue;
+    }
+    const identifier = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(source.slice(index))?.[0];
+    if (identifier === "from") {
+      return readModuleString(source, skipModuleTrivia(source, index + identifier.length))?.value ?? null;
+    }
+    index += identifier?.length ?? 1;
+  }
+  return null;
+}
+
+function relativeModuleSpecifiers(source: string): string[] {
+  const specifiers: string[] = [];
+  let index = 0;
+  while (index < source.length) {
+    const next = skipModuleTrivia(source, index);
+    if (next !== index) {
+      index = next;
+      continue;
+    }
+    const quoted = readModuleString(source, index);
+    if (quoted !== null) {
+      index = quoted.end;
+      continue;
+    }
+    const identifier = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(source.slice(index))?.[0];
+    if (identifier === undefined) {
+      index += 1;
+      continue;
+    }
+    const after = index + identifier.length;
+    const specifier = identifier === "require"
+      ? callModuleSpecifier(source, after)
+      : identifier === "import"
+        ? callModuleSpecifier(source, after) ?? staticModuleSpecifier(source, after, true)
+        : identifier === "export"
+          ? staticModuleSpecifier(source, after, false)
+          : null;
+    if (specifier?.startsWith("./") || specifier?.startsWith("../")) specifiers.push(specifier);
+    index = after;
+  }
+  return specifiers;
+}
+
+function directModuleEdges(input: {
+  cwd: string;
+  trackedFiles: ReadonlySet<string>;
+  paths: readonly string[];
+}): Map<string, Set<string>> {
+  const blobs = repositoryBlobsAtHead(input.cwd, input.paths);
+  const edges = new Map<string, Set<string>>();
+  for (const [importer, source] of blobs) {
+    for (const specifier of relativeModuleSpecifiers(source)) {
+      const imported = resolveRelativeModule(importer, specifier, input.trackedFiles);
+      if (imported === null) continue;
+      const imports = edges.get(importer) ?? new Set<string>();
+      imports.add(imported);
+      edges.set(importer, imports);
+    }
+  }
+  return edges;
+}
+
+function selectUniqueDirectDependencyConcern(input: {
+  implementationPaths: readonly string[];
+  candidates: readonly AttachmentConcernCandidate[];
+  edges: ReadonlyMap<string, ReadonlySet<string>>;
+  label: string;
+}): AttachmentConcernCandidate | "unresolved" | null {
+  const linked = input.candidates.filter((candidate) =>
+    input.implementationPaths.some((implementationPath) =>
+      candidate.assessment.contextPaths.some((contextPath) =>
+        input.edges.get(implementationPath)?.has(contextPath)
+        || input.edges.get(contextPath)?.has(implementationPath)
+      )
+    )
+  );
+  if (linked.length === 0) return null;
+  const eligible = linked.filter((candidate) => !attachmentConflictsWithExclusions(
+    candidate,
+    input.implementationPaths,
+    input.label,
+    true,
+  ));
+  return eligible.length === 1 ? eligible[0]! : "unresolved";
+}
+
 function inferRepositoryConcernAttachments(input: {
   map: CodebaseMap;
   accepted: readonly AssessedConcern[];
   clusters: readonly RepositoryBehaviorCluster[];
   structuralHighSignal: readonly string[];
+  cwd: string;
+  trackedFiles: ReadonlySet<string>;
 }): RepositoryConcernAttachment[] {
   const concerns = input.map.concern_evidence?.concerns ?? [];
   const candidates: AttachmentConcernCandidate[] = input.accepted.flatMap((assessment) => {
@@ -1096,6 +1308,14 @@ function inferRepositoryConcernAttachments(input: {
     }];
   });
   const acceptedConcernRecords = candidates.map((candidate) => candidate.concern);
+  const moduleEdges = directModuleEdges({
+    cwd: input.cwd,
+    trackedFiles: input.trackedFiles,
+    paths: [
+      ...input.clusters.flatMap((cluster) => cluster.implementation_paths),
+      ...candidates.flatMap((candidate) => candidate.assessment.contextPaths),
+    ],
+  });
   const attachmentPaths = new Map<string, Set<string>>();
   const reasons = new Map<string, Set<string>>();
   const add = (concern: string, paths: readonly string[], reason: string): void => {
@@ -1135,6 +1355,21 @@ function inferRepositoryConcernAttachments(input: {
       for (const candidate of direct) {
         add(candidate.concern.concern, clusterPaths, "tracked path-local implementation/test mirror");
       }
+      continue;
+    }
+    const dependencyOwner = selectUniqueDirectDependencyConcern({
+      implementationPaths: cluster.implementation_paths,
+      candidates,
+      edges: moduleEdges,
+      label: cluster.cluster_key,
+    });
+    if (dependencyOwner === "unresolved") continue;
+    if (dependencyOwner !== null) {
+      add(
+        dependencyOwner.concern.concern,
+        clusterPaths,
+        "direct relative module dependency to accepted concern evidence",
+      );
       continue;
     }
     const selected = selectUniqueConcern({
@@ -1368,13 +1603,15 @@ export function assessSpecialistEvidence(
   // explicit concern evidence may satisfy semantic closure. This prevents
   // filename or directory heuristics from silently absorbing distinct public
   // surfaces such as help rendering or type declarations.
-  const attachments = repository.trackedFiles === undefined
+  const attachments = repository.trackedFiles === undefined || repository.cwd === undefined
     ? []
     : inferRepositoryConcernAttachments({
       map,
       accepted,
       clusters: repositoryClusters,
       structuralHighSignal,
+      cwd: repository.cwd,
+      trackedFiles: repository.trackedFiles,
     });
   const contextualPaths = new Set([
     ...accepted.flatMap((assessment) => assessment.contextPaths),

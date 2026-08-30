@@ -242,6 +242,11 @@ still establish an implementation/test attachment under the ordinary exclusion
 rule, but inference alone cannot attach a cluster whose behavioral tokens match
 an explicit exclusion. Incidental positive mentions cannot erase that boundary;
 the cluster remains unresolved until separately traced or substantively rejected.
+For JavaScript and TypeScript modules, a current-HEAD relative import, export,
+or require edge may attach a mirrored cluster when it reaches exactly one
+accepted concern in either direction. The compiler reads bounded immutable Git
+blobs rather than the working tree. Multiple reachable concerns and explicit
+exclusions remain unresolved and cannot fall through to weaker inference.
 Inferred mirrored clusters require substantive evidence: an exact distinctive
 behavioral term with tracked path affinity, a file-stem term plus a non-generic
 behavioral locality, two semantic matches, or an exact multi-segment behavioral

@@ -277,6 +277,8 @@ test("direct module dependencies attach only to one non-excluded concern", () =>
     "src/auth/check.test.ts",
     "src/crypto/signature.ts",
     "src/crypto/signature.test.ts",
+    "src/plumbing/archive.ts",
+    "src/plumbing/archive.test.ts",
     "src/plumbing/table.ts",
     "src/plumbing/table.test.ts",
     "src/preset/quick.ts",
@@ -293,6 +295,8 @@ test("direct module dependencies attach only to one non-excluded concern", () =>
       'import { table } from "../plumbing/table.js";',
       'import { signature } from "../crypto/signature.js";',
       'import { state } from "../shared/state.js";',
+      '// import { archive } from "../plumbing/archive.js";',
+      "const example = 'require(\"../plumbing/archive.js\")';",
       "export const route = () => [table, signature, state];",
       "",
     ].join("\n"));
@@ -323,14 +327,14 @@ test("direct module dependencies attach only to one non-excluded concern", () =>
     const authentication = concern({
       name: "authentication",
       covers: "Verifies credentials and establishes authenticated request state.",
-      excludes: "Routing, rendering, and shared state lifecycle are separate.",
+      excludes: "Token minting and response serialization are separate.",
       core: "src/auth/check.ts",
       test: "src/auth/check.test.ts",
     });
     const rendering = concern({
       name: "response rendering",
       covers: "Serializes response values and commits output.",
-      excludes: "Routing, authentication, and shared state lifecycle are separate.",
+      excludes: "Credential verification and route matching are separate.",
       core: "src/render/response.ts",
       test: "src/render/response.test.ts",
     });
@@ -350,9 +354,11 @@ test("direct module dependencies attach only to one non-excluded concern", () =>
     assert.ok(routingPaths.includes("src/preset/quick.test.ts"));
     assert.ok(!routingPaths.includes("src/crypto/signature.ts"));
     assert.ok(assessment.uncovered_paths.includes("src/crypto/signature.ts"));
+    assert.ok(!routingPaths.includes("src/plumbing/archive.ts"));
+    assert.ok(assessment.uncovered_paths.includes("src/plumbing/archive.ts"));
     assert.ok(!assessment.attachments.some((attachment) =>
       attachment.paths.includes("src/shared/state.ts")
-    ));
+    ), JSON.stringify(assessment.attachments));
     assert.ok(assessment.uncovered_paths.includes("src/shared/state.ts"));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });

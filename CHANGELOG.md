@@ -6,6 +6,10 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Mirrored JavaScript and TypeScript clusters now attach deterministically when
+  a current-HEAD relative import, export, or require edge links them to exactly
+  one accepted concern. Multiple owners and explicit exclusions remain
+  unresolved instead of falling through to weaker filename inference.
 - Deterministic implementation/test attachment now strips locality suffixes
   from behavioral labels, requires independent semantic and behavioral-path
   signals, and leaves shallow generic matches unresolved. Exact implementation
