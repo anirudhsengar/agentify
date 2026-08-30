@@ -25,6 +25,9 @@ All notable changes to Agentify are documented here.
 - Existing-concern tracer replacements now preserve every verified flow name
   and ordered step-path sequence, preventing a later retrace from collapsing
   established behavior while global file coverage happens to remain unchanged.
+- Rejection validation now treats only explicit transfer language such as
+  `subsumed by` as delegation, so negative hypotheticals about attaching
+  governance files to an accepted concern remain independent rejections.
 
 ### Added
 
@@ -75,8 +78,8 @@ All notable changes to Agentify are documented here.
   path already covered or substantively exempted is rejected with the regressed
   paths, so repair cannot trade one unresolved obligation for another while
   retaining a stable concern name.
-- Path-backed rejected candidates that claim behavior is accepted, existing,
-  or subsumed elsewhere now exempt tracked obligations only when their named
+- Path-backed rejected candidates that claim behavior is subsumed elsewhere
+  now exempt tracked obligations only when their named
   disposition semantically binds to a real accepted concern. Independent
   substantive rejections remain valid; delegation to a nonexistent specialist
   fails closure with the exact candidate and claimed owner.

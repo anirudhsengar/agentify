@@ -900,9 +900,7 @@ function matchingTokenCount(left: ReadonlySet<string>, right: ReadonlySet<string
 }
 
 function delegatedOwnerDescription(value: string): string | null {
-  return /\b(?:accepted|existing)\s+(.{3,160}?)\s+(?:concern|specialist|contract|flow)\b/i
-    .exec(value)?.[1]?.trim()
-    ?? /\bsubsum(?:e|ed|es|ing)\s+by\s+(?:the\s+)?([^.;\n]{3,160})/i.exec(value)?.[1]?.trim()
+  return /\bsubsum(?:e|ed|es|ing)\s+by\s+(?:the\s+)?([^.;\n]{3,160})/i.exec(value)?.[1]?.trim()
     ?? null;
 }
 
