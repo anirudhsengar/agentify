@@ -365,6 +365,44 @@ test("direct module dependencies attach only to one non-excluded concern", () =>
   }
 });
 
+test("supporting dependencies and arbitrary consumers cannot seed inferred ownership", () => {
+  const cwd = repository([
+    "src/context.ts", "src/context.test.ts",
+    "src/utils/html.ts", "src/utils/html.test.ts",
+    "src/jsx/dom/server.ts", "src/jsx/dom/server.test.ts",
+    "src/adapter/conninfo.ts", "src/adapter/conninfo.test.ts",
+    "src/public/entry.ts", "src/public/entry.test.ts",
+  ]);
+  try {
+    fs.writeFileSync(path.join(cwd, "src/jsx/dom/server.ts"),
+      'import { escape } from "../../utils/html.js";\nexport const render = (node) => escape(node);\n');
+    fs.writeFileSync(path.join(cwd, "src/adapter/conninfo.ts"),
+      'import type { Context } from "../context.js";\nexport const getConnInfo = (c: Context) => c.env.remoteAddress;\n');
+    fs.writeFileSync(path.join(cwd, "src/public/entry.ts"),
+      '// Stable public facade.\nexport { Context } from "../context.js";\n');
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "record context consumers");
+    const context = concern({
+      name: "Request context lifecycle",
+      covers: "Constructs per-request state and finalizes response headers.",
+      excludes: "Route matching algorithms.",
+      core: "src/context.ts",
+      test: "src/context.test.ts",
+      supporting: ["src/utils/html.ts"],
+    });
+    const assessment = assessSpecialistEvidence(mapWithConcerns(["src/context.ts"], [context]), { cwd });
+    const attached = assessment.attachments.flatMap((attachment) => attachment.paths);
+    assert.ok(!attached.includes("src/jsx/dom/server.ts"), "supporting HTML consumption is not Context ownership");
+    assert.ok(!attached.includes("src/adapter/conninfo.ts"), "a shared Context import is not a delegation contract");
+    assert.ok(assessment.uncovered_paths.includes("src/jsx/dom/server.ts"));
+    assert.ok(assessment.uncovered_paths.includes("src/adapter/conninfo.ts"));
+    assert.ok(attached.includes("src/public/entry.ts"), "a pure public re-export remains deterministic");
+    assert.ok(attached.includes("src/public/entry.test.ts"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("test-only repositories may own their executable test behavior as core", () => {
   const cwd = repository([
     "tests/orchestration",
