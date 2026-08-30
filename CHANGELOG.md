@@ -54,6 +54,10 @@ All notable changes to Agentify are documented here.
   shared core file only when one claimant cites a strict superset of every
   competing concrete symbol set. Unrelated rejections and ambiguous symbol
   claims remain unresolved.
+- Existing current-HEAD maps with recorded concern evidence now enter
+  deterministic compilation before provider probing or budgeted audit repair,
+  so a normalizable map is not mislabeled as legacy evidence or blocked by an
+  already exhausted model budget.
 
 - The bounded default audit envelope now permits 240 model calls/turns, eight million input/cache tokens, and 24 explorer spawns so a complete evidence-backed portfolio and final obligation-focused repair can fit while duration, output, cost, convergence, and artifact caps remain enforced.
 

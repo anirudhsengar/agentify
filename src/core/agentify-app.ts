@@ -7,6 +7,7 @@ import { loadCanonicalMapAt } from "./audit/write-map-tool.ts";
 import {
   assessAuditCompletion,
   compileSpecialistEvidence,
+  specialistEvidenceRecorded,
 } from "./audit/schema.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "./audit/paths.ts";
 import { rollbackPendingInstallation } from "./installer/installation-transaction.ts";
@@ -108,9 +109,10 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<Fo
     const existingMap = loadCanonicalMapAt(options.cwd, AUDIT_STATE_RELATIVE_DIR);
     if (existingMap !== null) {
       const completion = assessAuditCompletion(existingMap, { cwd: options.cwd });
+      const evidenceRecorded = specialistEvidenceRecorded(existingMap);
       if (
         completion.coverage.unresolved.length === 0
-        && completion.specialistEvidenceRecorded
+        && evidenceRecorded
       ) {
         const compilation = compileSpecialistEvidence(existingMap, { cwd: options.cwd });
         const receiptAssessment = assessExplorerReceiptAttestation(
@@ -147,7 +149,7 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<Fo
         );
       } else if (
         completion.coverage.unresolved.length === 0
-        && !completion.specialistEvidenceRecorded
+        && !evidenceRecorded
       ) {
         options.ui.info(
           "agentify: the existing codebase map predates specialist evidence; running a bounded top-up audit",

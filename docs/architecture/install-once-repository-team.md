@@ -122,6 +122,10 @@ have exactly one accepted core owner; other specialists may retain it only as a
 supporting touchpoint until deterministic ownership is resolved. Test-only core
 ownership is refused when the same concern cites tracked implementation
 behavior, without rejecting repositories whose product is itself a test suite.
+An attached map with recorded concern evidence enters deterministic compilation
+before provider reachability or audit-budget admission. Only an absent concern
+section is a legacy top-up; a normalizable current-HEAD map can reach its fixed
+point without another model call.
 After that validation, an auxiliary-only example or fixture candidate is
 normalized into a path-backed rejection only when portfolio-distinct semantic
 evidence overlaps a concern with independent implementation core. Unrelated
