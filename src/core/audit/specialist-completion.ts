@@ -1469,8 +1469,7 @@ function rejectionCoversPath(
   }
   const escaped = candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const exactPathMention = new RegExp(`(^|[^A-Za-z0-9._/-])${escaped}(?=$|[^A-Za-z0-9._/-])`);
-  return exactPathMention.test(rejection.candidate)
-    || exactPathMention.test(rejection.why_rejected);
+  return exactPathMention.test(rejection.candidate);
 }
 
 function concreteTouchpointSymbols(value: string | null): Set<string> {
@@ -2178,12 +2177,15 @@ export function reconcileAuxiliaryDuplicateConcerns(
   const notConcerns = [...map.concern_evidence.not_concerns];
   const existing = new Set(notConcerns.map((entry) => entry.candidate.trim().toLowerCase()));
   for (const duplicate of assessment.auxiliary_duplicate_concerns) {
-    if (existing.has(duplicate.concern.trim().toLowerCase())) continue;
-    notConcerns.push({
-      candidate: duplicate.concern,
-      why_rejected:
-        `Trusted normalization rejected this auxiliary-only candidate because its tracked evidence (${duplicate.paths.join(", ")}) overlaps implementation-owned concern(s) ${duplicate.overlapping_concerns.join(", ")}; examples and fixtures are supporting evidence, not independent specialist ownership.`,
-    });
+    for (const candidate of [duplicate.concern, ...duplicate.paths]) {
+      if (existing.has(candidate.trim().toLowerCase())) continue;
+      existing.add(candidate.trim().toLowerCase());
+      notConcerns.push({
+        candidate,
+        why_rejected:
+          `Trusted normalization rejected this auxiliary-only candidate because its tracked evidence (${duplicate.paths.join(", ")}) overlaps implementation-owned concern(s) ${duplicate.overlapping_concerns.join(", ")}; examples and fixtures are supporting evidence, not independent specialist ownership.`,
+      });
+    }
   }
   return {
     ...map,

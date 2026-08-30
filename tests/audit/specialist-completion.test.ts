@@ -115,11 +115,11 @@ test("complete overlapping concerns close only after high-signal paths are accou
     ],
     not_concerns: [
       {
-        candidate: "Type declaration maintenance",
+        candidate: "typings/index.d.ts",
         why_rejected: "typings/index.d.ts mirrors the public runtime API and is validated with the concerns above.",
       },
       {
-        candidate: "Package metadata",
+        candidate: "package.json",
         why_rejected: "package.json is repository plumbing rather than an independent body of knowledge.",
       },
     ],

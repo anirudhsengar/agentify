@@ -6,6 +6,9 @@ All notable changes to Agentify are documented here.
 
 ### Fixed
 
+- Rejection explanations no longer dispose of files merely cited as evidence.
+  Whole-file rejection requires an explicit candidate path, and trusted
+  auxiliary normalization now emits those path dispositions directly.
 - Each semantic-repair pass now exhausts its bounded ordered obligation batch
   and checkpoints exact rejections together instead of spending one of only a
   few convergence passes on a single cluster.

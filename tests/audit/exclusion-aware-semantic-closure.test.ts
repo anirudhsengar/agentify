@@ -559,6 +559,12 @@ test("an auxiliary-only concern cannot duplicate implementation-owned behavior",
       && candidate.why_rejected.includes("examples/pm-install")
       && candidate.why_rejected.includes("tests/fixtures/pm-install")
     ));
+    assert.ok(compiled.map.concern_evidence?.not_concerns.some((candidate) =>
+      candidate.candidate === "examples/pm-install"
+    ));
+    assert.ok(compiled.map.concern_evidence?.not_concerns.some((candidate) =>
+      candidate.candidate === "tests/fixtures/pm-install"
+    ));
     const repeated = compileSpecialistEvidence(compiled.map, { cwd });
     assert.equal(repeated.complete, true, repeated.reasons.join("; "));
     assert.strictEqual(repeated.map, compiled.map);

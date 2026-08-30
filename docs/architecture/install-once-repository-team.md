@@ -266,6 +266,11 @@ establish positive tracked-file ownership. Repository-relative subtree
 exclusions such as `router/*` apply below source roots. An explicitly cited
 implementation carries its mirrored test unless the exclusion names that path;
 merely citing a test does not override behavioral negative evidence.
+Only a path named in a rejection's candidate field disposes of that file;
+explanatory evidence citations cannot suppress an accepted implementation's
+mirrored tests or exempt unrelated behavior from closure. Trusted auxiliary
+normalization emits explicit path dispositions for rejected example/fixture
+ownership.
 Observed public type traces deterministically bind a uniquely resolved tracked
 declaration to one specialist only when all traced runtime files have the same
 normalized core owner. The declaration becomes a core touchpoint; multiple type
