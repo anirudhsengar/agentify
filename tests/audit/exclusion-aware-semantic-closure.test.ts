@@ -641,6 +641,7 @@ test("normalization subsumes core-conflicting concerns only after their verified
       candidate: help.concern,
       why_rejected:
         "Subsumed by the accepted command dispatch lifecycle concern because both behaviors share the same file-level implementation owner and cannot form independent specialists.",
+      grouped_into: dispatch.concern,
     });
 
     const compiled = compileSpecialistEvidence(map, { cwd });
@@ -662,6 +663,7 @@ test("normalization subsumes core-conflicting concerns only after their verified
       [excludedDispatch, structuredClone(help)],
     );
     contradicted.concern_evidence!.not_concerns = structuredClone(map.concern_evidence!.not_concerns);
+    delete contradicted.concern_evidence!.not_concerns[0]!.grouped_into;
     const unresolved = compileSpecialistEvidence(contradicted, { cwd });
     assert.equal(unresolved.complete, false);
     assert.ok(unresolved.map.concern_evidence!.concerns.some((entry) =>

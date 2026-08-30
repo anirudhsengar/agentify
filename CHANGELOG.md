@@ -18,9 +18,10 @@ All notable changes to Agentify are documented here.
   and terminal accounting, preventing timeout cleanup from reporting aggregate
   elapsed usage just beyond the configured total wall-time limit.
 - Semantic repair can now group inseparable accepted concerns without weakening
-  closure. Trusted normalization retires a grounded subsumed concern only when
-  one retained owner preserves every prior flow name and ordered step-path
-  sequence, cites every retired core path, and no longer excludes that scope.
+  closure. A structured `grouped_into` decision names one existing broader
+  owner; trusted normalization unions the already-attested flows, touchpoints,
+  invariants, risks, questions, and validation only when the bodies share a
+  core implementation file. Unrelated grouping remains unresolved.
 - Existing-concern tracer replacements now preserve every verified flow name
   and ordered step-path sequence, preventing a later retrace from collapsing
   established behavior while global file coverage happens to remain unchanged.

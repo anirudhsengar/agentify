@@ -527,9 +527,9 @@ test("progressive semantic repair may exceed two passes while each pass closes t
     assert.equal(runtime.baseCalls, 1);
     assert.equal(runtime.repairCalls, 3);
     assert.ok(runtime.repairPrompts.every((prompt) =>
-      /group the inseparable behaviors/i.test(prompt)
-      && /preserves every exact prior flow name and ordered step-path sequence/i.test(prompt)
-      && /trusted normalization refuses the retirement/i.test(prompt)
+      /group the already-attested bodies/i.test(prompt)
+      && /grouped_into set to one exact existing broader concern identity/i.test(prompt)
+      && /unions their flows, touchpoints, invariants, pitfalls, questions, and validation/i.test(prompt)
     ));
     assert.deepEqual(
       runtime.repairToolSets,

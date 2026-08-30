@@ -1719,62 +1719,81 @@ export function reconcileExplicitlyRetainedCandidates(map: CodebaseMap): Codebas
 export function reconcileSubsumedConcernEvidence(map: CodebaseMap): CodebaseMap {
   const evidence = map.concern_evidence;
   if (evidence === undefined) return map;
+  const concerns = [...evidence.concerns];
   const retired = new Set<string>();
+  const groupedOwners = new Set<string>();
+  const appendUnique = <T>(left: readonly T[], right: readonly T[]): T[] => {
+    const seen = new Set(left.map((entry) => JSON.stringify(entry)));
+    return [...left, ...right.filter((entry) => {
+      const identity = JSON.stringify(entry);
+      if (seen.has(identity)) return false;
+      seen.add(identity);
+      return true;
+    })];
+  };
   for (const rejection of evidence.not_concerns) {
-    if (!isSubstantiveConcernRejection(rejection.why_rejected)) continue;
-    const source = evidence.concerns.find((concern) =>
+    if (
+      !isSubstantiveConcernRejection(rejection.why_rejected)
+      || rejection.grouped_into === undefined
+    ) continue;
+    const sourceIndex = concerns.findIndex((concern) =>
       concern.concern.trim().toLowerCase() === rejection.candidate.trim().toLowerCase()
     );
-    const delegatedOwner = delegatedOwnerDescription(rejection.why_rejected);
-    if (source === undefined || delegatedOwner === null) continue;
-    const delegatedTokens = semanticTokens(delegatedOwner);
-    const owners = evidence.concerns.filter((concern) =>
-      concern !== source
-      && matchingTokenCount(
-        delegatedTokens,
-        semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`),
-      ) >= 2
+    const ownerIndex = concerns.findIndex((concern) =>
+      concern.concern === rejection.grouped_into
     );
-    if (owners.length !== 1) continue;
-    const owner = owners[0]!;
-    if (
-      matchingTokenCount(
-        semanticTokens(`${source.concern} ${source.one_line} ${source.covers}`),
-        semanticTokens(owner.excludes),
-      ) >= 2
-    ) continue;
-    const ownerPaths = new Set(owner.touchpoints.flatMap((touchpoint) => {
-      const repositoryPath = normalizeRepositoryPathSyntax(touchpoint.path);
-      return repositoryPath === null ? [] : [repositoryPath];
-    }));
-    const sourceCorePaths = source.touchpoints.flatMap((touchpoint) => {
+    if (sourceIndex < 0 || ownerIndex < 0 || sourceIndex === ownerIndex) continue;
+    const source = concerns[sourceIndex]!;
+    const owner = concerns[ownerIndex]!;
+    const ownerCorePaths = new Set(owner.touchpoints.flatMap((touchpoint) => {
       const repositoryPath = normalizeRepositoryPathSyntax(touchpoint.path);
       return touchpoint.centrality === "core" && repositoryPath !== null ? [repositoryPath] : [];
+    }));
+    const sharesCore = source.touchpoints.some((touchpoint) => {
+      const repositoryPath = normalizeRepositoryPathSyntax(touchpoint.path);
+      return touchpoint.centrality === "core"
+        && repositoryPath !== null
+        && ownerCorePaths.has(repositoryPath);
     });
-    if (!sourceCorePaths.every((repositoryPath) => ownerPaths.has(repositoryPath))) continue;
+    if (!sharesCore) continue;
     const ownerFlows = new Map(owner.flows.map((flow) => [
       flow.name.trim().toLowerCase(),
-      flow.steps.map((step) => normalizeRepositoryPathSyntax(step.path) ?? step.path),
+      flow.steps.map((step) => step.path).join("\0"),
     ]));
-    const flowsPreserved = source.flows.every((flow) => {
-      const retained = ownerFlows.get(flow.name.trim().toLowerCase());
-      const sourcePaths = flow.steps.map((step) =>
-        normalizeRepositoryPathSyntax(step.path) ?? step.path
-      );
-      return retained !== undefined
-        && retained.length === sourcePaths.length
-        && retained.every((repositoryPath, index) => repositoryPath === sourcePaths[index]);
-    });
-    if (flowsPreserved) retired.add(source.concern.trim().toLowerCase());
+    if (source.flows.some((flow) => {
+      const existing = ownerFlows.get(flow.name.trim().toLowerCase());
+      return existing !== undefined && existing !== flow.steps.map((step) => step.path).join("\0");
+    })) continue;
+    concerns[ownerIndex] = {
+      ...owner,
+      one_line: `${owner.one_line} ${source.one_line}`,
+      covers: `${owner.covers} Also covers: ${source.covers}`,
+      flows: appendUnique(owner.flows, source.flows),
+      touchpoints: appendUnique(owner.touchpoints, source.touchpoints),
+      invariants: appendUnique(owner.invariants, source.invariants),
+      pitfalls: appendUnique(owner.pitfalls, source.pitfalls),
+      entry_questions: appendUnique(owner.entry_questions, source.entry_questions),
+      validation: appendUnique(owner.validation, source.validation),
+      spans_subtrees: [...new Set([...owner.spans_subtrees, ...source.spans_subtrees])].sort(),
+      last_updated: owner.last_updated > source.last_updated ? owner.last_updated : source.last_updated,
+    };
+    concerns.splice(sourceIndex, 1);
+    retired.add(source.concern.trim().toLowerCase());
+    groupedOwners.add(owner.concern.trim().toLowerCase());
   }
   if (retired.size === 0) return map;
+  const remainingNames = concerns.map((concern) => concern.concern);
+  const normalizedConcerns = concerns.map((concern) => groupedOwners.has(concern.concern.trim().toLowerCase())
+    ? {
+        ...concern,
+        excludes: `Adjacent accepted concerns remain separate: ${remainingNames.filter((name) => name !== concern.concern).join(", ")}.`,
+      }
+    : concern);
   return {
     ...map,
     concern_evidence: {
       ...evidence,
-      concerns: evidence.concerns.filter((concern) =>
-        !retired.has(concern.concern.trim().toLowerCase())
-      ),
+      concerns: normalizedConcerns,
     },
   };
 }
