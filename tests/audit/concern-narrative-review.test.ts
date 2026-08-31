@@ -506,6 +506,39 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     assert.equal(oversized.complete, false);
     assert.match(oversized.reasons.join("; "), /byte budget/);
     assert.equal(reviews, reviewsBeforeOverflow, "oversized source fails before any provider dispatch");
+
+    // Live portfolios consumed their final structural repair before discovering
+    // narrative contradictions. An unrelated ownership gap cannot hide them.
+    expectedSource = SOURCE;
+    fs.writeFileSync(path.join(cwd, "clock.py"), SOURCE);
+    fs.mkdirSync(path.join(cwd, "jobs"));
+    fs.writeFileSync(path.join(cwd, "jobs/scheduler.py"), "def schedule_task(task):\n    return task()\n");
+    fs.writeFileSync(path.join(cwd, "jobs/test_scheduler.py"), "from .scheduler import schedule_task\nassert schedule_task(lambda: 1) == 1\n");
+    execFileSync("git", ["-C", cwd, "add", "clock.py", "jobs"]);
+    execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+      "commit", "-qm", "independent scheduling obligation"]);
+    reviewedClaim = "pitfalls[0]";
+    const pending = compileSpecialistEvidence(makeValidCodebaseMap({
+      concern_evidence: { concerns: [concern], not_concerns: [] }, expert_evidence: undefined,
+    }), { cwd });
+    assert.equal(pending.complete, false);
+    assert.ok(pending.assessment.accepted_concerns.includes(concern.concern));
+    assert.match(pending.reasons.join("; "), /scheduler/);
+    const early = await reviewSpecialistCompilation(context, pending, budget, "early-review");
+    assert.match(early.reasons.join("; "), /Numeric strings are accepted/,
+      "review eligible bodies before the unrelated structural obligation closes");
+    assert.equal(early.complete, false);
+    for (const reason of pending.reasons) assert.ok(early.reasons.includes(reason));
+    const callsAfterEarlyReview = reviews;
+    await reviewSpecialistCompilation(context, early, budget, "early-review");
+    assert.equal(reviews, callsAfterEarlyReview, "unchanged early review uses the same exact-body cache");
+    const supported = structuredClone(pending);
+    supported.map.concern_evidence!.concerns[0]!.pitfalls[0]!.risk = CORRECTION;
+    const stillPending = await reviewSpecialistCompilation(context, supported, budget, "supported-pending");
+    assert.equal(stillPending.map.specialist_reviews!.records[0]!.failure, null);
+    assert.equal(stillPending.complete, false, "narrative approval cannot close an ownership gap");
+    assert.equal(stillPending.status, "incomplete");
+    for (const reason of pending.reasons) assert.ok(stillPending.reasons.includes(reason));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
