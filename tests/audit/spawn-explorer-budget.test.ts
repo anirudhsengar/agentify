@@ -994,12 +994,14 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
     }
     if (!backedBySource) return;
     if (observation === "compact") {
-      const emitted = textFrom(result).match(/## Report\n```json\n([\s\S]*?)\n```/u);
-      assert.ok(emitted);
-      assert.ok(Buffer.byteLength(emitted[0]) <= 16_000, "the actual emitted report must satisfy the same cap");
+      assert.ok(Buffer.byteLength(textFrom(result)) <= 1_024,
+        "the parent must receive a bounded checkpoint acknowledgement, not a repeated full specialist body");
+      assert.doesNotMatch(textFrom(result), /```json/, "model transport must not duplicate authoritative concern JSON");
       const original = JSON.parse(report.match(/```json\s*([\s\S]*?)```/u)![1]!) as { flows: unknown };
-      const returned = JSON.parse(emitted[1]!) as { flows: unknown };
-      assert.deepEqual(returned.flows, original.flows, "compact transport must preserve every flow step");
+      const returned = (result.details as { structured_concern: { flows: unknown; covers: string } }).structured_concern;
+      assert.deepEqual(returned.flows, original.flows, "application checkpoint transport must preserve every flow step");
+      assert.ok(Buffer.byteLength(JSON.stringify(returned)) >= 15_700,
+        "the full validated body must remain available to application checkpointing, not be summarized or truncated");
     }
     const details = result.details as { max_reads?: number; max_provider_calls?: number } | undefined;
     assert.equal(details?.max_reads, 6);
