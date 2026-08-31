@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Review eligible specialist narratives before unrelated portfolio gaps close, exposing false claims within the existing repair budget. Structural failures remain unresolved and normalization changes still require fresh exact-body review.
+
 - Preserve provider-admission failure diagnostics and typed resource-budget errors when the SDK cancels a denied request; never misreport them as an incomplete model review.
 
 - Report exact byte reductions and the largest typed-concern sections when rejecting oversized tracer output, preserving the existing cap, prior evidence, and verified flows.

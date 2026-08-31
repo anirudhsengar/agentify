@@ -518,6 +518,9 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
       "commit", "-qm", "independent scheduling obligation"]);
     reviewedClaim = "pitfalls[0]";
+    forgedExcerpt = false;
+    excerptOverride = undefined;
+    additionalFindings = [];
     const pending = compileSpecialistEvidence(makeValidCodebaseMap({
       concern_evidence: { concerns: [concern], not_concerns: [] }, expert_evidence: undefined,
     }), { cwd });
@@ -539,6 +542,12 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     assert.equal(stillPending.complete, false, "narrative approval cannot close an ownership gap");
     assert.equal(stillPending.status, "incomplete");
     for (const reason of pending.reasons) assert.ok(stillPending.reasons.includes(reason));
+    const noEligible = compileSpecialistEvidence(makeValidCodebaseMap({
+      concern_evidence: { concerns: [], not_concerns: [] }, expert_evidence: undefined,
+    }), { cwd });
+    const beforeEmpty = reviews;
+    assert.equal(await reviewSpecialistCompilation(context, noEligible, budget, "empty"), noEligible);
+    assert.equal(reviews, beforeEmpty, "a portfolio with no eligible body dispatches no review");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

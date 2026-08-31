@@ -235,6 +235,9 @@ the same deadline and aggregate budget. Reviews report up to three source-backed
 findings for atomic, exact-body correction, submitting immediately at the first
 decisive rejection without searching for a quota. A typed, complete review is
 required; unsupported assertions and incomplete reviews remain repair obligations.
+Eligible bodies are reviewed even while unrelated structural gaps remain, so
+repair sees narrative and ownership failures together. Review cannot close those
+gaps; normalization changes invalidate the body digest and require fresh review.
 Incomplete reviews may retry once in a later bounded run; an unchanged source-backed
 finding remains cached until the specialist body or repository HEAD changes.
 This quality control does not replace manual release qualification.

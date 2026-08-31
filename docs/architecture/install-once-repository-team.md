@@ -496,6 +496,11 @@ digest and current HEAD, and requires observed tracer evidence. References,
 compiler-inferred attachments (which are recomputed, not invented read receipts),
 other assertions, scope, identity, ownership and ordered flow structure cannot change.
 The repair prompt supplies only bounded rejected claims and their source findings.
+Eligible concern bodies receive narrative review before unrelated portfolio gaps
+close, allowing the same bounded repair pass to address both kinds of obligation.
+Rejected concerns and non-convergent compilations are not reviewed. Early review
+preserves all structural failures and grants no installation authority; any later
+normalization change invalidates its exact-body digest and requires fresh review.
 Correction neither fabricates a retrace nor approves the body: its changed digest
 requires full normalized review inside the existing bounded repair loop. Legacy
 failures without a typed finding still require retracing; failure prose cannot

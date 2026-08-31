@@ -262,7 +262,7 @@ export async function reviewSpecialistCompilation(
   context: RunContext, compilation: SpecialistCompilationResult, budget: AuditResourceBudget, runId: string,
   checkpoint?: (map: CodebaseMap) => void,
 ): Promise<SpecialistCompilationResult> {
-  if (!compilation.complete) return compilation;
+  if (compilation.status === "non-convergent" || compilation.assessment.accepted_concerns.length === 0) return compilation;
   const commit = currentRepositoryCommit(context.cwd);
   if (commit === null) throw new Error("cannot bind specialist review to HEAD");
   const map = structuredClone(compilation.map);
@@ -272,10 +272,11 @@ export async function reviewSpecialistCompilation(
     && map.concern_evidence?.concerns.some(concern =>
     record.concern === concern.concern && record.digest === specialistReviewDigest(concern)));
   for (const concern of map.concern_evidence?.concerns ?? []) {
+    if (!compilation.assessment.accepted_concerns.includes(concern.concern)) continue;
     const digest = specialistReviewDigest(concern);
     const cached = records.find(item => item.concern === concern.concern && item.digest === digest);
     if (cached) continue;
-    context.ui.status(`agentify: reviewing normalized specialist ${concern.concern}`);
+    context.ui.status(`agentify: reviewing specialist ${concern.concern}`);
     let failure: string | null;
     let retryable = true;
     let finding: NonNullable<SpecialistReviewSubmission["finding"]> | undefined;
@@ -295,7 +296,8 @@ export async function reviewSpecialistCompilation(
         digest, repository_commit: commit, failure, retryable } });
   }
   map.specialist_reviews = { repository_commit: commit, records };
-  const reasons = assessSpecialistReviews(map, context.cwd);
-  return { ...compilation, map, complete: reasons.length === 0,
-    status: reasons.length === 0 ? compilation.status : "incomplete", reasons };
+  const reasons = [...new Set([...compilation.reasons, ...assessSpecialistReviews(map, context.cwd)])];
+  const complete = compilation.complete && reasons.length === 0;
+  return { ...compilation, map, complete,
+    status: complete ? compilation.status : "incomplete", reasons };
 }
