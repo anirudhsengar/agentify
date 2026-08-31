@@ -366,7 +366,9 @@ Explorer calls, turns, tokens, and provider cost are reconciled live after each
 response. Reports over 16 KB fail the explorer receipt instead of letting a
 truncated behavioral trace establish semantic closure. A concern tracer has a
 six-read/eight-call envelope, which reserves aggregate capacity for every
-candidate in a real portfolio. Its 12,000-token response ceiling accommodates
+candidate in a real portfolio. All explorer modes use a 12,000-token response
+ceiling on APIs that support it; unsupported APIs retain their model-limit
+reservation. The ceiling accommodates
 configured reasoning; the 16 KB parsed report limit remains authoritative.
 The application parses scout proposal identities into the receipt ledger. Every
 proposal remains an obligation until a related tracer succeeds or normalized

@@ -90,7 +90,7 @@ export const DEFAULT_SUBAGENT_TIMEOUT_MS = 3 * 60 * 1000;
 const DEFAULT_MAX_TOTAL_COST_USD = 5;
 const MAX_EXPLORER_READS = 32;
 const MAX_EXPLORER_PROVIDER_CALLS = 40;
-const MAX_CONCERN_RESPONSE_TOKENS = 12_000;
+const MAX_EXPLORER_RESPONSE_TOKENS = 12_000;
 
 // The 9 dimension-shaped modes, the two concern modes that find and trace what
 // this repository's specialties actually are, plus a custom mode that takes an
@@ -1306,13 +1306,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                 if (providerCalls >= maxProviderCalls) {
                                     throw new Error(`sub-agent reached hard provider call cap of ${maxProviderCalls} before dispatch`);
                                 }
-                                let payload = mode === "concern_tracer"
-                                    ? capProviderOutputTokens(
-                                        event.payload,
-                                        subAgentModel.api,
-                                        MAX_CONCERN_RESPONSE_TOKENS,
-                                    )
-                                    : event.payload;
+                                let payload = capProviderOutputTokens(
+                                    event.payload, subAgentModel.api, MAX_EXPLORER_RESPONSE_TOKENS,
+                                );
                                 if (
                                     mode === "concern_tracer"
                                     && submission.concern === null
@@ -1334,9 +1330,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                 if (toolOptions.resourceBudget && explorerBudgetSession) {
                                     toolOptions.resourceBudget.recordProviderRequest(explorerBudgetSession,
                                         providerRequestReservation(subAgentModel,
-                                            mode === "concern_tracer"
-                                                && capProviderOutputTokens(payload, subAgentModel.api, MAX_CONCERN_RESPONSE_TOKENS) !== payload
-                                                ? MAX_CONCERN_RESPONSE_TOKENS : undefined));
+                                            capProviderOutputTokens(payload, subAgentModel.api, MAX_EXPLORER_RESPONSE_TOKENS) !== payload
+                                                ? MAX_EXPLORER_RESPONSE_TOKENS : undefined));
                                 }
                                 providerCalls += 1;
                                 return payload;

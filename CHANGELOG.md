@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Apply the bounded response ceiling to every explorer mode, not only concern tracing, so concurrent discovery cannot reserve unnecessarily unbounded outputs. APIs without a supported cap retain full reservations.
+
 - Allow three independent read-only explorers to overlap under the shared request-reservation budget. Concurrent duplicate concerns/scouts are refused; ownership, cancellation and aggregate limits remain enforced.
 
 - Retain bounded, redacted narrative-review identities, source/body bindings, findings and retry classifications in the audit log without logging full source.
