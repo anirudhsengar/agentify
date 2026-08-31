@@ -148,6 +148,8 @@ for (const policy of [
   "Project maintainers who do not follow or enforce the Code of Conduct in good faith may face temporary or permanent repercussions.",
   "Known AI-assisted code patterns are documented and welcome.",
   "No unsupervised deployments. Reviewed AI-assisted contributions are welcome.",
+  "You may use AI tools to contribute when you review and understand the output.",
+  "Contributing with LLM assistance is allowed. Do not commit credentials.",
 ]) {
   test(`non-prohibitive policy remains analyzable: ${policy}`, () => {
     const cwd = createRepository(policy);
@@ -165,6 +167,8 @@ for (const [policyPath, policy] of [
   [".github/automated-contribution-policy.md", "Absolutely **no** unsupervised agentic tools."],
   ["docs/working-rules.md", "Autonomous coding agents are not allowed."],
   [".github/PULL_REQUEST_TEMPLATE.md", "Do not submit AI-generated pull requests."],
+  ["docs/contributing.md", "Do not use LLM or AI tools to contribute at all."],
+  ["CONTRIBUTING.md", "Contributing with AI tools is prohibited."],
 ] as const) {
   test(`policy discovery and autonomous-use prohibition precede writes: ${policyPath}`, () => {
     const cwd = createRepository(policy, policyPath);

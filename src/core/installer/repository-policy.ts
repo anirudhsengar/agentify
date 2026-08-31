@@ -15,7 +15,7 @@ const POLICY_BASENAMES = new Set([
 ]);
 
 const AI_SUBJECT = String.raw`(?:\bai\b|a\.i\.|\bllms?\b|\blarge language models?\b|\blanguage models?\b|\bgenerative (?:ai|artificial intelligence)\b|\bcoding agents?\b|\bagentic tools?\b)`;
-const PERSISTENT_WORK = String.raw`(?:contribution|code|documentation|test(?: data)?|patch|pull request|repository (?:change|write)|generated (?:content|output)|authored (?:content|work))`;
+const PERSISTENT_WORK = String.raw`(?:contribut(?:e|ing|ion)|code|documentation|test(?: data)?|patch|pull request|repository (?:change|write)|generated (?:content|output)|authored (?:content|work))`;
 const PROHIBITION = String.raw`\b(?:do not|don't|must not|never|forbid(?:s|den)?|prohibit(?:s|ed)?|not (?:allow|accept)(?:ed)?|refuse(?:s|d)?|no)\b`;
 const PROHIBITED_STATE = String.raw`\b(?:forbidden|prohibited|not allowed|not accepted|must be refused|strictly forbidden)\b`;
 const AUTONOMOUS_AGENT = String.raw`(?:unsupervised|autonomous)\s+(?:coding agents?|agentic tools?)\b`;
