@@ -5,6 +5,83 @@
   "release_ready": false,
   "final_candidate_sha": null,
   "most_recent_exact_head_evidence": {
+    "agentify_sha": "6733b1a6618047be305d04eed66a9fd25a72a178",
+    "local_node22_release": "passed_97_source_files_12_corpus_tests_5_packed_qualifications_scaffold_audit_zero",
+    "local_log": "/tmp/agentify-tiered-price-release.log",
+    "package_sha256": "7ea2deaa172acfa6cecb512f1c223f8435a8b5a22c463fc765b69a99b1d8f49d",
+    "ci": "not_yet_run_for_this_sha",
+    "codeql": "not_yet_run_for_this_sha",
+    "live_cancellation": {
+      "evidence": "/home/anirudh/Projects/agentify-evaluation/analysis-capability-MNCWIq/6733-live-cancellation.json",
+      "passed": true,
+      "cancellation_latency_ms": 44,
+      "target_unchanged": true,
+      "admitted_calls": 1,
+      "completed_calls": 0,
+      "unknown_usage_calls_with_retained_bounds": 1,
+      "reserved_input_tokens": 1000000,
+      "reserved_output_tokens": 12000,
+      "reserved_cost_usd": 0.3144,
+      "exact_provider_charge_known": false,
+      "accounting_basis": "Selected-model metadata upper bounds, not an invoice or invented measured usage. Bounds survive cancellation and continuation."
+    },
+    "manual_quality_reviews_passed": 0,
+    "heldout_rounds_passed": 0,
+    "qualification_carries_forward_to_new_code": false
+  },
+  "latest_live_development": {
+    "agentify_sha": "3e12ac294e7edf3269dd2b400270f78bd87284b8",
+    "package_sha256": "fbc24fddf030e67f13a350a7c01dc3014d976462168f330f42c9f21a449fef8e",
+    "ci": "passed_node22_node24_typecheck_audit_codeql_packed_scaffold",
+    "ci_url": "https://github.com/anirudhsengar/agentify/actions/runs/33382250054",
+    "codeql_url": "https://github.com/anirudhsengar/agentify/actions/runs/33382249955",
+    "ci_retry_disclosure": "First Node22 job failed with ENOTEMPTY during temporary Git fixture cleanup after assertions. No product or test changes; ten focused repetitions (170 checks) and the same-SHA failed-job rerun passed. Original failure retained.",
+    "pyjwt": {
+      "target_sha": "7144e4534c34810f4525dc4578a32addd8212cff",
+      "report": "/home/anirudh/Projects/agentify-evaluation/analysis-capability-MNCWIq/pyjwt-fresh-1/report.json",
+      "manual_review": "/home/anirudh/Projects/agentify-evaluation/analysis-capability-MNCWIq/pyjwt-installed-quality.json",
+      "team_installed": true,
+      "specialists": 5,
+      "disposition": "analysis-ready",
+      "operational_execution_ready": false,
+      "elapsed_ms": 936192,
+      "original_tracked_files_unchanged": true,
+      "terminal_results": 1,
+      "model_calls": 108,
+      "turns": 107,
+      "reported_input_tokens": 1439818,
+      "reported_output_tokens": 67634,
+      "reported_cost_usd": 0.20390462,
+      "unanswered_requests": 1,
+      "manual_quality": "failed_numeric_string_coercion_and_identity_validator_narratives",
+      "counts_toward_heldout_success": false
+    },
+    "hono": {
+      "target_sha": "e2740d5a1bd0b4254e517e3af8b60789284bc7bd",
+      "status": "failed_wall_time_budget_exceeded_no_installation",
+      "report": "/home/anirudh/Projects/agentify-evaluation/analysis-capability-MNCWIq/hono-fresh-1/report.json",
+      "elapsed_ms": 1800163,
+      "exit_code": 143,
+      "original_tracked_files_unchanged": true,
+      "terminal_results": 1,
+      "retained_paths": [".agentify/runtime/audit/codebase_map.json"],
+      "model_calls": 123,
+      "turns": 118,
+      "reported_input_tokens": 2050362,
+      "reported_output_tokens": 103810,
+      "reported_cost_usd": 0.29445632,
+      "unanswered_requests": 5,
+      "capture_correction": "Signal exit did not announce the log path on stdout; recovered the existing single terminal by matching the external log run_start.cwd. Initial harness omission preserved in report provenance.",
+      "draft_quality": "failed_unsupported_concurrency_registration_cost_and_router_reuse_claims",
+      "review": "/home/anirudh/Projects/agentify-evaluation/analysis-capability-MNCWIq/hono-draft-quality.json"
+    },
+    "review_experiments": {
+      "small_primary_review": "43.1 seconds, one configured-primary call: rejected false registration-cost/concurrency claims and preserved the valid lock-in counterexample.",
+      "whole_record_reviews": "Both Hono and PyJWT exceeded the 90-second experiment limit. Each unanswered call retained 272000 input / 128000 output / USD0.2216 metadata-priced bounds. No production narrative-review gate was adopted.",
+      "production_narrative_correctness_resolved": false
+    }
+  },
+  "analysis_split_initial_evidence": {
     "agentify_sha": "60936a8adc8be07a7e232b897b49f726ac4d8cb6",
     "capability": "Semantically complete analysis-ready installation with no execution authority; operational readiness evaluated separately.",
     "local_node22_release": "passed_97_source_files_12_corpus_tests_5_packed_qualifications_scaffold_audit_zero",
@@ -32,7 +109,7 @@
       "operational_execution": "Evaluated separately. Missing reproducibility leaves issue intake, publication, autonomous mutation and learning disabled, with no execution workflows/runtimes and explicit enablement evidence in instructions.",
       "semantic_quality_unchanged": true,
       "external_locks_are_repository_evidence": false,
-      "qualification_status": "implementation_and_regression_in_progress_no_live_credit"
+      "qualification_status": "implemented_deterministic_and_packed_profiles_pass_live_pyjwt_analysis_installation_failed_manual_quality_no_quota_credit"
     },
     "historical_installation_replacement": {
       "excluded": "click",
