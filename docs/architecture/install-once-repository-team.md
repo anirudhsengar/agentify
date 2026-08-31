@@ -105,7 +105,11 @@ The local installer performs these steps in order:
 16. enable issue intake only when every required check passes.
 
 Policy inspection is deterministic, bounded to tracked regular policy files,
-and occurs before memory recovery, runtime repair, diagnostic map creation, or
+including policy/rules/instructions documents and GitHub pull-request templates.
+An explicit ban on unsupervised or autonomous agent use blocks installation
+even when it does not separately mention code contributions. Prohibition
+keywords are whole words; incidental substrings cannot establish a ban. Inspection
+occurs before memory recovery, runtime repair, diagnostic map creation, or
 transaction setup. Policy and resumable-diagnostic files are opened without
 following their final symlink, then type-checked and read with a byte cap
 through that same descriptor so metadata checks and content reads cannot

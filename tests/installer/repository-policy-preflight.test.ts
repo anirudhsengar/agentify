@@ -112,13 +112,13 @@ for (const [policyPath, policy] of [
   [".github/automated-contribution-policy.md", "Absolutely **no** unsupervised agentic tools."],
   ["docs/working-rules.md", "Autonomous coding agents are not allowed."],
   [".github/PULL_REQUEST_TEMPLATE.md", "Do not submit AI-generated pull requests."],
-]) {
+] as const) {
   test(`policy discovery and autonomous-use prohibition precede writes: ${policyPath}`, () => {
-    const cwd = createRepository(policy!, policyPath!);
+    const cwd = createRepository(policy, policyPath);
     try {
       const preflight = inspectRepositoryForInstallation({ cwd, runner: new PolicyRunner() });
       assert.equal(preflight.analysis_allowed, false);
-      assert.ok(preflight.blockers.some((blocker) => blocker.message.includes(policyPath!)));
+      assert.ok(preflight.blockers.some((blocker) => blocker.message.includes(policyPath)));
       assert.throws(() => prepareOneTimeInstallationState(cwd, preflight), /preflight forbids analysis/i);
       assert.equal(spawnSync("git", ["-C", cwd, "status", "--porcelain"], { encoding: "utf8" }).stdout, "");
       assert.equal(fs.existsSync(path.join(cwd, ".agentify")), false);
@@ -127,3 +127,13 @@ for (const [policyPath, policy] of [
     }
   });
 }
+
+test("source prose outside a policy surface does not become an authority", () => {
+  const cwd = createRepository("No unsupervised agentic tools.", "app/example.md");
+  try {
+    const preflight = inspectRepositoryForInstallation({ cwd, runner: new PolicyRunner() });
+    assert.equal(preflight.analysis_allowed, true);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});

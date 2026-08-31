@@ -4,6 +4,11 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Respect explicit bans on unsupervised agent use in tracked policy/rules
+  documents and GitHub pull-request templates before repository writes.
+  Prohibition keywords now require word boundaries, avoiding false bans from
+  words such as "known".
+
 - Give stateless concern tracers bounded existing core-ownership context and
   the actual repository tool root. Require source-local delegation and
   implementation-specific behavioral claims; unresolved conflicts remain gaps.
