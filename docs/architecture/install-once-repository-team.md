@@ -349,6 +349,12 @@ only when every target resolves to that same core owner; mixed exports and
 executable bodies remain unresolved. The compiler reads bounded immutable Git
 blobs rather than the working tree. Multiple reachable core owners and explicit
 exclusions remain unresolved and cannot fall through to weaker inference.
+Java superclass declarations provide a stronger ecosystem edge: a tracked base
+named by an accepted core class attaches as supporting evidence to each direct
+subclass concern, after comments and literals are excluded from parsing.
+Likewise, a tracked Maven or Gradle wrapper attaches only to specialists whose
+recorded validation command names that exact wrapper. These attachments record
+dependency and validation context; they never create core behavioral ownership.
 Inferred mirrored clusters require substantive evidence: an exact distinctive
 behavioral term with tracked path affinity, a file-stem term plus a non-generic
 behavioral locality, two semantic matches, or an exact multi-segment behavioral

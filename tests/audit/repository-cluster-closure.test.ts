@@ -252,7 +252,7 @@ test("shared Java bases and committed validation wrappers attach deterministical
   fs.writeFileSync(path.join(cwd, "src/main/java/example/Person.java"),
     "package example;\npublic abstract class Person { public String name; }\n");
   fs.writeFileSync(path.join(cwd, "src/main/java/example/Owner.java"),
-    "package example;\npublic final class Owner extends Person { public void register() {} }\n");
+    "// class Ignored extends Missing\npackage example;\npublic final class Owner extends Person { public void register() {} }\n");
   fs.writeFileSync(path.join(cwd, "src/main/java/example/Vet.java"),
     "package example;\npublic final class Vet extends Person { public void list() {} }\n");
   fs.chmodSync(path.join(cwd, "mvnw"), 0o755);

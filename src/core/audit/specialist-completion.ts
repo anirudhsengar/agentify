@@ -26,6 +26,7 @@ const GIT_PATH_MAX_BUFFER = 8 * 1024 * 1024;
 const MODULE_EDGE_MAX_FILES = 512;
 const MODULE_EDGE_MAX_BUFFER = 16 * 1024 * 1024;
 const MODULE_SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/i;
+const JAVA_SOURCE_EXTENSION = /\.java$/i;
 const WELL_KNOWN_FILE_NAMES = new Set([
   "dockerfile",
   "gemfile",
@@ -1342,6 +1343,74 @@ function directModuleEdges(input: {
   return { edges, facades };
 }
 
+function javaInheritanceEdges(input: {
+  cwd: string;
+  trackedFiles: ReadonlySet<string>;
+  paths: readonly string[];
+}): Map<string, Set<string>> {
+  const blobs = repositoryBlobsAtHead(input.cwd,
+    input.paths.filter((repositoryPath) => JAVA_SOURCE_EXTENSION.test(repositoryPath)));
+  const declarations = new Map<string, string>();
+  const parsed = new Map<string, { packageName: string; imports: Map<string, string>; source: string }>();
+  for (const [repositoryPath, source] of blobs) {
+    let code = "";
+    let state: "code" | "line" | "block" | "string" | "character" | "text" = "code";
+    for (let index = 0; index < source.length; index += 1) {
+      const character = source[index]!;
+      if (state === "line") {
+        if (character === "\n") { state = "code"; code += "\n"; } else code += " ";
+      } else if (state === "block") {
+        if (source.startsWith("*/", index)) { state = "code"; code += "  "; index += 1; }
+        else code += character === "\n" ? "\n" : " ";
+      } else if (state === "text") {
+        if (source.startsWith('\"\"\"', index)) { state = "code"; code += "   "; index += 2; }
+        else code += character === "\n" ? "\n" : " ";
+      } else if (state === "string" || state === "character") {
+        if (character === "\\") { code += "  "; index += 1; }
+        else if ((state === "string" && character === '\"') || (state === "character" && character === "'")) {
+          state = "code"; code += " ";
+        } else code += character === "\n" ? "\n" : " ";
+      } else if (source.startsWith("//", index)) {
+        state = "line"; code += "  "; index += 1;
+      } else if (source.startsWith("/*", index)) {
+        state = "block"; code += "  "; index += 1;
+      } else if (source.startsWith('\"\"\"', index)) {
+        state = "text"; code += "   "; index += 2;
+      } else if (character === '\"' || character === "'") {
+        state = character === '\"' ? "string" : "character"; code += " ";
+      } else code += character;
+    }
+    const packageName = /\bpackage\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*;/.exec(code)?.[1] ?? "";
+    const typeName = /\b(?:class|record|interface|enum)\s+([A-Za-z_$][\w$]*)/.exec(code)?.[1];
+    if (typeName === undefined) continue;
+    const imports = new Map([...code.matchAll(/\bimport\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\s*;/g)]
+      .map((match) => [match[1]!.slice(match[1]!.lastIndexOf(".") + 1), match[1]!]));
+    declarations.set(packageName ? `${packageName}.${typeName}` : typeName, repositoryPath);
+    parsed.set(repositoryPath, { packageName, imports, source: code });
+  }
+  const edges = new Map<string, Set<string>>();
+  for (const [repositoryPath, { packageName, imports, source }] of parsed) {
+    const inherited = /\bextends\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)/.exec(source)?.[1];
+    if (inherited === undefined) continue;
+    const target = declarations.get(inherited.includes(".") || !packageName
+      ? inherited : imports.get(inherited) ?? `${packageName}.${inherited}`);
+    if (target !== undefined) edges.set(repositoryPath, new Set([target]));
+  }
+  return edges;
+}
+
+function validationWrappers(
+  concern: AttachmentConcernCandidate["concern"],
+  trackedFiles: ReadonlySet<string>,
+): string[] {
+  return ["mvnw", "mvnw.cmd", "gradlew", "gradlew.bat"].filter((repositoryPath) =>
+    trackedFiles.has(repositoryPath)
+    && concern.validation.some((command) =>
+      new RegExp(`(?:^|[\\s\x60])(?:\\./)?${repositoryPath.replace(".", "\\.")}(?:[\\s\x60]|$)`, "i").test(command)
+    )
+  );
+}
+
 function prioritizeRepositoryClusters(input: {
   clusters: readonly RepositoryBehaviorCluster[];
   cwd: string | undefined;
@@ -1371,13 +1440,13 @@ function prioritizeRepositoryClusters(input: {
     || left.cluster_key.localeCompare(right.cluster_key));
 }
 
-function selectUniqueDirectDependencyConcern(input: {
+function directDependencyConcerns(input: {
   implementationPaths: readonly string[];
   candidates: readonly AttachmentConcernCandidate[];
   edges: ReadonlyMap<string, ReadonlySet<string>>;
   facades: ReadonlySet<string>;
   label: string;
-}): AttachmentConcernCandidate | "unresolved" | null {
+}): AttachmentConcernCandidate[] {
   const linked = input.candidates.filter((candidate) =>
     input.implementationPaths.some((implementationPath) =>
       candidate.assessment.corePaths.some((corePath) =>
@@ -1391,14 +1460,19 @@ function selectUniqueDirectDependencyConcern(input: {
       )
     )
   );
-  if (linked.length === 0) return null;
-  const eligible = linked.filter((candidate) => !attachmentConflictsWithExclusions(
+  return linked.filter((candidate) => !attachmentConflictsWithExclusions(
     candidate,
     input.implementationPaths,
     input.label,
     true,
   ));
-  return eligible.length === 1 ? eligible[0]! : "unresolved";
+}
+
+function selectUniqueDirectDependencyConcern(
+  input: Parameters<typeof directDependencyConcerns>[0],
+): AttachmentConcernCandidate | "unresolved" | null {
+  const eligible = directDependencyConcerns(input);
+  return eligible.length === 1 ? eligible[0]! : eligible.length > 1 ? "unresolved" : null;
 }
 
 function inferRepositoryConcernAttachments(input: {
@@ -1428,6 +1502,16 @@ function inferRepositoryConcernAttachments(input: {
     paths: [
       ...input.clusters.flatMap((cluster) => cluster.implementation_paths),
       ...candidates.flatMap((candidate) => candidate.assessment.contextPaths),
+      ...input.structuralHighSignal,
+    ],
+  });
+  const javaEdges = javaInheritanceEdges({
+    cwd: input.cwd,
+    trackedFiles: input.trackedFiles,
+    paths: [
+      ...input.clusters.flatMap((cluster) => cluster.implementation_paths),
+      ...candidates.flatMap((candidate) => candidate.assessment.contextPaths),
+      ...input.structuralHighSignal,
     ],
   });
   const attachmentPaths = new Map<string, Set<string>>();
@@ -1446,6 +1530,13 @@ function inferRepositoryConcernAttachments(input: {
         rejectionHasGroundedDisposition(entry, acceptedConcernRecords)
         && rejectionCoversPath(entry, repositoryPath)
       );
+
+  for (const candidate of candidates) {
+    const wrappers = validationWrappers(candidate.concern, input.trackedFiles);
+    if (wrappers.length > 0) {
+      add(candidate.concern.concern, wrappers, "tracked validation wrapper named by the specialist command");
+    }
+  }
 
   for (const cluster of input.clusters) {
     const clusterPaths = [...cluster.implementation_paths, ...cluster.test_paths]
@@ -1468,6 +1559,23 @@ function inferRepositoryConcernAttachments(input: {
     if (direct.length > 0) {
       for (const candidate of direct) {
         add(candidate.concern.concern, clusterPaths, "tracked path-local implementation/test mirror");
+      }
+      continue;
+    }
+    const javaDependencyOwners = directDependencyConcerns({
+      implementationPaths: cluster.implementation_paths,
+      candidates,
+      edges: javaEdges,
+      facades,
+      label: cluster.cluster_key,
+    });
+    if (javaDependencyOwners.length > 0) {
+      for (const dependencyOwner of javaDependencyOwners) {
+        add(
+          dependencyOwner.concern.concern,
+          clusterPaths,
+          "direct tracked dependency to accepted concern evidence",
+        );
       }
       continue;
     }
@@ -1498,6 +1606,24 @@ function inferRepositoryConcernAttachments(input: {
         selected.concern.concern,
         clusterPaths,
         "unique path-local and semantic match to accepted concern evidence",
+      );
+    }
+  }
+
+  for (const repositoryPath of input.structuralHighSignal) {
+    if (rejected(repositoryPath)) continue;
+    const dependencyOwners = directDependencyConcerns({
+      implementationPaths: [repositoryPath],
+      candidates,
+      edges: javaEdges,
+      facades,
+      label: filenameStem(repositoryPath),
+    });
+    for (const dependencyOwner of dependencyOwners) {
+      add(
+        dependencyOwner.concern.concern,
+        [repositoryPath],
+        "direct tracked dependency to accepted concern evidence",
       );
     }
   }
