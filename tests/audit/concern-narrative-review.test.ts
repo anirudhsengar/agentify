@@ -94,6 +94,64 @@ test("review re-proves supporting attachments hidden by normalized coverage", as
   }
 });
 
+test("review removes a rejected surplus pitfall before semantic repair", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-review-prune-"));
+  try {
+    fs.writeFileSync(path.join(cwd, "clock.py"), SOURCE);
+    execFileSync("git", ["init", "-q", cwd]);
+    execFileSync("git", ["-C", cwd, "add", "."]);
+    execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+      "commit", "-qm", "clock fixture"]);
+    const concern: Concern = {
+      concern: "Deadline normalization", one_line: "Convert caller deadlines with int().",
+      covers: "Deadline conversion and malformed-input rejection.", excludes: "Clock sampling.",
+      flows: [{ name: "Normalize deadline", description: "Convert or reject input.", steps: [
+        { path: "clock.py", what_happens: "normalize_time receives caller input." },
+        { path: "clock.py", what_happens: "int(value) converts it or raises ValueError." },
+      ] }],
+      touchpoints: [{ path: "clock.py", symbol: "normalize_time", role: "Owns conversion.",
+        line_range: null, centrality: "core" }],
+      invariants: [{ rule: "Conversion uses int(value).", why: "Malformed values raise ValueError.",
+        reference: "clock.py" }],
+      pitfalls: [
+        { risk: FALSE_CLAIM, consequence: "Valid numeric strings fail.", reference: "clock.py" },
+        { risk: "Nonnumeric strings raise ValueError.", consequence: "Callers must handle rejection.",
+          reference: "clock.py" },
+      ],
+      entry_questions: ["Can this caller handle ValueError?"], validation: [], spans_subtrees: [],
+      stability: "high", recurrence: "high", confidence: "high", last_updated: "2026-08-31T00:00:00.000Z",
+    };
+    const compilation = compileSpecialistEvidence(makeValidCodebaseMap({
+      concern_evidence: { concerns: [concern], not_concerns: [] }, expert_evidence: undefined,
+    }), { cwd });
+    assert.equal(compilation.complete, true, compilation.reasons.join("; "));
+    let reviews = 0;
+    const runtime: AgentRuntime = { async runSession(options) {
+      reviews += 1;
+      const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
+      const falseClaim = Object.keys(claims).find(key => JSON.stringify(claims[key]).includes(FALSE_CLAIM));
+      await options.customTools![0]!.execute("review", { checked_claims: Object.keys(claims), finding: falseClaim
+        ? { claim: falseClaim, path: "clock.py", excerpt: "return int(value)", reason: CORRECTION }
+        : null }, undefined, undefined, { cwd } as never);
+      return { turns: 0, costUsd: 0, aborted: false };
+    } };
+    const checkpoints: Concern[][] = [];
+    const reviewed = await reviewSpecialistCompilation({ cwd, runtime,
+      config: { schemaVersion: 1, thinkingLevel: "off" }, ui: { status() {} } } as never,
+    compilation, new AuditResourceBudget(), "prune-review", map => {
+      checkpoints.push(structuredClone(map.concern_evidence!.concerns));
+    });
+    assert.equal(reviews, 2, "the pruned body must be reviewed again without a broad repair session");
+    assert.equal(reviewed.complete, true, reviewed.reasons.join("; "));
+    assert.deepEqual(reviewed.map.concern_evidence!.concerns[0]!.pitfalls, concern.pitfalls.slice(1));
+    assert.deepEqual(reviewed.map.concern_evidence!.concerns[0]!.flows, concern.flows);
+    assert.ok(checkpoints.some(value => value[0]!.pitfalls.length === 1),
+      "the exact rejected assertion must be checkpointed as removed before approval");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 for (const concurrent of [false, true, "corrections", "queued-cancel"] as const) {
 test(`claim correction reviews within one session without overwriting concurrent evidence: ${concurrent}`, async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-inline-review-"));
