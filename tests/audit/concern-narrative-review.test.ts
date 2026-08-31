@@ -152,6 +152,57 @@ test("review removes a rejected surplus pitfall before semantic repair", async (
   }
 });
 
+test("independent specialist bodies are reviewed with bounded overlap", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-review-overlap-"));
+  try {
+    fs.writeFileSync(path.join(cwd, "clock.py"), SOURCE);
+    fs.writeFileSync(path.join(cwd, "retry.py"), SOURCE);
+    execFileSync("git", ["init", "-q", cwd]);
+    execFileSync("git", ["-C", cwd, "add", "."]);
+    execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+      "commit", "-qm", "review overlap fixture"]);
+    const concern = (name: string, file: string): Concern => ({
+      concern: name, one_line: `Convert ${name.toLowerCase()} with int().`,
+      covers: `${name} conversion.`, excludes: "Task scheduling.",
+      flows: [{ name, description: "Convert caller input.", steps: [
+        { path: file, what_happens: "The helper receives caller input." },
+        { path: file, what_happens: "int(value) converts it or raises ValueError." },
+      ] }],
+      touchpoints: [{ path: file, symbol: "normalize_time", role: "Owns integer conversion.",
+        line_range: null, centrality: "core" }],
+      invariants: [], pitfalls: [], entry_questions: ["Is the input integer-compatible?"],
+      validation: [], spans_subtrees: [], stability: "high", recurrence: "high", confidence: "high",
+      last_updated: "2026-08-31T00:00:00.000Z",
+    });
+    const concerns = [concern("Deadline normalization", "clock.py"), concern("Retry normalization", "retry.py")];
+    const compilation = compileSpecialistEvidence(makeValidCodebaseMap({
+      concern_evidence: { concerns, not_concerns: [] }, expert_evidence: undefined,
+    }), { cwd });
+    assert.equal(compilation.complete, true, compilation.reasons.join("; "));
+    let active = 0;
+    let peak = 0;
+    const runtime: AgentRuntime = { async runSession(options) {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise(resolve => setTimeout(resolve, 25));
+      const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
+      await options.customTools![0]!.execute("review", { checked_claims: Object.keys(claims), finding: null },
+        undefined, undefined, { cwd } as never);
+      active -= 1;
+      return { turns: 0, costUsd: 0, aborted: false };
+    } };
+    const reviewed = await reviewSpecialistCompilation({ cwd, runtime,
+      config: { schemaVersion: 1, thinkingLevel: "off" }, ui: { status() {} } } as never,
+    compilation, new AuditResourceBudget(), "overlap-review");
+    assert.equal(peak, 2, "two immutable read-only body reviews should overlap");
+    assert.deepEqual(reviewed.map.specialist_reviews?.records.map(record => record.concern),
+      concerns.map(item => item.concern), "overlap must preserve deterministic portfolio order");
+    assert.equal(reviewed.complete, true, reviewed.reasons.join("; "));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 for (const concurrent of [false, true, "corrections", "queued-cancel"] as const) {
 test(`claim correction reviews within one session without overwriting concurrent evidence: ${concurrent}`, async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-inline-review-"));
