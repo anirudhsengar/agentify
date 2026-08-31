@@ -4,7 +4,9 @@ Not release-ready. Do not merge PR #13. The earlier release recommendation is wi
 
 The approved gate separates high-quality specialist installation from operational execution readiness. A semantically complete `analysis-ready` team may count as an installation, while missing reproducible repository-owned validation keeps issue intake, publication, autonomous mutation and learning disabled. External harness locks never clear those execution blockers.
 
-Exact production `812eff8e327c39f1000cc9bcc004e87a58bf4d69` passed the full local Node 22 release suite: 98 source test files, 12 executable corpus cases, five packed qualifications, scaffold and zero-vulnerability audit. Canonical package SHA-256: `d2c0f9f54a73c1cf416e14071a6f05d6ead1de6dcb27da4eec4b036fae38ba8f`. CI/CodeQL and fresh Hono/PyJWT installations are in progress; no passing installation is claimed for this SHA.
+Exact production `812eff8e327c39f1000cc9bcc004e87a58bf4d69` passed the full local Node 22 release suite: 98 source test files, 12 executable corpus cases, five packed qualifications, scaffold and zero-vulnerability audit. Canonical package SHA-256: `d2c0f9f54a73c1cf416e14071a6f05d6ead1de6dcb27da4eec4b036fae38ba8f`. All Node 22/24 CI, CodeQL, package and scaffold checks also passed. Fresh Hono and PyJWT nevertheless failed installation in 820,583 ms and 691,204 ms respectively, before narrative review: their reported output plus retained unanswered-request bounds and the next uncappable 128,000-token request exceeded the 200,000-token total. Each rolled back with unchanged tracked files and one error terminal. No success credit.
+
+The admission failure now has a deterministic replay. The aggregate output default is explicitly 400,000 tokens, including reservations; a configured 200,000 ceiling still refuses the same request. No unanswered reservation is dropped, and call, time, cost and specialist-quality limits are unchanged. This budget correction still needs exact-head and fresh live qualification. Chi's additional run is invalid: the harness exited unexpectedly, so its verified task-owned child was stopped and its audit preserved. Missing stdout/stderr are disclosed, not fabricated.
 
 Normalized specialist bodies now receive a bounded, source-backed narrative review inside the repair loop. Current-HEAD/body-digest attestation is independently required at finalization. Live component probes on `56daf7f` rejected the known Hono router-reuse and PyJWT coercion contradictions; a manually corrected external PyJWT body passed in 67.274 seconds. These are component checks, not generated installations or manual-quality passes. The original bad installed team was not edited. Hono narrative correctness and installation convergence remain unqualified.
 
@@ -36,7 +38,7 @@ The complete machine-readable evidence summary is [`2026-08-stabilization-evalua
 
 ## Changed-file policy
 
-The archived 80-file inventory is retained separately. The current machine-readable inventory enumerates the stabilization branch through production commit `fdedf98077c86c520ac386f0736186936834a1e3`. Delivery-integrity inspection must pass again on the exact final candidate.
+The archived inventory is retained separately. The current machine-readable inventory enumerates all 115 changed branch paths through `f6ff3d2`; this milestone changes only already-listed paths. No temporary workflow, payload, archive or staging machinery is present. Delivery-integrity inspection must pass again on the exact final candidate.
 
 ## Current development evidence
 

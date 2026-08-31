@@ -250,12 +250,15 @@ README explicitly documents the individual-unittest command form.
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30
 minutes, three semantic repair passes, one coverage recovery, 240 model calls and
-turns, eight million input/cache tokens, 200,000 output tokens, 24 explorer
+turns, eight million input/cache tokens, 400,000 output tokens, 24 explorer
 dispatches, and USD 20 of provider-reported
 cost. Per-scout and per-tracer deadlines are three minutes. Repair state is
 measured by a canonical unresolved-obligation fingerprint and terminates after
 repeated no-progress states. Strict optional `auditBudgets` config overrides
 support unusually large repositories without permitting unbounded values.
+The output default includes reported usage plus outstanding reservations, with
+headroom for an uncappable provider response. It does not discard interrupted
+requests or exempt them from a configured lower hard ceiling.
 Provider and explorer deadlines retain one second of the total wall-time budget
 for abort propagation, checkpointing, rollback, and the single terminal audit
 event; model work cannot consume the cleanup interval itself.

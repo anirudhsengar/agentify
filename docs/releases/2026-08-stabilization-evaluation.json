@@ -9,9 +9,9 @@
     "local_node22_release": "passed_98_source_files_12_corpus_tests_5_packed_qualifications_scaffold_audit_zero",
     "local_log": "/tmp/agentify-grounded-review-combined-release.log",
     "package_sha256": "d2c0f9f54a73c1cf416e14071a6f05d6ead1de6dcb27da4eec4b036fae38ba8f",
-    "ci": "in_progress",
+    "ci": "passed_node22_node24_typecheck_audit_packed_scaffold",
     "ci_url": "https://github.com/anirudhsengar/agentify/actions/runs/33391180038",
-    "codeql": "in_progress",
+    "codeql": "passed",
     "codeql_url": "https://github.com/anirudhsengar/agentify/actions/runs/33391180001",
     "live_cancellation": {
       "evidence": "/home/anirudh/Projects/agentify-evaluation/grounded-review-Dq6vm3/live-cancellation.json",
@@ -72,9 +72,52 @@
     "component_scope": "These read-only probes isolate one body; they are neither full compiler qualification nor generated-team manual-review passes. Controlled corrections were external data only. Original bad installed PyJWT team remains unmodified.",
     "fresh_installations": {
       "agentify_sha": "812eff8e327c39f1000cc9bcc004e87a58bf4d69",
-      "status": "in_progress_no_success_claim",
+      "status": "failed_product_qualification",
       "evidence_root": "/home/anirudh/Projects/agentify-evaluation/grounded-review-Dq6vm3",
-      "repositories": ["hono", "pyjwt"]
+      "repositories": [
+        {
+          "repository": "hono",
+          "report": "hono-fresh-1/report.json",
+          "team_installed": false,
+          "elapsed_ms": 820583,
+          "failure": "output_token_reservation_exceeds_aggregate_budget_before_review",
+          "reported_output_tokens": 57933,
+          "reserved_output_tokens": 24000,
+          "next_request_output_bound": 128000,
+          "model_calls": 57,
+          "unreported_calls": 2,
+          "unreserved_calls": 0,
+          "terminal_results": 1,
+          "original_tracked_files_unchanged": true,
+          "draft_manual_review": "hono-draft-quality.json"
+        },
+        {
+          "repository": "pyjwt",
+          "report": "pyjwt-fresh-1/report.json",
+          "team_installed": false,
+          "elapsed_ms": 691204,
+          "failure": "output_token_reservation_exceeds_aggregate_budget_before_review",
+          "reported_output_tokens": 67163,
+          "reserved_output_tokens": 12000,
+          "next_request_output_bound": 128000,
+          "model_calls": 51,
+          "unreported_calls": 1,
+          "unreserved_calls": 0,
+          "terminal_results": 1,
+          "original_tracked_files_unchanged": true,
+          "draft_manual_review": "pyjwt-draft-quality.json"
+        },
+        {
+          "repository": "chi",
+          "report": "chi-fresh-1/report.json",
+          "qualification": "invalid_harness_interruption",
+          "team_installed": false,
+          "capture_incomplete": true,
+          "detail": "Harness exited 143 for an unknown reason; evaluator verified and stopped its orphaned task-owned child, then preserved its one aborted terminal and unchanged tracked hashes. Lost stdout/stderr were not reconstructed. No qualification credit."
+        }
+      ],
+      "budget_root_cause": "A 200000-token total left insufficient headroom for a provider that cannot cap responses and requires a full 128000-token next-request reservation. Existing reservations were correctly retained, not erased.",
+      "general_correction": "Default total output allowance is now explicitly 400000, including outstanding bounds. An explicit 200000 override still rejects the same request. Time, calls, cost, closure and quality limits are unchanged; no fresh installation success claimed for the correction."
     },
     "hono_narrative_correctness_resolved": false,
     "installed_manual_quality_reviews_passed": 0,
@@ -237,11 +280,11 @@
       "reason": "Harness omitted thinking-level initialization and launched outside tool root. Its configuration=unchanged label is incorrect; no qualification credit. Corrected high-thinking probe is recorded separately."
     }
   },
-  "latest_development_evidence": {
+  "archived_development_evidence": {
     "release_ready": false,
     "final_candidate_sha": null,
-    "current_production_sha": "fdedf98077c86c520ac386f0736186936834a1e3",
-    "current_production_qualification": "Exact 4f0dc70 (same production fdedf98 plus reports) passed local release and all CI; no fresh matrix is qualified. Chi continuation installed but failed manual quality.",
+    "production_sha": "fdedf98077c86c520ac386f0736186936834a1e3",
+    "production_qualification": "Exact 4f0dc70 (same production fdedf98 plus reports) passed local release and all CI; no fresh matrix is qualified. Chi continuation installed but failed manual quality.",
     "deterministic_sha": "20b3a9eb7d72b938a4a30b9e5e873c6bbeacef46",
     "deterministic_status": "passed_exact_Node22_verify_release_97_files_10_corpus_cases_scaffold_5_packed_qualifications_audit_zero",
     "deterministic_log": "/tmp/agentify-preserve-portfolio-release.log",
@@ -1448,9 +1491,10 @@
     "Live model qualification is nondeterministic; deterministic replay is the primary regression gate."
   ],
   "current_changed_file_inventory": {
-    "production_sha": "fdedf98077c86c520ac386f0736186936834a1e3",
-    "base": "origin/main",
+    "enumerated_sha": "f6ff3d29f866eb27a14a6f3102d0bea22e83eb7f",
+    "base_commit": "f2df9eb8563bfcb26919d82c7bf28c9fb7c19e8b",
     "files": [
+      "AGENTS.md",
       "CHANGELOG.md",
       "README.md",
       "SECURITY.md",
@@ -1463,6 +1507,7 @@
       "src/cli.ts",
       "src/core/agentify-app.ts",
       "src/core/agentify-config.ts",
+      "src/core/artifacts/managed-installation-paths.ts",
       "src/core/audit/concern-rejection.ts",
       "src/core/audit/coverage.ts",
       "src/core/audit/explorer-receipts.ts",
@@ -1480,11 +1525,13 @@
       "src/core/audit/schema/concerns.ts",
       "src/core/audit/schema/explorer-receipts.ts",
       "src/core/audit/schema/index.ts",
+      "src/core/audit/schema/specialist-review.ts",
       "src/core/audit/schema/write-map-params.ts",
       "src/core/audit/scripts/inspect-log.mjs",
       "src/core/audit/spawn-explorer-tool.ts",
       "src/core/audit/specialist-compiler.ts",
       "src/core/audit/specialist-completion.ts",
+      "src/core/audit/specialist-review.ts",
       "src/core/audit/write-map-tools.ts",
       "src/core/installer/agent-validation-discovery.ts",
       "src/core/installer/bounded-regular-file.ts",
@@ -1507,10 +1554,14 @@
       "src/core/runs/repository-audit-run-core.ts",
       "src/core/runs/repository-audit-run.ts",
       "src/core/runs/run-context.ts",
+      "src/core/scaffold-installer.ts",
+      "src/core/specialists/persistence.ts",
       "src/core/specialists/runtime.ts",
+      "src/core/task-lifecycle/validation-runner.ts",
       "src/core/types.ts",
       "tests/acceptance/stabilization-corpus.test.ts",
       "tests/audit/builder-prompt-state-dir.test.ts",
+      "tests/audit/concern-narrative-review.test.ts",
       "tests/audit/coverage-gate.test.ts",
       "tests/audit/exclusion-aware-semantic-closure.test.ts",
       "tests/audit/explorer-concern-checkpoint.test.ts",
@@ -1551,11 +1602,14 @@
       "tests/package/seed-installed-installer-fixture.ts",
       "tests/package/seed-installed-learning-fixture.ts",
       "tests/parity/cli-contract.test.ts",
+      "tests/parity/fixtures/cli-help.txt",
       "tests/pi-sdk-runtime.test.ts",
       "tests/scaffold-readiness-docs.test.ts",
+      "tests/specialists/specialist-persistence.test.ts",
       "tests/specialists/specialist-runtime.test.ts",
-      "tests/specialists/unbounded-specialist-portfolio.test.ts"
+      "tests/specialists/unbounded-specialist-portfolio.test.ts",
+      "tests/task-lifecycle/validation-runner.test.ts"
     ],
-    "note": "Enumerated before this report-only update; same report paths already included. No new workflow, payload, patch, archive, export, or materialization paths."
+    "note": "Complete branch path inventory. This milestone changes only already-listed paths. No temporary workflow, payload, patch, archive, export or materialization paths."
   }
 }

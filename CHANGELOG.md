@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Set the aggregate output default to 400,000 tokens, including outstanding request reservations, so bounded recovery has headroom for uncappable responses. Explicit lower ceilings remain enforced; interrupted usage, cost, time, call and semantic-quality limits are unchanged.
+
 - Review normalized specialist narratives against bounded immutable source before installation. Typed reviews bind the exact concern body and HEAD; unsupported claims, incomplete reviews, stale evidence and timeouts remain repair obligations. Model-authored approval is rejected and finalization independently enforces the review gate.
 
 - Remove narrative-field and core-path quotas from tracing guidance; require counterexample checks against executable predicates, option preconditions and actual test assertions without relaxing report size or flow-preservation limits.

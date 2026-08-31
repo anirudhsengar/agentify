@@ -146,13 +146,17 @@ large repository through the optional `auditBudgets` object in
 | `maxScoutDurationMs` / `maxTracerDurationMs` | 180,000 each |
 | `maxExplorerDurationMs` | 120,000 |
 | `maxModelCalls` / `maxTurns` | 240 each |
-| `maxInputTokens` / `maxOutputTokens` | 8,000,000 / 200,000 |
+| `maxInputTokens` / `maxOutputTokens` | 8,000,000 / 400,000 |
 | `maxTotalCostUsd` | 20 (provider-reported) |
 | `maxCoverageRecoveryPasses` / `maxSemanticRepairPasses` | 1 / 3 |
 | `maxRepeatedFingerprintStates` | 2 |
 | `maxExplorerSpawns` | 24 |
 
 Overrides are strictly validated and remain subject to finite safety ceilings.
+The output limit includes reported tokens, retained unanswered-request bounds,
+and the next request's output reservation. Its 400,000-token default leaves
+headroom for providers that cannot cap individual responses; a configured
+smaller limit still rejects any request whose full bound would exceed it.
 Parent audit requests and explorer sub-sessions consume the same aggregate call,
 turn, token, cost, and elapsed-time budget. A tool-use continuation must leave
 enough input capacity for another request at the just-observed context size.
