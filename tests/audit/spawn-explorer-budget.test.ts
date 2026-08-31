@@ -1019,6 +1019,8 @@ async function testCancelledRequestAdmissionIsCharged(): Promise<void> {
     assert.equal((result as { isError?: boolean }).isError, true);
     assert.equal(budget.snapshot().model_calls, 1);
     assert.equal(budget.snapshot().turns, 0);
+    assert.equal((result.details as { provider_calls?: number }).provider_calls, 1,
+      "the explorer diagnostic must include its interrupted admitted request");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
