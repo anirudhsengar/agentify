@@ -64,6 +64,7 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     let reviews = 0;
     const loggedEvents: string[] = [];
     let forgedExcerpt = false;
+    let excerptOverride: string | undefined;
     let mode: "normal" | "incomplete" | "prose" | "interrupted" = "normal";
     const runtime: AgentRuntime = { async runSession(options) {
       reviews += 1;
@@ -84,7 +85,7 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       await options.customTools![0]!.execute("review", {
         checked_claims: mode === "incomplete" ? [] : Object.keys(input.claims),
         finding: falseClaim ? { claim: "pitfalls[0]", path: "clock.py",
-          excerpt: forgedExcerpt ? "return False" : "return int(value)", reason: CORRECTION } : null,
+          excerpt: excerptOverride ?? (forgedExcerpt ? "return False" : "return int(value)"), reason: CORRECTION } : null,
       }, undefined, undefined, { cwd } as never);
       options.onEvent!({ type: "tool_execution_end" } as never);
       return { turns: 1, costUsd: 0.001, aborted: true };
@@ -125,6 +126,17 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     const forged = await reviewSpecialistCompilation(context, initial, budget, "forged-review");
     assert.equal(forged.complete, false);
     assert.match(forged.reasons.join("; "), /quote exact supplied source/);
+    excerptOverride = "try:\n    return int(value)";
+    const dedented = await reviewSpecialistCompilation(context, initial, budget, "dedented-review");
+    assert.match(dedented.reasons.join("; "), /Numeric strings are accepted/,
+      "a uniformly dedented quote must resolve to its exact source block");
+    assert.match(dedented.reasons.join("; "), /    try:\n        return int\(value\)/,
+      "persist the original source indentation, not the model's presentation");
+    excerptOverride = "try:\nreturn int(value)";
+    const alteredIndentation = await reviewSpecialistCompilation(context, initial, budget, "altered-indent-review");
+    assert.match(alteredIndentation.reasons.join("; "), /quote exact supplied source/,
+      "changing relative indentation cannot establish source evidence");
+    excerptOverride = undefined;
     for (const outcome of ["incomplete", "prose", "interrupted"] as const) {
       mode = outcome;
       const incomplete = await reviewSpecialistCompilation(context,
