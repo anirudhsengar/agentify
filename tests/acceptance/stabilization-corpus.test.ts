@@ -292,12 +292,23 @@ for (const entry of FIXTURE.cases.filter((candidate) => candidate.portfolio_fixt
           return { status: 1, stdout: "", stderr: "replayed validation failure", timedOut: false, errorMessage: null };
         } },
       });
-      assert.equal(refused.disposition, "analyzable-only");
-      assert.equal(refused.specialists_installed, 0);
+      assert.equal(refused.disposition, "analysis-ready");
+      assert.equal(refused.specialists_installed, portfolioFixture.concerns.length);
       assert.equal(refused.github_issue_intake_enabled, false);
+      assert.equal(refused.draft_pr_publication_enabled, false);
+      assert.equal(refused.automatic_knowledge_refresh_enabled, false);
+      assert.equal(readRepositoryTaskPolicyConfiguration(cwd)?.configured, false);
+      assert.equal(readRepositoryTaskPolicyConfiguration(cwd)?.policy, null);
       assert.ok(refused.blockers.some((blocker) => blocker.code === "validation_failed"));
-      for (const relative of [".agentify/agents", ".agentify/manifest.json", "AGENTS.md", ".github/workflows/agentify-issue.yml", ".github/workflows/agentify-learn.yml"]) {
-        assert.equal(fs.existsSync(path.join(cwd, relative)), false, `${relative}: partial installation survived`);
+      for (const relative of [".github/agentify/task-runtime.mjs", ".github/scripts/publish-task-draft.mjs", ".github/workflows/agentify-issue.yml", ".github/workflows/agentify-learn.yml"]) {
+        assert.equal(fs.existsSync(path.join(cwd, relative)), false, `${relative}: execution capability survived`);
+      }
+      for (const relative of ["AGENTS.md", "SETUP.md"]) {
+        const instructions = fs.readFileSync(path.join(cwd, relative), "utf8");
+        assert.match(instructions, /analysis-ready/);
+        assert.match(instructions, /validation_failed/);
+        assert.match(instructions, /repository-owned/);
+        assert.match(instructions, /learning.*disabled/i);
       }
       prepareOneTimeInstallationState(cwd, preflight);
       writeCanonicalMap(cwd, compilation.map, MAP_CONTEXT);
@@ -353,6 +364,30 @@ for (const entry of FIXTURE.cases.filter((candidate) => candidate.portfolio_fixt
         total + fs.statSync(path.join(cwd, ".agentify/agents/specialists", `${specialistId}.json`)).size
       ), 0);
       assert.ok(outputBytes <= entry.budgets.output_bytes, `${entry.repository}: specialist output budget exceeded`);
+
+      // A lockless operational downgrade preserves the same complete team, but
+      // removes execution authority. Harness locks cannot change this result.
+      const lockless: RepositoryInstallationPreflight = {
+        ...preflight, disposition: "analyzable-only",
+        blockers: [{ code: "missing_dependency_lock", message: "No committed dependency lock.", remediation: "Provide reproducible repository-owned dependency validation." }],
+      };
+      prepareOneTimeInstallationState(cwd, lockless);
+      const analysis = finalizeOneTimeInstallation({
+        cwd, preflight: lockless, validationApproval: approval,
+        agentifyVersion: "1.1.0", provider: "fixture", model: "deterministic-replay", providerVerified: true,
+        runner: { run() { throw new Error("analysis-only installation must not configure GitHub or execute commands"); } },
+      });
+      assert.equal(analysis.disposition, "analysis-ready", JSON.stringify(analysis.blockers));
+      assert.equal(analysis.specialists_installed, specialists.length);
+      assert.equal(readRepositoryTaskPolicyConfiguration(cwd)?.policy, null);
+      assert.equal(fs.existsSync(path.join(cwd, ".github/workflows/agentify-issue.yml")), false);
+      assert.equal(fs.existsSync(path.join(cwd, ".github/workflows/agentify-learn.yml")), false);
+      const analysisSync = synchronizeRepositorySpecialists(cwd, { trustedValidationArgv: [] });
+      assert.equal(analysisSync.status, "synchronized");
+      if (analysisSync.status === "synchronized") {
+        assert.deepEqual(analysisSync.portfolio.specialists.map(({ concern, excludes, flows, touchpoints }) => ({ concern, excludes, flows, touchpoints })),
+          specialists.map(({ concern, excludes, flows, touchpoints }) => ({ concern, excludes, flows, touchpoints })));
+      }
       assert.ok(Date.now() - startedAt <= entry.budgets.runtime_ms, `${entry.repository}: runtime budget exceeded`);
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
