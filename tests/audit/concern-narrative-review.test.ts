@@ -15,12 +15,105 @@ import { finalizeOneTimeInstallation, prepareOneTimeInstallationState,
   type RepositoryInstallationPreflight } from "../../src/core/installer/index.ts";
 import { loadCanonicalMapAt, writeCanonicalMap } from "../../src/core/audit/map-storage.ts";
 import { createWriteMapTools } from "../../src/core/audit/write-map-tools.ts";
+import { runRepositoryAudit } from "../../src/core/runs/repository-audit-run.ts";
+import { AgentifyLog } from "../../src/core/audit/log.ts";
 
 // Reduced from an installed held-out team's false numeric-string rejection.
 // Error-message wording does not override executable int() coercion.
 const SOURCE = 'def normalize_time(value):\n    try:\n        return int(value)\n    except ValueError:\n        raise ValueError("Time must be an integer")\n';
 const FALSE_CLAIM = "Numeric-string time values cannot be accepted.";
 const CORRECTION = "Numeric strings are accepted by int(); nonnumeric strings raise ValueError.";
+
+test("claim correction returns the next normalized review inside the same bounded repair session", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-inline-review-"));
+  const logs = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-inline-review-log-"));
+  try {
+    fs.writeFileSync(path.join(cwd, "clock.py"), SOURCE);
+    fs.writeFileSync(path.join(cwd, "README.md"), "Test fixture evidence citation.\n");
+    execFileSync("git", ["init", "-q", cwd]);
+    execFileSync("git", ["-C", cwd, "add", "."]);
+    execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+      "commit", "-qm", "clock normalization"]);
+    const head = execFileSync("git", ["-C", cwd, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const concern: Concern = {
+      concern: "Deadline normalization", one_line: "Convert caller deadlines with int().",
+      covers: "Deadline value conversion.", excludes: "Clock sampling and task scheduling.",
+      flows: [{ name: "Normalize deadline", description: "Convert caller input.", steps: [
+        { path: "clock.py", what_happens: "normalize_time receives value." },
+        { path: "clock.py", what_happens: "int(value) converts it or raises ValueError." },
+      ] }],
+      touchpoints: [{ path: "clock.py", symbol: "normalize_time", role: "Owns deadline conversion.",
+        line_range: null, centrality: "core" }],
+      pitfalls: [{ risk: FALSE_CLAIM, consequence: "Numeric strings fail.", reference: "clock.py" },
+        { risk: FALSE_CLAIM, consequence: "String inputs cannot convert.", reference: "clock.py" }],
+      invariants: [], entry_questions: ["Are deadlines numeric strings?"], validation: [], spans_subtrees: [],
+      stability: "high", recurrence: "high", confidence: "high", last_updated: "2026-08-31T00:00:00.000Z",
+    };
+    const compilation = compileSpecialistEvidence(makeValidCodebaseMap({
+      concern_evidence: { concerns: [concern], not_concerns: [] }, expert_evidence: undefined,
+    }), { cwd });
+    assert.equal(compilation.complete, true, compilation.reasons.join("; "));
+    const map = attestCodebaseMap(compilation.map, head);
+    delete map.specialist_reviews;
+    writeCanonicalMap(cwd, map, { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
+    let reviews = 0;
+    let repairs = 0;
+    const budget = new AuditResourceBudget({ maxSemanticRepairPasses: 1 });
+    const runtime: AgentRuntime = { async runSession(options) {
+      options.onProviderRequest!({ inputTokens: 1_000, outputTokens: 100, costUsd: 0.1 });
+      options.onEvent?.({ type: "message_end", message: { role: "assistant", stopReason: "toolUse",
+        usage: { input: 50, output: 10, cost: { total: 0.001 } } } } as never);
+      if (options.tools.includes("submit_specialist_review")) {
+        reviews += 1;
+        const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
+        const claim = Object.keys(claims).find(key => JSON.stringify(claims[key]).includes(FALSE_CLAIM));
+        await options.customTools![0]!.execute("review", { checked_claims: Object.keys(claims),
+          finding: claim ? { claim, path: "clock.py", excerpt: "return int(value)", reason: CORRECTION } : null,
+        }, undefined, undefined, { cwd } as never);
+        options.onEvent?.({ type: "tool_execution_end" } as never);
+        return { turns: 1, costUsd: 0.001, aborted: true };
+      }
+      if (options.tools.includes("read")) return { turns: 1, costUsd: 0.001, aborted: false };
+      repairs += 1;
+      assert.equal(repairs, 1, "narrative findings must not require another broad repair session");
+      const tool = options.customTools!.find(item => item.name === "write_map_delta")!;
+      for (let index = 0; index < 2; index += 1) {
+        const current = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+        const record = current.specialist_reviews!.records.find(item => item.concern === concern.concern)!;
+        assert.equal(record.finding?.claim, `pitfalls[${index}]`);
+        const proposal = { delta: {}, claim_correction: { concern: concern.concern, digest: record.digest,
+          claim: record.finding!.claim, statement: CORRECTION, rationale: "Nonnumeric strings fail conversion." } };
+        const before = reviews;
+        const invalid = await tool.execute("stale", { ...proposal,
+          claim_correction: { ...proposal.claim_correction, digest: "0".repeat(64) } },
+        undefined, undefined, { cwd } as never);
+        assert.equal((invalid as { isError?: boolean }).isError, true);
+        assert.equal(reviews, before, "rejected correction must not dispatch a review");
+        const result = await tool.execute("correct", proposal, undefined, undefined, { cwd } as never);
+        assert.notEqual((result as { isError?: boolean }).isError, true, JSON.stringify(result.content));
+        assert.equal(reviews, before + 1,
+          "successful correction must expose fresh review before the repair session ends");
+        const feedback = JSON.stringify(result.content);
+        if (index === 0) assert.match(feedback, /pitfalls\[1\]/);
+      }
+      return { turns: 1, costUsd: 0.001, aborted: false };
+    } };
+    await runRepositoryAudit({ cwd, runtime, auditResourceBudget: budget,
+      config: { schemaVersion: 1, models: {}, thinkingLevel: "high" },
+      auditLog: new AgentifyLog({ cwd, configDir: logs }),
+      ui: { info() {}, status() {}, error() {} } as never });
+    assert.equal(reviews, 3);
+    assert.equal(repairs, 1);
+    const finalMap = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+    assert.deepEqual(assessSpecialistReviews(finalMap, cwd), []);
+    assert.deepEqual(finalMap.concern_evidence!.concerns[0]!.flows, concern.flows);
+    assert.equal(execFileSync("git", ["-C", cwd, "diff", "HEAD"], { encoding: "utf8" }), "");
+    assert.equal(budget.snapshot().model_calls, 5);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(logs, { recursive: true, force: true });
+  }
+});
 
 test("normalized narrative review rejects contradictions and binds exact bodies without losing flows", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-narrative-review-"));
