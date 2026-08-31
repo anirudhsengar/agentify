@@ -68,17 +68,20 @@ export function correctSpecialistClaim(
   const concern = map.concern_evidence?.concerns.find(item => item.concern === proposal.concern);
   const record = map.specialist_reviews?.records.find(item => item.concern === proposal.concern
     && item.digest === proposal.digest);
-  const match = /^(pitfalls|invariants)\[([0-9]+)\]$/.exec(proposal.claim);
+  const match = /^(pitfalls|invariants|flows)\[([0-9]+)\]$/.exec(proposal.claim);
   if (!commit || map.specialist_reviews?.repository_commit !== commit
     || map.explorer_receipts?.repository_commit !== commit || !concern
     || specialistReviewDigest(concern) !== proposal.digest || !record?.failure
     || record.finding?.claim !== proposal.claim || !match
+    || (match[1] === "flows"
+      ? !Number.isSafeInteger(proposal.flow_step) || proposal.flow_step! < 0 || proposal.flow_step! > 511
+      : proposal.flow_step !== undefined)
     || [proposal.statement, proposal.rationale].some(text => !text.trim() || text.length > 2_048)) {
-    throw new Error("claim_correction requires a current-HEAD exact-body rejected pitfall or invariant");
+    throw new Error("claim_correction requires a current-HEAD exact-body rejected assertion and valid step selection");
   }
   // Match the completion ledger: normalization can combine separately traced
   // bodies without rewriting the original observations' concern identities.
-  // This exact-body repair changes no source, flow, scope or ownership.
+  // This exact-body repair changes no source paths, flow structure, scope or ownership.
   const observed = new Set(map.explorer_receipts.receipts.filter(receipt =>
     receipt.mode === "concern_tracer" && receipt.success
   ).flatMap(receipt => receipt.observed_paths ?? []));
@@ -90,7 +93,13 @@ export function correctSpecialistClaim(
   const corrected = structuredClone(map);
   const body = corrected.concern_evidence!.concerns.find(item => item.concern === proposal.concern)!;
   const index = Number(match[2]);
-  if (match[1] === "pitfalls") {
+  if (match[1] === "flows") {
+    const step = body.flows[index]?.steps[proposal.flow_step!];
+    if (!step || step.path !== record.finding.path) {
+      throw new Error("claim_correction requires a flow step at the reviewed source path");
+    }
+    step.what_happens = proposal.statement;
+  } else if (match[1] === "pitfalls") {
     const claim = body.pitfalls[index];
     if (!claim) throw new Error("claim_correction names a missing pitfall");
     claim.risk = proposal.statement;

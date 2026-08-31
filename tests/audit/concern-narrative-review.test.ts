@@ -175,6 +175,7 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     for (const invalid of [
       { ...proposal, digest: "0".repeat(64) }, { ...proposal, claim: "invariants[0]" },
       { ...proposal, claim: "flows[0]" }, { ...proposal, concern: "Other identity" },
+      { ...proposal, flow_step: 1 },
       { ...proposal, statement: "" }, { ...proposal, statement: "x".repeat(2_049) },
       { ...proposal, statement: FALSE_CLAIM, rationale: concern.pitfalls[0]!.consequence },
     ]) {
@@ -304,6 +305,13 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     assert.equal(assessSpecialistReviews(flowCorrected, cwd).length, 1);
     assert.equal((await reviewSpecialistCompilation(context,
       compileSpecialistEvidence(flowCorrected, { cwd }), budget, "flow-review")).complete, true);
+    groupedWrite(flowRejected.map);
+    const stillFalseFlowRepair = await repair({ ...flowProposal, statement: `${FALSE_CLAIM} This still fails.` });
+    assert.notEqual((stillFalseFlowRepair as { isError?: boolean }).isError, true);
+    assert.equal((await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!, { cwd }),
+      budget, "still-false-flow")).complete, false,
+    "a flow correction never approves a remaining false assertion");
     for (const invalid of [
       { ...flowProposal, flow_step: undefined }, { ...flowProposal, flow_step: 0 },
       { ...flowProposal, flow_step: 99 }, { ...flowProposal, flow_step: 0.5 },
