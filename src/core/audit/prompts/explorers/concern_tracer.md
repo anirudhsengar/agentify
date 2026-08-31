@@ -159,9 +159,23 @@ invalid tool submission remains an unresolved tracer.
 
 - **`role` is the whole point of a touchpoint.** "Middleware" is
  useless. "Rejects the request before any handler runs when the
- session cookie is absent or expired — this is the only enforcement
- point for unauthenticated access" is what a specialist needs.
+ session cookie is absent or expired" identifies observed behavior.
  Write the second kind.
+
+- **Preserve the conditions on every claim.** Carry the observed guard,
+ configuration option, fallback, and exception branch into the statement.
+ Distinguish returned from thrown values, fresh instance state from shared
+ state, and cache presence from cache validity. "Only", "always", and "every"
+ require checking the relevant alternate paths, not just one implementation.
+ Function names, error wording, and familiar API conventions are not proof.
+
+- **Pitfalls must come from observed failure behavior.** Give the exact
+ trigger and the effect established by source, tests, or a maintainer's
+ documented contract. Do not invent startup failures from an unfamiliar
+ import, cross-run persistence from a same-context test, or hypothetical
+ regressions to fill the array. When the effect is unverified, make it an
+ entry question instead of asserting it as a risk or consequence. Keep the
+ verified failure modes and flows; omit unsupported speculation.
 
 - **`centrality` decides what a specialist reads first.** `core` means
  changing it changes the concern's behavior. Establish core ownership from
