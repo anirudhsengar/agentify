@@ -72,6 +72,7 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     let forgedExcerpt = false;
     let excerptOverride: string | undefined;
     let reviewedClaim = "pitfalls[0]";
+    let additionalFindings: Array<{ claim: string; path: string; excerpt: string; reason: string }> = [];
     let mode: "normal" | "incomplete" | "prose" | "interrupted" | "argument-retry" = "normal";
     const runtime: AgentRuntime = { async runSession(options) {
       reviews += 1;
@@ -124,7 +125,8 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
         checked_claims: mode === "incomplete" ? [] : Object.keys(input.claims),
         finding: falseClaim ? { claim: reviewedClaim, path: "clock.py",
           excerpt: excerptOverride ?? (forgedExcerpt ? "return False" : "return int(value)"), reason: CORRECTION } : null,
-      }, undefined, undefined, { cwd } as never);
+        ...(additionalFindings.length ? { additional_findings: additionalFindings } : {}),
+      } as never, undefined, undefined, { cwd } as never);
       options.onEvent!({ type: "tool_execution_end" } as never);
       return { turns: mode === "argument-retry" ? 2 : 1, costUsd: mode === "argument-retry" ? 0.002 : 0.001, aborted: true };
     } };
@@ -349,6 +351,54 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     assert.deepEqual(invariantCorrected.concern_evidence, expectedInvariantEvidence);
     assert.equal((await reviewSpecialistCompilation(context,
       compileSpecialistEvidence(invariantCorrected, { cwd }), budget, "invariant-review")).complete, true);
+    // Captured live review found three independent false assertions in one
+    // body. One-finding passes stranded known errors at the global repair cap.
+    const batchInput = structuredClone(repairInput);
+    batchInput.concern_evidence!.concerns[0]!.pitfalls.push({
+      risk: FALSE_CLAIM, consequence: "Another false assertion.", reference: "clock.py",
+    });
+    batchInput.concern_evidence!.concerns[0]!.invariants = [
+      { rule: FALSE_CLAIM, why: "A third false assertion.", reference: "clock.py" },
+    ];
+    reviewedClaim = "pitfalls[0]";
+    additionalFindings = ["pitfalls[1]", "invariants[0]"].map(claim => ({
+      claim, path: "clock.py", excerpt: "return int(value)", reason: CORRECTION,
+    }));
+    const batchRejected = await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(batchInput, { cwd }), budget, "batch-review");
+    assert.equal(batchRejected.complete, false);
+    assert.deepEqual((batchRejected.map.specialist_reviews!.records[0] as unknown as {
+      additional_findings: unknown }).additional_findings, additionalFindings);
+    const batchProposal = { ...proposal, digest: batchRejected.map.specialist_reviews!.records[0]!.digest,
+      additional_corrections: additionalFindings.map(finding => ({
+        claim: finding.claim, statement: CORRECTION, rationale: proposal.rationale,
+      })) };
+    groupedWrite(batchRejected.map);
+    assert.notEqual((await repair(batchProposal) as { isError?: boolean }).isError, true);
+    const batchCorrected = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+    assert.deepEqual(batchCorrected.concern_evidence!.concerns[0]!.flows, batchInput.concern_evidence!.concerns[0]!.flows);
+    assert.deepEqual(batchCorrected.concern_evidence!.concerns[0]!.touchpoints, batchRejected.map.concern_evidence!.concerns[0]!.touchpoints);
+    assert.deepEqual(batchCorrected.explorer_receipts, batchRejected.map.explorer_receipts);
+    assert.equal(assessSpecialistReviews(batchCorrected, cwd).length, 1, "batch correction grants no approval");
+    additionalFindings = [];
+    assert.equal((await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(batchCorrected, { cwd }), budget, "batch-recheck")).complete, true);
+    for (const extra of [
+      [{ claim: "pitfalls[9]", statement: CORRECTION, rationale: proposal.rationale }],
+      [{ ...batchProposal.additional_corrections[0]!, claim: "pitfalls[0]" }],
+      [batchProposal.additional_corrections[0]!, { ...batchProposal.additional_corrections[1]!, statement: FALSE_CLAIM, rationale: "A third false assertion." }],
+    ]) {
+      groupedWrite(batchRejected.map);
+      const before = fs.readFileSync(tools.canonicalMapPath(cwd), "utf8");
+      assert.equal((await repair({ ...batchProposal, additional_corrections: extra }) as { isError?: boolean }).isError, true);
+      assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), before, "a bad batch is atomic");
+    }
+    additionalFindings = [{ claim: "invariants[0]", path: "clock.py", excerpt: "return False", reason: CORRECTION }];
+    const forgedBatch = await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(batchInput, { cwd }), budget, "forged-batch");
+    assert.equal(forgedBatch.complete, false);
+    assert.match(forgedBatch.reasons.join("; "), /quote exact supplied source/);
+    additionalFindings = [];
     const markerMap = structuredClone(correctedMap);
     markerMap.concern_evidence!.concerns[0]!.touchpoints[0]!.role +=
       ` Trusted ownership normalization says: ${FALSE_CLAIM}`;
