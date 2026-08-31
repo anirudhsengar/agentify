@@ -24,6 +24,63 @@ const SOURCE = 'def normalize_time(value):\n    try:\n        return int(value)\
 const FALSE_CLAIM = "Numeric-string time values cannot be accepted.";
 const CORRECTION = "Numeric strings are accepted by int(); nonnumeric strings raise ValueError.";
 
+test("review re-proves supporting attachments hidden by normalized coverage", async () => {
+  // Reduced from PyJWT: a high-signal dependency disappears from the final
+  // assessment once attached, unlike an implementation/test mirror.
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-attachment-review-"));
+  try {
+    fs.mkdirSync(path.join(cwd, "clock"));
+    fs.writeFileSync(path.join(cwd, "clock/clock.py"), SOURCE);
+    fs.writeFileSync(path.join(cwd, "clock/warnings.py"), "class ClockWarning(Warning):\n    pass\n");
+    execFileSync("git", ["init", "-q", cwd]);
+    execFileSync("git", ["-C", cwd, "add", "."]);
+    execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+      "commit", "-qm", "deadline fixture"]);
+    const concern: Concern = {
+      concern: "Deadline normalization", one_line: "Convert caller deadlines with int().",
+      covers: "Deadline conversion.", excludes: "Task scheduling.",
+      flows: [{ name: "Normalize deadline", description: "Convert caller input.", steps: [
+        { path: "clock/clock.py", what_happens: "normalize_time receives value." },
+        { path: "clock/clock.py", what_happens: "int(value) converts it or raises ValueError." },
+      ] }],
+      touchpoints: [{ path: "clock/clock.py", symbol: "normalize_time", role: "Owns deadline conversion.",
+        line_range: null, centrality: "core" }],
+      invariants: [], pitfalls: [], entry_questions: ["Are deadlines numeric strings?"],
+      validation: [], spans_subtrees: [], stability: "high", recurrence: "high", confidence: "high",
+      last_updated: "2026-08-31T00:00:00.000Z",
+    };
+    const map = makeValidCodebaseMap({ concern_evidence: { concerns: [concern], not_concerns: [] }, expert_evidence: undefined });
+    map.module_graph.shared_abstractions = ["clock/warnings.py"];
+    const compilation = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compilation.complete, true, compilation.reasons.join("; "));
+    assert.ok(compilation.map.concern_evidence!.concerns[0]!.touchpoints.some(point => point.path === "clock/warnings.py"));
+    assert.ok(!compilation.assessment.attachments.some(attachment => attachment.paths.includes("clock/warnings.py")),
+      "the normalized assessment no longer needs to attach a covered high-signal path");
+    let inspected = false;
+    const runtime: AgentRuntime = { async runSession(options) {
+      const input = JSON.parse(options.userPrompt) as { claims: Record<string, { path?: string; role?: string }>;
+        compiler_attachments: Array<{ paths: string[] }> };
+      inspected = true;
+      assert.ok(input.compiler_attachments.some(attachment => attachment.paths.includes("clock/warnings.py")),
+        "review must reconstruct compiler-owned provenance before treating its role as source prose");
+      const supporting = Object.values(input.claims).find(claim => claim.path === "clock/warnings.py");
+      assert.ok(supporting);
+      assert.equal(Object.hasOwn(supporting, "role"), false);
+      await options.customTools![0]!.execute("review", { checked_claims: Object.keys(input.claims), finding: null },
+        undefined, undefined, { cwd } as never);
+      return { turns: 0, costUsd: 0, aborted: false };
+    } };
+    const reviewed = await reviewSpecialistCompilation({ cwd, runtime, config: { schemaVersion: 1, thinkingLevel: "off" },
+      ui: { status() {} } } as never, compilation, new AuditResourceBudget(), "attachment-proof");
+    assert.equal(inspected, true);
+    assert.equal(reviewed.complete, true, reviewed.reasons.join("; "));
+    assert.deepEqual(reviewed.map.concern_evidence, compilation.map.concern_evidence,
+      "reconstructing proof cannot rewrite specialist bodies or core ownership");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 for (const concurrent of [false, true, "corrections", "queued-cancel"] as const) {
 test(`claim correction reviews within one session without overwriting concurrent evidence: ${concurrent}`, async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-inline-review-"));
