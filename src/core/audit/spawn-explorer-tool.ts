@@ -1176,6 +1176,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         let onParentAbort: (() => void) | undefined;
         let resourceUsageRecorded = false;
         let providerCalls = 0;
+        let providerResponses = 0;
         let oversizedReportPath: string | null = null;
         const submission: { concern: Concern | null } = { concern: null };
 
@@ -1249,6 +1250,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                         });
                         pi.on("before_provider_request", (event) => {
                             if (stopped || signal?.aborted) throw new Error("explorer cancelled by parent audit");
+                            if (providerCalls >= maxProviderCalls) {
+                                throw new Error(`sub-agent reached hard provider call cap of ${maxProviderCalls} before dispatch`);
+                            }
                             let payload = mode === "concern_tracer"
                                 ? capProviderOutputTokens(
                                     event.payload,
@@ -1276,6 +1280,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                             if (toolOptions.resourceBudget && explorerBudgetSession) {
                                 toolOptions.resourceBudget.recordProviderRequest(explorerBudgetSession);
                             }
+                            providerCalls += 1;
                             return payload;
                         });
                         pi.on("tool_call", async (event) => {
@@ -1371,7 +1376,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     if (!isRecord(event) || event.type !== "message_end" || !isRecord(event.message)) return;
                     if (event.message.role !== "assistant") return;
                     if (callCapReached) return;
-                    providerCalls += 1;
+                    providerResponses += 1;
+                    providerCalls = Math.max(providerCalls, providerResponses);
                     if (toolOptions.resourceBudget && explorerBudgetSession) {
                         resourceUsageRecorded = true;
                         try {
@@ -1426,9 +1432,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             if (stopped || signal?.aborted) throw new Error("explorer cancelled by parent audit");
 
             if (!session.subscribe) {
-                providerCalls = session.messages.filter((message) => (
+                providerCalls = Math.max(providerCalls, session.messages.filter((message) => (
                     isRecord(message) && message.role === "assistant" && message.usage !== undefined
-                )).length;
+                )).length);
                 if (providerCalls > maxProviderCalls) {
                     throw new Error(
                         `sub-agent exceeded hard provider call cap of ${maxProviderCalls}: observed ${providerCalls}`,

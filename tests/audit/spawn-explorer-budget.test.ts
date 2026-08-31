@@ -982,7 +982,7 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
   }
 }
 
-async function testCancelledRequestAdmissionIsCharged(): Promise<void> {
+async function testCancelledRequestAdmissionIsCharged(kind: "cancel" | "retry"): Promise<void> {
   const cwd = tempDir("spawn-admission-cancellation");
   const controller = new AbortController();
   const budget = new AuditResourceBudget({ maxModelCalls: 3 });
@@ -1004,9 +1004,10 @@ async function testCancelledRequestAdmissionIsCharged(): Promise<void> {
               .flatMap((extension) => extension.handlers.get("before_provider_request") ?? []);
             assert.ok(handlers.length > 0);
             for (const handler of handlers) await handler({ payload: {} } as never, { cwd } as never);
-            controller.abort();
+            if (kind === "cancel") controller.abort();
             for (const handler of handlers) {
-              await assert.rejects(async () => handler({ payload: {} } as never, { cwd } as never),
+              if (kind === "retry") await handler({ payload: {} } as never, { cwd } as never);
+              else await assert.rejects(async () => handler({ payload: {} } as never, { cwd } as never),
                 /cancelled by parent audit/);
             }
           },
@@ -1014,9 +1015,10 @@ async function testCancelledRequestAdmissionIsCharged(): Promise<void> {
       }),
     });
     const result = await tool.execute("cancel-admitted-request",
-      { mode: "topography", target_path: "." } as never,
+      { mode: "topography", target_path: ".", max_total_steps: 1 } as never,
       controller.signal, undefined, { cwd } as never);
     assert.equal((result as { isError?: boolean }).isError, true);
+    if (kind === "retry") assert.match(textFrom(result), /hard provider call cap/);
     assert.equal(budget.snapshot().model_calls, 1);
     assert.equal(budget.snapshot().turns, 0);
     assert.equal((result.details as { provider_calls?: number }).provider_calls, 1,
@@ -1026,7 +1028,8 @@ async function testCancelledRequestAdmissionIsCharged(): Promise<void> {
   }
 }
 
-await testCancelledRequestAdmissionIsCharged();
+await testCancelledRequestAdmissionIsCharged("cancel");
+await testCancelledRequestAdmissionIsCharged("retry");
 await testRejectsWhenTotalSpawnBudgetIsExhausted();
 await testInitialConcernScoutRejectsParentAuthoredPortfolioCaps();
 await testRefusesDuplicateCurrentHeadConcernScout();

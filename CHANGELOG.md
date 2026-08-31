@@ -10,7 +10,8 @@ All notable changes to Agentify are documented here.
 
 - Charge parent and explorer model requests before dispatch, including
   interrupted calls. Report unanswered calls and incomplete provider cost
-  accounting explicitly in terminal logs and log inspection.
+  accounting explicitly in terminal logs and log inspection. Explorer-local
+  call limits and diagnostics also count admitted retries without responses.
 
 - Preserve aggregate parent/explorer lineage usage in terminal audit results,
   distinguish it from invocation-local parent counters, and charge reported
