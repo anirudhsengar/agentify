@@ -222,7 +222,12 @@ obligations; the complete concern stays in application-owned checkpoint data,
 without duplicating every flow and invariant in subsequent model requests.
 On attach, recorded concern evidence is deterministically compiled before any
 model-backed top-up audit; a normalizable fixed point can therefore finish
-without spending or resetting an exhausted model budget.
+without spending or resetting an exhausted model budget when its exact
+normalized bodies already have current-HEAD narrative reviews. Changed bodies
+require fresh review with the configured primary model: one request per concern,
+90 seconds and at most 128 KiB of immutable source. A typed, complete review is
+required; unsupported assertions and incomplete reviews remain repair obligations.
+This quality control does not replace manual release qualification.
 Agentify-managed paths observed during the transaction are normalized out of
 repository topography and process evidence before the map can close.
 The explorer runtime permits only one successful concern scout per repository

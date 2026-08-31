@@ -127,6 +127,20 @@ cannot expand it. A permissive policy or an unrelated warning that merely
 mentions AI does not trigger the blocker.
 
 Finalization independently requires a current explorer receipt attestation.
+After deterministic compilation reaches its fixed point, each changed concern
+receives a separate read-only review using the configured primary model and the
+shared audit budget. The reviewer receives at most 128 KiB of immutable tracked
+regular source, no filesystem or command tools, and one provider request within
+90 seconds including source collection. It submits a typed result: either the
+first unsupported assertion with a known claim ID and exact source excerpt, or
+an explicit complete checklist. Free-form prose and incomplete checklists cannot
+approve a team. Application-owned review records bind HEAD and the exact
+normalized concern digest. Identical failures remain unresolved without repeated
+calls; changed bodies invalidate approval. Review findings enter the existing
+bounded semantic repair loop, and every repair completion checks the normalized
+result again. Finalization and same-HEAD reuse independently require matching
+reviews. This model review is a quality control, not a proof of arbitrary
+program semantics; release qualification still requires manual team inspection.
 The CLI owns the external audit log through finalization. Semantic closure
 does not emit the terminal result before installation validation; exactly one
 terminal event records the committed installation or its failure and rollback.

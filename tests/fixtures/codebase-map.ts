@@ -5,6 +5,7 @@
 
 import { Value } from "typebox/value";
 import { concernEvidencePaths } from "../../src/core/audit/specialist-completion.ts";
+import { specialistReviewDigest } from "../../src/core/audit/specialist-review.ts";
 import {
   CodebaseMapSchema,
   COVERAGE_DIMENSIONS,
@@ -212,6 +213,14 @@ export function attestCodebaseMap(
   const concernNames = map.concern_evidence?.concerns.map((concern) => concern.concern) ?? [];
   return {
     ...map,
+    // Synthetic review replay, never live/model qualification evidence. Changing
+    // a fixture after attestation must invalidate these exact body digests.
+    specialist_reviews: {
+      repository_commit: repositoryCommit,
+      records: (map.concern_evidence?.concerns ?? []).map(concern => ({
+        concern: concern.concern, digest: specialistReviewDigest(concern), run_id: runId, failure: null,
+      })),
+    },
     explorer_receipts: {
       repository_commit: repositoryCommit,
       run_id: runId,

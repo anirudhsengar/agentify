@@ -2,6 +2,7 @@ import { DEFAULT_MAP_FILENAME, writeCanonicalMap } from "../audit/map-storage.ts
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
 import { compileSpecialistEvidence } from "../audit/schema.ts";
 import { assessExplorerReceiptAttestation } from "../audit/explorer-receipts.ts";
+import { assessSpecialistReviews } from "../audit/specialist-review.ts";
 import { loadCanonicalMapAt } from "../audit/write-map-tool.ts";
 import type {
   InstallerBlocker,
@@ -108,6 +109,10 @@ export function finalizeOneTimeInstallation(
         );
       }
       if (compilation.assessment.source === "concern_evidence") {
+        const reviewReasons = assessSpecialistReviews(compilation.map, input.cwd);
+        if (reviewReasons.length > 0) {
+          throw new Error(`repository specialist narrative review incomplete: ${reviewReasons.join("; ")}`);
+        }
         expectedSpecialists = compilation.assessment.accepted_concerns.length;
       }
     }

@@ -77,7 +77,7 @@ class InstallerAuditRuntime implements AgentRuntime {
       line_range: null,
       centrality: "supporting",
     });
-    const map = JSON.stringify(fixtureMap, null, 2)
+    const map = JSON.stringify(attestCodebaseMap(fixtureMap, git(options.cwd, "rev-parse", "HEAD")), null, 2)
       .replaceAll(".pi/", ".agents/");
     fs.writeFileSync(destination, `${map}\n`);
     options.onEvent?.({

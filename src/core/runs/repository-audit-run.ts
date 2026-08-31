@@ -23,6 +23,7 @@ import {
   type SpecialistEvidenceAssessment,
 } from "../audit/schema.ts";
 import { createWriteMapTools, loadCanonicalMapAt } from "../audit/write-map-tool.ts";
+import { assessSpecialistReviews, reviewSpecialistCompilation } from "../audit/specialist-review.ts";
 import { createReadOnlyExecutionPolicy } from "../security/execution-policy.ts";
 import type { AgentRuntimeResult } from "../types.ts";
 import type { RunContext } from "./run-context.ts";
@@ -108,6 +109,7 @@ function repairPrompt(
     "The repository's coverage map is complete, but its specialist portfolio failed the trusted semantic-quality gate.",
     `Repair pass ${pass}/${maxRepairPasses}; ${assessment.uncovered_paths.length} tracked paths and ${assessment.uncovered_clusters.length} local implementation/test clusters remain in total.`,
     `Current failures: ${currentFailures.slice(0, 12).join("; ")}.`,
+    "A narrative review finding is a source-backed correction obligation: retrace that exact concern and correct the named assertion while retaining its verified flow structure. Covered paths do not excuse false claims; do not reject a real concern or suppress the review to close it.",
     `Accepted concerns to preserve or safely subsume: ${assessment.accepted_concerns.join(", ") || "none"}.`,
     `Current tracked-path batch: ${uncovered}.`,
     `Current local implementation/test-cluster batch, ordered by direct dependency centrality: ${uncoveredClusters}.`,
@@ -177,6 +179,7 @@ function actionableBudgetError(
       );
     }
     obligations.push(...assessExplorerReceiptAttestation(map, cwd).reasons);
+    obligations.push(...assessSpecialistReviews(map, cwd));
   }
   const uniqueObligations = [...new Set(obligations)].sort();
   const fingerprint = unresolvedObligationFingerprint({ obligations: uniqueObligations });
@@ -256,6 +259,15 @@ function persistSpecialistCompilation(
   });
 }
 
+function reviewCompiledPortfolio(
+  context: RunContext, log: AgentifyLog, budget: AuditResourceBudget, compilation: SpecialistCompilationResult,
+): Promise<SpecialistCompilationResult> {
+  return reviewSpecialistCompilation({ ...context, auditLog: log }, compilation, budget, log.runId,
+    map => { writeCanonicalMap(context.cwd, map, {
+      stateDir: AUDIT_STATE_RELATIVE_DIR, mapFilename: DEFAULT_MAP_FILENAME,
+    }); });
+}
+
 function announceCompiledPortfolio(
   context: RunContext,
   compilation: SpecialistCompilationResult,
@@ -332,7 +344,8 @@ async function repairSpecialistPortfolio(
     resourceBudget.reserveSemanticRepairPass();
     const sourceMap = preserveReceiptAttestation(loadCanonicalMapAt(context.cwd, stateDir));
     if (sourceMap === null) throw new Error("canonical codebase map disappeared before specialist repair");
-    const compilation = compileSpecialistEvidence(sourceMap, { cwd: context.cwd });
+    const compilation = await reviewCompiledPortfolio(context, log, resourceBudget,
+      compileSpecialistEvidence(sourceMap, { cwd: context.cwd }));
     persistSpecialistCompilation(context, sourceMap, compilation);
     const map = compilation.map;
     const assessment = compilation.assessment;
@@ -426,7 +439,8 @@ async function repairSpecialistPortfolio(
     const updatedSourceMap = preserveReceiptAttestation(loadCanonicalMapAt(context.cwd, stateDir));
     const updatedCompilation = updatedSourceMap === null
       ? null
-      : compileSpecialistEvidence(updatedSourceMap, { cwd: context.cwd });
+      : await reviewCompiledPortfolio(context, log, resourceBudget,
+        compileSpecialistEvidence(updatedSourceMap, { cwd: context.cwd }));
     if (updatedSourceMap !== null && updatedCompilation !== null) {
       persistSpecialistCompilation(context, updatedSourceMap, updatedCompilation);
     }
@@ -444,7 +458,8 @@ async function repairSpecialistPortfolio(
   const finalSourceMap = preserveReceiptAttestation(loadCanonicalMapAt(context.cwd, stateDir));
   const finalCompilation = finalSourceMap === null
     ? null
-    : compileSpecialistEvidence(finalSourceMap, { cwd: context.cwd });
+    : await reviewCompiledPortfolio(context, log, resourceBudget,
+      compileSpecialistEvidence(finalSourceMap, { cwd: context.cwd }));
   if (finalSourceMap !== null && finalCompilation !== null) {
     persistSpecialistCompilation(context, finalSourceMap, finalCompilation);
   }
@@ -542,7 +557,8 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     });
     const map = loadCanonicalMapAt(context.cwd, AUDIT_STATE_RELATIVE_DIR);
     if (map === null) throw new Error("repository audit returned without a canonical codebase map");
-    const compilation = compileSpecialistEvidence(map, { cwd: context.cwd });
+    const compilation = await reviewCompiledPortfolio(context, log, resourceBudget,
+      compileSpecialistEvidence(map, { cwd: context.cwd }));
     persistSpecialistCompilation(context, map, compilation);
     let repair = { turns: 0, cost_usd: null as number | null };
     if (compilation.complete) {
@@ -565,6 +581,8 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         `repository specialist discovery did not reach semantic closure: ${finalCompilation.reasons.join("; ")}`,
       );
     }
+    const reviewReasons = assessSpecialistReviews(finalCompilation.map, context.cwd);
+    if (reviewReasons.length > 0) throw new Error(`specialist narrative review incomplete: ${reviewReasons.join("; ")}`);
     const receiptAttestation = assessExplorerReceiptAttestation(
       finalCompilation.map,
       context.cwd,

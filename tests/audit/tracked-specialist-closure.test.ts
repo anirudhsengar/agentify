@@ -437,7 +437,7 @@ class ProgressiveRepairRuntime implements AgentRuntime {
             this.repairCalls,
           );
         }
-        fs.writeFileSync(destination, `${JSON.stringify(repaired, null, 2)}
+        fs.writeFileSync(destination, `${JSON.stringify(attestCodebaseMap(repaired, git(options.cwd, "rev-parse", "HEAD")), null, 2)}
 `);
         options.onEvent?.({
           type: "tool_execution_end",

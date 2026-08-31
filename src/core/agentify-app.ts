@@ -12,6 +12,7 @@ import { AUDIT_STATE_RELATIVE_DIR } from "./audit/paths.ts";
 import type { AgentifyLog } from "./audit/log.ts";
 import { rollbackPendingInstallation } from "./installer/installation-transaction.ts";
 import { assessExplorerReceiptAttestation } from "./audit/explorer-receipts.ts";
+import { assessSpecialistReviews } from "./audit/specialist-review.ts";
 import { createRepositoryEvidenceDraft } from "./audit/repository-evidence-bootstrap.ts";
 import type {
   AgentifyConfig,
@@ -111,7 +112,8 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<Fo
             mapFilename: DEFAULT_MAP_FILENAME,
           });
         }
-        if (compilation.complete && receiptAssessment.complete) {
+        if (compilation.complete && receiptAssessment.complete
+          && assessSpecialistReviews(compilation.map, options.cwd).length === 0) {
           options.ui.info(
             `agentify: retained ${compilation.assessment.accepted_concerns.length} tracked specialist concern(s) and recorded ${compilation.assessment.rejected_concerns.length} ungrounded candidate(s) as rejected`,
           );

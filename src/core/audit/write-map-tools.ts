@@ -1231,6 +1231,10 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
             if (existingMap?.explorer_receipts !== undefined) {
                 validMap.explorer_receipts = structuredClone(existingMap.explorer_receipts);
             }
+            delete validMap.specialist_reviews;
+            if (existingMap?.specialist_reviews !== undefined) {
+                validMap.specialist_reviews = structuredClone(existingMap.specialist_reviews);
+            }
             const downgradedDimensions = downgradeUnsupportedCoverage(validMap, closure);
             let writeResult: { path: string; size_bytes: number };
             try {
