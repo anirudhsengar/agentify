@@ -16,15 +16,16 @@ function result(status: number, stdout = "", stderr = ""): InstallerProcessResul
   return { status, stdout, stderr, timedOut: false, errorMessage: null };
 }
 
-function createRepository(policy: string): string {
+function createRepository(policy: string, policyPath = "CONTRIBUTING.md"): string {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-restrictive-policy-"));
   fs.mkdirSync(path.join(cwd, "app"), { recursive: true });
   fs.writeFileSync(path.join(cwd, "README.md"), "# Community application\n");
   fs.writeFileSync(path.join(cwd, "app", "story.rb"), "class Story\nend\n");
   fs.writeFileSync(path.join(cwd, "Gemfile"), "source 'https://rubygems.org'\n");
   fs.writeFileSync(path.join(cwd, "Gemfile.lock"), "GEM\n\nBUNDLED WITH\n   2.6.0\n");
+  fs.mkdirSync(path.dirname(path.join(cwd, policyPath)), { recursive: true });
   fs.writeFileSync(
-    path.join(cwd, "CONTRIBUTING.md"),
+    path.join(cwd, policyPath),
     `${policy}\n`,
   );
   const git = (...args: string[]): void => {
@@ -92,6 +93,8 @@ for (const policy of [
   "AI-assisted contributions are welcome when contributors review and test them.",
   "Do not commit credentials, including credentials suggested by AI tools.",
   "Project maintainers who do not follow or enforce the Code of Conduct in good faith may face temporary or permanent repercussions.",
+  "Known AI-assisted code patterns are documented and welcome.",
+  "No unsupervised deployments. Reviewed AI-assisted contributions are welcome.",
 ]) {
   test(`non-prohibitive policy remains analyzable: ${policy}`, () => {
     const cwd = createRepository(policy);
@@ -99,6 +102,26 @@ for (const policy of [
       const preflight = inspectRepositoryForInstallation({ cwd, runner: new PolicyRunner() });
       assert.equal(preflight.analysis_allowed, true);
       assert.ok(!preflight.blockers.some((blocker) => String(blocker.code) === "repository_policy_prohibits_ai"));
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const [policyPath, policy] of [
+  [".github/automated-contribution-policy.md", "Absolutely **no** unsupervised agentic tools."],
+  ["docs/working-rules.md", "Autonomous coding agents are not allowed."],
+  [".github/PULL_REQUEST_TEMPLATE.md", "Do not submit AI-generated pull requests."],
+]) {
+  test(`policy discovery and autonomous-use prohibition precede writes: ${policyPath}`, () => {
+    const cwd = createRepository(policy!, policyPath!);
+    try {
+      const preflight = inspectRepositoryForInstallation({ cwd, runner: new PolicyRunner() });
+      assert.equal(preflight.analysis_allowed, false);
+      assert.ok(preflight.blockers.some((blocker) => blocker.message.includes(policyPath!)));
+      assert.throws(() => prepareOneTimeInstallationState(cwd, preflight), /preflight forbids analysis/i);
+      assert.equal(spawnSync("git", ["-C", cwd, "status", "--porcelain"], { encoding: "utf8" }).stdout, "");
+      assert.equal(fs.existsSync(path.join(cwd, ".agentify")), false);
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
     }
