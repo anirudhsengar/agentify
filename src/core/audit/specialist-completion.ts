@@ -2462,7 +2462,6 @@ export function reconcileSpecialistEvidence(
           return {
             ...touchpoint,
             centrality: "core" as const,
-            role: `${touchpoint.role} Trusted ownership normalization selects this concern as the sole core owner because ${resolution.reason}.`,
           };
         }
         if (touchpoint.centrality !== "core") return touchpoint;
@@ -2470,7 +2469,6 @@ export function reconcileSpecialistEvidence(
         return {
           ...touchpoint,
           centrality: "supporting" as const,
-          role: `${touchpoint.role} Trusted ownership normalization retains ${resolution.concern} as the sole core owner because ${resolution.reason}.`,
         };
       });
       const attachment = attachmentsByConcern.get(concern.concern);

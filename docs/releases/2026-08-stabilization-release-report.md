@@ -4,7 +4,15 @@ Not release-ready. Do not merge PR #13. The earlier release recommendation is wi
 
 The approved gate separates high-quality specialist installation from operational execution readiness. A semantically complete `analysis-ready` team may count as an installation, while missing reproducible repository-owned validation keeps issue intake, publication, autonomous mutation and learning disabled. External harness locks never clear those execution blockers.
 
-## Current development evidence — 2026-08-31 15:41 UTC
+## Current development evidence — 2026-08-31 16:40 UTC
+
+Exact `86a547cc5e9b089e6d18b2a39083df60ecbf6dbb` passed local Node 22/24 release qualification, CI and CodeQL. Its root artifact is `3a0fb5a840d612a5499b239509962c3996826584a821731c963de6dc1d3002b1`; the Node 24 worktree artifact was independently qualified with the different hash recorded in the JSON report.
+
+All four fresh product runs failed: Commander (1,473,561 ms), PyJWT (1,655,464 ms), Chi (1,287,642 ms), and Petclinic (1,800,463 ms, exceeding the wall budget). No teams installed. Every run preserved tracked files and emitted one terminal result. Live three-tracer cancellation returned in 49 ms with all unanswered requests reserved; their actual provider charges remain unknown.
+
+Commander exposed stale delegation targets after verified concern grouping. Chi exhausted the separate 24-spawn cap with 81 shared calls still available. Petclinic's review also mistook compiler-added ownership prose for repository-source claims; independent false behavioral claims remain. These failures have reduced deterministic regressions before general corrections. None establishes installation success. Zero installed teams pass manual review, zero held-out rounds qualify, and Hono narrative correctness remains unqualified. `release_ready=false`; `final_candidate_sha=null`.
+
+## Previous development evidence — 2026-08-31 15:41 UTC
 
 Exact `f7edfe635f7fc254545e75937f467eb24e20b159` passed both local Node release suites, CI and CodeQL. The separately qualified root package hash is `ec8140df0e6f1d87a98dd84e5163b646ee99aa2d27ea9e68ee9946c7ca89c7fd`. Its four fresh product runs all failed: Hono (1,488,430 ms), Commander (1,700,709 ms), Mustache (1,450,919 ms), and SQLAlchemy (1,214,141 ms) were diagnostic-only. Every run preserved original tracked files and emitted one terminal result; unanswered model calls retained explicit resource reservations. Provider charges for unanswered calls remain unknown. These safe failures earn no installation credit.
 
