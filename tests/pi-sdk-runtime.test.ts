@@ -102,7 +102,7 @@ test("MiniMax compatibility keeps reasoning and avoids unsupported named tool ch
     await new PiSdkRuntime().runSession({
       cwd, configDir: cwd,
       config: { schemaVersion: 1, thinkingLevel: "high", models: { primary: { provider: "minimax", model: "MiniMax-M3" } } },
-      systemPrompt: "Local wire test.", userPrompt: "Read the fixture.", tools: ["read"], timeoutMs: 5000,
+      systemPrompt: "Local wire test.", userPrompt: "Read the fixture.", tools: ["read", "submit_report"], timeoutMs: 5000,
       executionPolicy: createReadOnlyExecutionPolicy({ cwd, mode: "audit-readonly", tools: ["read"] }),
       customTools: [{ name: "submit_report", label: "Submit", description: "Submit fixture result.", parameters: Type.Object({}),
         async execute() { return { content: [{ type: "text", text: "recorded" }], details: {} }; } }],
@@ -111,6 +111,7 @@ test("MiniMax compatibility keeps reasoning and avoids unsupported named tool ch
     });
     assert.equal(payloads.length, 1);
     assert.deepEqual(payloads[0]!.tool_choice, { type: "auto" });
+    assert.deepEqual((payloads[0]!.tools as Array<{ name: string }>).map((tool) => tool.name), ["submit_report"]);
     assert.notDeepEqual(payloads[0]!.thinking, { type: "disabled" }, "unsupported forcing must not disable configured reasoning");
   } finally {
     server.closeAllConnections();

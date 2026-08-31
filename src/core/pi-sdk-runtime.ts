@@ -39,8 +39,18 @@ function record(value: unknown): value is Record<string, unknown> {
  * Unknown APIs retain their existing prompt/recovery behavior instead of
  * receiving a guessed wire shape.
  */
-export function forceProviderToolChoice(payload: unknown, api: string, toolName: string): unknown {
+export function forceProviderToolChoice(payload: unknown, api: string, toolName: string, provider?: string): unknown {
   if (!record(payload)) return payload;
+  if (api === "anthropic-messages" && (provider === "minimax" || provider === "minimax-cn")) {
+    // MiniMax's Messages contract supports only auto/none, not named forcing:
+    // https://platform.minimax.io/docs/api-reference/text-chat-anthropic
+    // Restrict available tools without disabling the configured reasoning.
+    return {
+      ...payload,
+      ...(Array.isArray(payload.tools) ? { tools: payload.tools.filter((tool) => record(tool) && tool.name === toolName) } : {}),
+      tool_choice: { type: "auto" },
+    };
+  }
   if (api === "anthropic-messages") {
     const next = { ...payload };
     delete next.output_config;
@@ -264,7 +274,7 @@ export class PiSdkRuntime implements AgentRuntime {
               }
               forcedToolChoiceRequests += 1;
               return admitProviderRequest(
-                forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName),
+                forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName, selectedModel?.provider),
               );
             });
           } else if (recovery && options.forceRequiredToolChoiceAfterTurns !== undefined) {
@@ -281,7 +291,7 @@ export class PiSdkRuntime implements AgentRuntime {
               if (providerRequests + 1 < turnBudget) return admitProviderRequest(boundedPayload);
               forcedToolChoiceRequests += 1;
               return admitProviderRequest(
-                forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName),
+                forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName, selectedModel?.provider),
               );
             });
           } else if (options.maxOutputTokens !== undefined) {

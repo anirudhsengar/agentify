@@ -4,6 +4,10 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Respect MiniMax's Anthropic-compatible tool-selection contract: narrow the
+  available tool set using `auto` instead of unsupported named forcing, and
+  preserve configured reasoning during final evidence submission.
+
 - Reject purported behavioral flows that only list re-export facades. Tracers
   must follow delegated implementations; verified implementation flows remain valid.
 

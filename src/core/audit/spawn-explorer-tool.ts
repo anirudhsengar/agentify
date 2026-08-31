@@ -1278,6 +1278,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                         payload,
                                         subAgentModel.api,
                                         "submit_concern_report",
+                                        subAgentModel.provider,
                                     );
                                 }
                                 toolOptions.resourceBudget?.assertProviderInputCapacity(payload);
