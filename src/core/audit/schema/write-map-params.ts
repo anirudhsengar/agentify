@@ -69,15 +69,22 @@ export type WriteMapParams = Static<typeof WriteMapParamsSchema>;
  */
 export const NON_CLOSING_DELTA_DIMENSIONS = ["specialist_evidence", "concern_evidence"] as const;
 
+const CLAIM_CORRECTION_FIELDS = {
+  claim: Type.String({ pattern: "^(pitfalls|invariants|flows)\\[[0-9]+\\]$" }),
+  flow_step: Type.Optional(Type.Integer({ minimum: 0, maximum: 511,
+    description: "Zero-based step index, required only for a flows[i] finding. Its path must match the finding's source path." })),
+  statement: Type.String({ minLength: 1, maxLength: 2_048 }),
+  rationale: Type.String({ minLength: 1, maxLength: 2_048 }),
+};
+
 export const WriteMapDeltaParamsSchema = Type.Object({
   claim_correction: Type.Optional(Type.Object({
     concern: Type.String({ minLength: 1, maxLength: 256 }),
     digest: Type.String({ pattern: "^[0-9a-f]{64}$" }),
-    claim: Type.String({ pattern: "^(pitfalls|invariants|flows)\\[[0-9]+\\]$" }),
-    flow_step: Type.Optional(Type.Integer({ minimum: 0, maximum: 511,
-      description: "Zero-based step index, required only for a flows[i] finding. Its path must match the finding's source path." })),
-    statement: Type.String({ minLength: 1, maxLength: 2_048 }),
-    rationale: Type.String({ minLength: 1, maxLength: 2_048 }),
+    ...CLAIM_CORRECTION_FIELDS,
+    additional_corrections: Type.Optional(Type.Array(Type.Object(CLAIM_CORRECTION_FIELDS, { additionalProperties: false }), {
+      maxItems: 2, description: "Correct up to two other findings in the same exact-body review atomically. Each distinct claim must have its own source-backed finding. No unreviewed edits.",
+    })),
   }, {
     additionalProperties: false,
     description: "Correct only an assertion rejected by a current-HEAD, exact-body narrative review. Use its exact concern, digest and claim ID. For pitfalls/invariants, statement replaces risk/rule and rationale replaces consequence/why. For flows, flow_step selects one step and statement replaces only what_happens; rationale explains the correction without changing the flow description. Use delta: {}. Preserve paths, references, ownership, scope, flow names, order and all other steps. Fresh full review is mandatory; this proposal grants no approval.",

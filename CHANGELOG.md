@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Review up to three source-backed narrative findings per body and correct them atomically at one exact-body digest. Existing one-finding records remain valid; forged, duplicate, unreviewed or no-progress batch edits fail without writes. Review deadlines, call limits and full post-correction review remain unchanged.
+
 - Supply compiler-verified attachment relationships to narrative review separately from source claims. Structural bookkeeping does not require a source declaration, while every authored behavioral claim and exact-source finding remains checked.
 
 - Preserve authored touchpoint roles during ownership normalization; compiler decisions remain structured ownership facts rather than unsupported source narratives.

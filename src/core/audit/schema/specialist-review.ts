@@ -20,6 +20,11 @@ export function createSpecialistReviewSubmissionSchema(claimIds: readonly string
       ...SpecialistReviewFindingSchema.properties,
       claim: claimId,
     }, { additionalProperties: false })]),
+    additional_findings: Type.Optional(Type.Array(Type.Object({
+      ...SpecialistReviewFindingSchema.properties,
+      claim: claimId,
+    }, { additionalProperties: false }), { maxItems: 2,
+      description: "Up to two further independent findings after finding. Empty or omitted for a null finding. Stop after three total findings." })),
   }, { additionalProperties: false });
 }
 
@@ -35,6 +40,7 @@ export const SpecialistReviewAttestationSchema = Type.Object({
     retryable: Type.Optional(Type.Boolean()),
     // Application-owned source finding; never reconstructed from failure prose.
     finding: Type.Optional(SpecialistReviewFindingSchema),
+    additional_findings: Type.Optional(Type.Array(SpecialistReviewFindingSchema, { maxItems: 2 })),
   }, { additionalProperties: false }), { maxItems: 128 }),
 }, { additionalProperties: false });
 

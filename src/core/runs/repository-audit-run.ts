@@ -66,12 +66,14 @@ function repairPrompt(
   const currentFailures = [...assessment.reasons, ...compilationReasons];
   const narrativeCorrections = (map.specialist_reviews?.records ?? []).flatMap(record => {
     const body = map.concern_evidence?.concerns.find(concern => concern.concern === record.concern);
-    const match = /^(pitfalls|invariants|flows)\[([0-9]+)\]$/.exec(record.finding?.claim ?? "");
-    if (!record.failure || !body || record.digest !== specialistReviewDigest(body) || !match) return [];
-    return [{ concern: record.concern, digest: record.digest, claim: record.finding!.claim,
-      original: match[1] === "pitfalls" ? body.pitfalls[Number(match[2])]
-        : match[1] === "invariants" ? body.invariants[Number(match[2])] : body.flows[Number(match[2])],
-      finding: record.finding }];
+    if (!record.failure || !body || record.digest !== specialistReviewDigest(body)) return [];
+    return [record.finding, ...record.additional_findings ?? []].flatMap(finding => {
+      const match = /^(pitfalls|invariants|flows)\[([0-9]+)\]$/.exec(finding?.claim ?? "");
+      if (!finding || !match) return [];
+      return [{ concern: record.concern, digest: record.digest, claim: finding.claim,
+        original: match[1] === "pitfalls" ? body.pitfalls[Number(match[2])]
+          : match[1] === "invariants" ? body.invariants[Number(match[2])] : body.flows[Number(match[2])], finding }];
+    });
   }).slice(0, 12);
   const coreConflictReasons = currentFailures.filter((reason) =>
     /multiple core owners/i.test(reason)
@@ -120,6 +122,7 @@ function repairPrompt(
     `Current failures: ${currentFailures.slice(0, 12).join("; ")}.`,
     "A narrative review finding is a source-backed correction obligation. For a listed correction, use write_map_delta with delta: {} and claim_correction: {concern, digest, claim, statement, rationale}; use the exact identifiers below. For a pitfall/invariant, correct only that assertion and its consequence/explanation. For a flow finding, also supply flow_step (zero-based index at the finding's path); statement replaces only that step's what_happens and rationale explains the correction. Flow descriptions, names, paths, order and all other steps stay unchanged. All other claims, references and ownership are preserved, and full normalized review remains mandatory. Findings requiring new paths or changed flow structure require retracing the exact concern. Covered paths do not excuse false claims; never reject real behavior or suppress review to close it.",
     `Bounded narrative corrections: ${JSON.stringify(narrativeCorrections)}.`,
+    "When multiple listed findings share one concern and digest, include up to two additional_corrections: [{claim, statement, rationale, flow_step?}] in that claim_correction proposal. The batch is atomic and only named reviewed assertions may change; do not use a stale digest for sequential corrections.",
     `Accepted concerns to preserve or safely subsume: ${assessment.accepted_concerns.join(", ") || "none"}.`,
     `Current tracked-path batch: ${uncovered}.`,
     `Current local implementation/test-cluster batch, ordered by direct dependency centrality: ${uncoveredClusters}.`,

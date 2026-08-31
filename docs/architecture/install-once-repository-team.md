@@ -134,8 +134,8 @@ regular source, no filesystem or command tools, and one provider request within
 90 seconds including source collection. Only a rejected typed submission permits
 one additional request to correct its arguments, within the same deadline and
 shared resource budget. Prose, unrelated tool errors, and a second rejection grant
-no further calls. It submits a typed result: either the
-first unsupported assertion with a known claim ID and exact source excerpt, or
+no further calls. It submits a typed result: up to three
+unsupported assertions, each with a known claim ID and exact source excerpt, or
 an explicit complete checklist. Free-form prose and incomplete checklists cannot
 approve a team. Application-owned review records bind HEAD and the exact
 normalized concern digest. Source-backed findings remain unresolved without repeated
@@ -150,7 +150,10 @@ Claim-only repair may replace a rejected pitfall/invariant or the text of one
 flow step at the finding's source path. A flow repair cannot change its name,
 description, paths, order, step count or other steps; its rationale is proposal
 justification, not replacement flow content. Changes to those structural fields
-require retracing. Every corrected body still needs fresh complete review.
+require retracing. Up to three distinct findings at the same body digest may be
+corrected atomically; a bad or unchanged member rejects the entire proposal.
+Every corrected body still needs fresh complete review. Existing single-finding
+records and proposals remain valid; missing findings never authorize edits.
 The CLI owns the external audit log through finalization. Semantic closure
 does not emit the terminal result before installation validation; exactly one
 terminal event records the committed installation or its failure and rollback.
@@ -479,11 +482,11 @@ Both model map-write boundaries reject any merged result that removes or changes
 a recorded concern body. Appending rejections cannot erase the portfolio; body
 replacement belongs to the attested tracer and removal to trusted reconciliation.
 The existing delta tool also accepts a narrowly scoped `claim_correction`: only
-the statement and explanation of one pitfall or invariant named by an
+the statement and explanation of up to three assertions named by an
 application-owned source review can change. The proposal binds the exact body
 digest and current HEAD, and requires observed tracer evidence. References,
 compiler-inferred attachments (which are recomputed, not invented read receipts),
-other assertions, scope, identity, ownership and ordered flow steps cannot change.
+other assertions, scope, identity, ownership and ordered flow structure cannot change.
 The repair prompt supplies only bounded rejected claims and their source findings.
 Correction neither fabricates a retrace nor approves the body: its changed digest
 requires full normalized review inside the existing bounded repair loop. Legacy

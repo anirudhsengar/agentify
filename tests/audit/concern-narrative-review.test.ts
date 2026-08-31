@@ -376,6 +376,8 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     groupedWrite(batchRejected.map);
     assert.notEqual((await repair(batchProposal) as { isError?: boolean }).isError, true);
     const batchCorrected = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+    assert.ok(batchCorrected.concern_evidence!.concerns[0]!.pitfalls.every(item => item.risk === CORRECTION));
+    assert.equal(batchCorrected.concern_evidence!.concerns[0]!.invariants[0]!.rule, CORRECTION);
     assert.deepEqual(batchCorrected.concern_evidence!.concerns[0]!.flows, batchInput.concern_evidence!.concerns[0]!.flows);
     assert.deepEqual(batchCorrected.concern_evidence!.concerns[0]!.touchpoints, batchRejected.map.concern_evidence!.concerns[0]!.touchpoints);
     assert.deepEqual(batchCorrected.explorer_receipts, batchRejected.map.explorer_receipts);
@@ -398,6 +400,22 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       compileSpecialistEvidence(batchInput, { cwd }), budget, "forged-batch");
     assert.equal(forgedBatch.complete, false);
     assert.match(forgedBatch.reasons.join("; "), /quote exact supplied source/);
+    for (const invalidFindings of [
+      [{ claim: "pitfalls[0]", path: "clock.py", excerpt: "return int(value)", reason: CORRECTION }],
+      [{ claim: "unrecognized", path: "clock.py", excerpt: "return int(value)", reason: CORRECTION }],
+      Array.from({ length: 3 }, (_, i) => ({ claim: `pitfalls[${i + 1}]`, path: "clock.py", excerpt: "return int(value)", reason: CORRECTION })),
+    ]) {
+      additionalFindings = invalidFindings;
+      const invalidReview = await reviewSpecialistCompilation(context,
+        compileSpecialistEvidence(batchInput, { cwd }), budget, "invalid-batch");
+      assert.equal(invalidReview.complete, false);
+      assert.equal(invalidReview.map.specialist_reviews!.records[0]!.finding, undefined,
+        "a malformed batch cannot retain even its first otherwise valid finding");
+    }
+    additionalFindings = [{ claim: "pitfalls[0]", path: "clock.py", excerpt: "return int(value)", reason: CORRECTION }];
+    assert.equal((await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(correctedMap, { cwd }), budget, "null-with-findings")).complete, false,
+    "null cannot approve a body with additional findings");
     additionalFindings = [];
     const markerMap = structuredClone(correctedMap);
     markerMap.concern_evidence!.concerns[0]!.touchpoints[0]!.role +=
