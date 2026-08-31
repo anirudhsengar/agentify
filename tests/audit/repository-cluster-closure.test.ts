@@ -237,6 +237,73 @@ test("uncovered module clusters prioritize dependency centrality with stable tie
   }
 });
 
+test("shared Java bases and committed validation wrappers attach deterministically", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-java-dependencies-"));
+  for (const repositoryPath of [
+    "README.md",
+    "pom.xml",
+    "mvnw",
+    "src/main/java/example/Person.java",
+    "src/main/java/example/Owner.java",
+    "src/main/java/example/Vet.java",
+    "src/test/java/example/OwnerTests.java",
+    "src/test/java/example/VetTests.java",
+  ]) write(cwd, repositoryPath);
+  fs.writeFileSync(path.join(cwd, "src/main/java/example/Person.java"),
+    "package example;\npublic abstract class Person { public String name; }\n");
+  fs.writeFileSync(path.join(cwd, "src/main/java/example/Owner.java"),
+    "package example;\npublic final class Owner extends Person { public void register() {} }\n");
+  fs.writeFileSync(path.join(cwd, "src/main/java/example/Vet.java"),
+    "package example;\npublic final class Vet extends Person { public void list() {} }\n");
+  fs.chmodSync(path.join(cwd, "mvnw"), 0o755);
+  git(cwd, "init", "-q");
+  git(cwd, "config", "user.name", "Agentify Test");
+  git(cwd, "config", "user.email", "agentify@example.invalid");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "java dependency fixture");
+  try {
+    const map = clickShapedMap();
+    map.meta.project_type = "Java application";
+    map.meta.languages = ["Java"];
+    map.skeleton.entry_points = [{
+      path: "src/main/java/example/Owner.java",
+      role: "owner entry point",
+      language: "Java",
+      run_command: "./mvnw test",
+    }];
+    map.skeleton.first_5_files_for_fresh_agent = [
+      { path: "src/main/java/example/Person.java", why: "shared identity contract" },
+      { path: "mvnw", why: "committed validation wrapper" },
+    ];
+    map.module_graph.edges = [];
+    map.module_graph.parallelizable_subtrees = [];
+    map.module_graph.shared_abstractions = ["src/main/java/example/Person.java"];
+    map.module_graph.shared_state = [];
+    map.pitfalls = [];
+    map.operational_surface.build.recipe_file = "pom.xml";
+    map.concern_evidence = {
+      concerns: [
+        concern("owner registration", "src/main/java/example/Owner.java", "src/test/java/example/OwnerTests.java"),
+        concern("vet directory", "src/main/java/example/Vet.java", "src/test/java/example/VetTests.java"),
+      ],
+      not_concerns: [],
+    };
+    for (const body of map.concern_evidence.concerns) body.validation = ["./mvnw test"];
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.complete, true, compiled.reasons.join("; "));
+    for (const name of ["owner registration", "vet directory"]) {
+      const body = compiled.map.concern_evidence!.concerns.find((entry) => entry.concern === name)!;
+      assert.ok(body.touchpoints.some((entry) => entry.path === "src/main/java/example/Person.java"
+        && entry.centrality === "supporting"));
+      assert.ok(body.touchpoints.some((entry) => entry.path === "mvnw"
+        && entry.centrality === "supporting"));
+    }
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("normalization keeps an explicitly excluded sibling behavior unresolved", () => {
   const cwd = createRepository();
   try {
