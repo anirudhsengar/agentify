@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Match dotenv protection at path-component boundaries, retaining protection for explicit `.env` suffixes, so ordinary source/test names containing `.env` are not misclassified as secret files. Review diagnostics identify inaccessible evidence paths.
+
 - Permit one argument-correction request after a rejected typed narrative-review submission, within the existing deadline and aggregate budget. Source verification remains strict; unrelated errors, prose and repeated invalid submissions grant no extra calls.
 
 - Preserve deterministic compiler attachments during claim-only repairs without demanding fabricated model-read receipts. Authored source still requires observations and normalization recomputes inferred paths.

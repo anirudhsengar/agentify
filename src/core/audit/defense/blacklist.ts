@@ -180,4 +180,6 @@ export const BLACKLIST: ReadonlyArray<BlacklistEntry> = [
  * `.agentify/` (e.g. this project's own `.agentify/webhooks.example.json`)
  * is legitimate and must remain readable.
  */
-export const ZERO_ACCESS_PATH_REGEX = /(\.env(?!\.sample(?:\..*)?$|\.example(?:\..*)?$|\.template(?:\..*)?$)|secrets\.(?!sample(?:\..*)?$|example(?:\..*)?$|template(?:\..*)?$)|~?\/?\.ssh\/|\/etc\/|\.aws\/credentials|\.npmrc$|id_(rsa|ed25519|ecdsa|dsa)(\.pub)?$)/;
+// Dotenv basenames start a path component; an embedded '.env' in a source
+// filename is not a dotenv file. Explicit *.env files remain protected too.
+export const ZERO_ACCESS_PATH_REGEX = /((?:^|[\\/])\.env(?!\.sample(?:\..*)?$|\.example(?:\..*)?$|\.template(?:\..*)?$)|\.env$|secrets\.(?!sample(?:\..*)?$|example(?:\..*)?$|template(?:\..*)?$)|~?\/?\.ssh\/|\/etc\/|\.aws\/credentials|\.npmrc$|id_(rsa|ed25519|ecdsa|dsa)(\.pub)?$)/;

@@ -123,7 +123,9 @@ function immutableSources(cwd: string, commit: string, concern: Concern, deadlin
   let bytes = 0;
   for (const file of paths) {
     const blob = regular.get(file);
-    if (!blob || ZERO_ACCESS_PATH_REGEX.test(file)) throw new Error("review requires accessible tracked regular source");
+    if (!blob || ZERO_ACCESS_PATH_REGEX.test(file)) {
+      throw new Error(`review requires accessible tracked regular source: ${JSON.stringify(file)}`);
+    }
     const read = spawnSync("git", ["-C", cwd, "cat-file", "blob", blob], {
       encoding: "utf8", maxBuffer: MAX_SOURCE_BYTES - bytes, timeout: timeout(), windowsHide: true,
     });
