@@ -11,7 +11,7 @@ import { stableMapValueIdentity } from "./map-delta.ts";
 import { AuditBudgetExceededError, type AuditResourceBudget } from "./resource-budget.ts";
 import type { Concern } from "./schema/concerns.ts";
 import type { CodebaseMap } from "./schema/codebase-map.ts";
-import { SpecialistReviewSubmissionSchema, type SpecialistReviewSubmission } from "./schema/specialist-review.ts";
+import { createSpecialistReviewSubmissionSchema, type SpecialistReviewSubmission } from "./schema/specialist-review.ts";
 import { concernEvidencePaths } from "./specialist-completion.ts";
 import type { SpecialistCompilationResult } from "./specialist-compiler.ts";
 
@@ -106,13 +106,14 @@ async function reviewConcern(
   let submitted: SpecialistReviewSubmission | undefined;
   let requests = 0;
   const timer = setTimeout(cancel, duration);
+  const parameters = createSpecialistReviewSubmissionSchema(Object.keys(claims));
   const tool = defineTool({
     name: "submit_specialist_review", label: "Review normalized specialist",
     description: "Return the first unsupported or contradicted claim with exact source evidence. A null finding requires checking every supplied claim ID. Stop after submission.",
-    parameters: SpecialistReviewSubmissionSchema,
+    parameters,
     async execute(_id, report) {
       if (controller.signal.aborted || context.signal?.aborted || submitted
-        || !Value.Check(SpecialistReviewSubmissionSchema, report)) throw new Error("invalid or expired specialist review");
+        || !Value.Check(parameters, report)) throw new Error("invalid or expired specialist review");
       const checked = new Set(report.checked_claims);
       const finding = report.finding;
       const excerpt = finding === null ? null : exactSourceExcerpt(sources.get(finding.path), finding.excerpt);
