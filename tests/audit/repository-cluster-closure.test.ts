@@ -223,6 +223,15 @@ test("uncovered module clusters prioritize dependency centrality with stable tie
       .map((cluster) => cluster.cluster_key);
     assert.equal(keys[0], "z-core");
     assert.ok(keys.indexOf("a-leaf") < keys.indexOf("b-leaf"));
+
+    for (let index = 0; index < 520; index += 1) {
+      write(cwd, `src/extra-${index}.ts`);
+    }
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "large tracked evidence set");
+    const largeKeys = assessSpecialistEvidence(map, { cwd }).uncovered_clusters
+      .map((cluster) => cluster.cluster_key);
+    assert.equal(largeKeys[0], "z-core", "crossing a Git batch boundary must not erase dependency evidence");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
