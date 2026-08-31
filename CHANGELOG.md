@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Preserve provider-admission failure diagnostics and typed resource-budget errors when the SDK cancels a denied request; never misreport them as an incomplete model review.
+
 - Review up to three source-backed narrative findings per body and correct them atomically at one exact-body digest. Existing one-finding records remain valid; forged, duplicate, unreviewed or no-progress batch edits fail without writes. Review deadlines, call limits and full post-correction review remain unchanged.
 
 - Keep exact, independently recomputed supporting-attachment annotations out of source-narrative claims. All path/symbol/ownership fields and authored or altered role prose remain reviewed; marker text alone grants no exemption.

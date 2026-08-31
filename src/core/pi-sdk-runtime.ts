@@ -185,6 +185,7 @@ export class PiSdkRuntime implements AgentRuntime {
     options.auditResourceBudget?.assertProviderSessionCapacity(selectedModel?.contextWindow ?? 0);
     let sawRequiredRecoveryTool = false;
     let providerRequests = 0;
+    let admissionFailure: { error: unknown } | undefined;
     let forcedToolChoiceRequests = 0;
     let cappedOutputRequests = 0;
     const eventCounts = new Map<string, number>();
@@ -262,6 +263,7 @@ export class PiSdkRuntime implements AgentRuntime {
             } catch (error) {
               // SDK extension errors are logged and swallowed. Cancel the
               // transport before its runner can dispatch the original payload.
+              admissionFailure = { error };
               abortSession();
               throw error;
             }
@@ -366,6 +368,7 @@ export class PiSdkRuntime implements AgentRuntime {
     };
     const promptUntilAbort = async (userPrompt: string): Promise<void> => {
       await Promise.race([session.prompt(userPrompt), abortPromise]);
+      if (admissionFailure) throw admissionFailure.error;
     };
     let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
     const resetInactivityTimer = (): void => {
