@@ -78,6 +78,24 @@ async function testOnlyProviderResponsesCountAsTurns(): Promise<void> {
 
 await testStreamingUpdatesAreNotPersisted();
 await testOnlyProviderResponsesCountAsTurns();
+// Reduced from live narrative reviews whose audit payload became {type:"unknown"}.
+const reviewDir = tempDir("agentify-log-review-");
+try {
+  const log = new AgentifyLog({ cwd: reviewDir, configDir: reviewDir });
+  const review = { type: "specialist_review_result", concern: "Deadline normalization",
+    digest: "a".repeat(64), repository_commit: "b".repeat(40), retryable: false,
+    failure: "Numeric strings are accepted; example ghp_FAKEFIXTUREONLY", source: "x".repeat(100_000) };
+  log.sessionEvent({ pi_event_type: review.type, event: review });
+  await log.close();
+  const raw = fs.readFileSync(log.logPath, "utf8");
+  const record = JSON.parse(JSON.parse(raw).payload) as { event: Record<string, unknown> };
+  assert.deepEqual(record.event, { type: review.type, concern: review.concern, digest: review.digest,
+    repository_commit: review.repository_commit, retryable: false,
+    failure: "Numeric strings are accepted; example [REDACTED:github-pat]" });
+  assert.ok(Buffer.byteLength(raw) < 1_024, "review logs retain identity and outcome, not whole source");
+} finally {
+  fs.rmSync(reviewDir, { recursive: true, force: true });
+}
 const reservationCases: Array<Record<string, number>> = [{}, { unreported_calls: 1, unreserved_calls: 0,
   reserved_input_tokens: 100, reserved_output_tokens: 20, reserved_cost_usd: 0.5 }];
 for (const bounds of reservationCases) {
