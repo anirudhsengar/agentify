@@ -177,8 +177,8 @@ test("a continuation at the exact aggregate call limit fails before another requ
   );
   assert.equal(
     budget.snapshot().model_calls,
-    1,
-    "reconciliation after a recorded failure must not mutate counters past the limit",
+    2,
+    "reported post-limit usage must remain charged while the run stays failed; hiding an overrun is not enforcement",
   );
 
   const finalBudget = new AuditResourceBudget({ maxModelCalls: 1 });

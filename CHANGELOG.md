@@ -4,6 +4,10 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Preserve the bounded recovery allowance after a parent session deadline,
+  without extending session or aggregate limits. Aggregate elapsed checks
+  include prior continuations, and final usage cannot hide a reported overrun.
+
 - Execute the tracer's final typed report tool at its call limit. A validated
   submission ends the child session immediately, without paying for a prose
   acknowledgement; invalid reports and cancelled tracers remain unresolved.

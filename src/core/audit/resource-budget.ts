@@ -318,7 +318,9 @@ export class AuditResourceBudget {
   }
 
   exhaustSession(session: SessionObservation): never {
-    this.fail(`session elapsed time reached ${session.maxDurationMs}ms`);
+    // The session is over, but the existing bounded recovery pass may still
+    // use the aggregate allowance. Never reopen this expired session.
+    throw new AuditBudgetExceededError(`session elapsed time reached ${session.maxDurationMs}ms`);
   }
 
   observeParentEvent(event: AgentSessionEvent, session: SessionObservation): void {
@@ -380,8 +382,6 @@ export class AuditResourceBudget {
   }
 
   finishParentSession(session: SessionObservation, result: RuntimeResultShape): void {
-    this.assertWithinBudget();
-    this.expireSession(session);
     const reportedCalls = result.diagnostics?.provider_requests ?? result.turns;
     const additionalCalls = Math.max(0, reportedCalls - session.requests);
     // Legacy runtimes count tool-result deliveries as turns. With admission
@@ -392,7 +392,7 @@ export class AuditResourceBudget {
     this.#modelCalls += additionalCalls;
     this.#turns += additionalTurns;
     this.#costUsd += additionalCost;
-    this.checkCounters();
+    this.assertWithinBudget();
   }
 
   reserveExplorer(mode: string): number {
@@ -459,7 +459,7 @@ export class AuditResourceBudget {
 
   assertWithinBudget(): void {
     if (this.#failure !== null) throw new AuditBudgetExceededError(this.#failure);
-    if (Date.now() - this.#startedAt > this.limits.maxTotalDurationMs) {
+    if (this.#priorElapsedMs + Date.now() - this.#startedAt > this.limits.maxTotalDurationMs) {
       this.fail(`elapsed time exceeded ${this.limits.maxTotalDurationMs}ms`);
     }
     this.checkCounters();

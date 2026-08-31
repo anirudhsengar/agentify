@@ -699,14 +699,17 @@ async function testParentAuditSessionHasApplicationOwnedDeadline(): Promise<void
   }
 }
 
-async function testDeadlineRecoveryCanInstall(): Promise<void> {
+async function testDeadlineRecoveryCanCloseAudit(): Promise<void> {
   const cwd = tempDir("gate-deadline-recovery");
   try {
     const runtime = new DeadlineRuntime(true);
     await runWithRuntime(cwd, runtime, { maxSessionDurationMs: 100 });
     assert.equal(runtime.calls, 2);
     assert.equal(runtime.abortedBySignal, true);
-    assert.ok(fs.existsSync(path.join(cwd, "AGENTS.md")), "validated recovery must reach installation");
+    const map = loadCanonicalMapAt(cwd, ".agentify/runtime/audit");
+    assert.ok(map);
+    assert.equal(assessCoverageClosure(map).unresolved.length, 0,
+      "bounded recovery must pass the ordinary closure gate");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -853,7 +856,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "auditFailsWhenSpecialistEvidenceNeverRecorded", fn: testAuditFailsWhenSpecialistEvidenceNeverRecorded },
   { name: "failedAuditRetainsApplicationAttestedExplorerCheckpoint", fn: testFailedAuditRetainsApplicationAttestedExplorerCheckpoint },
   { name: "parentAuditSessionHasApplicationOwnedDeadline", fn: testParentAuditSessionHasApplicationOwnedDeadline },
-  { name: "deadlineRecoveryCanInstall", fn: testDeadlineRecoveryCanInstall },
+  { name: "deadlineRecoveryCanCloseAudit", fn: testDeadlineRecoveryCanCloseAudit },
 ];
 
 let passed = 0;
