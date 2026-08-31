@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Supply compiler-verified attachment relationships to narrative review separately from source claims. Structural bookkeeping does not require a source declaration, while every authored behavioral claim and exact-source finding remains checked.
+
 - Preserve authored touchpoint roles during ownership normalization; compiler decisions remain structured ownership facts rather than unsupported source narratives.
 
 - Retarget explicit supporting-path delegations when verified normalization folds their owner into a retained concern. Missing or ambiguous owners remain unresolved; paths and flows are preserved without another model call.
