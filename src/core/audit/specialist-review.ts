@@ -100,21 +100,23 @@ export function correctSpecialistClaim(
   for (const correction of corrections) {
     const finding = findings.find(item => item?.claim === correction.claim);
     const match = /^(pitfalls|invariants|flows)\[([0-9]+)\]$/.exec(correction.claim);
-    if (!finding || !match || (match[1] === "flows"
+    if (!finding || (!match && correction.claim !== "one_line") || (match?.[1] === "flows"
       ? !Number.isSafeInteger(correction.flow_step) || correction.flow_step! < 0 || correction.flow_step! > 511
       : correction.flow_step !== undefined)
       || [correction.statement, correction.rationale].some(text => !text.trim() || text.length > 2_048)) {
       throw new Error("claim_correction requires a current-HEAD exact-body rejected assertion and valid step selection");
     }
     const before = specialistReviewDigest(body);
-    const index = Number(match[2]);
-    if (match[1] === "flows") {
+    const index = Number(match?.[2]);
+    if (correction.claim === "one_line") {
+      body.one_line = correction.statement;
+    } else if (match?.[1] === "flows") {
       const step = body.flows[index]?.steps[correction.flow_step!];
       if (!step || step.path !== finding.path) {
         throw new Error("claim_correction requires a flow step at the reviewed source path");
       }
       step.what_happens = correction.statement;
-    } else if (match[1] === "pitfalls") {
+    } else if (match?.[1] === "pitfalls") {
       const claim = body.pitfalls[index];
       if (!claim) throw new Error("claim_correction names a missing pitfall");
       claim.risk = correction.statement;

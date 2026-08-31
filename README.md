@@ -238,6 +238,9 @@ required; unsupported assertions and incomplete reviews remain repair obligation
 Eligible bodies are reviewed even while unrelated structural gaps remain, so
 repair sees narrative and ownership failures together. Review cannot close those
 gaps; normalization changes invalidate the body digest and require fresh review.
+A source-rejected summary can be corrected without regenerating its specialist;
+scope boundaries, ownership, evidence and flows remain unchanged and unapproved
+until full review passes again.
 Incomplete reviews may retry once in a later bounded run; an unchanged source-backed
 finding remains cached until the specialist body or repository HEAD changes.
 This quality control does not replace manual release qualification.

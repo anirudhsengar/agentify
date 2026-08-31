@@ -4,7 +4,19 @@ Not release-ready. Do not merge PR #13. The earlier release recommendation is wi
 
 The approved gate separates high-quality specialist installation from operational execution readiness. A semantically complete `analysis-ready` team may count as an installation, while missing reproducible repository-owned validation keeps issue intake, publication, autonomous mutation and learning disabled. External harness locks never clear those execution blockers.
 
-## Current development evidence — 2026-08-31 17:39 UTC
+## Current development evidence — 2026-08-31 18:36 UTC
+
+Exact `776d86916dc03f5077a8f7bd6ec507b9152901ca` passed both local Node 22/24 release suites and all CI/CodeQL gates. The independently qualified root and Node 24 worktree package hashes are recorded in JSON; live runs used the latter unchanged.
+
+All four original runs failed to install: Cobra (1,800,158 ms; wall budget exceeded), PyJWT (1,370,617 ms), Petclinic (1,011,016 ms), and AQA (1,497,878 ms). Each preserved tracked files, retained only its diagnostic map, and emitted one terminal result. The latter three exhausted output reservations with real semantic obligations outstanding. None receives a tooling waiver or installation credit. Hono remains in progress on the same frozen candidate; an initial harness PATH mistake was corrected after read-only identity preflight refused it.
+
+PyJWT reached structural compilation, then source review found false claims about required-claim values, supported URL schemes, key lookup delegation, detached payload decoding and key-format counts. Reviews previously waited for whole-portfolio structural closure, stranding new findings at the repair limit. A reduced independent scheduling/clock fixture reproduces that ordering defect. Commit `6b0a073edb61b9d9abb5fe6e7ce84f0e4f2d31c9` reviews eligible bodies earlier while retaining every structural failure; focused tests and all 12 corpus cases pass, with its full exact-commit release suite pending.
+
+A live actual-compiler component check on `6b0a073` rejected a false Petclinic pagination claim in 13,487 ms (one call; 6,354 input and 629 output tokens; $0.0020256 reported; no unknown usage), without closing any ownership gap or modifying the target. Its source predicate computes `page - 1`, not a fixed -1 for every non-positive page. The existing correction tool is also being extended to address an exact-review-rejected summary without retracing unrelated flows. These changes are not yet full installation qualification.
+
+There remain zero qualifying held-out rounds and zero passing installed-team manual reviews. Hono narrative correctness remains unqualified. `release_ready=false`, `final_candidate_sha=null`; do not merge.
+
+## Previous development evidence — 2026-08-31 17:39 UTC
 
 Exact `80ba6a1f91caf56ac9756e63c2f2f43a9f3f028f` passed local Node 22/24 release suites, CI, and CodeQL. Root package SHA-256: `1df4285be019e677015c93437d9646d9ee0dbe181f13edf32bb781b3f7f1f1ba`; the independently qualified Node 24 worktree artifact differs as recorded in JSON.
 

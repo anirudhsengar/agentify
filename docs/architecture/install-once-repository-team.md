@@ -495,6 +495,9 @@ application-owned source review can change. The proposal binds the exact body
 digest and current HEAD, and requires observed tracer evidence. References,
 compiler-inferred attachments (which are recomputed, not invented read receipts),
 other assertions, scope, identity, ownership and ordered flow structure cannot change.
+For a rejected `one_line`, only that summary sentence can be corrected; the
+`covers` and `excludes` scope boundaries remain unchanged and require retracing
+if they are wrong. Summary correction still invalidates full narrative review.
 The repair prompt supplies only bounded rejected claims and their source findings.
 Eligible concern bodies receive narrative review before unrelated portfolio gaps
 close, allowing the same bounded repair pass to address both kinds of obligation.

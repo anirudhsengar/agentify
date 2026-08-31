@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Permit bounded correction of a source-rejected specialist summary without retracing the whole body. Scope boundaries, paths, ownership and flows stay unchanged; exact-body/current-HEAD findings and fresh full review remain mandatory.
+
 - Review eligible specialist narratives before unrelated portfolio gaps close, exposing false claims within the existing repair budget. Structural failures remain unresolved and normalization changes still require fresh exact-body review.
 
 - Preserve provider-admission failure diagnostics and typed resource-budget errors when the SDK cancels a denied request; never misreport them as an incomplete model review.
