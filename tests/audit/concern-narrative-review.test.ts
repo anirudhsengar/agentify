@@ -72,7 +72,7 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     let forgedExcerpt = false;
     let excerptOverride: string | undefined;
     let reviewedClaim = "pitfalls[0]";
-    let mode: "normal" | "incomplete" | "prose" | "interrupted" = "normal";
+    let mode: "normal" | "incomplete" | "prose" | "interrupted" | "argument-retry" = "normal";
     const runtime: AgentRuntime = { async runSession(options) {
       reviews += 1;
       assert.equal(options.modelRole, "primary");
@@ -97,6 +97,22 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
         role: "assistant", stopReason: "toolUse", usage: { input: 50, output: 10, cost: { total: 0.001 } },
       } } as never);
       if (mode === "prose") return { turns: 1, costUsd: 0.001, aborted: false };
+      if (mode === "argument-retry") {
+        await assert.rejects(() => options.customTools![0]!.execute("bad-quote", {
+          checked_claims: ["pitfalls[0]"], finding: { claim: "pitfalls[0]", path: "clock.py",
+            excerpt: "return False", reason: "An unverified quote cannot establish a finding." },
+        }, undefined, undefined, { cwd } as never), /quote exact supplied source/);
+        options.onEvent!({ type: "tool_execution_end", toolName: "unrelated_tool", isError: true } as never);
+        assert.throws(() => options.onProviderRequest!(), /provider-call limit/);
+        options.onEvent!({ type: "tool_execution_end", toolName: "submit_specialist_review", isError: true } as never);
+        options.onProviderRequest!({ inputTokens: 1_000, outputTokens: 100, costUsd: 0.1 });
+        options.onEvent!({ type: "tool_execution_end", toolName: "submit_specialist_review", isError: true } as never);
+        assert.throws(() => options.onProviderRequest!(), /provider-call limit/,
+          "a second rejected submission cannot grant a third call");
+        options.onEvent!({ type: "message_end", message: {
+          role: "assistant", stopReason: "toolUse", usage: { input: 50, output: 10, cost: { total: 0.001 } },
+        } } as never);
+      }
       const falseClaim = JSON.stringify(input.claims[reviewedClaim]).includes(FALSE_CLAIM);
       await options.customTools![0]!.execute("review", {
         checked_claims: mode === "incomplete" ? [] : Object.keys(input.claims),
@@ -104,7 +120,7 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
           excerpt: excerptOverride ?? (forgedExcerpt ? "return False" : "return int(value)"), reason: CORRECTION } : null,
       }, undefined, undefined, { cwd } as never);
       options.onEvent!({ type: "tool_execution_end" } as never);
-      return { turns: 1, costUsd: 0.001, aborted: true };
+      return { turns: mode === "argument-retry" ? 2 : 1, costUsd: mode === "argument-retry" ? 0.002 : 0.001, aborted: true };
     } };
     const context = { cwd, runtime, config: { schemaVersion: 1 as const, models: {}, thinkingLevel: "high" as const },
       auditLog: { sessionEvent(value: { pi_event_type: string }) { loggedEvents.push(value.pi_event_type); },
@@ -188,6 +204,17 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       compileSpecialistEvidence(correctedMap, { cwd }), budget, "review-fixture");
     assert.equal(accepted.complete, true, accepted.reasons.join("; "));
     assert.equal(reviews, 2);
+    // Captured live source review had an invalid excerpt, but the original
+    // one-request ceiling prevented correcting even typed arguments.
+    mode = "argument-retry";
+    const beforeRetry = budget.snapshot();
+    const retriedArguments = await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(correctedMap, { cwd }), budget, "argument-retry");
+    assert.equal(retriedArguments.complete, true, retriedArguments.reasons.join("; "));
+    assert.equal(budget.snapshot().model_calls - beforeRetry.model_calls, 2);
+    assert.equal(budget.snapshot().turns - beforeRetry.turns, 2);
+    assert.equal(budget.snapshot().unreported_calls, 0);
+    mode = "normal";
     assert.deepEqual(assessSpecialistReviews(accepted.map, cwd), []);
     assert.deepEqual(compileSpecialistEvidence(accepted.map, { cwd }).map, accepted.map);
     assert.equal(budget.snapshot().unreported_calls, 0);
