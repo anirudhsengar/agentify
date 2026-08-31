@@ -1047,6 +1047,12 @@ test("normalization subsumes core-conflicting concerns only after their verified
     const missing = compileSpecialistEvidence(missingOwner, { cwd });
     assert.equal(missing.complete, false);
     assert.match(missing.reasons.join("; "), /Untraced owner/);
+    const conflictingFlow = structuredClone(map);
+    conflictingFlow.concern_evidence!.concerns[1]!.flows[0]!.name = dispatch.flows[0]!.name;
+    const unmerged = compileSpecialistEvidence(conflictingFlow, { cwd });
+    assert.equal(unmerged.complete, false);
+    assert.equal(unmerged.map.concern_evidence!.not_concerns[1]!.grouped_into, help.concern,
+      "delegations cannot move when conflicting flow structure prevents the merge");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

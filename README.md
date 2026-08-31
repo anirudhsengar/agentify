@@ -228,8 +228,10 @@ On attach, recorded concern evidence is deterministically compiled before any
 model-backed top-up audit; a normalizable fixed point can therefore finish
 without spending or resetting an exhausted model budget when its exact
 normalized bodies already have current-HEAD narrative reviews. Changed bodies
-require fresh review with the configured primary model: one request per concern,
-90 seconds and at most 512 KiB of immutable source. A typed, complete review is
+require fresh review with the configured primary model: 90 seconds and at most
+512 KiB of immutable source per concern. One provider request is allowed, plus
+one argument-correction request only after a rejected typed submission, within
+the same deadline and aggregate budget. A typed, complete review is
 required; unsupported assertions and incomplete reviews remain repair obligations.
 Incomplete reviews may retry once in a later bounded run; an unchanged source-backed
 finding remains cached until the specialist body or repository HEAD changes.
