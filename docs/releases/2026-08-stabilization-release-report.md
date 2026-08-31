@@ -4,7 +4,19 @@ Not release-ready. Do not merge PR #13. The earlier release recommendation is wi
 
 The approved gate separates high-quality specialist installation from operational execution readiness. A semantically complete `analysis-ready` team may count as an installation, while missing reproducible repository-owned validation keeps issue intake, publication, autonomous mutation and learning disabled. External harness locks never clear those execution blockers.
 
-## Current development evidence — 2026-08-31 19:22 UTC
+## Current development evidence — 2026-08-31 20:00 UTC
+
+Exact `d44188a7658110f532b6df2e44629f5c47241750` passed both full local release suites and CI/CodeQL, but all six live installations FAILED. Hono (1,046,193 ms), PyJWT (1,453,615 ms) and Axum (1,708,146 ms) exhausted output reservations with unresolved ownership or narratives. Petclinic (1,800,153 ms), Mustache (1,800,134 ms) and Gin (1,800,091 ms) exceeded the wall budget. All preserved tracked files, retained only the diagnostic map and emitted one terminal result. None receives a tooling waiver or installation credit. Hono narrative correctness remains unresolved.
+
+Live Petclinic repair corrected flow steps but left a contradictory description. Reduced regression `0c871a9` reproduces that unrepairable field. Production correction `885c2d5df8a1e9fea0a4c1cc7b8c6e497db48928` permits only an exact-review-rejected flow description to change, separately from its steps. Names, paths, order, ownership, scope and unselected prose remain immutable, and fresh normalized review is mandatory. Typecheck and 18 focused review/schema/corpus checks passed before committing.
+
+Exact `885c2d5` subsequently passed full local Node 22.19.0 and 24.19.0 release suites: 99 source test files, 12 executable corpus cases, five packed qualifications, scaffold and zero-vulnerability dependency audit. Their retained packages are byte-identical, SHA-256 `99f85940d415e2bd6df5e3072f84e3953b3978d3eaa14556152bc3ccae29dd69`. CI tests remain in progress; CodeQL passed. All eight eligible historical repositories and six held-outs are now running fresh on that unchanged production commit, using the locally built bundles matched to this qualified artifact. JCommander uses newly installed, checksum-verified Temurin 21.0.12.1+1; no target dependency lock or model configuration was changed.
+
+Two exact-`885c2d5` live cancellation probes passed. Cancellation after a completed response returned in 3 ms with one call, 3,434 input tokens, 84 output tokens, $0.00094668 reported cost, and no unknown usage or remaining reservation. Cancelling three concurrent streaming tracers returned in 28 ms and retained all three unknown-request bounds: 3,000,000 input tokens, 36,000 output tokens and $0.9432 metadata-priced upper bound. Settlement neither erased nor double-counted usage; targets stayed unchanged. Bounds are not provider invoices. These are component checks, not installation/manual-quality credit. Another read-only probe corrected a flow step but still failed body review; it did not exercise the new description selector.
+
+The complete 118-path branch inventory was enumerated against `origin/main` and matches both JSON inventories; the forbidden-delivery-artifact scan passed. No qualifying held-out rounds or passing installed-team manual reviews exist. `release_ready=false`, `final_candidate_sha=null`; do not merge.
+
+## Previous development evidence — 2026-08-31 19:22 UTC
 
 Exact `9e99e8ec4f45973fdad716c17705c12c0ab5b6c1` passed local Node 22/24 full release suites, CI, package/scaffold and CodeQL, but all six fresh full-CLI runs FAILED to install. Commander (1,800,182 ms), AQA (1,800,430 ms), and Chi (1,800,150 ms) exceeded the wall budget. Petclinic (1,216,474 ms) and Mustache (1,783,515 ms) exhausted three repair passes with narrative findings unresolved. PyJWT (1,631,276 ms) exhausted output reservations with findings and a tracer failure outstanding. Every run retained only its diagnostic map, preserved tracked files and emitted one terminal result. None receives an installation credit or tooling waiver. Exact usage and artifact paths are recorded in JSON.
 
@@ -18,7 +30,7 @@ Zero qualifying held-out rounds and zero passing installed-team manual reviews. 
 
 Exact `776d86916dc03f5077a8f7bd6ec507b9152901ca` passed both local Node 22/24 release suites and all CI/CodeQL gates. The independently qualified root and Node 24 worktree package hashes are recorded in JSON; live runs used the latter unchanged.
 
-All four original runs failed to install: Cobra (1,800,158 ms; wall budget exceeded), PyJWT (1,370,617 ms), Petclinic (1,011,016 ms), and AQA (1,497,878 ms). Each preserved tracked files, retained only its diagnostic map, and emitted one terminal result. The latter three exhausted output reservations with real semantic obligations outstanding. None receives a tooling waiver or installation credit. Hono remains in progress on the same frozen candidate; an initial harness PATH mistake was corrected after read-only identity preflight refused it.
+All four original runs failed to install: Cobra (1,800,158 ms; wall budget exceeded), PyJWT (1,370,617 ms), Petclinic (1,011,016 ms), and AQA (1,497,878 ms). Each preserved tracked files, retained only its diagnostic map, and emitted one terminal result. The latter three exhausted output reservations with real semantic obligations outstanding. None receives a tooling waiver or installation credit. Hono subsequently failed in 1,556,947 ms with unresolved core ownership and narratives; an initial harness PATH mistake had been corrected after read-only identity preflight refused it.
 
 PyJWT reached structural compilation, then source review found false claims about required-claim values, supported URL schemes, key lookup delegation, detached payload decoding and key-format counts. Reviews previously waited for whole-portfolio structural closure, stranding new findings at the repair limit. A reduced independent scheduling/clock fixture reproduces that ordering defect. Commit `6b0a073edb61b9d9abb5fe6e7ce84f0e4f2d31c9` reviews eligible bodies earlier while retaining every structural failure; focused tests and all 12 corpus cases pass, with its full exact-commit release suite pending.
 
@@ -115,7 +127,7 @@ The complete machine-readable evidence summary is [`2026-08-stabilization-evalua
 
 ## Changed-file policy
 
-The archived inventory is retained separately. The current machine-readable inventory enumerates all 118 changed branch paths through `b6644cd`; this milestone changes only already-listed paths. No temporary workflow, payload, archive or staging machinery is present. Delivery-integrity inspection must pass again on the exact final candidate.
+The archived inventory is retained separately. The current machine-readable inventory enumerates all 118 changed branch paths through `885c2d5`; this milestone changes only already-listed paths. No temporary workflow, payload, archive or staging machinery is present. Delivery-integrity inspection must pass again on the exact final candidate.
 
 ## Current development evidence
 
