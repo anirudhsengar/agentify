@@ -474,6 +474,7 @@ The existing delta tool also accepts a narrowly scoped `claim_correction`: only
 the statement and explanation of one pitfall or invariant named by an
 application-owned source review can change. The proposal binds the exact body
 digest and current HEAD, and requires observed tracer evidence. References,
+compiler-inferred attachments (which are recomputed, not invented read receipts),
 other assertions, scope, identity, ownership and ordered flow steps cannot change.
 The repair prompt supplies only bounded rejected claims and their source findings.
 Correction neither fabricates a retrace nor approves the body: its changed digest

@@ -13,7 +13,7 @@ import type { Concern } from "./schema/concerns.ts";
 import type { CodebaseMap } from "./schema/codebase-map.ts";
 import { createSpecialistReviewSubmissionSchema, type SpecialistReviewSubmission } from "./schema/specialist-review.ts";
 import type { WriteMapDeltaParams } from "./schema/write-map-params.ts";
-import { concernEvidencePaths } from "./specialist-completion.ts";
+import { concernEvidencePaths, removeTrustedInferredAttachments } from "./specialist-completion.ts";
 import type { SpecialistCompilationResult } from "./specialist-compiler.ts";
 
 const MAX_SOURCE_BYTES = 256 * 1_024;
@@ -79,7 +79,9 @@ export function correctSpecialistClaim(
   const observed = new Set(map.explorer_receipts.receipts.filter(receipt =>
     receipt.mode === "concern_tracer" && receipt.success && receipt.report_concern === concern.concern
   ).flatMap(receipt => receipt.observed_paths ?? []));
-  if (concernEvidencePaths(concern).some(file => !observed.has(file))) {
+  const authored = removeTrustedInferredAttachments(map).concern_evidence!.concerns
+    .find(item => item.concern === concern.concern)!;
+  if (concernEvidencePaths(authored).some(file => !observed.has(file))) {
     throw new Error("claim_correction requires observed tracer evidence; retrace missing source");
   }
   const corrected = structuredClone(map);

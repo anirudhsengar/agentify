@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Preserve deterministic compiler attachments during claim-only repairs without demanding fabricated model-read receipts. Authored source still requires observations and normalization recomputes inferred paths.
+
 - Correct a review-rejected pitfall or invariant without regenerating an entire specialist. Exact HEAD/body/finding bindings preserve references, flows and ownership; the corrected body still requires full normalized review before installation.
 
 - Keep request-admission refusals separate from incurred budget violations. Concurrent responses may release capacity for a later bounded retry; refused calls spend nothing and interrupted reservations remain intact.
