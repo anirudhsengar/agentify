@@ -130,7 +130,13 @@ Finalization independently requires a current explorer receipt attestation.
 After deterministic compilation reaches its fixed point, each changed concern
 receives a separate read-only review using the configured primary model and the
 shared audit budget. The reviewer receives at most 512 KiB of immutable tracked
-regular source, no filesystem or command tools, and one provider request within
+regular source. Independently recomputed attachment relationships are supplied
+as structural context. Only exact compiler-generated annotations on supporting,
+symbol-free, range-free touchpoints are projected out of narrative role claims;
+their paths and structural fields remain reviewed. Authored or altered role text
+is never exempted by a marker prefix. This projection changes neither the
+installed body nor its review digest. The reviewer has
+no filesystem or command tools, and one provider request within
 90 seconds including source collection. Only a rejected typed submission permits
 one additional request to correct its arguments, within the same deadline and
 shared resource budget. Prose, unrelated tool errors, and a second rejection grant

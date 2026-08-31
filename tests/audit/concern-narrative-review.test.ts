@@ -83,6 +83,11 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
         compiler_attachments: typeof initial.assessment.attachments };
       assert.ok(Array.isArray(input.compiler_attachments), "review needs application-owned path-relationship context");
       if (reviews === 1) assert.deepEqual(input.compiler_attachments, initial.assessment.attachments);
+      if (reviews === 1) {
+        const inferred = initial.map.concern_evidence!.concerns[0]!.touchpoints.findIndex(point => point.path === "test_clock.py");
+        assert.equal(Object.hasOwn(input.claims[`touchpoints[${inferred}]`] as object, "role"), false,
+          "independently proven, exact compiler annotations are not repository-source claims");
+      }
       assert.ok(input.compiler_attachments.every(attachment => attachment.paths.every(file => Object.hasOwn(input.evidence, file))));
       assert.ok(!JSON.stringify(input.compiler_attachments).includes(FALSE_CLAIM),
         "authored claims cannot become trusted attachment context");
