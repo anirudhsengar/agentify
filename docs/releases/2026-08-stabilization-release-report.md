@@ -4,7 +4,13 @@ Not release-ready. Do not merge PR #13. The earlier release recommendation is wi
 
 The approved gate separates high-quality specialist installation from operational execution readiness. A semantically complete `analysis-ready` team may count as an installation, while missing reproducible repository-owned validation keeps issue intake, publication, autonomous mutation and learning disabled. External harness locks never clear those execution blockers.
 
-## Current development evidence — 2026-08-31 14:53 UTC
+## Current development evidence — 2026-08-31 15:41 UTC
+
+Exact `f7edfe635f7fc254545e75937f467eb24e20b159` passed both local Node release suites, CI and CodeQL. The separately qualified root package hash is `ec8140df0e6f1d87a98dd84e5163b646ee99aa2d27ea9e68ee9946c7ca89c7fd`. Its four fresh product runs all failed: Hono (1,488,430 ms), Commander (1,700,709 ms), Mustache (1,450,919 ms), and SQLAlchemy (1,214,141 ms) were diagnostic-only. Every run preserved original tracked files and emitted one terminal result; unanswered model calls retained explicit resource reservations. Provider charges for unanswered calls remain unknown. These safe failures earn no installation credit.
+
+Commander exposed a false secret-path match on an ordinary test filename. Complete review evidence also exceeded the 256 KiB source cap in captured Commander and Hono portfolios. Separate deterministic regressions precede corrections; neither correction establishes live semantic closure. Remaining narrative errors, uncovered behavior, failed tracers and bounded-review failures still prevent qualification. There are zero passing installed-team manual reviews and zero qualifying unchanged-code rounds.
+
+## Previous development evidence — 2026-08-31 14:53 UTC
 
 Exact `18693b08d3b680eec8bc9d5cc49ba9dbb4063751` passed both local Node 22.19/24.19 release suites, all CI and CodeQL. Both locally qualified packages have SHA-256 `d4d1ba8fa8c1e504e9d066662eebb90c16888738de98c9d2554ba00145542ae6`. Live three-tracer cancellation returned in 15 ms with all unanswered calls fully reserved; a separate admission/retry probe completed 13 calls with fully reported usage. These are component proofs, not installation success.
 
