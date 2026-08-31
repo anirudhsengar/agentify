@@ -879,7 +879,9 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
       stateDir: ".agentify/runtime/audit",
-      maxSubagentDurationMs: 500,
+      // This observation test starts the real grep subprocess; deadline
+      // enforcement has its own 20ms timeout test above.
+      maxSubagentDurationMs: 5_000,
       ...stubExplorerArgs(),
       createSession: async (sessionOptions) => {
         assert.ok(sessionOptions);
