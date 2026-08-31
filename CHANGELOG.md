@@ -4,6 +4,10 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Remove the unaccounted connectivity call before installation. The first real
+  audit request establishes provider reachability under the same budget and
+  logging as all other audit work; credential recovery remains available.
+
 - Preserve the bounded recovery allowance after a parent session deadline,
   without extending session or aggregate limits. Aggregate elapsed checks
   include prior continuations, and final usage cannot hide a reported overrun.

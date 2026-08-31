@@ -1,7 +1,6 @@
 import { defaultConfigDir, ensureAgentifyConfig, runFullProviderSetup } from "./agentify-config.ts";
 import { DEFAULT_MAP_FILENAME, writeCanonicalMap } from "./audit/map-storage.ts";
 import { runRepositoryAudit, ProviderAuthFailedError, type FocusedAuditResult } from "./runs/repository-audit-run.ts";
-import { probeProviderReachable } from "./runs/provider-probe.ts";
 import { NoAuthForProviderError } from "./models/resolver.ts";
 import { loadCanonicalMapAt } from "./audit/write-map-tool.ts";
 import {
@@ -38,42 +37,9 @@ function failedAuthProvider(error: unknown): string | undefined {
 }
 
 /**
- * Verify the configured model is actually reachable *before* the audit
- * banner, spinner, and gap-map bootstrap start. On failure this re-enters
- * the full provider picker (same as brand-new setup — every supported
- * provider, not just a re-prompt for the one that just failed), since a
- * rejected credential is as good a reason to reconsider the provider as
- * having none configured at all. Probes and re-setups run at most twice
- * total, so a genuinely broken environment fails loudly instead of looping.
- */
-async function ensureProviderReachable(
-  options: RunAgentifyAppOptions,
-  config: AgentifyConfig,
-): Promise<AgentifyConfig> {
-  const configDir = defaultConfigDir();
-  const first = await probeProviderReachable(options.runtime, options.cwd, configDir, config);
-  if (first.ok) return config;
-
-  options.ui.info(
-    first.provider
-      ? `agentify: could not reach ${first.provider}${first.detail ? `: ${first.detail}` : " — the stored credentials may be missing, invalid, or expired."}`
-      : "agentify: could not verify the configured model provider.",
-  );
-  const updated = await runFullProviderSetup(configDir, options.ui, config);
-
-  const second = await probeProviderReachable(options.runtime, options.cwd, configDir, updated);
-  if (second.ok) return updated;
-  throw new Error(
-    `agentify: still could not reach ${second.provider ?? "the configured provider"} after re-entering setup`
-    + `${second.detail ? `: ${second.detail}` : ". Double-check the API key and your network connection, then run `agentify` again."}`,
-  );
-}
-
-/**
- * Run the audit; if it still fails on a credential-shaped error despite
- * passing the pre-flight probe (e.g. a key valid enough for one trivial
- * call but rejected under real load, or revoked mid-run), fall back to the
- * same full provider picker rather than a bare error.
+ * The first accounted audit request establishes reachability. Credential
+ * failures still enter the full provider picker once; no unlogged model probe
+ * is needed before the real audit's resource budget exists.
  */
 async function runAuditWithCredentialRecovery(
   options: RunAgentifyAppOptions,
@@ -171,8 +137,7 @@ export async function runAgentifyApp(options: RunAgentifyAppOptions): Promise<Fo
         );
       }
     }
-    const verifiedConfig = await ensureProviderReachable(options, config);
-    return await runAuditWithCredentialRecovery(options, verifiedConfig);
+    return await runAuditWithCredentialRecovery(options, config);
   } catch (error) {
     rollbackPendingInstallation(options.cwd);
     throw error;

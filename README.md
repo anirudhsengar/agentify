@@ -200,7 +200,7 @@ is reusable only after its complete concern
 body has also been checkpointed. Concern checkpoints append and deduplicate by
 default so later bounded invocations cannot erase earlier tracer evidence.
 On attach, recorded concern evidence is deterministically compiled before any
-provider probe or top-up audit; a normalizable fixed point can therefore finish
+model-backed top-up audit; a normalizable fixed point can therefore finish
 without spending or resetting an exhausted model budget.
 Agentify-managed paths observed during the transaction are normalized out of
 repository topography and process evidence before the map can close.

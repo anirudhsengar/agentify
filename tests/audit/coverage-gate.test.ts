@@ -41,10 +41,8 @@ class SilentUi implements AgentifyUi {
 }
 
 /**
- * `runAgentifyApp` now issues a cheap tool-free reachability probe before
- * the real audit session. Test doubles below only model the real audit
- * call's contract (spawnExplorerStateDir, recoveryPromptIfToolNotCalled,
- * etc.), so they short-circuit the probe with a trivial success.
+ * Legacy doubles tolerate explicit tool-free probes, but normal installation
+ * must enter through the accounted audit session (asserted separately below).
  */
 function isProbeCall(options: AgentRuntimeSessionOptions): boolean {
   return options.tools.length === 0;

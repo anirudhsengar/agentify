@@ -366,7 +366,9 @@ application-owned timer at the configured session deadline. An expired session
 cannot admit more work, but the existing bounded coverage-recovery pass may use
 the remaining aggregate allowance. Total time includes prior continuation
 checkpoints; finishing a session reconciles reported usage even after a failure.
-Neither recovery nor accounting clears an aggregate budget violation. SIGINT and SIGTERM
+Neither recovery nor accounting clears an aggregate budget violation. The first
+real audit request establishes provider reachability; there is no connectivity
+model call outside the audit budget and log. SIGINT and SIGTERM
 run the same synchronous pending-installation rollback before process exit, so
 only the permitted diagnostic map can survive an interrupted fresh install.
 Audit events append synchronously. Prepended signal handlers checkpoint charged
