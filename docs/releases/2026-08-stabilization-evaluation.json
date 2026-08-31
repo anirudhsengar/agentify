@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-31T05:58:00Z",
+  "generated_at": "2026-08-31T06:09:00Z",
   "report_status": "failed_product_qualification_product_decisions_pending",
   "release_ready": false,
   "final_candidate_sha": null,
@@ -11,7 +11,7 @@
     "release_ready": false,
     "final_candidate_sha": null,
     "current_production_sha": "fdedf98077c86c520ac386f0736186936834a1e3",
-    "current_production_qualification": "not_live_qualified; exact release and CI rerun required after report commit",
+    "current_production_qualification": "Exact 4f0dc70 (same production fdedf98 plus reports) passed local release and all CI; no fresh matrix is qualified. Chi continuation installed but failed manual quality.",
     "deterministic_sha": "20b3a9eb7d72b938a4a30b9e5e873c6bbeacef46",
     "deterministic_status": "passed_exact_Node22_verify_release_97_files_10_corpus_cases_scaffold_5_packed_qualifications_audit_zero",
     "deterministic_log": "/tmp/agentify-preserve-portfolio-release.log",
@@ -527,13 +527,15 @@
           "HTML pagination flow identifies /vets.html, page-1 offset, size 5, model attributes and vetList template.",
           "Installed profiles retain typed flow steps and verified ./gradlew check and ./gradlew test commands."
         ],
-        "manual_pass": false
+        "manual_pass": false,
+        "cleanup": "Generated installation moved to recoverable external quarantined-installation after manual rejection; target Git-clean. Not production rollback proof."
       }
     ],
     "manual_review_totals": {
       "passed": 0,
-      "failed": 1,
-      "required_passes": 3
+      "failed": 2,
+      "required_passes": 3,
+      "note": "Petclinic and Chi are different development-continuation SHAs, not three passing same-candidate repository reviews."
     },
     "hono_narrative_review": {
       "repository": "hono",
@@ -642,7 +644,115 @@
         "reason": "Mustache and Thiserror intentionally ignore lockfiles; PyJWT also lacks a committed lock. No lock-policy exception has been implemented."
       }
     ],
-    "artifact_directory": "/home/anirudh/Projects/agentify-evaluation/83dd8578d2e7cca297ca124c318ef5ed9a4e236d/artifacts"
+    "artifact_directory": "/home/anirudh/Projects/agentify-evaluation/83dd8578d2e7cca297ca124c318ef5ed9a4e236d/artifacts",
+    "newest_exact_sha_evidence": {
+      "release_ready": false,
+      "final_candidate_sha": null,
+      "agentify_sha": "4f0dc70fcf649a7ba5800e76ad9ed82d812da067",
+      "production_sha": "fdedf98077c86c520ac386f0736186936834a1e3",
+      "local_release": {
+        "result": "passed",
+        "node": "22.19.0",
+        "log": "/tmp/agentify-current-report-release.log",
+        "qualified_package_sha256": "a8b3aef9a4f0f84f7344cfe5df05a3d9f1dd0ab6a2db1bbb78e5d8c9c1078be3",
+        "package_entries": 51
+      },
+      "ci": {
+        "result": "passed",
+        "node22": "passed",
+        "node24": "passed",
+        "typecheck": "passed",
+        "audit": "passed",
+        "codeql": "passed",
+        "packed_scaffold": "passed",
+        "workflow": "https://github.com/anirudhsengar/agentify/actions/runs/33362405801",
+        "codeql_workflow": "https://github.com/anirudhsengar/agentify/actions/runs/33362405809"
+      },
+      "live_development_continuation": {
+        "agentify_sha": "4f0dc70fcf649a7ba5800e76ad9ed82d812da067",
+        "target_sha": "36611d24579aaca3250ed9732e17e085c5026334",
+        "exit_code": 0,
+        "elapsed_ms": 99222,
+        "specialist_count": 18,
+        "all_verified_flow_steps_preserved": true,
+        "flow_count": 69,
+        "max_profile_bytes": 25779,
+        "map_bytes": 301477,
+        "original_file_hashes_unchanged": true,
+        "terminal_events": [
+          {
+            "exit_code": 0,
+            "status": "success",
+            "agents_md_path": "AGENTS.md",
+            "duration_ms": 98758,
+            "files_written": 0,
+            "total_turns": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_cache_read_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0,
+            "total_usage_scope": "parent_sessions_this_invocation",
+            "mean_turn_latency_ms": null
+          }
+        ],
+        "validated_commands": [
+          "go test ./...",
+          "go vet ./..."
+        ],
+        "scope": "Uses prior 83dd same-target-HEAD attested map; no model audit rerun, not a fresh held-out qualification round.",
+        "go": "1.23.12",
+        "installation_result": "installed",
+        "product_qualification": "failed_manual_quality",
+        "resource_scope": "New invocation: zero model calls/turns. Prior map lineage still has incomplete provider usage; this does not qualify live provider accounting.",
+        "artifact_directory": "chi-go-retry"
+      },
+      "manual_review": {
+        "repository": "chi",
+        "target_sha": "36611d24579aaca3250ed9732e17e085c5026334",
+        "result": "failed",
+        "review_scope": "Portfolio names/scopes/core ownership/relationships checked for all 18. Full throttle profile and routing/context narrative sections checked against pinned source; not a complete 18-specialist quality pass.",
+        "findings": [
+          {
+            "specialist": "Radix tree URL pattern matching",
+            "claim": "findRoute walks static, param, regexp, catchAll groups in that order",
+            "result": "contradicted",
+            "evidence": "tree.go:91-94 declares ntStatic, ntRegexp, ntParam, ntCatchAll; findRoute ranges children in array order.",
+            "impact": "Predicts the wrong handler priority for competing parameter and regexp routes."
+          },
+          {
+            "specialist": "Rate limiting (token bucket)",
+            "claim": "Rate limiting specialist and token-bucket admission",
+            "result": "misleading_name_and_mechanism",
+            "evidence": "middleware/throttle.go:29-32 documents in-flight concurrency bounds; channels are primed once and tokens returned after handlers, with no timed token replenishment.",
+            "impact": "Suggests a request-rate algorithm not implemented here, despite the body's own concurrency exclusion."
+          },
+          {
+            "specialist": "Rate limiting (token bucket)",
+            "claim": "Capacity exceeded when backlog channel is already full",
+            "result": "contradicted_channel_state",
+            "evidence": "middleware/throttle.go primes available slots, receives on admission, and uses default when no backlog token is available; exhaustion is an empty channel.",
+            "impact": "Inverts semaphore state in the recorded failure flow."
+          }
+        ],
+        "positive_evidence": [
+          "Context scope identifies pooled routing state, Clone-before-escape, Reset and reversed parameter lookup.",
+          "Profiles link radix routing, mux dispatch, context lifecycle and chain composition with distinct implementation core owners.",
+          "Real go test ./... and go vet ./... passed; all recorded verified flows survived materialization."
+        ],
+        "passing_repository_reviews": 0
+      },
+      "cleanup": {
+        "disposition": "manual_recoverable_quarantine_after_quality_failure",
+        "repositories": [
+          "spring-petclinic",
+          "chi"
+        ],
+        "both_git_clean": true,
+        "original_application_files_preserved": true,
+        "note": "Generated managed roots, policies, workflows and guides moved into each external run's quarantined-installation directory. This is evaluator cleanup, not production atomic rollback proof."
+      }
+    }
   },
   "candidate": {
     "production_sha": "e1186861095ac543b4bef9e4f97ca09a76918be8",
