@@ -32,6 +32,35 @@ test("audit budget defaults bound every aggregate resource", () => {
   assert.ok(limits.maxTracerDurationMs <= limits.maxSessionDurationMs);
 });
 
+test("an interrupted admitted request remains charged without inventing response usage", () => {
+  const budget = new AuditResourceBudget({ maxModelCalls: 1 });
+  const session = budget.beginSession();
+  budget.recordProviderRequest(session);
+  assert.equal(budget.snapshot().model_calls, 1);
+  assert.equal(budget.snapshot().turns, 0);
+  assert.equal(budget.snapshot().cost_usd, 0, "no provider usage has arrived; this is not a measured free request");
+  assert.throws(() => budget.recordProviderRequest(session), /model calls reached 1/);
+  assert.equal(budget.snapshot().model_calls, 1);
+});
+
+test("admission and response observations count one call, including explorer overlap", () => {
+  const budget = new AuditResourceBudget();
+  const parent = budget.beginSession();
+  const explorer = budget.beginSession();
+  const response = { type: "message_end", message: { role: "assistant", usage: { input: 7, output: 3 } } } as never;
+  budget.recordProviderRequest(parent);
+  budget.observeParentEvent(response, parent);
+  budget.recordProviderRequest(explorer);
+  budget.observeParentEvent(response, explorer);
+  budget.recordProviderRequest(explorer); // Interrupted: no usage response.
+  budget.finishParentSession(parent, { turns: 1, costUsd: null, diagnostics: { provider_requests: 1 } });
+  budget.finishParentSession(explorer, { turns: 1, costUsd: null, diagnostics: { provider_requests: 2 } });
+  assert.equal(budget.snapshot().model_calls, 3);
+  assert.equal(budget.snapshot().turns, 2);
+  assert.equal(budget.snapshot().input_tokens, 14);
+  assert.equal(budget.snapshot().output_tokens, 6);
+});
+
 test("session deadlines leave bounded headroom for terminal cleanup", () => {
   const budget = new AuditResourceBudget(
     undefined,
