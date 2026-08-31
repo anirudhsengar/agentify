@@ -472,7 +472,10 @@ async function repairSpecialistPortfolio(
 }
 
 export async function runRepositoryAudit(context: RunContext): Promise<FocusedAuditResult> {
-  const log = new AgentifyLog({ cwd: context.cwd, configDir: defaultConfigDir() });
+  const ownsLog = context.auditLog === undefined;
+  const log = context.auditLog ?? new AgentifyLog({ cwd: context.cwd, configDir: defaultConfigDir() });
+  const deferCompletion = context.deferAuditLogCompletion === true;
+  if (deferCompletion && ownsLog) throw new Error("deferred audit logging requires a caller-owned AgentifyLog");
   const startedAt = Date.now();
   const initialMap = loadCanonicalMapAt(context.cwd, AUDIT_STATE_RELATIVE_DIR);
   const initialCommit = currentRepositoryCommit(context.cwd);
@@ -518,7 +521,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         usage: resourceBudget.snapshot(),
       });
     } catch (error) {
-      log.runEnd({
+      if (!deferCompletion) log.runEnd({
         exit_code: exitCode,
         status: "error",
         error_message: `Could not checkpoint interrupted audit usage: ${error instanceof Error ? error.message : String(error)}`,
@@ -584,7 +587,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       was_aborted: false,
       status: "success",
     });
-    log.runEnd({
+    if (!deferCompletion) log.runEnd({
       exit_code: 0,
       status: "success",
       coverage: {
@@ -595,7 +598,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       agents_md_path: null,
     });
     terminalWritten = true;
-    context.ui.info(`agentify: audit log written to ${log.logPath}`);
+    if (!deferCompletion) context.ui.info(`agentify: audit log written to ${log.logPath}`);
     return {
       ...result,
       turns: result.turns + repair.turns,
@@ -619,7 +622,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         limits: { ...resourceBudget.limits },
         usage: resourceBudget.snapshot(),
       });
-      log.runEnd({
+      if (!deferCompletion) log.runEnd({
         exit_code: -1,
         status: "error",
         error_message: reportedError instanceof Error ? reportedError.message : String(reportedError),
@@ -630,13 +633,13 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         },
         agents_md_path: null,
       });
-      context.ui.info(`agentify: audit log written to ${log.logPath}`);
+      if (!deferCompletion) context.ui.info(`agentify: audit log written to ${log.logPath}`);
       throw reportedError;
     }
     throw error;
   } finally {
     process.removeListener("SIGINT", checkpointOnSigint);
     process.removeListener("SIGTERM", checkpointOnSigterm);
-    await log.close();
+    if (ownsLog) await log.close();
   }
 }

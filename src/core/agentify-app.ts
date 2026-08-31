@@ -9,6 +9,7 @@ import {
   specialistEvidenceRecorded,
 } from "./audit/schema.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "./audit/paths.ts";
+import type { AgentifyLog } from "./audit/log.ts";
 import { rollbackPendingInstallation } from "./installer/installation-transaction.ts";
 import { assessExplorerReceiptAttestation } from "./audit/explorer-receipts.ts";
 import { createRepositoryEvidenceDraft } from "./audit/repository-evidence-bootstrap.ts";
@@ -27,6 +28,8 @@ export interface RunAgentifyAppOptions {
   signal?: AbortSignal;
   configOverride?: AgentifyConfig;
   repositoryPreflight?: RepositoryInstallationPreflight;
+  /** Installer-owned log remains open until materialization and validation finish. */
+  auditLog?: AgentifyLog;
 }
 
 /** Provider slug a failure blamed, if the failure is credential-shaped. */
@@ -52,6 +55,8 @@ async function runAuditWithCredentialRecovery(
     config: activeConfig,
     signal: options.signal,
     repositoryPreflight: options.repositoryPreflight,
+    auditLog: options.auditLog,
+    deferAuditLogCompletion: options.auditLog !== undefined,
   });
   try {
     return await runOnce(config);

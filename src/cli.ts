@@ -131,6 +131,21 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
+  const log = new AgentifyLog({ cwd: process.cwd(), configDir: defaultConfigDir() });
+  try {
+    await installRepository(ui, log);
+    log.runEnd({ exit_code: 0, status: "success", agents_md_path: "AGENTS.md" });
+  } catch (error) {
+    rollbackPendingInstallation(process.cwd());
+    log.runEnd({ exit_code: 1, status: "error", error_message: error instanceof Error ? error.message : String(error) });
+    throw error;
+  } finally {
+    await log.close();
+    ui.info(`agentify: audit log written to ${log.logPath}`);
+  }
+}
+
+async function installRepository(ui: ClackUi, log: AgentifyLog): Promise<void> {
   let installerPreflight = inspectRepositoryForInstallation({
     cwd: process.cwd(),
     runValidation: false,
@@ -139,15 +154,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     for (const blocker of installerPreflight.blockers) {
       ui.error(`agentify: blocker [${blocker.code}]: ${blocker.message} ${blocker.remediation}`);
     }
-    const log = new AgentifyLog({ cwd: process.cwd(), configDir: defaultConfigDir() });
     log.runEnd({
       exit_code: 1,
       status: "error",
       error_message: installerPreflight.blockers
         .map((blocker) => `[${blocker.code}]: ${blocker.message} ${blocker.remediation}`).join("\n"),
     });
-    await log.close();
-    ui.info(`agentify: audit log written to ${log.logPath}`);
     throw new Error("repository is not safe to analyze or install; no Agentify files were changed");
   }
   const memoryRecovery = recoverTeamMemoryStore(process.cwd());
@@ -248,6 +260,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       ui,
       runtime: new PiSdkRuntime(),
       repositoryPreflight: installerPreflight,
+      auditLog: log,
     });
   }
 
@@ -368,7 +381,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       ui.info("agentify: optional but recommended: configure AGENT_PAT with target-repository Contents, Pull requests, and Secrets read/write so Agentify-created pull requests trigger normal checks and rotated OAuth credentials persist; enter the token through stdin.");
     }
     if (report.disposition !== "ready") {
-      throw new Error(`installation completed with readiness status ${report.disposition}`);
+      throw new Error(`installation rolled back: readiness status ${report.disposition}`);
     }
     return;
   }

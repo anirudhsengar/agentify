@@ -4,6 +4,10 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Keep the installer audit log open through final validation and atomic
+  installation. A rolled-back installation now emits one failed terminal
+  result instead of retaining the earlier successful semantic-audit result.
+
 - Give bounded retracers the prior attested concern body. Unchanged source
   claims can reuse current-commit receipts while new or changed claims still
   require fresh reads; ownership-only centrality edits preserve the original

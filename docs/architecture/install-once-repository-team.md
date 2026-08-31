@@ -118,6 +118,9 @@ cannot expand it. A permissive policy or an unrelated warning that merely
 mentions AI does not trigger the blocker.
 
 Finalization independently requires a current explorer receipt attestation.
+The CLI owns the external audit log through finalization. Semantic closure
+does not emit the terminal result before installation validation; exactly one
+terminal event records the committed installation or its failure and rollback.
 Missing or stale receipts, failed tracers, and accepted concerns without a
 successful tracer abort the transaction and remove Agentify-managed persistent
 artifacts instead of leaving a partial team.
