@@ -865,7 +865,13 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
       const existing = makeValidCodebaseMap();
       type Concern = NonNullable<typeof existing.concern_evidence>["concerns"][number];
       const prior = JSON.parse(report.slice(report.indexOf("{"), report.lastIndexOf("}") + 1)) as Concern;
-      existing.concern_evidence = { concerns: [{ ...prior, concern: "Entry dispatch" }], not_concerns: [] };
+      const lastUpdated = git(cwd, "show", "-s", "--format=%cI", "HEAD");
+      existing.concern_evidence = { concerns: [
+        { ...prior, concern: "Entry dispatch", last_updated: lastUpdated },
+        ...Array.from({ length: 40 }, (_, index) => ({
+          ...prior, concern: `Other provisional owner ${index}: ${"x".repeat(250)}`, last_updated: lastUpdated,
+        })),
+      ], not_concerns: [] };
       const dir = path.join(cwd, ".agentify/runtime/audit");
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(path.join(dir, "codebase_map.json"), JSON.stringify(existing));
@@ -891,6 +897,8 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
                 assert.ok(task.includes('"Entry dispatch"'), "the tracer needs existing core claims before proposing overlap");
                 assert.ok(task.includes('"README.md"'));
                 assert.match(task, /provisional.*claims/i);
+                assert.ok(Buffer.byteLength(task) < 10_000, "ownership context must stay bounded independently of portfolio size");
+                assert.match(task, /[1-9][0-9]* claims omitted/);
               }
               if (observation !== "none") {
                 const isGrep = observation.startsWith("grep-") || observation === "no-matches" || observation === "wrong-subtree";
@@ -947,7 +955,12 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
       { cwd } as never,
     );
     const backedBySource = observation === "read" || observation === "compact" || observation === "ownership-context" || observation.startsWith("grep-");
-    assert.equal((result as { isError?: boolean }).isError, backedBySource ? undefined : true, observation);
+    assert.equal((result as { isError?: boolean }).isError, backedBySource ? undefined : true, `${observation}: ${textFrom(result).slice(0,1_500)}`);
+    if (observation === "ownership-context") {
+      const details = result.details as { structured_concern?: { touchpoints: Array<{ centrality: string }> } };
+      assert.equal(details.structured_concern?.touchpoints[0]?.centrality, "core",
+        "provisional hints must not silently resolve an ambiguous core claim; the compiler still owns closure");
+    }
     if (observation === "cancelled") {
       assert.equal(fs.existsSync(path.join(cwd, ".agentify/runtime/audit/codebase_map.json")), false,
         "a cancelled tracer must not checkpoint a late report after parent rollback");

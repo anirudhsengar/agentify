@@ -9,20 +9,20 @@
   "evaluation_scope": "specialist compiler stabilization",
   "latest_development_evidence": {
     "release_ready": false,
-    "deterministic_sha": "49c4a90babcccff74270468badfe71a0860daa09",
-    "deterministic_status": "passed_local_97_files_10_corpus_cases_and_CI_Node22_Node24_package_scaffold_audit_CodeQL",
-    "live_sha": "74d23647fa777133e573b588a495f4d7d80bea8b",
-    "package_sha256": "27c24b386a297797c5026ca1fc353af46b2d12c7a27a21da641effb565143562",
+    "deterministic_sha": "4bfc709cbb09365323390d686febc453a33fc15b",
+    "deterministic_status": "passed_exact_verify_release_97_files_10_corpus_cases_and_CI_Node22_Node24_package_scaffold_audit_CodeQL",
+    "live_sha": "4bfc709cbb09365323390d686febc453a33fc15b",
+    "package_sha256": "26084ac4ff4612822d94d37fc96785b08e57ae7788d742d3bed66ba1ad5899a7",
     "node": "22.19.0",
     "models_and_budgets": "Unchanged configured models, high thinking, default budgets",
     "cases": [
-      {"repository":"hono","target_sha":"e2740d5a1bd0b4254e517e3af8b60789284bc7bd","invocation":1,"disposition":"diagnostic_only","qualification":"failed","draft_concerns":4,"elapsed_ms":903958,"terminal_events":1,"original_file_hashes_unchanged":true},
-      {"repository":"gin","target_sha":"dcaa4296d111981ffb31ac3eba90bb63e1eb5ab9","invocation":1,"disposition":"diagnostic_only","qualification":"failed","draft_concerns":7,"elapsed_ms":758061,"terminal_events":1,"original_file_hashes_unchanged":true}
+      {"repository":"hono","target_sha":"e2740d5a1bd0b4254e517e3af8b60789284bc7bd","invocations":2,"disposition":"diagnostic_only","qualification":"failed","draft_concerns":8,"elapsed_ms":2000498,"terminal_events_per_invocation":1,"original_file_hashes_unchanged":true,"reported_aggregate":{"elapsed_ms":1799849,"model_calls":212,"turns":212,"input_tokens":4129586,"output_tokens":164622,"cost_usd":0.55623226,"explorer_spawns":24,"semantic_repair_passes":2}},
+      {"repository":"gin","target_sha":"dcaa4296d111981ffb31ac3eba90bb63e1eb5ab9","invocations":2,"disposition":"diagnostic_only","qualification":"failed","draft_concerns":10,"elapsed_ms":1519370,"terminal_events_per_invocation":1,"original_file_hashes_unchanged":true,"reported_aggregate":{"elapsed_ms":1498400,"model_calls":217,"turns":217,"input_tokens":3525581,"output_tokens":141753,"cost_usd":0.46932454,"explorer_spawns":24,"semantic_repair_passes":1}}
     ],
     "persistent_artifacts": [".agentify/runtime/audit/codebase_map.json"],
-    "resource_accounting": "Incomplete: an explorer ignored parent cancellation and continued after the terminal event. No complete-run token, call, cost, or runtime budget pass is claimed.",
-    "manual_quality": "Hono draft rejected: incorrect Quick preset fallback and matcher-finalization claims despite observed source paths. This does not count toward installed-team review.",
-    "artifact_directory": "/home/anirudh/Projects/agentify-evaluation/74d23647fa777133e573b588a495f4d7d80bea8b/artifacts",
+    "resource_accounting": "Incomplete: invocation-1 reported usage reconciles to parent plus explorer responses, but interrupted requests are absent from response-based call counts. No late explorer session events were observed after invocation-1 terminal events; SDK disposal disconnects listeners, so this alone does not prove provider settlement. Hono aggregate harness wall time exceeds 30 minutes. No complete live resource-budget pass is claimed.",
+    "manual_quality": "Hono draft rejected: lazy matcher compilation is now described, but the imported implementation has the wrong flow path and a backend-specific late-registration restriction is generalized to all routers. Quick is not covered. These are draft reviews, not installed-team reviews.",
+    "artifact_directory": "/home/anirudh/Projects/agentify-evaluation/4bfc709cbb09365323390d686febc453a33fc15b/artifacts",
     "carry_forward": false
   },
   "candidate": {

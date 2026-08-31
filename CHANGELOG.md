@@ -4,6 +4,10 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Give stateless concern tracers bounded existing core-ownership context and
+  the actual repository tool root. Require source-local delegation and
+  implementation-specific behavioral claims; unresolved conflicts remain gaps.
+
 - Charge parent and explorer model requests before dispatch, including
   interrupted calls. Report unanswered calls and incomplete provider cost
   accounting explicitly in terminal logs and log inspection.

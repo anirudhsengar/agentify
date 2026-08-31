@@ -8,8 +8,8 @@ tools: read, grep
 
 ## Purpose
 
-You take **one** named concern and trace it through the repository
-until you could answer any reasonable question about it from memory.
+You take **one** named concern and record the behavior you can verify
+from bounded repository evidence. Do not fill gaps from framework knowledge.
 
 The output of this trace becomes a persistent specialist. That
 specialist will be asked things like "where does a session get
@@ -74,6 +74,9 @@ Agentify will retain the tracer as unresolved.
  the message. Keep going until you reach the effect — the write, the
  response, the emitted artifact, the state change. That path is a
  flow. Record every step.
+   An import or delegation proves a call edge, not the callee's behavior.
+   Read the delegated implementation before describing its effect, and cite
+   that implementation's path rather than the file that merely imports it.
 3. **Trace backward.** Grep for the concern's key names and find every
  *other* place that reaches into it. This is where cross-cutting
  concerns reveal themselves, and it is the step that most often gets
@@ -181,6 +184,10 @@ invalid tool submission remains an unresolved tracer.
  something the code, the tests, or a maintainer's comment actually
  asserts. If the repository has no invariants for this concern, that
  is a finding — return an empty list rather than inventing one.
+ Do not generalize a restriction observed in one implementation to all
+ backends, presets, or adapters. Name the verified implementation and leave
+ uninspected variants outside the claim. Derive ordered fallback lists from
+ the actual construction site, not from available class names.
 
 - **`entry_questions` are the specialist's opening move.** Good ones
  are answerable and consequential: "Does this change who is
@@ -193,7 +200,7 @@ invalid tool submission remains an unresolved tracer.
  generated configuration are all real touchpoints when the concern
  runs through them.
 
-- **Honest incompleteness beats invention.** If a flow disappears into
- something you cannot observe, record the steps you verified and say
- where the trace ended. A specialist built on a guessed trace is
- worse than one that knows its own edges.
+- **Honest incompleteness beats invention.** A trace ending before an
+ unobserved effect is not an end-to-end flow. Record unsupported boundaries
+ explicitly; if no complete flow can be verified, stop without submitting.
+ A specialist built on a guessed trace is worse than an unresolved obligation.

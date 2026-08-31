@@ -22,10 +22,11 @@ The archived 80-file inventory in the machine-readable report is not the current
 
 ## Current development evidence
 
-- Exact `49c4a90babcccff74270468badfe71a0860daa09` passed all 97 test files and the ten-case executable corpus locally. Its CI passed on Node 22.19.0 and Node 24, including typecheck, packed-package/scaffold qualification, full dependency audit, and CodeQL. Subsequent production changes require fresh qualification.
-- Fresh Hono and Gin invocation-one evaluations on `74d23647fa777133e573b588a495f4d7d80bea8b` both failed installation at the session deadline: four and seven draft concerns respectively. Wall-clock durations were 903,958 ms and 758,061 ms. Each emitted one terminal audit result and retained only the permitted diagnostic map; original file hashes were unchanged.
-- That candidate's terminal usage counters are not complete-run proof: Hono's last tracer continued after the parent terminal event. The ignored cancellation signal is corrected in `49c4a90`, with pre-dispatch, creation, active-work, completion-race, and late-checkpoint regressions. Live verification of the correction remains required.
-- Source observation receipts do not prove narrative correctness. Manual inspection of Hono's draft found an incorrect Quick preset fallback chain and an incorrect matcher-finalization claim. This is a quality failure, not an accepted installed-team review.
+- Exact `4bfc709cbb09365323390d686febc453a33fc15b` passed `verify:release` locally, including all 97 test files and ten executable corpus cases. Its CI passed on Node 22.19.0 and Node 24, including package/scaffold, full audit, and CodeQL. Subsequent production changes require fresh qualification.
+- Hono and Gin each failed two same-HEAD invocations on that SHA. They retained eight and ten draft concerns, not installed teams. Aggregate harness wall times were 2,000,498 ms and 1,519,370 ms. Each invocation emitted exactly one terminal result; original file hashes were unchanged. Only the permitted diagnostic map remained.
+- Gin exhausted 24 explorers with shared core-ownership conflicts and untraced new proposals. Hono reached the 30-minute aggregate audit deadline with public surfaces, behavioral clusters, and failed tracers unresolved. Its total harness wall time exceeded 30 minutes; no runtime pass is claimed.
+- First-invocation reported usage reconciles to parent plus explorer responses. No later explorer session events were observed, but SDK disposal disconnects listeners; absence of events alone does not prove provider settlement. Interrupted requests were not counted at admission. New deterministic regressions cover admitted-but-interrupted calls, terminal lineage accounting, deadline-arrival usage, and cancellation without fabricated response usage. Complete live accounting verification remains required.
+- Hono's newer draft correctly describes lazy matcher compilation, but misattributes an imported implementation's flow path and generalizes a backend-specific restriction to all routers. Quick remains uncovered. Source-local and implementation-specific tracer instructions now address those general failure modes, but correction is not claimed until fresh generated output passes inspection. Draft review does not count toward the three installed-team reviews.
 - Development installations on earlier commits do not qualify later production code. No final candidate or two clean qualification rounds have been established.
 
 ## Known limitations
@@ -33,6 +34,7 @@ The archived 80-file inventory in the machine-readable report is not the current
 - Hono still fails convergence and has exposed false attachment, generic-portfolio, and unsupported narrative risks. Safe failure remains necessary but is not successful product qualification.
 - The reduced corpus now exercises real compilation, installation, readiness canaries, and validation-failure rollback, with only GitHub operations replayed. It does not replace live generation or maintainer-quality review.
 - Validation commands execute in disposable exact-HEAD checkouts with scrubbed credentials, but Agentify does not provide container or network isolation.
+- Pinned Click delegates contribution rules to Pallets' external policy. Its classification as an installation-required non-policy case conflicts with the task's policy constraints; no new Click writes or policy bypass have been performed.
 - Live model outcomes are nondeterministic. The executable replay corpus, compiler invariants, and package qualification remain the authoritative repeatable release gates.
 
 ## Recommendation
