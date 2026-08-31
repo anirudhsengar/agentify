@@ -1,8 +1,8 @@
 {
   "serialization": {
     "codebase_map": {
-      "sha256": "09526eadc68f029cf688f973410c38932d30814351db07c9e19f35623d1f417f",
-      "bytes": 60867
+      "sha256": "c40822e00aaeac3b63ee9e965e2033d25d404fb6c42455becb7e37d8525a6bcd",
+      "bytes": 61603
     },
     "partial_codebase_map": {
       "sha256": "f8510472807c6de9624fdb2a97580c6a56c5709cabbc95caab55514d0431f7b3",
@@ -13,8 +13,8 @@
       "bytes": 1533
     },
     "write_map_delta_params": {
-      "sha256": "a294392309c976d98234865b1a69f29b03a9c5e347b3709ebe827fd8a0f158d8",
-      "bytes": 4597
+      "sha256": "46153283eb3756e1d78a5e0b0694ec0e6d8024a0fdb670c76e0e42a71ba5f1bb",
+      "bytes": 5433
     }
   },
   "required": {
@@ -102,6 +102,7 @@
       "mode"
     ],
     "write_map_delta_params": [
+      "claim_correction",
       "core_owner",
       "dimension",
       "confidence",

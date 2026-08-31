@@ -43,6 +43,7 @@ import {
 import { validateMap } from "./map-validation.ts";
 import { currentRepositoryCommit } from "./explorer-receipts.ts";
 import { resolveConcernCoreOwner } from "./specialist-completion.ts";
+import { correctSpecialistClaim } from "./specialist-review.ts";
 
 export interface MapTools {
     writeMapTool: ToolDefinition;
@@ -1549,6 +1550,17 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             const removedManagedPaths = stripAgentifyManagedRepositoryEvidence(validMap);
             const overwriteError = concernOverwriteError(existing, validMap);
             if (overwriteError) return overwriteError;
+            if (params.claim_correction) {
+                try {
+                    validMap = correctSpecialistClaim(validMap, params.claim_correction, ctx.cwd);
+                } catch (error) {
+                    return {
+                        content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+                        isError: true,
+                        details: undefined as unknown as Record<string, unknown>,
+                    };
+                }
+            }
             if (params.core_owner) {
                 try {
                     validMap = resolveConcernCoreOwner(validMap, params.core_owner, ctx.cwd, currentRepositoryCommit(ctx.cwd));

@@ -1,6 +1,15 @@
 import { Type, type Static } from "typebox";
 import { SafeRelativePathSchema } from "./primitives.ts";
 
+const SpecialistReviewFindingSchema = Type.Object({
+  claim: Type.String({ minLength: 1, maxLength: 256 }),
+  path: SafeRelativePathSchema,
+  excerpt: Type.String({ minLength: 1, maxLength: 1_024,
+    description: "One contiguous verbatim source excerpt. One line or expression is sufficient. Never join separate locations, insert ellipses, or change relative indentation." }),
+  reason: Type.String({ minLength: 1, maxLength: 1_024,
+    description: "Why this excerpt falsifies or fails to support the named assertion." }),
+}, { additionalProperties: false });
+
 export function createSpecialistReviewSubmissionSchema(claimIds: readonly string[]) {
   const claimId = Type.String({ enum: [...claimIds],
     description: "Exact supplied claim ID, never the claim text or a description of it." });
@@ -8,12 +17,8 @@ export function createSpecialistReviewSubmissionSchema(claimIds: readonly string
     checked_claims: Type.Array(claimId, { maxItems: 512,
       description: "IDs actually checked. Include every supplied ID only for a null finding." }),
     finding: Type.Union([Type.Null(), Type.Object({
+      ...SpecialistReviewFindingSchema.properties,
       claim: claimId,
-      path: SafeRelativePathSchema,
-      excerpt: Type.String({ minLength: 1, maxLength: 1_024,
-        description: "One contiguous verbatim source excerpt. One line or expression is sufficient. Never join separate locations, insert ellipses, or change relative indentation." }),
-      reason: Type.String({ minLength: 1, maxLength: 1_024,
-        description: "Why this excerpt falsifies or fails to support the named assertion." }),
     }, { additionalProperties: false })]),
   }, { additionalProperties: false });
 }
@@ -28,6 +33,8 @@ export const SpecialistReviewAttestationSchema = Type.Object({
     failure: Type.Union([Type.Null(), Type.String({ minLength: 1, maxLength: 2_048 })]),
     // Application-owned: incomplete execution may retry once in a later run.
     retryable: Type.Optional(Type.Boolean()),
+    // Application-owned source finding; never reconstructed from failure prose.
+    finding: Type.Optional(SpecialistReviewFindingSchema),
   }, { additionalProperties: false }), { maxItems: 128 }),
 }, { additionalProperties: false });
 

@@ -70,6 +70,16 @@ export type WriteMapParams = Static<typeof WriteMapParamsSchema>;
 export const NON_CLOSING_DELTA_DIMENSIONS = ["specialist_evidence", "concern_evidence"] as const;
 
 export const WriteMapDeltaParamsSchema = Type.Object({
+  claim_correction: Type.Optional(Type.Object({
+    concern: Type.String({ minLength: 1, maxLength: 256 }),
+    digest: Type.String({ pattern: "^[0-9a-f]{64}$" }),
+    claim: Type.String({ pattern: "^(pitfalls|invariants)\\[[0-9]+\\]$" }),
+    statement: Type.String({ minLength: 1, maxLength: 2_048 }),
+    rationale: Type.String({ minLength: 1, maxLength: 2_048 }),
+  }, {
+    additionalProperties: false,
+    description: "Correct only a named pitfall or invariant rejected by a current-HEAD, exact-body narrative review. Use its exact concern, digest and claim ID. statement replaces risk/rule; rationale replaces consequence/why. Preserve the cited reference. Use delta: {}. No paths, ownership, scope or flows change; fresh full review is mandatory and this proposal grants no approval.",
+  })),
   core_owner: Type.Optional(Type.Object({
     path: SafeRelativePathSchema,
     concern: Type.String({ minLength: 1, maxLength: 256 }),

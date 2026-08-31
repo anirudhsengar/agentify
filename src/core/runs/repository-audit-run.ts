@@ -23,7 +23,7 @@ import {
   type SpecialistEvidenceAssessment,
 } from "../audit/schema.ts";
 import { createWriteMapTools, loadCanonicalMapAt } from "../audit/write-map-tool.ts";
-import { assessSpecialistReviews, reviewSpecialistCompilation } from "../audit/specialist-review.ts";
+import { assessSpecialistReviews, reviewSpecialistCompilation, specialistReviewDigest } from "../audit/specialist-review.ts";
 import { createReadOnlyExecutionPolicy } from "../security/execution-policy.ts";
 import type { AgentRuntimeResult } from "../types.ts";
 import type { RunContext } from "./run-context.ts";
@@ -64,6 +64,14 @@ function repairPrompt(
   compilationReasons: ReadonlyArray<string> = [],
 ): string {
   const currentFailures = [...assessment.reasons, ...compilationReasons];
+  const narrativeCorrections = (map.specialist_reviews?.records ?? []).flatMap(record => {
+    const body = map.concern_evidence?.concerns.find(concern => concern.concern === record.concern);
+    const match = /^(pitfalls|invariants)\[([0-9]+)\]$/.exec(record.finding?.claim ?? "");
+    if (!record.failure || !body || record.digest !== specialistReviewDigest(body) || !match) return [];
+    return [{ concern: record.concern, digest: record.digest, claim: record.finding!.claim,
+      original: match[1] === "pitfalls" ? body.pitfalls[Number(match[2])] : body.invariants[Number(match[2])],
+      finding: record.finding }];
+  }).slice(0, 12);
   const coreConflictReasons = currentFailures.filter((reason) =>
     /multiple core owners/i.test(reason)
   );
@@ -109,7 +117,8 @@ function repairPrompt(
     "The repository's coverage map is complete, but its specialist portfolio failed the trusted semantic-quality gate.",
     `Repair pass ${pass}/${maxRepairPasses}; ${assessment.uncovered_paths.length} tracked paths and ${assessment.uncovered_clusters.length} local implementation/test clusters remain in total.`,
     `Current failures: ${currentFailures.slice(0, 12).join("; ")}.`,
-    "A narrative review finding is a source-backed correction obligation: retrace that exact concern and correct the named assertion while retaining its verified flow structure. Covered paths do not excuse false claims; do not reject a real concern or suppress the review to close it.",
+    "A narrative review finding is a source-backed correction obligation. For a listed pitfall/invariant correction, use write_map_delta with delta: {} and claim_correction: {concern, digest, claim, statement, rationale}; use the exact identifiers below. Correct only that assertion from the source finding, including its consequence/explanation. All other claims, references, ownership and flows are preserved, and full normalized review remains mandatory. Other findings require retracing the exact concern. Covered paths do not excuse false claims; never reject real behavior or suppress review to close it.",
+    `Bounded narrative corrections: ${JSON.stringify(narrativeCorrections)}.`,
     `Accepted concerns to preserve or safely subsume: ${assessment.accepted_concerns.join(", ") || "none"}.`,
     `Current tracked-path batch: ${uncovered}.`,
     `Current local implementation/test-cluster batch, ordered by direct dependency centrality: ${uncoveredClusters}.`,
@@ -134,7 +143,7 @@ function repairPrompt(
     "Shared supporting files should appear under every concern they serve. When the compiler names multiple core owners that cannot retain independent file-level implementation ownership, group the already-attested bodies instead of guessing an owner or retranscribing them: add each narrower exact identity to not_concerns with grouped_into set to one exact existing broader concern identity and a repository-specific 'Subsumed by ...' reason. Trusted normalization unions their flows, touchpoints, invariants, pitfalls, questions, and validation only when the grouped concerns share a core implementation file; unrelated grouping remains unresolved.",
     `Current core-conflict preservation obligations: ${coreConflictObligations.join(" || ") || "none"}.`,
     "Do not include .agentify/** or .github/agentify/** as repository architecture, specialists, or application evidence.",
-    "Agentify validates and checkpoints complete concern_tracer bodies directly. Never retranscribe or resend accepted concern bodies through write_map_delta. Use write_map_delta for compact core_owner proposals or rejected candidates in not_concerns, or submit an empty concern list when no rejection is needed. Omit the dimension parameter because concern evidence closes no D1-D10 dimension.",
+    "Agentify validates and checkpoints complete concern_tracer bodies directly. Never retranscribe or resend accepted concern bodies through write_map_delta. Use write_map_delta for compact core_owner or claim_correction proposals, or rejected candidates in not_concerns. Omit the dimension parameter because concern evidence closes no D1-D10 dimension.",
     "Do not modify application files, workflows, dependencies, prompts, or documentation. Do not return prose instead of the structured write_map_delta call.",
   ].join(" ");
 }

@@ -470,6 +470,16 @@ strategy remains available for an intentional repair.
 Both model map-write boundaries reject any merged result that removes or changes
 a recorded concern body. Appending rejections cannot erase the portfolio; body
 replacement belongs to the attested tracer and removal to trusted reconciliation.
+The existing delta tool also accepts a narrowly scoped `claim_correction`: only
+the statement and explanation of one pitfall or invariant named by an
+application-owned source review can change. The proposal binds the exact body
+digest and current HEAD, and requires observed tracer evidence. References,
+other assertions, scope, identity, ownership and ordered flow steps cannot change.
+The repair prompt supplies only bounded rejected claims and their source findings.
+Correction neither fabricates a retrace nor approves the body: its changed digest
+requires full normalized review inside the existing bounded repair loop. Legacy
+failures without a typed finding still require retracing; failure prose cannot
+authorize a correction. All final compiler, receipt and atomicity gates remain.
 Before either a full map or delta is assessed, the write boundary removes
 Agentify-managed paths from skeleton topography, entry/read-first lists,
 agentic-layer bleed paths, and repository process identities. The tool reports

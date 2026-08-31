@@ -12,6 +12,7 @@ import { AuditBudgetExceededError, type AuditResourceBudget } from "./resource-b
 import type { Concern } from "./schema/concerns.ts";
 import type { CodebaseMap } from "./schema/codebase-map.ts";
 import { createSpecialistReviewSubmissionSchema, type SpecialistReviewSubmission } from "./schema/specialist-review.ts";
+import type { WriteMapDeltaParams } from "./schema/write-map-params.ts";
 import { concernEvidencePaths } from "./specialist-completion.ts";
 import type { SpecialistCompilationResult } from "./specialist-compiler.ts";
 
@@ -59,6 +60,47 @@ export function assessSpecialistReviews(map: CodebaseMap, cwd: string): string[]
   });
 }
 
+/** Revise one rejected assertion, not its evidence or the rest of the body. */
+export function correctSpecialistClaim(
+  map: CodebaseMap, proposal: NonNullable<WriteMapDeltaParams["claim_correction"]>, cwd: string,
+): CodebaseMap {
+  const commit = currentRepositoryCommit(cwd);
+  const concern = map.concern_evidence?.concerns.find(item => item.concern === proposal.concern);
+  const record = map.specialist_reviews?.records.find(item => item.concern === proposal.concern
+    && item.digest === proposal.digest);
+  const match = /^(pitfalls|invariants)\[([0-9]+)\]$/.exec(proposal.claim);
+  if (!commit || map.specialist_reviews?.repository_commit !== commit
+    || map.explorer_receipts?.repository_commit !== commit || !concern
+    || specialistReviewDigest(concern) !== proposal.digest || !record?.failure
+    || record.finding?.claim !== proposal.claim || !match
+    || [proposal.statement, proposal.rationale].some(text => !text.trim() || text.length > 2_048)) {
+    throw new Error("claim_correction requires a current-HEAD exact-body rejected pitfall or invariant");
+  }
+  const observed = new Set(map.explorer_receipts.receipts.filter(receipt =>
+    receipt.mode === "concern_tracer" && receipt.success && receipt.report_concern === concern.concern
+  ).flatMap(receipt => receipt.observed_paths ?? []));
+  if (concernEvidencePaths(concern).some(file => !observed.has(file))) {
+    throw new Error("claim_correction requires observed tracer evidence; retrace missing source");
+  }
+  const corrected = structuredClone(map);
+  const body = corrected.concern_evidence!.concerns.find(item => item.concern === proposal.concern)!;
+  const index = Number(match[2]);
+  if (match[1] === "pitfalls") {
+    const claim = body.pitfalls[index];
+    if (!claim) throw new Error("claim_correction names a missing pitfall");
+    claim.risk = proposal.statement;
+    claim.consequence = proposal.rationale;
+  } else {
+    const claim = body.invariants[index];
+    if (!claim) throw new Error("claim_correction names a missing invariant");
+    claim.rule = proposal.statement;
+    claim.why = proposal.rationale;
+  }
+  if (specialistReviewDigest(body) === proposal.digest) throw new Error("claim_correction made no progress");
+  // The old rejected digest stays as provenance, never as approval of new prose.
+  return corrected;
+}
+
 function immutableSources(cwd: string, commit: string, concern: Concern, deadline: number): Map<string, string> {
   const timeout = (): number => {
     const remaining = deadline - Date.now();
@@ -93,7 +135,7 @@ function immutableSources(cwd: string, commit: string, concern: Concern, deadlin
 
 async function reviewConcern(
   context: RunContext, concern: Concern, commit: string, budget: AuditResourceBudget,
-): Promise<{ failure: string | null; retryable: boolean }> {
+): Promise<{ failure: string | null; retryable: boolean; finding?: NonNullable<SpecialistReviewSubmission["finding"]> }> {
   const deadline = Date.now() + budget.remainingDurationMs(REVIEW_TIMEOUT_MS);
   const sources = immutableSources(context.cwd, commit, concern, deadline);
   const claims = reviewClaims(concern);
@@ -166,7 +208,7 @@ async function reviewConcern(
     const finding = submitted.finding;
     return { failure: finding
       ? `${finding.claim}: ${finding.reason} (${finding.path}: ${finding.excerpt})`.slice(0, 2_048) : null,
-    retryable: false };
+    retryable: false, ...(finding ? { finding } : {}) };
   } finally {
     clearTimeout(timer);
     context.signal?.removeEventListener("abort", cancel);
@@ -194,12 +236,13 @@ export async function reviewSpecialistCompilation(
     context.ui.status(`agentify: reviewing normalized specialist ${concern.concern}`);
     let failure: string | null;
     let retryable = true;
-    try { ({ failure, retryable } = await reviewConcern(context, concern, commit, budget)); }
+    let finding: NonNullable<SpecialistReviewSubmission["finding"]> | undefined;
+    try { ({ failure, retryable, finding } = await reviewConcern(context, concern, commit, budget)); }
     catch (error) {
       if (error instanceof AuditBudgetExceededError) throw error;
       failure = `Review unresolved: ${error instanceof Error ? error.message : String(error)}`.slice(0, 2_048);
     }
-    records.push({ concern: concern.concern, digest, run_id: runId, failure, retryable });
+    records.push({ concern: concern.concern, digest, run_id: runId, failure, retryable, ...(finding ? { finding } : {}) });
     map.specialist_reviews = { repository_commit: commit, records };
     checkpoint?.(structuredClone(map));
     context.auditLog?.sessionEvent({ pi_event_type: "specialist_review_result",

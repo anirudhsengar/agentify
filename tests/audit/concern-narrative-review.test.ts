@@ -67,6 +67,7 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     const loggedEvents: string[] = [];
     let forgedExcerpt = false;
     let excerptOverride: string | undefined;
+    let reviewedClaim = "pitfalls[0]";
     let mode: "normal" | "incomplete" | "prose" | "interrupted" = "normal";
     const runtime: AgentRuntime = { async runSession(options) {
       reviews += 1;
@@ -92,10 +93,10 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
         role: "assistant", stopReason: "toolUse", usage: { input: 50, output: 10, cost: { total: 0.001 } },
       } } as never);
       if (mode === "prose") return { turns: 1, costUsd: 0.001, aborted: false };
-      const falseClaim = JSON.stringify(input.claims["pitfalls[0]"]).includes(FALSE_CLAIM);
+      const falseClaim = JSON.stringify(input.claims[reviewedClaim]).includes(FALSE_CLAIM);
       await options.customTools![0]!.execute("review", {
         checked_claims: mode === "incomplete" ? [] : Object.keys(input.claims),
-        finding: falseClaim ? { claim: "pitfalls[0]", path: "clock.py",
+        finding: falseClaim ? { claim: reviewedClaim, path: "clock.py",
           excerpt: excerptOverride ?? (forgedExcerpt ? "return False" : "return int(value)"), reason: CORRECTION } : null,
       }, undefined, undefined, { cwd } as never);
       options.onEvent!({ type: "tool_execution_end" } as never);
@@ -150,6 +151,7 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       { ...proposal, digest: "0".repeat(64) }, { ...proposal, claim: "invariants[0]" },
       { ...proposal, claim: "flows[0]" }, { ...proposal, concern: "Other identity" },
       { ...proposal, statement: "" }, { ...proposal, statement: "x".repeat(2_049) },
+      { ...proposal, statement: FALSE_CLAIM, rationale: concern.pitfalls[0]!.consequence },
     ]) {
       save();
       const before = fs.readFileSync(tools.canonicalMapPath(cwd), "utf8");
@@ -157,12 +159,13 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       assert.equal((invalidResult as { isError?: boolean }).isError, true);
       assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), before);
     }
-    for (const fault of ["stale-head", "unreviewed", "approved", "unobserved", "forged-finding", "changed-body"]) {
+    for (const fault of ["stale-head", "unreviewed", "approved", "unobserved", "forged-finding", "changed-body", "legacy-finding"]) {
       save();
       const input = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
       if (fault === "stale-head") input.specialist_reviews!.repository_commit = "0".repeat(40);
       if (fault === "unreviewed") delete input.specialist_reviews;
       if (fault === "approved") input.specialist_reviews!.records[0]!.failure = null;
+      if (fault === "legacy-finding") delete input.specialist_reviews!.records[0]!.finding;
       if (fault === "unobserved") input.explorer_receipts!.receipts.forEach(item => { item.observed_paths = []; });
       if (fault === "changed-body") input.concern_evidence!.concerns[0]!.covers = "Unreviewed new scope.";
       writeCanonicalMap(cwd, input, { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
@@ -180,6 +183,34 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     assert.deepEqual(compileSpecialistEvidence(accepted.map, { cwd }).map, accepted.map);
     assert.equal(budget.snapshot().unreported_calls, 0);
     assert.equal(budget.snapshot().unreserved_calls, 0);
+    save();
+    await repair({ ...proposal, statement: FALSE_CLAIM, rationale: "The same unsupported assertion still applies." });
+    const stillFalse = await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!, { cwd }), budget, "false-repair");
+    assert.equal(stillFalse.complete, false, "accepting a correction proposal never bypasses semantic review");
+    assert.match(stillFalse.reasons.join("; "), /Numeric strings are accepted/);
+
+    reviewedClaim = "invariants[0]";
+    const invariantInput = structuredClone(correctedMap);
+    invariantInput.concern_evidence!.concerns[0]!.invariants = [
+      { rule: FALSE_CLAIM, why: "String inputs must fail.", reference: "clock.py" },
+    ];
+    const invariantRejected = await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(invariantInput, { cwd }), budget, "invariant-review");
+    assert.equal(invariantRejected.complete, false);
+    writeCanonicalMap(cwd, invariantRejected.map, { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
+    const invariantRepair = await repair({ ...proposal, claim: reviewedClaim,
+      digest: invariantRejected.map.specialist_reviews!.records[0]!.digest });
+    assert.notEqual((invariantRepair as { isError?: boolean }).isError, true);
+    const invariantCorrected = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+    const expectedInvariantEvidence = structuredClone(invariantInput.concern_evidence!);
+    expectedInvariantEvidence.concerns[0]!.invariants[0] = {
+      rule: CORRECTION, why: proposal.rationale, reference: "clock.py",
+    };
+    assert.deepEqual(invariantCorrected.concern_evidence, expectedInvariantEvidence);
+    assert.equal((await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(invariantCorrected, { cwd }), budget, "invariant-review")).complete, true);
+    reviewedClaim = "pitfalls[0]";
     forgedExcerpt = true;
     const forged = await reviewSpecialistCompilation(context, initial, budget, "forged-review");
     assert.equal(forged.complete, false);

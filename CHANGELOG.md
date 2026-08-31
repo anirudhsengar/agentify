@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Correct a review-rejected pitfall or invariant without regenerating an entire specialist. Exact HEAD/body/finding bindings preserve references, flows and ownership; the corrected body still requires full normalized review before installation.
+
 - Keep request-admission refusals separate from incurred budget violations. Concurrent responses may release capacity for a later bounded retry; refused calls spend nothing and interrupted reservations remain intact.
 
 - Resolve ownership-only proposals without retracing unchanged specialist bodies. Current-HEAD evidence, verified flows and independent adjacent ownership are required; source claims remain immutable and normalized review is invalidated.

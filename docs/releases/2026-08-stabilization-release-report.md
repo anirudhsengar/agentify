@@ -4,7 +4,17 @@ Not release-ready. Do not merge PR #13. The earlier release recommendation is wi
 
 The approved gate separates high-quality specialist installation from operational execution readiness. A semantically complete `analysis-ready` team may count as an installation, while missing reproducible repository-owned validation keeps issue intake, publication, autonomous mutation and learning disabled. External harness locks never clear those execution blockers.
 
-## Current development evidence — 2026-08-31 13:55 UTC
+## Current development evidence — 2026-08-31 14:53 UTC
+
+Exact `18693b08d3b680eec8bc9d5cc49ba9dbb4063751` passed both local Node 22.19/24.19 release suites, all CI and CodeQL. Both locally qualified packages have SHA-256 `d4d1ba8fa8c1e504e9d066662eebb90c16888738de98c9d2554ba00145542ae6`. Live three-tracer cancellation returned in 15 ms with all unanswered calls fully reserved; a separate admission/retry probe completed 13 calls with fully reported usage. These are component proofs, not installation success.
+
+Four subsequent completed product runs also failed: Hono and Chi on `9c5bcd0` took 936,171 and 1,088,213 ms; Mustache on the same SHA took 1,728,411 ms; SQLAlchemy on `6439d0f` took 1,353,730 ms. Each installed no team, preserved tracked files, and emitted exactly one error terminal. Full metrics and external evidence paths are in the machine-readable report.
+
+The admission fix prevents a temporarily refused concurrent request from poisoning the budget after sibling responses release capacity. Mustache additionally exposed full-body retracing for single narrative findings, leaving unrelated false claims and exhausting repair capacity. The new claim-only correction has executable regression and counterexample coverage: only a typed, exact-body/current-HEAD rejected pitfall or invariant can change; all other claims, paths, flows and ownership remain untouched. Full normalized review is still mandatory. Its exact-commit release and live gates are pending; earlier checks do not carry forward.
+
+There remain zero qualifying held-out rounds and zero passing installed-team manual reviews. Hono narrative correctness remains unqualified. `release_ready=false`; `final_candidate_sha=null`.
+
+## Prior development evidence — 2026-08-31 13:55 UTC
 
 There are still zero qualifying held-out rounds and zero passing installed-team manual reviews. The latest four completed fresh runs all failed product qualification, with unchanged tracked files and one error terminal each:
 
