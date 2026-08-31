@@ -8,6 +8,46 @@ import {
   unresolvedObligationFingerprint,
 } from "../../src/core/audit/resource-budget.ts";
 
+test("interrupted requests retain bounded token and cost reservations across continuation", () => {
+  const budget = new AuditResourceBudget({ maxTotalCostUsd: 1 });
+  const session = budget.beginSession();
+  budget.recordProviderRequest(session, { inputTokens: 1_000, outputTokens: 100, costUsd: 0.6 });
+  budget.observeParentEvent({ type: "message_end", message: {
+    role: "assistant", stopReason: "aborted",
+    usage: { input: 0, output: 0, cost: { total: 0 } },
+  } } as never, session);
+  const snapshot = budget.snapshot();
+  assert.equal(snapshot.unreported_calls, 1);
+  assert.equal(snapshot.reserved_input_tokens, 1_000);
+  assert.equal(snapshot.reserved_output_tokens, 100);
+  assert.equal(snapshot.reserved_cost_usd, 0.6);
+  assert.equal(snapshot.cost_usd, 0, "reservation is not measured provider usage");
+  const continued = new AuditResourceBudget({ maxTotalCostUsd: 1 }, Date.now(), snapshot);
+  assert.throws(() => continued.recordProviderRequest(continued.beginSession(), {
+    inputTokens: 100, outputTokens: 10, costUsd: 0.5,
+  }), /cost.*reserv|reserv.*cost/i);
+  assert.equal(continued.snapshot().model_calls, 1, "denied request cannot be charged as dispatched");
+});
+
+test("completed provider usage replaces only that session's reservation", () => {
+  const budget = new AuditResourceBudget();
+  const parent = budget.beginSession();
+  const child = budget.beginSession();
+  budget.recordProviderRequest(parent, { inputTokens: 1_000, outputTokens: 100, costUsd: 0.6 });
+  budget.recordProviderRequest(child, { inputTokens: 500, outputTokens: 50, costUsd: 0.3 });
+  budget.observeParentEvent({ type: "message_end", message: {
+    role: "assistant", stopReason: "toolUse",
+    usage: { input: 70, cacheRead: 10, output: 9, cost: { total: 0.02 } },
+  } } as never, child);
+  const snapshot = budget.snapshot();
+  assert.equal(snapshot.unreported_calls, 1);
+  assert.equal(snapshot.reserved_input_tokens, 1_000);
+  assert.equal(snapshot.reserved_cost_usd, 0.6);
+  assert.equal(snapshot.input_tokens, 80);
+  assert.equal(snapshot.cost_usd, 0.02);
+  assert.equal(snapshot.model_calls, 2);
+});
+
 test("usage reported at a deadline is charged before the deadline rejects it", () => {
   const budget = new AuditResourceBudget();
   const session = budget.beginSession();
