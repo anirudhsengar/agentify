@@ -296,10 +296,10 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       "commit", "--allow-empty", "-qm", "new HEAD"]);
     assert.equal(assessSpecialistReviews(accepted.map, cwd).length, 1, "stale-HEAD review is unresolved");
 
-    // Reduced from a held-out body citing 133,252 bytes of implementation/tests.
+    // Captured normalized portfolios cite over 280 KB of implementation/tests.
     // Full source must fit a bounded review, not be silently truncated to fit.
     mode = "normal";
-    expectedSource = SOURCE + "# supporting test case\n".repeat(6_500);
+    expectedSource = SOURCE + "# supporting test case\n".repeat(13_000);
     fs.writeFileSync(path.join(cwd, "clock.py"), expectedSource);
     execFileSync("git", ["-C", cwd, "add", "clock.py"]);
     execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",

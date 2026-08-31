@@ -1,9 +1,30 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-31T14:52:49.625Z",
+  "generated_at": "2026-08-31T15:41:00.000Z",
   "report_status": "failed_product_qualification_approved_scope_in_progress",
   "release_ready": false,
   "final_candidate_sha": null,
+  "latest_product_qualification": {
+    "agentify_sha": "f7edfe635f7fc254545e75937f467eb24e20b159",
+    "package_sha256": "ec8140df0e6f1d87a98dd84e5163b646ee99aa2d27ea9e68ee9946c7ca89c7fd",
+    "local_node22_node24_release": "passed_on_exact_commit_in_detached_worktrees; root_artifact_separately_packed_and_qualified",
+    "ci": "https://github.com/anirudhsengar/agentify/actions/runs/33406920220",
+    "codeql": "https://github.com/anirudhsengar/agentify/actions/runs/33406920553",
+    "ci_and_codeql_result": "passed",
+    "live_results": [
+      { "repository": "hono", "elapsed_ms": 1488430, "team_installed": false, "disposition": "diagnostic-only", "qualification_credit": false, "failure_class": "uncovered behavior and failed tracers; narrative review not reached", "evidence": "/home/anirudh/Projects/agentify-evaluation/claim-repair-live-whKhrs/hono-fresh-1/report.json" },
+      { "repository": "commander", "elapsed_ms": 1700709, "team_installed": false, "disposition": "diagnostic-only", "qualification_credit": false, "failure_class": "false secret-path match, incorrect narrative claims, unresolved tracer and input reservation exhaustion", "evidence": "/home/anirudh/Projects/agentify-evaluation/claim-repair-live-whKhrs/commander-fresh-1/report.json" },
+      { "repository": "mustache", "elapsed_ms": 1450919, "team_installed": false, "disposition": "diagnostic-only", "qualification_credit": false, "failure_class": "remaining false claims and incomplete bounded narrative reviews", "evidence": "/home/anirudh/Projects/agentify-evaluation/claim-repair-live-whKhrs/mustache-fresh-1/report.json" },
+      { "repository": "sqlalchemy", "elapsed_ms": 1214141, "team_installed": false, "disposition": "diagnostic-only", "qualification_credit": false, "failure_class": "24-explorer limit reached with uncovered high-signal files", "evidence": "/home/anirudh/Projects/agentify-evaluation/claim-repair-live-whKhrs/sqlalchemy-fresh-1/report.json" }
+    ],
+    "all_original_tracked_files_unchanged": true,
+    "terminal_results_per_run": 1,
+    "all_unanswered_calls_reserved": true,
+    "complete_provider_charges_known": false,
+    "manual_quality_reviews_passed": 0,
+    "heldout_rounds_passed": 0,
+    "qualification_carries_forward_to_new_code": false
+  },
   "most_recent_exact_head_evidence": {
     "agentify_sha": "18693b08d3b680eec8bc9d5cc49ba9dbb4063751",
     "local_node22_release": "passed_99_source_files_12_corpus_tests_5_packed_qualifications_scaffold_audit_zero",

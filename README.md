@@ -229,7 +229,7 @@ model-backed top-up audit; a normalizable fixed point can therefore finish
 without spending or resetting an exhausted model budget when its exact
 normalized bodies already have current-HEAD narrative reviews. Changed bodies
 require fresh review with the configured primary model: one request per concern,
-90 seconds and at most 256 KiB of immutable source. A typed, complete review is
+90 seconds and at most 512 KiB of immutable source. A typed, complete review is
 required; unsupported assertions and incomplete reviews remain repair obligations.
 Incomplete reviews may retry once in a later bounded run; an unchanged source-backed
 finding remains cached until the specialist body or repository HEAD changes.

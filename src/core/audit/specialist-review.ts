@@ -16,7 +16,7 @@ import type { WriteMapDeltaParams } from "./schema/write-map-params.ts";
 import { concernEvidencePaths, removeTrustedInferredAttachments } from "./specialist-completion.ts";
 import type { SpecialistCompilationResult } from "./specialist-compiler.ts";
 
-const MAX_SOURCE_BYTES = 256 * 1_024;
+const MAX_SOURCE_BYTES = 512 * 1_024;
 const REVIEW_TIMEOUT_MS = 90_000;
 
 function exactSourceExcerpt(source: string | undefined, excerpt: string): string | null {
