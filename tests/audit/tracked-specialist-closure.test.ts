@@ -548,6 +548,8 @@ test("progressive semantic repair may exceed two passes while each pass closes t
       && /unions their flows, touchpoints, invariants, pitfalls, questions, and validation/i.test(prompt)
       && /resolve every obligation in the current bounded cluster batch/i.test(prompt)
       && /batch exact not_concerns decisions into one write_map_delta/i.test(prompt)
+      && /core_owner: \{path, concern\}/.test(prompt)
+      && /if ownership is ambiguous, keep it unresolved/i.test(prompt)
       && !/resolve the earliest distinct behavior/i.test(prompt)
     ));
     assert.deepEqual(

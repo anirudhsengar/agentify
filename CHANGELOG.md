@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Resolve ownership-only proposals without retracing unchanged specialist bodies. Current-HEAD evidence, verified flows and independent adjacent ownership are required; source claims remain immutable and normalized review is invalidated.
+
 - Apply the bounded response ceiling to every explorer mode, not only concern tracing, so concurrent discovery cannot reserve unnecessarily unbounded outputs. APIs without a supported cap retain full reservations.
 
 - Allow three independent read-only explorers to overlap under the shared request-reservation budget. Concurrent duplicate concerns/scouts are refused; ownership, cancellation and aggregate limits remain enforced.

@@ -387,6 +387,50 @@ function independentCoreImplementationPath(repositoryPath: string): boolean {
     .some((segment) => AUXILIARY_DIRECTORY_NAMES.has(segment.toLowerCase()));
 }
 
+/** Apply only a portfolio classification proposal, never new source evidence. */
+export function resolveConcernCoreOwner(
+  map: CodebaseMap,
+  proposal: { path: string; concern: string },
+  cwd: string,
+  repositoryCommit: string | null,
+): CodebaseMap {
+  const evidence = map.concern_evidence;
+  const attestation = map.explorer_receipts;
+  if (!repositoryCommit || attestation?.repository_commit !== repositoryCommit || !evidence) {
+    throw new Error("core_owner requires current-HEAD attested concern evidence");
+  }
+  const claimants = evidence.concerns.filter(concern => concern.touchpoints.some(point =>
+    point.path === proposal.path && point.centrality === "core"));
+  const owners = claimants.filter(concern => concern.concern === proposal.concern);
+  if (owners.length !== 1 || !owners[0]!.flows.some(flow =>
+    flow.steps.length >= 2 && flow.steps.some(step => step.path === proposal.path))) {
+    throw new Error("core_owner must name one existing core claimant with a verified flow through the file");
+  }
+  for (const concern of claimants) {
+    const observed = new Set(attestation.receipts.filter(receipt =>
+      receipt.mode === "concern_tracer" && receipt.success && receipt.report_concern === concern.concern
+    ).flatMap(receipt => receipt.observed_paths ?? []));
+    if (concernEvidencePaths(concern).some(file => !observed.has(file))
+      || assessConcernGrounding(concern, cwd).length > 0) {
+      throw new Error(`core_owner requires observed, grounded evidence for ${concern.concern}`);
+    }
+    if (concern.concern === proposal.concern) continue;
+    if (!concern.touchpoints.some(point => point.centrality === "core"
+      && point.path !== proposal.path && independentCoreImplementationPath(point.path)
+      && !evidence.concerns.some(other => other !== concern && other.touchpoints.some(candidate =>
+        candidate.path === point.path && candidate.centrality === "core")))) {
+      throw new Error(`core_owner would remove independent implementation ownership from ${concern.concern}; trace or group the behavior instead`);
+    }
+  }
+  if (claimants.length === 1) return map;
+  return { ...map, concern_evidence: { ...evidence, concerns: evidence.concerns.map(concern =>
+    concern.concern === proposal.concern ? concern : {
+      ...concern,
+      touchpoints: concern.touchpoints.map(point => point.path === proposal.path && point.centrality === "core"
+        ? { ...point, centrality: "supporting" as const } : point),
+    }) } };
+}
+
 function auxiliaryRepositoryPath(repositoryPath: string): boolean {
   return repositoryPath.split("/").slice(0, -1)
     .some((segment) => AUXILIARY_DIRECTORY_NAMES.has(segment.toLowerCase()));

@@ -41,6 +41,8 @@ import {
     type MapToolExecutionContext,
 } from "./map-storage.ts";
 import { validateMap } from "./map-validation.ts";
+import { currentRepositoryCommit } from "./explorer-receipts.ts";
+import { resolveConcernCoreOwner } from "./specialist-completion.ts";
 
 export interface MapTools {
     writeMapTool: ToolDefinition;
@@ -1382,6 +1384,16 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 )
                 : prepared.delta as UnknownRecord;
 
+            const forgedAttestations = ["explorer_receipts", "specialist_reviews", "audit_budget_checkpoint"]
+                .filter((key) => key in delta);
+            if (forgedAttestations.length > 0) {
+                return {
+                    content: [{ type: "text", text: `Error: application-owned attestations cannot be changed by write_map_delta: ${forgedAttestations.join(", ")}` }],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+
             const submittedConcerns = (delta.concern_evidence as UnknownRecord | undefined)?.concerns;
             if (Array.isArray(submittedConcerns)) {
                 const recorded = new Map<string, string>();
@@ -1533,10 +1545,21 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 };
             }
 
-            const validMap = mergedValidation.value;
+            let validMap = mergedValidation.value;
             const removedManagedPaths = stripAgentifyManagedRepositoryEvidence(validMap);
             const overwriteError = concernOverwriteError(existing, validMap);
             if (overwriteError) return overwriteError;
+            if (params.core_owner) {
+                try {
+                    validMap = resolveConcernCoreOwner(validMap, params.core_owner, ctx.cwd, currentRepositoryCommit(ctx.cwd));
+                } catch (error) {
+                    return {
+                        content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+                        isError: true,
+                        details: undefined as unknown as Record<string, unknown>,
+                    };
+                }
+            }
             const needsTopographyEvidence =
                 dimension === "D1_topography"
                 && (

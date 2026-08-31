@@ -4,6 +4,25 @@ Not release-ready. Do not merge PR #13. The earlier release recommendation is wi
 
 The approved gate separates high-quality specialist installation from operational execution readiness. A semantically complete `analysis-ready` team may count as an installation, while missing reproducible repository-owned validation keeps issue intake, publication, autonomous mutation and learning disabled. External harness locks never clear those execution blockers.
 
+## Current development evidence — 2026-08-31 13:55 UTC
+
+There are still zero qualifying held-out rounds and zero passing installed-team manual reviews. The latest four completed fresh runs all failed product qualification, with unchanged tracked files and one error terminal each:
+
+| Repository | Exact production SHA | Elapsed | Result |
+| --- | --- | ---: | --- |
+| PyJWT | `190b21485dc4cac16581019f7004981eee3dd530` | 1,443,563 ms | Unresolved cryptographic/security traces; no team |
+| Chi | `190b21485dc4cac16581019f7004981eee3dd530` | 1,800,233 ms | Wall budget exceeded during ownership repair; no team |
+| Hono | `29b22e50cae6dba7ecb54e7a78bfb20d16ab56ec` | 1,177,346 ms | Explorer output reservation exhausted; no team |
+| SQLAlchemy | `29b22e50cae6dba7ecb54e7a78bfb20d16ab56ec` | 461,592 ms | Explorer output reservation exhausted; no team |
+
+Exact `190b214` passed local release qualification and all Node 22/24 CI, CodeQL, package, scaffold and audit gates. Its canonical artifact hash is `1d5b76917aeb8d2aa9530bbfbc4b09cef3289d4ceaaae0ffbdeb08d717b17386`. These checks do not carry forward to changed production. Exact `6439d0f03e35d29c1f4faab41dc31818f064d030` subsequently completed local qualification of 99 source test files, 12 corpus cases, five packed qualifications, scaffold and zero-vulnerability audit; artifact `93726bff0ee4765000782b7e3349fd66bc99656fac044b0dc0526e403ccdebe3`. Its fresh SQLAlchemy development run is in progress, not passed.
+
+General corrections now cap every supported explorer response, allow three independent readers within aggregate reservations, and permit compact ownership-only proposals without retranscribing unchanged bodies. Ownership proposals preserve all claims/flows, require current-HEAD attestation and independent adjacent implementation, invalidate normalized review, and do not close unrelated gaps. Map deltas also reject forged application-owned receipts, reviews and budget checkpoints. The ownership change has focused regression/corpus proof; its exact-commit full release gate is pending.
+
+Live cancellation on `190b214` settled in 8 ms; a three-tracer probe on `61d98d62d08e88800b61933f0cf27de87175f0ea` settled in 6 ms. All admitted unanswered calls retained conservative model-bound reservations; none were unreserved. Actual interrupted provider usage/charges remain unknown, not zero. These component proofs do not qualify a final candidate or an installation. Hono's installed narrative-quality gate remains unresolved.
+
+## Earlier development evidence
+
 Exact production `812eff8e327c39f1000cc9bcc004e87a58bf4d69` passed the full local Node 22 release suite: 98 source test files, 12 executable corpus cases, five packed qualifications, scaffold and zero-vulnerability audit. Canonical package SHA-256: `d2c0f9f54a73c1cf416e14071a6f05d6ead1de6dcb27da4eec4b036fae38ba8f`. All Node 22/24 CI, CodeQL, package and scaffold checks also passed. Fresh Hono and PyJWT nevertheless failed installation in 820,583 ms and 691,204 ms respectively, before narrative review: their reported output plus retained unanswered-request bounds and the next uncappable 128,000-token request exceeded the 200,000-token total. Each rolled back with unchanged tracked files and one error terminal. No success credit.
 
 The admission failure now has a deterministic replay. The aggregate output default is explicitly 400,000 tokens, including reservations; a configured 200,000 ceiling still refuses the same request. No unanswered reservation is dropped, and call, time, cost and specialist-quality limits are unchanged. This budget correction still needs exact-head and fresh live qualification. Chi's additional run is invalid: the harness exited unexpectedly, so its verified task-owned child was stopped and its audit preserved. Missing stdout/stderr are disclosed, not fabricated.
@@ -50,7 +69,7 @@ The archived inventory is retained separately. The current machine-readable inve
 - Earlier exact production `20b3a9eb7d72b938a4a30b9e5e873c6bbeacef46` also passed Node 22.19.0 `verify:release`: all 97 source test files, ten executable compiler/install corpus cases, scaffold, five packed-package qualifications, and dependency audit with zero vulnerabilities. Artifact SHA-256: `f877387cc9380a53b89d55c40e99a28129db4912f81568aeabd58c04c74d6358`. No earlier live results carry forward.
 - The latest completed live matrix used exact `83dd8578d2e7cca297ca124c318ef5ed9a4e236d`, package hash `c6be50d345f290a1e115bbb9ed2ce0b3e4f965cbc22da064952722a477bb3252`, Node 22.19.0, and unchanged configured models/authentication. That SHA passed CI on Node 22/24, package/scaffold, audit, and CodeQL, but failed product qualification.
 
-| Latest fresh live cases | Installed | Result |
+| Earlier `83dd8578` fresh live matrix | Installed | Result |
 | --- | ---: | --- |
 | Commander, AQA, Cobra, Hono, Gin, Axum, Petclinic | 0/7 attempted | Failed; Click is policy-negative, approved replacement SQLAlchemy not yet run |
 | Preact, PyJWT, Chi, Thiserror, JCommander, Mustache — round 1 | 0/6 | Failed |
@@ -66,7 +85,7 @@ The archived inventory is retained separately. The current machine-readable inve
 
 ## Approved evaluation scope
 
-Click remains a policy/refusal regression and does not count toward installation success. Its command/locality reduction also remains executable read-only. The approved replacement is SQLAlchemy at `274adcbd2d3f82ea12f143256aaa7ea434f3a8ce`: a demanding Python/Cython relational toolkit covering unit-of-work ordering, pooling, and SQL compilation, selected before any installation outcome. All pinned contribution/conduct/PR policies and their linked developer policies were reviewed. AI assistance is permitted; no upstream submissions will be made. The evaluation fork is `anirudhsengar/sqlalchemy`. Live qualification is not yet run.
+Click remains a policy/refusal regression and does not count toward installation success. Its command/locality reduction also remains executable read-only. The approved replacement is SQLAlchemy at `274adcbd2d3f82ea12f143256aaa7ea434f3a8ce`: a demanding Python/Cython relational toolkit covering unit-of-work ordering, pooling, and SQL compilation, selected before any installation outcome. All pinned contribution/conduct/PR policies and their linked developer policies were reviewed. AI assistance is permitted; no upstream submissions will be made. The evaluation fork is `anirudhsengar/sqlalchemy`. Its first fresh live run failed as recorded above; no success credit is claimed.
 
 External immutable validation locks are approved **only in the evaluation harness**. They must stay outside targets, be content-hashed and bound to the repository SHA/toolchain, and never count as repository evidence or override readiness. Both original state and external provenance must be reported. The Python harness experiment below is implemented; other ecosystem captures remain pending. The existing committed-lock readiness requirement is not silently waived. Dependency-free Go is a separate established ecosystem contract: [Go permits absent go.sum when there are no dependencies](https://go.dev/ref/mod).
 

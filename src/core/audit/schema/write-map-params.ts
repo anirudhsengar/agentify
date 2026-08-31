@@ -1,7 +1,7 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type, type Static } from "typebox";
 import { COVERAGE_DIMENSIONS } from "../coverage.ts";
-import { EvidenceCitationSchema } from "./primitives.ts";
+import { EvidenceCitationSchema, SafeRelativePathSchema } from "./primitives.ts";
 
 const SerializedMapTransportSchema = Type.String({
   description:
@@ -70,6 +70,13 @@ export type WriteMapParams = Static<typeof WriteMapParamsSchema>;
 export const NON_CLOSING_DELTA_DIMENSIONS = ["specialist_evidence", "concern_evidence"] as const;
 
 export const WriteMapDeltaParamsSchema = Type.Object({
+  core_owner: Type.Optional(Type.Object({
+    path: SafeRelativePathSchema,
+    concern: Type.String({ minLength: 1, maxLength: 256 }),
+  }, {
+    additionalProperties: false,
+    description: "Ownership-only proposal for one shared tracked file. Select an exact existing core claimant whose verified flow owns it; competing concerns must retain independent core implementation. Agentify only demotes competing core touchpoints, preserves every attested claim and flow, and requires fresh normalized review. Use delta: {} without retranscribing bodies. Never select an arbitrary owner for ambiguous behavior.",
+  })),
   dimension: Type.Optional(
     StringEnum([...COVERAGE_DIMENSIONS, ...NON_CLOSING_DELTA_DIMENSIONS], {
       description:

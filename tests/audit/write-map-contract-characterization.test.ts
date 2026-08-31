@@ -1426,6 +1426,12 @@ async function testStripsModelAuthoredRuntimeAttestations(): Promise<void> {
     undefined,
     "write_map must not accept a model-authored cumulative budget checkpoint",
   );
+  for (const key of ["explorer_receipts", "specialist_reviews", "audit_budget_checkpoint"] as const) {
+    const before = fs.readFileSync(tools.canonicalMapPath(cwd), "utf8");
+    const delta = await executeTool(tools.writeMapDeltaTool, { delta: { [key]: map[key] } }, cwd);
+    assert.equal(isToolError(delta), true, `delta must reject forged ${key}`);
+    assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), before);
+  }
 }
 
 async function testStripsAgentifyManagedRepositoryEvidence(): Promise<void> {

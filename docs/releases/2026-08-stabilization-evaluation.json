@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-31T12:21:00Z",
+  "generated_at": "2026-08-31T13:55:39Z",
   "report_status": "failed_product_qualification_approved_scope_in_progress",
   "release_ready": false,
   "final_candidate_sha": null,
   "most_recent_exact_head_evidence": {
-    "agentify_sha": "812eff8e327c39f1000cc9bcc004e87a58bf4d69",
+    "agentify_sha": "190b21485dc4cac16581019f7004981eee3dd530",
     "local_node22_release": "passed_98_source_files_12_corpus_tests_5_packed_qualifications_scaffold_audit_zero",
-    "local_log": "/tmp/agentify-grounded-review-combined-release.log",
-    "package_sha256": "d2c0f9f54a73c1cf416e14071a6f05d6ead1de6dcb27da4eec4b036fae38ba8f",
+    "local_log": "/tmp/agentify-review-retry-release.log",
+    "package_sha256": "1d5b76917aeb8d2aa9530bbfbc4b09cef3289d4ceaaae0ffbdeb08d717b17386",
     "ci": "passed_node22_node24_typecheck_audit_packed_scaffold",
-    "ci_url": "https://github.com/anirudhsengar/agentify/actions/runs/33391180038",
+    "ci_url": "https://github.com/anirudhsengar/agentify/actions/runs/33395969402",
     "codeql": "passed",
-    "codeql_url": "https://github.com/anirudhsengar/agentify/actions/runs/33391180001",
+    "codeql_url": "https://github.com/anirudhsengar/agentify/actions/runs/33395969417",
     "live_cancellation": {
-      "evidence": "/home/anirudh/Projects/agentify-evaluation/grounded-review-Dq6vm3/live-cancellation.json",
+      "evidence": "/home/anirudh/Projects/agentify-evaluation/review-retry-live-NXFpmE/live-cancellation.json",
       "passed": true,
-      "cancellation_latency_ms": 22,
+      "cancellation_latency_ms": 8,
       "target_unchanged": true,
       "admitted_calls": 1,
       "completed_calls": 0,
@@ -30,6 +30,161 @@
     "manual_quality_reviews_passed": 0,
     "heldout_rounds_passed": 0,
     "qualification_carries_forward_to_new_code": false
+  },
+  "current_development_followup": {
+    "status": "development_in_progress_no_qualification_credit",
+    "latest_live_results": [
+      {
+        "repository": "pyjwt",
+        "agentify_sha": "190b21485dc4cac16581019f7004981eee3dd530",
+        "target_sha": "7144e4534c34810f4525dc4578a32addd8212cff",
+        "evidence": "/home/anirudh/Projects/agentify-evaluation/review-retry-live-NXFpmE/pyjwt-fresh-1/report.json",
+        "package_sha256": "d927b328463a1cc4ba8288706b1ce79f5f7196107e59906bf0f8eda526ff5e8e",
+        "elapsed_ms": 1443563,
+        "disposition": "diagnostic-only",
+        "team_installed": false,
+        "original_tracked_files_unchanged": true,
+        "terminal_results": 1,
+        "aggregate_usage": {
+          "elapsed_ms": 1440302,
+          "model_calls": 102,
+          "turns": 97,
+          "input_tokens": 2639301,
+          "output_tokens": 112642,
+          "cost_usd": 0.33874266,
+          "explorer_spawns": 12,
+          "coverage_recovery_passes": 1,
+          "semantic_repair_passes": 0,
+          "unreported_calls": 5,
+          "unreserved_calls": 0,
+          "reserved_input_tokens": 5000000,
+          "reserved_output_tokens": 60000,
+          "reserved_cost_usd": 1.572
+        },
+        "failure": "repository audit did not reach structured closure (10/10); explorer receipt: concern_tracer for \"Algorithm registry and cryptographic bindings\" failed and was not successfully retraced; explorer receipt: concern_tracer for \"Algorithm registry and cryptographic bindings\" failed and was not successfully retraced; explorer receipt: concern_tracer for \"Algorithm registry and cryptographic bindings (timed out)\" failed and was not successfully retraced; explorer receipt: scout proposal \"Algorithm registry and cryptographic bindings\" was neither successfully traced nor substantively rejected; explorer receipt: scout proposal \"Security-advisory warnings and weak-key policy\" was neither successfully traced nor substantively rejected",
+        "qualification_credit": false
+      },
+      {
+        "repository": "chi",
+        "agentify_sha": "190b21485dc4cac16581019f7004981eee3dd530",
+        "target_sha": "36611d24579aaca3250ed9732e17e085c5026334",
+        "evidence": "/home/anirudh/Projects/agentify-evaluation/review-retry-live-NXFpmE/chi-fresh-1/report.json",
+        "package_sha256": "d927b328463a1cc4ba8288706b1ce79f5f7196107e59906bf0f8eda526ff5e8e",
+        "elapsed_ms": 1800233,
+        "disposition": "diagnostic-only",
+        "team_installed": false,
+        "original_tracked_files_unchanged": true,
+        "terminal_results": 1,
+        "aggregate_usage": {
+          "elapsed_ms": 1767365,
+          "model_calls": 121,
+          "turns": 117,
+          "input_tokens": 2049836,
+          "output_tokens": 104780,
+          "cost_usd": 0.27449896,
+          "explorer_spawns": 16,
+          "coverage_recovery_passes": 1,
+          "semantic_repair_passes": 1,
+          "unreported_calls": 4,
+          "unreserved_calls": 0,
+          "reserved_input_tokens": 4000000,
+          "reserved_output_tokens": 164000,
+          "reserved_cost_usd": 1.3968
+        },
+        "failure": "Process exited before the audit completed; semantic closure was not established.",
+        "qualification_credit": false
+      },
+      {
+        "repository": "hono",
+        "agentify_sha": "29b22e50cae6dba7ecb54e7a78bfb20d16ab56ec",
+        "target_sha": "e2740d5a1bd0b4254e517e3af8b60789284bc7bd",
+        "evidence": "/home/anirudh/Projects/agentify-evaluation/parallel-live-c7EJqf/hono-fresh-1/report.json",
+        "package_sha256": "07c35a09386c44ce32a2e402ac42d0d3a158d71f21bc255de32be0e2b9571495",
+        "elapsed_ms": 1177346,
+        "disposition": "diagnostic-only",
+        "team_installed": false,
+        "original_tracked_files_unchanged": true,
+        "terminal_results": 1,
+        "aggregate_usage": {
+          "elapsed_ms": 1097671,
+          "model_calls": 102,
+          "turns": 99,
+          "input_tokens": 1853915,
+          "output_tokens": 148508,
+          "cost_usd": 0.3734187,
+          "explorer_spawns": 16,
+          "coverage_recovery_passes": 1,
+          "semantic_repair_passes": 0,
+          "unreported_calls": 3,
+          "unreserved_calls": 0,
+          "reserved_input_tokens": 3000000,
+          "reserved_output_tokens": 36000,
+          "reserved_cost_usd": 0.9432
+        },
+        "failure": "repository audit resource budget exhausted: output token reservation exceeds the aggregate budget; semantic closure remains unresolved; unresolved-obligation fingerprint 964d2462e82074a302ae084f524145e651523f735530a6a5b226d4c606037dec: D2_module_boundaries: coverage status is not 'covered'; D3_type_contract: coverage status is not 'covered'; D4_conventions: coverage status is not 'covered'; D5_pitfalls: coverage status is not 'covered'; D7_operational: coverage status is not 'covered'; D8_security: coverage status is not 'covered'; D9_process: coverage status is not 'covered'; HTTP exception, `c.req`, and `c.res` typed pipeline: normalized specialist narrative lacks current-HEAD review; JSX SSR/streaming runtime and DOM renderer: normalized specialist narrative lacks current-HEAD review; Multi-router dispatch (RegExp/Trie/Smart/Linear/Pattern): normalized specialist narrative lacks current-HEAD review; Runtime adapters (Workers/Pages/Deno/Bun/Lambda/Vercel/Netlify/Edge/ServiceWorker): normalized specialist narrative lacks current-HEAD review; Type-safe RPC client (`hc`) and response/request type inference: normalized specialist narrative lacks current-HEAD review",
+        "qualification_credit": false
+      },
+      {
+        "repository": "sqlalchemy",
+        "agentify_sha": "29b22e50cae6dba7ecb54e7a78bfb20d16ab56ec",
+        "target_sha": "274adcbd2d3f82ea12f143256aaa7ea434f3a8ce",
+        "evidence": "/home/anirudh/Projects/agentify-evaluation/parallel-live-c7EJqf/sqlalchemy-fresh-1/report.json",
+        "package_sha256": "07c35a09386c44ce32a2e402ac42d0d3a158d71f21bc255de32be0e2b9571495",
+        "elapsed_ms": 461592,
+        "disposition": "diagnostic-only",
+        "team_installed": false,
+        "original_tracked_files_unchanged": true,
+        "terminal_results": 1,
+        "aggregate_usage": {
+          "elapsed_ms": 455764,
+          "model_calls": 63,
+          "turns": 62,
+          "input_tokens": 790087,
+          "output_tokens": 75913,
+          "cost_usd": 0.18962002,
+          "explorer_spawns": 10,
+          "coverage_recovery_passes": 0,
+          "semantic_repair_passes": 0,
+          "unreported_calls": 1,
+          "unreserved_calls": 0,
+          "reserved_input_tokens": 1000000,
+          "reserved_output_tokens": 12000,
+          "reserved_cost_usd": 0.3144
+        },
+        "failure": "repository audit resource budget exhausted: output token reservation exceeds the aggregate budget; semantic closure remains unresolved; unresolved-obligation fingerprint 7f0e1db590664170b3c602698f7dbf25fd16b7674258cc6fddf5ad2c922a6b3d: Connection Pooling & Connection Lifecycle: normalized specialist narrative lacks current-HEAD review; D10_documentation: coverage status is not 'covered'; D1_topography: coverage status is not 'covered'; D2_module_boundaries: coverage status is not 'covered'; D3_type_contract: coverage status is not 'covered'; D4_conventions: coverage status is not 'covered'; D5_pitfalls: coverage status is not 'covered'; D7_operational: coverage status is not 'covered'; D8_security: coverage status is not 'covered'; D9_process: coverage status is not 'covered'; ORM Mapper, Identity Map & Instrumentation: normalized specialist narrative lacks current-HEAD review; SQL Expression Language & Compiler (Core): normalized specialist narrative lacks current-HEAD review",
+        "qualification_credit": false
+      }
+    ],
+    "parallel_cancellation": {
+      "agentify_sha": "61d98d62d08e88800b61933f0cf27de87175f0ea",
+      "evidence": "/home/anirudh/Projects/agentify-evaluation/review-retry-live-NXFpmE/live-concurrent-cancellation.json",
+      "cancellation_latency_ms": 6,
+      "admitted_calls": 3,
+      "unknown_calls_with_retained_bounds": 3,
+      "unreserved_calls": 0,
+      "reported_provider_charge_known": false,
+      "target_unchanged": true,
+      "qualification_carries_forward": false
+    },
+    "explorer_caps": {
+      "agentify_sha": "6439d0f03e35d29c1f4faab41dc31818f064d030",
+      "local_release_log": "/tmp/agentify-all-explorer-output-release.log",
+      "local_result": "completed_source99_corpus12_packed5_scaffold_audit0_log",
+      "package_sha256": "93726bff0ee4765000782b7e3349fd66bc99656fac044b0dc0526e403ccdebe3",
+      "fresh_sqlalchemy_capture": "/home/anirudh/Projects/agentify-evaluation/all-explorer-live-GdzOz7/sqlalchemy-fresh-1",
+      "fresh_sqlalchemy_status": "running",
+      "ci": "not_run_on_this_sha"
+    },
+    "ownership_repair": {
+      "regression": "tests/audit/explorer-concern-checkpoint.test.ts",
+      "red_commit": "8fab83d",
+      "cause": "Ownership-only classification required retranscribing already-attested bodies. Chi spent its wall budget retracing shared ownership and left substantive middleware obligations unresolved.",
+      "correction": "Compact core_owner proposal demotes only competing existing core claims, requires current-HEAD observed/grounded evidence and a verified owner flow, preserves independent adjacent implementation and all source claims, and invalidates normalized review. Forged runtime attestations are rejected in all map deltas.",
+      "status": "focused_validation_passed_full_exact_commit_gate_pending"
+    },
+    "successful_installed_manual_reviews": 0,
+    "unchanged_production_heldout_rounds_passed": 0,
+    "hono_narrative_correctness_resolved": false
   },
   "normalized_narrative_review_development": {
     "production_sha": "812eff8e327c39f1000cc9bcc004e87a58bf4d69",
@@ -1491,7 +1646,7 @@
     "Live model qualification is nondeterministic; deterministic replay is the primary regression gate."
   ],
   "current_changed_file_inventory": {
-    "enumerated_sha": "f6ff3d29f866eb27a14a6f3102d0bea22e83eb7f",
+    "enumerated_sha": "8fab83d",
     "base_commit": "f2df9eb8563bfcb26919d82c7bf28c9fb7c19e8b",
     "files": [
       "AGENTS.md",
@@ -1565,6 +1720,7 @@
       "tests/audit/coverage-gate.test.ts",
       "tests/audit/exclusion-aware-semantic-closure.test.ts",
       "tests/audit/explorer-concern-checkpoint.test.ts",
+      "tests/audit/explorer-concurrency.test.ts",
       "tests/audit/explorer-receipts.test.ts",
       "tests/audit/log.test.ts",
       "tests/audit/map-storage-size.test.ts",
@@ -1610,6 +1766,7 @@
       "tests/specialists/unbounded-specialist-portfolio.test.ts",
       "tests/task-lifecycle/validation-runner.test.ts"
     ],
-    "note": "Complete branch path inventory. This milestone changes only already-listed paths. No temporary workflow, payload, patch, archive, export or materialization paths."
+    "note": "Complete branch path inventory. This milestone changes only already-listed paths. No temporary workflow, payload, patch, archive, export or materialization paths.",
+    "enumeration_scope": "working candidate including ownership source/tests and report updates; complete file list unchanged by committing these contents"
   }
 }

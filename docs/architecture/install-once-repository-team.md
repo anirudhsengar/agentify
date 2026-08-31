@@ -149,8 +149,8 @@ terminal event records the committed installation or its failure and rollback.
 Missing or stale receipts, failed tracers, and accepted concerns without a
 successful tracer abort the transaction and remove Agentify-managed persistent
 artifacts instead of leaving a partial team.
-Typed tracer checkpoints are the only path that may replace an existing concern
-body. Incremental map deltas may append a new concern or replay an identical
+Typed tracer checkpoints are the only path that may replace an existing concern's
+source claims. Incremental map deltas may append a new concern or replay an identical
 checkpoint, but reject a changed body with the same semantic identity so repair
 cannot bypass scope and monotonicity validation or create duplicate specialists.
 Bounded retracers receive the previous current-commit attested body as untrusted
@@ -160,6 +160,14 @@ Centrality alone is a portfolio ownership proposal and may change without
 rereading identical source claims. New receipts list only newly observed files;
 the retained ledger supplies provenance for reused evidence. Stale or failed
 receipts cannot authorize reuse, and closure still validates the complete result.
+For ownership-only repair, `write_map_delta` accepts one compact `core_owner`
+proposal with an exact tracked path and existing core claimant. It requires
+current-HEAD observed and grounded evidence, a verified owner flow, and an
+independent core implementation for every demoted claimant. Only competing
+centrality fields change; all claims, exclusions and flow steps remain intact.
+The proposal does not attest narrative correctness or close unrelated gaps:
+the changed normalized body invalidates its review and all final gates still run.
+Ambiguous behavior must remain unresolved rather than receiving an arbitrary owner.
 Each successful tracer also returns at most 4 KiB of fresh compiler feedback
 computed through the same prospective merge used by its trusted checkpoint.
 Exact remaining path/cluster previews and total counts supersede stale repair

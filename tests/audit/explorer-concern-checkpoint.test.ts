@@ -130,7 +130,7 @@ test("ownership-only repair preserves attested bodies without another tracer", a
       ...structuredClone(extraction), concern: "Request context lifetime",
       one_line: "Owns the context acquired while extracting a request.",
       covers: "Request context acquisition and release.", excludes: "Typed rejection conversion.",
-      touchpoints: [extraction.touchpoints[0]!, {
+      touchpoints: [structuredClone(extraction.touchpoints[0]!), {
         path: "src/state.rs", symbol: "Context", role: "Owns request context lifetime.",
         centrality: "core", line_range: null,
       }],
@@ -163,11 +163,11 @@ test("ownership-only repair preserves attested bodies without another tracer", a
     await resolve();
     assert.deepEqual(loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!.concern_evidence, expected);
 
-    for (const failure of ["stale", "unobserved", "supporting", "last-core", "no-flow", "body-change", "missing-owner"]) {
+    for (const failure of ["stale", "unobserved", "supporting", "last-core", "no-flow", "body-change", "missing-owner", "forged-receipts"]) {
       reset();
       const input = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
       if (failure === "stale") input.explorer_receipts!.repository_commit = "0".repeat(40);
-      if (failure === "unobserved") input.explorer_receipts!.receipts[2]!.observed_paths = ["src/state.rs"];
+      if (failure === "unobserved" || failure === "forged-receipts") input.explorer_receipts!.receipts[2]!.observed_paths = ["src/state.rs"];
       if (failure === "supporting") input.concern_evidence!.concerns[0]!.touchpoints[0]!.centrality = "supporting";
       if (failure === "last-core") input.concern_evidence!.concerns[1]!.touchpoints[1]!.centrality = "supporting";
       if (failure === "no-flow") input.concern_evidence!.concerns[0]!.flows[0]!.steps = [
@@ -176,7 +176,8 @@ test("ownership-only repair preserves attested bodies without another tracer", a
       writeCanonicalMap(cwd, input, { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
       const before = fs.readFileSync(tools.canonicalMapPath(cwd), "utf8");
       const rejected = await resolve(failure === "missing-owner" ? "Unknown owner" : extraction.concern,
-        failure === "body-change" ? { concern_evidence: { concerns: [{ ...extraction, covers: "Forged behavior." }] } } : {});
+        failure === "body-change" ? { concern_evidence: { concerns: [{ ...extraction, covers: "Forged behavior." }] } }
+          : failure === "forged-receipts" ? { explorer_receipts: original.explorer_receipts } : {});
       assert.equal((rejected as { isError?: boolean }).isError, true, failure);
       assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), before, failure);
     }

@@ -13,8 +13,8 @@
       "bytes": 1533
     },
     "write_map_delta_params": {
-      "sha256": "e00f55cf4d8435286aeddd9b46b40dbd6ae8cda70161ea67eca87a1aad38233f",
-      "bytes": 3817
+      "sha256": "a294392309c976d98234865b1a69f29b03a9c5e347b3709ebe827fd8a0f158d8",
+      "bytes": 4597
     }
   },
   "required": {
@@ -102,6 +102,7 @@
       "mode"
     ],
     "write_map_delta_params": [
+      "core_owner",
       "dimension",
       "confidence",
       "evidence_summary",
