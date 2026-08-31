@@ -140,7 +140,9 @@ no filesystem or command tools, and one provider request within
 90 seconds including source collection. Only a rejected typed submission permits
 one additional request to correct its arguments, within the same deadline and
 shared resource budget. Prose, unrelated tool errors, and a second rejection grant
-no further calls. It submits a typed result: up to three
+no further calls. It submits immediately at the first decisive rejection, retaining
+additional findings only if already established rather than searching for a quota.
+It submits a typed result: up to three
 unsupported assertions, each with a known claim ID and exact source excerpt, or
 an explicit complete checklist. Free-form prose and incomplete checklists cannot
 approve a team. Application-owned review records bind HEAD and the exact
