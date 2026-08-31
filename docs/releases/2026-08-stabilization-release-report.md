@@ -2,6 +2,8 @@
 
 Not release-ready. Do not merge PR #13. The earlier release recommendation is withdrawn: bounded, atomic failure does not qualify specialist-team generation.
 
+The approved gate now separates high-quality specialist installation from operational execution readiness. A semantically complete `analysis-ready` team may count as an installation, while missing reproducible repository-owned validation keeps issue intake, publication, autonomous mutation and learning disabled. External harness locks never clear those execution blockers. This capability change is under implementation and regression testing; no new live matrix, manual-quality pass, or unchanged-SHA round is credited.
+
 The archived candidate below is `e1186861095ac543b4bef9e4f97ca09a76918be8`, built from base `f2df9eb8563bfcb26919d82c7bf28c9fb7c19e8b`. Its Node 22.19.0 packed artifact is 8,060,372 bytes with SHA-256 `acf4a0f09b6739249b5418f7f1bc21ca4f99d98baa2d1c3286cf23dab0c5bb1e`. This is historical evidence, not qualification of the current branch.
 
 The implementation now treats specialist generation as a bounded, fail-closed compiler. Repository evidence and application-attested explorer receipts feed concern proposals; deterministic normalization resolves ownership; validation checks normalized closure and fixed-point idempotence; only the exact validated output can materialize; and the installation transaction rolls back every operational artifact on failure or termination. Restrictive tracked policy is evaluated before persistent mutation. Repository validation runs in disposable checkouts.
@@ -56,7 +58,7 @@ The machine-readable report records `release_ready=false`, `final_candidate_sha=
 ## Known limitations
 
 - Hono still fails convergence and has exposed false attachment, generic-portfolio, and unsupported narrative risks. Safe failure remains necessary but is not successful product qualification.
-- The reduced corpus now exercises real compilation, installation, readiness canaries, and validation-failure rollback, with only GitHub operations replayed. It does not replace live generation or maintainer-quality review.
+- The reduced corpus exercises real compilation, installation, readiness canaries, analysis/operational transitions, and semantic-failure rollback, with only GitHub operations replayed. It does not replace live generation or maintainer-quality review.
 - Validation commands execute in disposable exact-HEAD checkouts with scrubbed credentials, but Agentify does not provide container or network isolation.
 - Pinned Click delegates contribution rules to Pallets' external policy. The reduced refusal fixture replays captured policy text; it does not prove automatic live URL-policy resolution. No new Click writes or policy bypass have been performed.
 - Live model outcomes are nondeterministic. The executable replay corpus, compiler invariants, and package qualification remain the authoritative repeatable release gates.

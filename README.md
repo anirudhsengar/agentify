@@ -81,7 +81,15 @@ Supported build manifests include:
 | Make-based | `Makefile` | `make test`, `check`, `lint`, or `typecheck` targets | — |
 | Shell | `build.sh`, `compile.sh`, `test.sh`, `lint.sh`, `get.sh`, `setup.sh`, etc. | `bash build.sh`, `bash test.sh`, etc. Install scripts (`get.sh`, `setup.sh`) are identified but not executed as validation | — |
 
-Agentify may analyze a repository that is not ready for issue execution, but it keeps issue intake disabled until every readiness blocker is resolved.
+Specialist-team installation and operational execution are separate capabilities.
+A complete, grounded, validated team can install as `analysis-ready` when
+repository-owned validation is not reproducible. Issue intake, PR publication,
+autonomous mutation, and learning remain disabled: execution workflows and
+runtimes are absent and the task policy is unconfigured. Generated instructions
+record the blockers and evidence needed to enable execution by rerunning Agentify.
+Agentify never creates a missing repository lockfile to obtain readiness.
+Immutable external evaluation locks are harness artifacts, not repository
+evidence or permission to enable execution.
 
 ### Local requirements
 
@@ -193,9 +201,11 @@ exiting. A later invocation may resume only the exact diagnostic-map-only
 topology with a current-HEAD application receipt ledger; extra, stale, or
 unattested state is never claimed. Each bounded continuation retains its newest
 diagnostic checkpoint on failure, while operational installation state is
-rolled back. A non-ready final report—including a failed required repository
-validation—also restores the exact prior state; a fresh run retains only its
-permitted diagnostic map and no empty managed directories. A successful tracer
+rolled back. Semantic, ownership, materialization, and structural failures restore
+the exact prior state; a fresh failed run retains only its permitted diagnostic
+map and no empty managed directories. Operational validation blockers alone may
+retain the complete team as `analysis-ready`, with execution capabilities absent.
+A successful tracer
 is reusable only after its complete concern
 body has also been checkpointed. Concern checkpoints append and deduplicate by
 default so later bounded invocations cannot erase earlier tracer evidence.

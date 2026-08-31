@@ -5,10 +5,17 @@
   "release_ready": false,
   "final_candidate_sha": null,
   "evidence_scope": "Candidate and changed-file inventory below are archived observations, not qualification of the current branch. Results cannot carry forward to changed production code.",
-  "product_qualification_rule": "All eight non-policy historical teams and at least five of six non-policy held-outs in each of two unchanged-production rounds must install. Diagnostic-only fails unless required tooling is unavailable.",
+  "product_qualification_rule": "All eight eligible historical teams and at least five of six eligible held-outs in each of two unchanged-production rounds must install high-quality specialist teams. Analysis-ready installations qualify only after the same semantic-quality invariants pass; operational execution readiness is evaluated separately. Diagnostic-only fails unless required tooling is unavailable.",
   "evaluation_scope": "specialist compiler stabilization",
   "approved_evaluation_decisions": {
     "approved_at": "2026-08-31",
+    "capability_separation": {
+      "specialist_installation": "A complete, attested, grounded, fixed-point specialist portfolio may install as analysis-ready without reproducible repository-owned validation.",
+      "operational_execution": "Evaluated separately. Missing reproducibility leaves issue intake, publication, autonomous mutation and learning disabled, with no execution workflows/runtimes and explicit enablement evidence in instructions.",
+      "semantic_quality_unchanged": true,
+      "external_locks_are_repository_evidence": false,
+      "qualification_status": "implementation_and_regression_in_progress_no_live_credit"
+    },
     "historical_installation_replacement": {
       "excluded": "click",
       "exclusion_reason": "Pinned contribution guidance delegates to the Pallets AI policy. Retain refusal and read-only command/locality replay; no installation quota credit.",
@@ -44,7 +51,7 @@
         "agentify_installation_credit": false,
         "agentify_readiness_overridden": false
       },
-      "readiness_defect_status": "Committed-lock readiness requirements remain unchanged. External harness validation must not be represented as a passing Agentify installation."
+      "readiness_defect_status": "Repository-owned reproducibility remains required for execution, not semantically validated analysis-ready team installation. Harness validation cannot override execution readiness or count as Agentify installation."
     }
   },
   "post_approval_development_evidence": {

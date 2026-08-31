@@ -10,6 +10,7 @@ import {
   finalizeOneTimeInstallation,
   inspectRepositoryForInstallation,
   prepareOneTimeInstallationState,
+  readRepositoryTaskPolicyConfiguration,
   refinePreflightWithAudit,
   repairInstalledRuntime,
   repositoryTaskPolicySchemaStatus,
@@ -263,34 +264,32 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
       validationApproval: approvedConfiguration(cwd, preflight).approval,
       runner,
     });
-    assert.equal(report.disposition, "analyzable-only");
+    assert.equal(report.disposition, "analysis-ready");
     assert.ok(report.blockers.some((entry) => (
       entry.code === "validation_failed" && /after Agentify installed/.test(entry.message)
     )));
-    assert.ok(report.blockers.some((entry) => (
-      entry.code === "installation_canary_failed"
-      && /Atomic installation rolled back/.test(entry.message)
-      && /readiness blocker\(s\) reported above/.test(entry.remediation)
-    )));
-    assert.equal(report.specialists_installed, 0);
+    assert.equal(report.blockers.some((entry) => entry.code === "installation_canary_failed"), false);
+    assert.ok(report.specialists_installed > 0);
     assert.equal(report.github_issue_intake_enabled, false);
-    assert.equal(report.procedures_installed, 0);
-    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), false);
-    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "agents")), false);
-    assert.equal(fs.existsSync(path.join(cwd, ".github", "agentify-task-policy.json")), false);
+    assert.equal(report.draft_pr_publication_enabled, false);
+    assert.equal(report.automatic_knowledge_refresh_enabled, false);
+    assert.equal(report.procedures_installed, 0, "unverified command-only procedures must not survive");
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), true);
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "agents")), true);
+    assert.equal(readRepositoryTaskPolicyConfiguration(cwd)?.configured, false);
+    assert.equal(readRepositoryTaskPolicyConfiguration(cwd)?.policy, null);
     assert.equal(fs.existsSync(path.join(cwd, ".github", "agentify")), false);
     assert.equal(fs.existsSync(path.join(cwd, ".github", "scripts")), false);
     assert.equal(fs.existsSync(path.join(cwd, ".github", "workflows", "agentify-issue.yml")), false);
     assert.equal(fs.existsSync(path.join(cwd, ".github", "workflows", "agentify-learn.yml")), false);
-    assert.equal(fs.existsSync(path.join(cwd, "AGENTS.md")), false);
-    assert.equal(fs.existsSync(path.join(cwd, "SETUP.md")), false);
-    assert.equal(fs.existsSync(path.join(cwd, ".github")), false);
+    assert.match(fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf8"), /analysis-ready/);
+    assert.match(fs.readFileSync(path.join(cwd, "SETUP.md"), "utf8"), /validation_failed/);
     assert.ok(postInstallValidationCwds.length > 0);
     assert.deepEqual(postInstallProvisioningCwds, [postInstallValidationCwds[0]!]);
     assert.ok(postInstallValidationCwds.every((validationCwd) => validationCwd !== cwd));
     assert.ok(postInstallValidationCwds.every((validationCwd) => !fs.existsSync(validationCwd)));
     assert.equal(fs.existsSync(path.join(cwd, ".pytest_cache")), false);
-    assert.equal(fs.existsSync(mapPath), true, "the externally permitted diagnostic map survives rollback");
+    assert.equal(fs.existsSync(mapPath), true, "the validated canonical map is installed");
     assert.equal(
       requests.some((request) => request.program === "gh" && request.args[0] === "label"),
       false,

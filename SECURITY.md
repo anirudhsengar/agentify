@@ -86,6 +86,14 @@ across repair sessions; model map tools cannot author or replace it. Installatio
 fails closed and rolls back if the ledger is missing, stale, records a failed
 tracer, or lacks a successful tracer for any accepted concern.
 
+Operational validation is independent of specialist semantic quality. A complete
+team can be `analysis-ready` with an unconfigured/null task policy, no managed
+execution workflows, publication scripts or runtimes, and explicit disablement
+instructions. Issue intake, autonomous mutation, publication and learning are
+disabled. An operational downgrade removes only recognized managed entry points
+inside the installation transaction; ambiguous ownership refuses the downgrade.
+External harness locks never establish repository-owned validation approval.
+
 ## Credentials
 
 Provider credentials stay outside repository state. The CLI accepts them through

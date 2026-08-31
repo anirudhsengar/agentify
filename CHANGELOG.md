@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Separate complete specialist-team installation (`analysis-ready`) from operational readiness. Missing reproducible validation retains a validated read-only team with actionable enablement requirements, no execution workflows/runtimes, and an unconfigured task policy; semantic and structural failures still roll back atomically. External evaluation locks never establish repository-owned readiness.
+
 - Keep complete tracer reports in application-owned checkpoint data and send the parent only a bounded acknowledgement plus compiler obligations, avoiding repeated specialist JSON in model context.
 
 - Detect explicit bans on using AI to contribute, including verb-form policy wording, before repository mutation.

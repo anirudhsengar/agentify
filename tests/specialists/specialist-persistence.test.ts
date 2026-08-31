@@ -113,6 +113,20 @@ test("materialization persists read-only specialists and retires removed experti
       first.specialist_memory.map((record) => record.memory_id),
     );
 
+    const analysisPortfolio = discoverSpecialistPortfolio(makeSpecialistFixtureMap(), fixture.commit, undefined, { trustedValidationArgv: [] });
+    for (const posture of [analysisPortfolio, portfolio, analysisPortfolio, portfolio]) {
+      const input = { cwd: fixture.cwd, portfolio: posture, actor: "knowledge-maintainer" as const, observed_at: observedAt };
+      const changed = materializeSpecialistPortfolio(input);
+      assert.ok([...changed.specialist_memory, ...changed.procedure_memory].every((record) => record.freshness === "current"));
+      const recordCount = listMemoryRecords(fixture.cwd).length;
+      const repeated = materializeSpecialistPortfolio(input);
+      assert.deepEqual(repeated.specialist_memory, changed.specialist_memory);
+      assert.deepEqual(repeated.procedure_memory, changed.procedure_memory);
+      assert.equal(listMemoryRecords(fixture.cwd).length, recordCount, "unchanged posture must not create memory history");
+    }
+    assert.ok(listMemoryRecords(fixture.cwd, { freshness: "superseded" }).length > 0,
+      "earlier accepted postures remain historical, not silently resurrected");
+
     const reducedMap = makeSpecialistFixtureMap();
     reducedMap.concern_evidence = { concerns: [], not_concerns: [] };
     reducedMap.expert_evidence = { expert_domains: [] };

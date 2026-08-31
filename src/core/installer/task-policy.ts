@@ -223,7 +223,12 @@ export function buildRepositoryTaskPolicyConfiguration(
       validation_execution: VALIDATION_EXECUTION,
       validation_approval: approvalCurrent ? validationApproval : null,
       policy: null,
-      instructions: "Agentify remains fail-closed until every installer readiness blocker is resolved, credential-scrubbed validation passes in a disposable exact-HEAD checkout, and the remaining unsandboxed network/OS posture is attested.",
+      instructions: [
+        "Execution is disabled. A validated specialist team may be analysis-ready; this policy grants no autonomous mutation, issue intake, PR publication, or learning authority.",
+        ...preflight.blockers.map((blocker) => `[${blocker.code}] ${blocker.message} ${blocker.remediation}`),
+        "To enable execution, rerun Agentify after repository-owned deterministic tests and reproducible dependency inputs are verified at the current HEAD, with current maintainer attestation of the credential-scrubbed, disposable-checkout, unsandboxed network/OS posture.",
+        "Do not manufacture a repository lockfile to enable installation. External evaluation locks are harness-only artifacts, never repository-owned evidence or execution approval.",
+      ].join("\n"),
     };
   }
 

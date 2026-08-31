@@ -22,13 +22,6 @@ export type { FinalizeOneTimeInstallationInput };
 
 const ATOMIC_ROLLBACK_PREFIX = "Atomic installation rolled back";
 
-function auditIntentionallyDeferred(input: FinalizeOneTimeInstallationInput): boolean {
-  return input.preflight.blockers.some((blocker) =>
-    blocker.code === "validation_consent_required"
-    || blocker.code === "validation_policy_stale"
-  );
-}
-
 function atomicBlocker(message: string): InstallerBlocker {
   return {
     code: "installation_canary_failed",
@@ -61,7 +54,7 @@ function reportAfterRollback(
 }
 
 function installationFailure(report: OneTimeInstallationReport): string | null {
-  if (report.disposition === "ready") return null;
+  if (report.disposition === "ready" || report.disposition === "analysis-ready") return null;
   const blockers = report.blockers
     .map((blocker) => `[${blocker.code}] ${blocker.message}`)
     .join("; ");
@@ -78,17 +71,18 @@ function installationFailure(report: OneTimeInstallationReport): string | null {
 export function finalizeOneTimeInstallation(
   input: FinalizeOneTimeInstallationInput,
 ): OneTimeInstallationReport {
+  if (!input.preflight.analysis_allowed) {
+    throw new Error("repository preflight forbids specialist installation");
+  }
   beginPendingInstallation(input.cwd);
   try {
     const map = loadCanonicalMapAt(input.cwd, AUDIT_STATE_RELATIVE_DIR);
     let expectedSpecialists: number | null = null;
 
     if (map === null) {
-      if (!auditIntentionallyDeferred(input)) {
-        throw new Error(
-          "cannot finalize Agentify without a canonical codebase map that passed specialist compilation",
-        );
-      }
+      throw new Error(
+        "cannot finalize Agentify without a canonical codebase map that passed specialist compilation",
+      );
     } else {
       const compilation = compileSpecialistEvidence(map, { cwd: input.cwd });
       if (compilation.map !== map) {

@@ -42,8 +42,9 @@ write("package.json", `${JSON.stringify({
   name: `installer-fixture-${profile}`,
   private: true,
   scripts,
+  ...(profile === "lockless" ? { dependencies: { "must-never-be-fetched-in-analysis": "1.0.0" } } : {}),
 }, null, 2)}\n`);
-write("package-lock.json", `${JSON.stringify({
+if (profile !== "lockless") write("package-lock.json", `${JSON.stringify({
   name: "installer-fixture",
   lockfileVersion: 3,
   requires: true,

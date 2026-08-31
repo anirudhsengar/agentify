@@ -16,9 +16,18 @@ the repository. Persistence never expands model authority.
 
 Installation requires a repository with Git history, a canonical GitHub remote,
 an authorized maintainer, deterministic validation commands, a supported model,
-and an explicit protected-path policy. The installer may analyze a repository
-that is not ready for autonomous task execution, but it reports blockers and
-keeps issue intake disabled.
+and an explicit protected-path policy for operational execution. Specialist-team
+installation is a separate capability: a semantically closed, attested team may
+install as `analysis-ready` despite missing reproducible repository-owned
+validation. The policy remains unconfigured with no executable task policy;
+issue intake, PR publication, autonomous mutation, and learning are disabled.
+Only analysis instructions and the disabled policy are installed as control
+artifacts; execution workflows, publication scripts and runtimes are absent.
+Instructions record exact blockers and repository-owned evidence required for
+an atomic upgrade on rerunning Agentify. No lockfile is created or copied into
+the repository; external immutable evaluation locks are harness-only artifacts,
+never repository evidence or execution approval. Missing/stale validation consent
+does not authorize validation execution and does not prevent read-only discovery.
 
 A ready installation provides:
 
@@ -199,10 +208,15 @@ complete pair and every competing concern cites a strict subset. The rule uses
 exact tracked evidence rather than repository names or filename semantics;
 complete-claim ties and absent claims remain unresolved.
 
-The transaction commits only when the final installation report is `ready`.
-Failed required repository validation, unavailable readiness prerequisites,
-and structural failures retain their precise blockers but restore the complete
-pre-installation snapshot. Fresh attempts keep only permitted diagnostic audit
+The transaction commits when the final installation report is `ready` or
+`analysis-ready`. Only operational-validation blockers permit the latter;
+semantic closure, current-HEAD attestation, exact portfolio count, ownership,
+fixed-point normalization and all structural canaries remain mandatory.
+Downgrades remove recognized managed execution entry points and command-bearing
+procedures, then rerun disabled-policy/absent-runtime canaries before committing.
+Unrecognized or symlinked execution paths refuse the downgrade. Structural and
+other installation failures retain their precise blockers and restore the complete
+pre-installation snapshot. Fresh failed attempts keep only permitted diagnostic audit
 evidence and remove managed parent directories created by the failed attempt;
 an existing installation is restored rather than deleted.
 Repository validation residue is confined to disposable system-temporary
@@ -433,7 +447,7 @@ isolation guarantee. The installed issue
 workflow pins the supported npm runtime and
 restores lockfile-pinned npm dependencies with lifecycle scripts disabled before
 approved validation. A dependency-bearing repository without `package-lock.json`
-or `npm-shrinkwrap.json` remains analyzable-only because a fresh GitHub checkout
+or `npm-shrinkwrap.json` can be analysis-ready but cannot execute because a fresh GitHub checkout
 cannot reproduce the locally verified validation environment.
 
 Task-policy schema 2 records the installer attestation and hashes. Schema-1 or
@@ -504,7 +518,7 @@ structured map tools. Prompts supplement these controls but never replace them.
 
 ## Completion criteria
 
-An installation is ready only when repository identity, provider and model,
+An installation is operationally ready only when repository identity, provider and model,
 memory ownership, specialist synchronization, workflows, bundled runtimes, task
 policy, and lifecycle canaries all pass. A task is complete only when trusted
 validation passes, role-separated automated review accepts the bounded diff, a draft pull

@@ -313,6 +313,13 @@ export function refinePreflightWithAudit(input: {
   validationApproval: RepositoryValidationApproval | null;
 } {
   const runner = input.runner ?? DEFAULT_INSTALLER_PROCESS_RUNNER;
+  // Read-only specialist installation must not implicitly renew execution
+  // consent or test against dependencies that cannot be reproduced from HEAD.
+  if (input.preflight.blockers.some((blocker) =>
+    blocker.code === "missing_dependency_lock"
+    || blocker.code === "validation_consent_required"
+    || blocker.code === "validation_policy_stale"
+  )) return { preflight: input.preflight, validationApproval: null };
   let preflight = { ...input.preflight };
   let commands = [...preflight.commands];
 

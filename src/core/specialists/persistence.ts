@@ -6,6 +6,7 @@ import {
   markMemoryStale,
   proposeMemoryCandidate,
   readAgentIdentity,
+  readMemoryRecord,
   supersedeMemory,
   updateAgentIdentity,
 } from "../memory/index.ts";
@@ -63,6 +64,27 @@ function stableMemoryId(prefix: string, stableId: string, value: unknown): strin
 
 function candidateId(value: unknown): string {
   return `candidate-${digestCanonical(value).slice(0, 32)}`;
+}
+
+function unretiredDraft(cwd: string, input: MemoryCandidateDraft): MemoryCandidateDraft {
+  let draft = input;
+  for (;;) {
+    let existing: MemoryRecord;
+    try { existing = readMemoryRecord(cwd, draft.memory_id); } catch (error) {
+      if (notFound(error)) return draft;
+      throw error;
+    }
+    if (existing.freshness === "current") return draft;
+    // Returning to an earlier portfolio/command posture is new acceptance,
+    // not resurrection of a superseded decision. Follow deterministic revisions
+    // so repeated synchronization still resolves the same current record.
+    const { candidate_id: _priorCandidateId, ...body } = draft;
+    const next = {
+      ...body,
+      memory_id: stableMemoryId("renewed", input.memory_id, existing.content_digest),
+    };
+    draft = { ...next, candidate_id: candidateId(next) };
+  }
 }
 
 function evidenceIds(evidence: ReadonlyArray<EvidenceReference>): string[] {
@@ -301,7 +323,7 @@ function materializeSpecialistMemory(
   });
   const record = acceptMemoryCandidate(
     input.cwd,
-    proposeMemoryCandidate(specialistDraft(input, definition, evidence, observedAt)),
+    proposeMemoryCandidate(unretiredDraft(input.cwd, specialistDraft(input, definition, evidence, observedAt))),
     input.actor,
     `accept specialist portfolio ${input.portfolio.source_map_digest}`,
     input.options,
@@ -324,7 +346,7 @@ function materializeProcedureMemory(
   });
   const record = acceptMemoryCandidate(
     input.cwd,
-    proposeMemoryCandidate(procedureDraft(input, definition, evidence, observedAt)),
+    proposeMemoryCandidate(unretiredDraft(input.cwd, procedureDraft(input, definition, evidence, observedAt))),
     input.actor,
     `accept procedure portfolio ${input.portfolio.source_map_digest}`,
     input.options,

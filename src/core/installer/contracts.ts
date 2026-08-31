@@ -2,6 +2,7 @@ import type { TaskLifecyclePolicy } from "../task-lifecycle/contracts.ts";
 
 export type InstallerDisposition =
   | "ready"
+  | "analysis-ready"
   | "partially-ready"
   | "analyzable-only"
   | "blocked";
