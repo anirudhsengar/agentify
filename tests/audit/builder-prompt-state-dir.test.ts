@@ -188,6 +188,10 @@ async function testConcernPromptsRespectFileLevelCoreOwnership(): Promise<void> 
   const builder = readRawBuilderPrompt();
   const scout = readExplorerPrompt("concern_scout");
   const tracer = readExplorerPrompt("concern_tracer");
+  assert.doesNotMatch(tracer, /2–5 invariants|2–5 pitfalls|A concern with fifteen/,
+    "field and core-path quotas cannot substitute for behavioral evidence");
+  assert.match(tracer, /counterexample input or state/,
+    "tracers must check the direction and preconditions of their claims");
   for (const [name, prompt] of [["builder", builder], ["scout", scout]] as const) {
     assert.match(
       prompt,

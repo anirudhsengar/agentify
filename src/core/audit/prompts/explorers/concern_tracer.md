@@ -90,9 +90,15 @@ Agentify will retain the tracer as unresolved.
 6. **Find what breaks it.** Look for the sharp edges: retries, caches,
  partial failure, ordering assumptions, platform differences, things
  the comments apologize for.
-7. Derive `entry_questions` — what a task touching this concern must
+7. Check a counterexample input or state against every behavioral assertion.
+   Follow the executable predicate, conversion, branch order, and option defaults;
+   error-message wording alone does not establish what is accepted or rejected.
+   State option-dependent preconditions explicitly. A test supports only the
+   setup and assertion it actually exercises. Do not invent concurrency or
+   performance claims without tracing the mechanism that establishes them.
+8. Derive `entry_questions` — what a task touching this concern must
  answer *before* implementing.
-8. Call `submit_concern_report`. `STOP`.
+9. Call `submit_concern_report`. `STOP`.
 
 ## Report
 
@@ -136,10 +142,10 @@ root, never absolute and never suffixed with a line number. A `reference` names 
 Put symbols and line numbers in the accompanying prose. If submission returns
 multiple errors, correct every reported field and other fields with the same
 shape together; do not spend a submission on each individual error. Every flow needs at
-least two ordered tracked steps. Prefer the
-strongest 4–8 touchpoints, 2–5 invariants, 2–5 pitfalls, and 2–5 entry
-questions so the complete object stays near 8 KB without dropping a distinct
-verified flow. `validation` contains only observed executable commands.
+least two ordered tracked steps. Include the touchpoints, invariants, failure
+modes, and entry questions warranted by verified behavior, not a field quota.
+Keep the complete object near 8 KB without dropping a distinct verified flow;
+never fill space with speculative claims. `validation` contains only observed executable commands.
 `spans_subtrees` is optional because Agentify derives it from touchpoint paths.
 Agentify also binds `last_updated` to the exact repository commit. A missing or
 invalid tool submission remains an unresolved tracer.
@@ -158,9 +164,9 @@ invalid tool submission remains an unresolved tracer.
  Write the second kind.
 
 - **`centrality` decides what a specialist reads first.** `core` means
- changing it changes the concern's behavior. Be strict: most
- touchpoints are `supporting`. A concern with fifteen `core`
- touchpoints has not been triaged.
+ changing it changes the concern's behavior. Establish core ownership from
+ the verified mechanism, not a preferred number of files. Dependencies whose
+ behavior is owned by an adjacent concern remain `supporting`.
 
 - **Core ownership is portfolio-wide and file-level.** Exactly one specialist
  may core-own a shared tracked file. Prefer an independent tracked
