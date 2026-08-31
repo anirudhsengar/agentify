@@ -10,7 +10,7 @@ import { createReadOnlyExecutionPolicy } from "../src/core/security/execution-po
 import { createAgentSession } from "@earendil-works/pi-coding-agent";
 import { createAgentifyModelRuntime } from "../src/core/pi-credential-store.ts";
 import { createSpawnExplorerTool } from "../src/core/audit/spawn-explorer-tool.ts";
-import { AuditResourceBudget } from "../src/core/audit/resource-budget.ts";
+import { AuditBudgetExceededError, AuditResourceBudget } from "../src/core/audit/resource-budget.ts";
 
 test("SDK admission rejection prevents HTTP dispatch, while admitted requests still dispatch", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-sdk-admission-"));
@@ -33,21 +33,23 @@ test("SDK admission rejection prevents HTTP dispatch, while admitted requests st
     for (const reject of [true, false]) {
       const before = requests;
       let admissions = 0;
-      const result = await runtime.runSession({
+      const run = runtime.runSession({
         cwd, configDir: cwd,
         config: { schemaVersion: 1, thinkingLevel: "off", models: { primary: { provider: "openai", model: "admission-fixture" } } },
         systemPrompt: "Local transport test.", userPrompt: "ok", tools: [], timeoutMs: 5000,
         executionPolicy: createReadOnlyExecutionPolicy({ cwd, mode: "audit-readonly", tools: [] }),
         onProviderRequest: () => { admissions += 1; if (reject) throw new Error("admission denied"); },
       });
+      if (reject) await assert.rejects(run, /admission denied/,
+        "SDK-swallowed admission errors must reach the caller, not look like a model timeout");
+      else assert.equal((await run).diagnostics?.provider_requests, 1);
       assert.equal(admissions, 1);
       assert.equal(requests - before, reject ? 0 : 1, "denied SDK hooks must not dispatch their original payload");
-      assert.equal(result.diagnostics?.provider_requests, reject ? 0 : 1);
     }
     const costBudget = new AuditResourceBudget({ maxTotalCostUsd: 0.01 });
     const costSession = costBudget.beginSession();
     const beforeCostRejection = requests;
-    const costResult = await runtime.runSession({
+    await assert.rejects(runtime.runSession({
       cwd, configDir: cwd,
       config: { schemaVersion: 1, thinkingLevel: "off", models: { primary: { provider: "openai", model: "admission-fixture" } } },
       systemPrompt: "Local cost admission test.", userPrompt: "ok", tools: [], timeoutMs: 5000,
@@ -57,9 +59,8 @@ test("SDK admission rejection prevents HTTP dispatch, while admitted requests st
         assert.ok(reservation, "the real SDK must supply model-bound reservations");
         costBudget.recordProviderRequest(costSession, reservation);
       },
-    });
+    }), AuditBudgetExceededError, "preserve typed budget exhaustion across SDK extension dispatch");
     assert.equal(requests, beforeCostRejection, "cost reservation rejection must prevent HTTP dispatch");
-    assert.equal(costResult.diagnostics?.provider_requests, 0);
     assert.equal(costBudget.snapshot().model_calls, 0);
     const { modelRuntime } = await createAgentifyModelRuntime({
       authFile: path.join(cwd, "auth.json"), modelsFile: path.join(cwd, "models.json"),
