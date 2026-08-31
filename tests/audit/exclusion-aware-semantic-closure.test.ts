@@ -1005,6 +1005,12 @@ test("normalization subsumes core-conflicting concerns only after their verified
         "Subsumed by the accepted command dispatch lifecycle concern because both behaviors share the same file-level implementation owner and cannot form independent specialists.",
       grouped_into: dispatch.concern,
     });
+    // Captured Commander compilation retired a specialist but left supporting
+    // path dispositions pointing at its now-missing identity.
+    map.concern_evidence!.not_concerns.push({
+      candidate: "tests/help.test.ts", grouped_into: help.concern,
+      why_rejected: "Supporting regression for the accepted help and usage rendering behavior, not an independent specialist.",
+    });
 
     const compiled = compileSpecialistEvidence(map, { cwd });
     assert.equal(compiled.complete, true, compiled.reasons.join("; "));
@@ -1012,6 +1018,7 @@ test("normalization subsumes core-conflicting concerns only after their verified
       compiled.map.concern_evidence!.concerns.map((entry) => entry.concern),
       [dispatch.concern],
     );
+    assert.equal(compiled.map.concern_evidence!.not_concerns[1]!.grouped_into, dispatch.concern);
     assert.ok(compiled.map.concern_evidence!.concerns[0]!.flows.some((flow) =>
       flow.name === help.flows[0]!.name
       && flow.steps.map((step) => step.path).join("\0")
@@ -1035,6 +1042,11 @@ test("normalization subsumes core-conflicting concerns only after their verified
     const repeated = compileSpecialistEvidence(compiled.map, { cwd });
     assert.equal(repeated.complete, true, repeated.reasons.join("; "));
     assert.strictEqual(repeated.map, compiled.map);
+    const missingOwner = structuredClone(compiled.map);
+    missingOwner.concern_evidence!.not_concerns[1]!.grouped_into = "Untraced owner";
+    const missing = compileSpecialistEvidence(missingOwner, { cwd });
+    assert.equal(missing.complete, false);
+    assert.match(missing.reasons.join("; "), /Untraced owner/);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
