@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createServer } from "node:http";
+import { Type } from "typebox";
 import { capProviderOutputTokens, forceProviderToolChoice, PiSdkRuntime } from "../src/core/pi-sdk-runtime.ts";
 import { createReadOnlyExecutionPolicy } from "../src/core/security/execution-policy.ts";
 import { createAgentSession } from "@earendil-works/pi-coding-agent";
@@ -72,6 +73,45 @@ test("SDK admission rejection prevents HTTP dispatch, while admitted requests st
     assert.equal(requests, before, "explorer rejection must abort the actual SDK transport");
     assert.equal(budget.snapshot().model_calls, 3, "a denied dispatch is not a fourth model call");
     assert.equal((denied.details as { provider_calls: number }).provider_calls, 0);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("MiniMax compatibility keeps reasoning and avoids unsupported named tool choice on the wire", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-sdk-tool-choice-"));
+  const payloads: Array<Record<string, unknown>> = [];
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    payloads.push(JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>);
+    // A deterministic non-retryable response suffices to inspect dispatch.
+    response.writeHead(400, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "wire fixture complete" } }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    fs.writeFileSync(path.join(cwd, "models.json"), JSON.stringify({ providers: {
+      minimax: { baseUrl: `http://127.0.0.1:${address.port}`, api: "anthropic-messages",
+        apiKey: "local-test-placeholder", models: [{ id: "MiniMax-M3", reasoning: true, contextWindow: 32768, maxTokens: 4096 }] },
+    } }));
+    await new PiSdkRuntime().runSession({
+      cwd, configDir: cwd,
+      config: { schemaVersion: 1, thinkingLevel: "high", models: { primary: { provider: "minimax", model: "MiniMax-M3" } } },
+      systemPrompt: "Local wire test.", userPrompt: "Read the fixture.", tools: ["read"], timeoutMs: 5000,
+      executionPolicy: createReadOnlyExecutionPolicy({ cwd, mode: "audit-readonly", tools: ["read"] }),
+      customTools: [{ name: "submit_report", label: "Submit", description: "Submit fixture result.", parameters: Type.Object({}),
+        async execute() { return { content: [{ type: "text", text: "recorded" }], details: {} }; } }],
+      forceRequiredToolChoice: true,
+      recoveryPromptIfToolNotCalled: { requiredToolName: "submit_report", userPrompt: "Submit.", maxAttempts: 0 },
+    });
+    assert.equal(payloads.length, 1);
+    assert.deepEqual(payloads[0]!.tool_choice, { type: "auto" });
+    assert.notDeepEqual(payloads[0]!.thinking, { type: "disabled" }, "unsupported forcing must not disable configured reasoning");
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
