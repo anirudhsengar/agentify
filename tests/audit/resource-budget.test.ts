@@ -197,10 +197,32 @@ test("default budgets retain bounded capacity for a final obligation-focused rep
     semantic_repair_passes: 1,
   });
   assert.doesNotThrow(() => budget.assertProviderSessionCapacity(1_000_000));
+  assert.doesNotThrow(() => budget.recordProviderRequest(budget.beginSession(),
+    providerRequestReservation({ contextWindow: 272_000, maxTokens: 128_000,
+      cost: { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0 } })));
   assert.equal(budget.remainingModelCalls(64), 64);
   for (let index = 0; index < 6; index += 1) {
     assert.doesNotThrow(() => budget.reserveExplorer("concern_tracer"));
   }
+});
+
+test("default admission retains interrupted bounds and uncappable output headroom", () => {
+  const prior = { ...new AuditResourceBudget().snapshot(),
+    model_calls: 51, turns: 50, output_tokens: 67_163,
+    unreported_calls: 1, unreserved_calls: 0,
+    reserved_input_tokens: 1_000_000, reserved_output_tokens: 12_000, reserved_cost_usd: 0.3144 };
+  const reservation = providerRequestReservation({ contextWindow: 272_000, maxTokens: 128_000,
+    cost: { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0 } });
+  const budget = new AuditResourceBudget(undefined, Date.now(), prior);
+  assert.doesNotThrow(() => budget.recordProviderRequest(budget.beginSession(), reservation));
+  assert.equal(budget.snapshot().reserved_output_tokens, 140_000,
+    "an interrupted request's reservation cannot be discarded to admit the next one");
+  assert.ok(budget.snapshot().output_tokens + budget.snapshot().reserved_output_tokens!
+    <= budget.limits.maxOutputTokens);
+
+  const tight = new AuditResourceBudget({ maxOutputTokens: 200_000 }, Date.now(), prior);
+  assert.throws(() => tight.recordProviderRequest(tight.beginSession(), reservation), /output token reservation/);
+  assert.equal(tight.snapshot().model_calls, prior.model_calls, "a configured hard ceiling still denies dispatch");
 });
 
 test("parent provider calls, turns, tokens, and cost share one hard budget", () => {
