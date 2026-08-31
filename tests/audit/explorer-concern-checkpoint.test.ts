@@ -299,7 +299,7 @@ test("submission and compilation reject unsupported tracked-file symbol claims",
       "2026-08-29T00:00:00.000Z",
     );
     assert.ok(original);
-    for (const scenario of ["valid", "missing-core-symbol", "missing-supporting-symbol", "untracked-step"]) {
+    for (const scenario of ["valid", "missing-core-symbol", "missing-supporting-symbol", "untracked-step", "reexport-only-flow"]) {
       const invalid = scenario !== "valid";
       const report: Concern = structuredClone(original);
       if (scenario === "missing-core-symbol") report.touchpoints[0]!.symbol = "moduleMap";
@@ -310,6 +310,12 @@ test("submission and compilation reject unsupported tracked-file symbol claims",
       if (scenario === "untracked-step") {
         fs.writeFileSync(path.join(cwd, "src/generated.ts"), "export function sign() {}\n");
         report.flows[0]!.steps.splice(1, 0, { path: "src/generated.ts", what_happens: "Signs the request." });
+      }
+      if (scenario === "reexport-only-flow") {
+        report.flows[0]!.steps = [
+          { path: "src/index.ts", what_happens: "Re-exports the verify entry point." },
+          { path: "src/index.ts", what_happens: "Re-exports sign, allegedly completing credential validation." },
+        ];
       }
       let recorded = false;
       const map = makeValidCodebaseMap({ concern_evidence: { concerns: [], not_concerns: [] }, expert_evidence: undefined });
@@ -323,6 +329,7 @@ test("submission and compilation reject unsupported tracked-file symbol claims",
       assert.equal(recorded, !invalid, `${scenario}: unsupported claims must never reach the receipt callback`);
       assert.equal(result.isError === true, invalid);
       if (scenario === "missing-core-symbol") assert.match(result.content[0]?.text ?? "", /moduleMap.*src\/auth\.ts|src\/auth\.ts.*moduleMap/);
+      if (scenario === "reexport-only-flow") assert.match(result.content[0]?.text ?? "", /re-export.*implementation/);
       map.concern_evidence!.concerns = [report];
       const assessment = assessSpecialistEvidence(map, { cwd });
       assert.equal(assessment.accepted_concerns.includes(report.concern), !invalid,
