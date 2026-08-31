@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Allow dependency-free Go modules without `go.sum`; declared module requirements still need checksum evidence and successful isolated validation.
+
 - Preserve traced specialist bodies across full-map and explicit delta merge writes; destructive model overwrites must use validated tracer replacement or compiler reconciliation.
 
 - Keep the installer audit log open through final validation and atomic
