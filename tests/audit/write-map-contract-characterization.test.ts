@@ -687,6 +687,25 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
     [...existingConcernNames, "response delivery"],
   );
 
+  const preservedMapPath = appendTools.canonicalMapPath(appendCwd);
+  const preservedBytes = fs.readFileSync(preservedMapPath, "utf8");
+  for (const mergeStrategy of ["deep_merge", "shallow_overwrite"] as const) {
+    const removedConcernsResult = await executeTool(
+      appendTools.writeMapDeltaTool,
+      { delta: { concern_evidence: { concerns: [], not_concerns: [] } }, merge_strategy: mergeStrategy },
+      appendCwd,
+    );
+    assert.equal(isToolError(removedConcernsResult), true, `${mergeStrategy} must not erase traced bodies`);
+    assert.equal(fs.readFileSync(preservedMapPath, "utf8"), preservedBytes);
+  }
+  for (const concerns of [[], [makeValidConcern(), changedExistingConcern]]) {
+    const replacementMap = readJson(preservedMapPath);
+    replacementMap.concern_evidence = { concerns: concerns as never[], not_concerns: [] };
+    const replacementResult = await executeTool(appendTools.writeMapTool, { map: replacementMap }, appendCwd);
+    assert.equal(isToolError(replacementResult), true, "full writes must not erase or rewrite traced bodies");
+    assert.equal(fs.readFileSync(preservedMapPath, "utf8"), preservedBytes);
+  }
+
   const implicitCheckpoint = makeValidConcern({
     concern: "help rendering and formatting",
     one_line: "Owns how command metadata becomes rendered help output.",
