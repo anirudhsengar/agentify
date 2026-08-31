@@ -6,6 +6,10 @@ import * as path from "node:path";
 import { createServer } from "node:http";
 import { capProviderOutputTokens, forceProviderToolChoice, PiSdkRuntime } from "../src/core/pi-sdk-runtime.ts";
 import { createReadOnlyExecutionPolicy } from "../src/core/security/execution-policy.ts";
+import { createAgentSession } from "@earendil-works/pi-coding-agent";
+import { createAgentifyModelRuntime } from "../src/core/pi-credential-store.ts";
+import { createSpawnExplorerTool } from "../src/core/audit/spawn-explorer-tool.ts";
+import { AuditResourceBudget } from "../src/core/audit/resource-budget.ts";
 
 test("SDK admission rejection prevents HTTP dispatch, while admitted requests still dispatch", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-sdk-admission-"));
@@ -38,6 +42,34 @@ test("SDK admission rejection prevents HTTP dispatch, while admitted requests st
       assert.equal(requests - before, reject ? 0 : 1, "denied SDK hooks must not dispatch their original payload");
       assert.equal(result.diagnostics?.provider_requests, reject ? 0 : 1);
     }
+    const { modelRuntime } = await createAgentifyModelRuntime({
+      authFile: path.join(cwd, "auth.json"), modelsFile: path.join(cwd, "models.json"),
+    });
+    const model = modelRuntime.getModel("openai", "admission-fixture");
+    assert.ok(model);
+    const budget = new AuditResourceBudget({ maxModelCalls: 3 });
+    const before = requests;
+    let explorerCreated = false;
+    const explorer = createSpawnExplorerTool({
+      agentDir: cwd, stateDir: ".audit", explorerModel: model, resourceBudget: budget,
+      createSession: async (options) => {
+        const created = await createAgentSession({ ...options, modelRuntime });
+        explorerCreated = true;
+        // Another session consumes the remaining slots after explorer preflight.
+        const competing = budget.beginSession();
+        created.session.subscribe((event) => {
+          if (event.type === "agent_start") {
+            for (let call = 0; call < 3; call += 1) budget.recordProviderRequest(competing);
+          }
+        });
+        return created;
+      },
+    });
+    const denied = await explorer.execute("sdk-admission", { mode: "topography", target_path: "." } as never,
+      undefined, undefined, { cwd } as never);
+    assert.equal((denied as { isError?: boolean }).isError, true);
+    assert.equal(explorerCreated, true, JSON.stringify(denied));
+    assert.equal(requests, before, "explorer rejection must abort the actual SDK transport");
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
