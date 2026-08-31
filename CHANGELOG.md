@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Allow up to 256 KiB of complete immutable source per normalized specialist review, accommodating implementation/test evidence without truncation. Larger inputs remain unresolved before provider dispatch; the one-call deadline and all claim-verification requirements remain unchanged.
+
 - Set the aggregate output default to 400,000 tokens, including outstanding request reservations, so bounded recovery has headroom for uncappable responses. Explicit lower ceilings remain enforced; interrupted usage, cost, time, call and semantic-quality limits are unchanged.
 
 - Review normalized specialist narratives against bounded immutable source before installation. Typed reviews bind the exact concern body and HEAD; unsupported claims, incomplete reviews, stale evidence and timeouts remain repair obligations. Model-authored approval is rejected and finalization independently enforces the review gate.

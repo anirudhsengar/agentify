@@ -129,7 +129,7 @@ mentions AI does not trigger the blocker.
 Finalization independently requires a current explorer receipt attestation.
 After deterministic compilation reaches its fixed point, each changed concern
 receives a separate read-only review using the configured primary model and the
-shared audit budget. The reviewer receives at most 128 KiB of immutable tracked
+shared audit budget. The reviewer receives at most 256 KiB of immutable tracked
 regular source, no filesystem or command tools, and one provider request within
 90 seconds including source collection. It submits a typed result: either the
 first unsupported assertion with a known claim ID and exact source excerpt, or
