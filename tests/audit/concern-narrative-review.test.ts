@@ -510,6 +510,35 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     assert.deepEqual(invariantCorrected.concern_evidence, expectedInvariantEvidence);
     assert.equal((await reviewSpecialistCompilation(context,
       compileSpecialistEvidence(invariantCorrected, { cwd }), budget, "invariant-review")).complete, true);
+    // Captured role claims attributed formatter decisions to its repository and
+    // keyed a template cache by name instead of rendered source. Correct prose,
+    // never the tracked path, symbol, core ownership, or behavioral flow.
+    reviewedClaim = "touchpoints[0]";
+    const roleInput = structuredClone(correctedMap);
+    roleInput.concern_evidence!.concerns[0]!.touchpoints[0]!.role = FALSE_CLAIM;
+    const roleRejected = await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(roleInput, { cwd }), budget, "role-review");
+    assert.equal(roleRejected.complete, false);
+    groupedWrite(roleRejected.map);
+    const roleProposal = { ...proposal, claim: reviewedClaim,
+      digest: roleRejected.map.specialist_reviews!.records[0]!.digest };
+    assert.equal(Value.Check(tools.writeMapDeltaTool.parameters, { delta: {}, claim_correction: roleProposal }), true,
+      "the provider-facing schema must admit correction of an exact reviewed touchpoint role");
+    assert.notEqual((await repair(roleProposal) as { isError?: boolean }).isError, true);
+    const roleCorrected = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+    const expectedRoleEvidence = structuredClone(roleInput.concern_evidence!);
+    expectedRoleEvidence.concerns[0]!.touchpoints[0]!.role = CORRECTION;
+    assert.deepEqual(roleCorrected.concern_evidence, expectedRoleEvidence);
+    assert.deepEqual(roleCorrected.explorer_receipts, roleRejected.map.explorer_receipts);
+    assert.equal((await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(roleCorrected, { cwd }), budget, "role-review")).complete, true);
+    for (const invalid of [{ ...roleProposal, flow_step: 0 }, { ...roleProposal, statement: FALSE_CLAIM }]) {
+      groupedWrite(roleRejected.map);
+      const before = fs.readFileSync(tools.canonicalMapPath(cwd), "utf8");
+      assert.equal((await repair(invalid) as { isError?: boolean }).isError, true);
+      assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), before);
+    }
+
     // A captured summary asserted HTTPS-only despite an HTTP-or-HTTPS predicate.
     // Correcting that one reviewed sentence must not require regenerating flows.
     reviewedClaim = "one_line";
