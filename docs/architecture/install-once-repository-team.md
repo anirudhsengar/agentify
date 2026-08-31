@@ -131,7 +131,10 @@ After deterministic compilation reaches its fixed point, each changed concern
 receives a separate read-only review using the configured primary model and the
 shared audit budget. The reviewer receives at most 256 KiB of immutable tracked
 regular source, no filesystem or command tools, and one provider request within
-90 seconds including source collection. It submits a typed result: either the
+90 seconds including source collection. Only a rejected typed submission permits
+one additional request to correct its arguments, within the same deadline and
+shared resource budget. Prose, unrelated tool errors, and a second rejection grant
+no further calls. It submits a typed result: either the
 first unsupported assertion with a known claim ID and exact source excerpt, or
 an explicit complete checklist. Free-form prose and incomplete checklists cannot
 approve a team. Application-owned review records bind HEAD and the exact

@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Permit one argument-correction request after a rejected typed narrative-review submission, within the existing deadline and aggregate budget. Source verification remains strict; unrelated errors, prose and repeated invalid submissions grant no extra calls.
+
 - Preserve deterministic compiler attachments during claim-only repairs without demanding fabricated model-read receipts. Authored source still requires observations and normalization recomputes inferred paths.
 
 - Correct a review-rejected pitfall or invariant without regenerating an entire specialist. Exact HEAD/body/finding bindings preserve references, flows and ownership; the corrected body still requires full normalized review before installation.
