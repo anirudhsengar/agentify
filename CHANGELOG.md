@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Keep exact, independently recomputed supporting-attachment annotations out of source-narrative claims. All path/symbol/ownership fields and authored or altered role prose remain reviewed; marker text alone grants no exemption.
+
 - Supply compiler-verified attachment relationships to narrative review separately from source claims. Structural bookkeeping does not require a source declaration, while every authored behavioral claim and exact-source finding remains checked.
 
 - Preserve authored touchpoint roles during ownership normalization; compiler decisions remain structured ownership facts rather than unsupported source narratives.

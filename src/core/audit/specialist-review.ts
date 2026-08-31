@@ -37,12 +37,20 @@ export function specialistReviewDigest(concern: Concern): string {
   return createHash("sha256").update(stableMapValueIdentity(concern)).digest("hex");
 }
 
-function reviewClaims(concern: Concern): Record<string, unknown> {
+function reviewClaims(concern: Concern, attachments: readonly RepositoryConcernAttachment[]): Record<string, unknown> {
   return Object.fromEntries([
     ...concern.pitfalls.map((value, index) => [`pitfalls[${index}]`, value]),
     ...concern.invariants.map((value, index) => [`invariants[${index}]`, value]),
     ...concern.flows.map((value, index) => [`flows[${index}]`, value]),
-    ...concern.touchpoints.map((value, index) => [`touchpoints[${index}]`, value]),
+    ...concern.touchpoints.map((value, index) => {
+      const { role, ...structural } = value;
+      const compilerOwned = value.centrality === "supporting" && value.symbol === null && value.line_range === null
+        && attachments.some(attachment => attachment.concern === concern.concern
+          && attachment.paths.includes(value.path)
+          && role === `Trusted semantic closure attached this tracked dependency: ${attachment.reason}.`);
+      // Exact deterministic proof, never a marker-prefix exemption for prose.
+      return [`touchpoints[${index}]`, compilerOwned ? structural : value];
+    }),
     ...["concern", "one_line", "covers", "excludes", "entry_questions", "validation"].map(key =>
       [key, concern[key as keyof Concern]]),
   ]);
@@ -155,7 +163,7 @@ async function reviewConcern(
 ): Promise<{ failure: string | null; retryable: boolean; finding?: NonNullable<SpecialistReviewSubmission["finding"]> }> {
   const deadline = Date.now() + budget.remainingDurationMs(REVIEW_TIMEOUT_MS);
   const sources = immutableSources(context.cwd, commit, concern, deadline);
-  const claims = reviewClaims(concern);
+  const claims = reviewClaims(concern, attachments);
   if (Object.keys(claims).length > 512) throw new Error("review claim budget exceeded");
   const controller = new AbortController();
   const cancel = (): void => controller.abort();
