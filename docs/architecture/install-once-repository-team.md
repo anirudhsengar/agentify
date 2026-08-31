@@ -125,6 +125,13 @@ Typed tracer checkpoints are the only path that may replace an existing concern
 body. Incremental map deltas may append a new concern or replay an identical
 checkpoint, but reject a changed body with the same semantic identity so repair
 cannot bypass scope and monotonicity validation or create duplicate specialists.
+Bounded retracers receive the previous current-commit attested body as untrusted
+context. Unchanged claims may retain their prior source receipts; a changed
+scope, flow, invariant, pitfall, or touchpoint claim requires fresh observation.
+Centrality alone is a portfolio ownership proposal and may change without
+rereading identical source claims. New receipts list only newly observed files;
+the retained ledger supplies provenance for reused evidence. Stale or failed
+receipts cannot authorize reuse, and closure still validates the complete result.
 Each successful tracer also returns at most 4 KiB of fresh compiler feedback
 computed through the same prospective merge used by its trusted checkpoint.
 Exact remaining path/cluster previews and total counts supersede stale repair

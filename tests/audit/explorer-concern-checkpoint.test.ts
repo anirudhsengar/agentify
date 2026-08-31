@@ -11,6 +11,7 @@ import type { Concern } from "../../src/core/audit/schema/concerns.ts";
 import {
   checkpointExplorerConcernEvidence,
   currentRepositoryCommit,
+  ExplorerReceiptTracker,
 } from "../../src/core/audit/explorer-receipts.ts";
 import { loadCanonicalMapAt, writeCanonicalMap } from "../../src/core/audit/map-storage.ts";
 import {
@@ -153,7 +154,7 @@ test("successful tracers return bounded current compiler obligations without ext
   const stateDir = ".agentify/runtime/audit";
   try {
     for (const repositoryPath of [
-      "README.md", "src/extract/request.ts", "src/extract/rejection.ts", "src/extract/rejection.test.ts",
+      "README.md", "src/extract/request.ts", "src/extract/rejection.ts", "src/extract/rejection.test.ts", "src/extract/extra.ts",
       "src/render/page.ts", "src/render/page.test.ts",
       ...Array.from({ length: 64 }, (_, index) => [
         `src/render/surface-${index}.ts`, `src/render/surface-${index}.test.ts`,
@@ -184,8 +185,14 @@ test("successful tracers return bounded current compiler obligations without ext
         assert.ok(submit);
         return { session: {
           messages: [], dispose(): void {},
-          async prompt(): Promise<void> {
-            for (const repositoryPath of ["src/extract/request.ts", "src/extract/rejection.ts"]) {
+          async prompt(task: string): Promise<void> {
+            if (sessions === 2) {
+              assert.match(task, /Prior current-HEAD attested concern/);
+              assert.ok(task.includes("Request parts are extracted before one body-consuming extractor."));
+            }
+            const reads = sessions === 1
+              ? ["src/extract/request.ts", "src/extract/rejection.ts"] : ["src/extract/extra.ts"];
+            for (const repositoryPath of reads) {
               const input = { path: repositoryPath };
               const result = await createReadTool(cwd).execute("observe", input);
               for (const extension of options!.resourceLoader!.getExtensions().extensions) {
@@ -194,8 +201,11 @@ test("successful tracers return bounded current compiler obligations without ext
                 }
               }
             }
+            const body = JSON.parse(report.match(/```json\s*([\s\S]*?)```/u)![1]!) as Concern;
+            if (sessions === 2) body.touchpoints.push({ path: "src/extract/extra.ts", symbol: null,
+              centrality: "supporting", role: "Provides newly observed extraction support.", line_range: null });
             const submitted = await submit.execute("submit", {
-              report_json: report.match(/```json\s*([\s\S]*?)```/u)![1]!,
+              report_json: JSON.stringify(body),
             }, undefined, undefined, { cwd } as never);
             assert.notEqual((submitted as { isError?: boolean }).isError, true);
           },
@@ -225,6 +235,18 @@ test("successful tracers return bounded current compiler obligations without ext
     const compilation = compileSpecialistEvidence(loadCanonicalMapAt(cwd, stateDir)!, { cwd });
     assert.equal(feedback.uncovered_path_count, compilation.assessment.uncovered_paths.length);
     assert.equal(feedback.uncovered_cluster_count, compilation.assessment.uncovered_clusters.length);
+    const tracker = new ExplorerReceiptTracker();
+    tracker.observe({ type: "tool_execution_end", toolName: "spawn_explorer", result });
+    const current = loadCanonicalMapAt(cwd, stateDir)!;
+    current.explorer_receipts = tracker.attestation(currentRepositoryCommit(cwd)!, "prior-session");
+    writeCanonicalMap(cwd, current, { stateDir, mapFilename: "codebase_map.json" });
+    const repaired = await tool.execute("repair", {
+      mode: "concern_tracer", target_path: ".", concern: "Request extraction and rejection contracts",
+    } as never, undefined, undefined, { cwd } as never);
+    assert.notEqual((repaired as { isError?: boolean }).isError, true, JSON.stringify(repaired.content));
+    assert.deepEqual((repaired.details as { observed_paths: string[] }).observed_paths, ["src/extract/extra.ts"],
+      "reused evidence must not be falsely attested as a new source observation");
+    assert.equal(sessions, 2);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -359,7 +381,7 @@ test("repair reuses only unchanged evidence attested at the current commit", asy
     git(cwd, "commit", "-qm", "attested repair fixture");
     const previous = parseStructuredConcernReport(REPORT, "2026-08-29T00:00:00.000Z");
     assert.ok(previous);
-    for (const scenario of ["append", "centrality", "flow", "invariant", "role", "stale", "failed", "unattested"]) {
+    for (const scenario of ["append", "centrality", "flow", "invariant", "role", "scope", "stale", "failed", "unattested", "moved-head"]) {
       const map = makeValidCodebaseMap({
         concern_evidence: { concerns: [previous], not_concerns: [] }, expert_evidence: undefined,
         explorer_receipts: {
@@ -380,9 +402,11 @@ test("repair reuses only unchanged evidence attested at the current commit", asy
       if (scenario === "flow") report.flows[0]!.steps[0]!.what_happens = "Invents different extraction behavior.";
       if (scenario === "invariant") report.invariants[0]!.rule = "Any extractor may consume the body twice.";
       if (scenario === "role") report.touchpoints[0]!.role = "Invents a different responsibility.";
+      if (scenario === "scope") report.covers = "Invents new responsibility without observed evidence.";
       let recorded = false;
       const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", () => { recorded = true; },
         cwd, previous.concern, ["src/extract/mod.rs"], map, new Set(["src/fresh.rs"]));
+      if (scenario === "moved-head") git(cwd, "commit", "--allow-empty", "-qm", "HEAD changed after dispatch");
       const result = await tool.execute("repair", { report_json: JSON.stringify(report) } as never,
         undefined, undefined, {} as never) as { isError?: boolean; content: Array<{ text?: string }> };
       const valid = scenario === "append" || scenario === "centrality";

@@ -4,6 +4,11 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Give bounded retracers the prior attested concern body. Unchanged source
+  claims can reuse current-commit receipts while new or changed claims still
+  require fresh reads; ownership-only centrality edits preserve the original
+  evidence and new receipts never pretend reused files were reread.
+
 - Collect tracked dependency evidence in bounded Git batches without dropping
   every edge when a repository exceeds 512 source files. The aggregate byte
   ceiling remains unchanged; unavailable evidence stays unresolved.
