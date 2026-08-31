@@ -313,6 +313,54 @@ async function testRejectsWhenConcurrentSpawnBudgetIsExhausted(): Promise<void> 
   }
 }
 
+async function testAggregateBudgetConcurrencyPreservesParentOutputReserve(): Promise<void> {
+  const cwd = tempDir("spawn-budget-parent-reserve");
+  let release!: () => void;
+  let ready!: () => void;
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  const twoStarted = new Promise<void>((resolve) => { ready = resolve; });
+  let started = 0;
+  try {
+    const budget = new AuditResourceBudget({ maxOutputTokens: 100_000 });
+    const parent = budget.beginSession(60_000);
+    budget.recordProviderRequest(parent, { inputTokens: 1, outputTokens: 70_000, costUsd: 0 });
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      stateDir: ".agentify/runtime/audit",
+      resourceBudget: budget,
+      explorerModel: { ...stubExplorerArgs().explorerModel, api: "anthropic-messages",
+        contextWindow: 100_000, maxTokens: 128_000 },
+      createSession: async options => ({ session: {
+        messages: [], dispose() {}, async abort() {},
+        async prompt() {
+          const handlers = options!.resourceLoader!.getExtensions().extensions
+            .flatMap(extension => extension.handlers.get("before_provider_request") ?? []);
+          for (const handler of handlers) {
+            await handler({ payload: { max_tokens: 128_000 } } as never, { cwd } as never);
+          }
+          started += 1;
+          if (started === 2) ready();
+          await released;
+        },
+      } }),
+    });
+    const first = tool.execute("first", { mode: "topography", target_path: "." } as never,
+      undefined, undefined, { cwd } as never);
+    const second = tool.execute("second", { mode: "module_graph", target_path: "." } as never,
+      undefined, undefined, { cwd } as never);
+    await twoStarted;
+    const third = await tool.execute("third", { mode: "conventions", target_path: "." } as never,
+      undefined, undefined, { cwd } as never);
+    assert.match(textFrom(third), /spawn_explorer concurrency budget exhausted/i,
+      "the scheduler must reject a third concurrent explorer before its reservation aborts the audit");
+    release();
+    await Promise.all([first, second]);
+  } finally {
+    release?.();
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function testRejectsWhenCostBudgetIsExhausted(): Promise<void> {
   const cwd = tempDir("spawn-budget-cost");
   try {
@@ -1108,6 +1156,7 @@ await testRejectsWhenTotalSpawnBudgetIsExhausted();
 await testInitialConcernScoutRejectsParentAuthoredPortfolioCaps();
 await testRefusesDuplicateCurrentHeadConcernScout();
 await testRejectsWhenConcurrentSpawnBudgetIsExhausted();
+await testAggregateBudgetConcurrencyPreservesParentOutputReserve();
 await testRejectsWhenCostBudgetIsExhausted();
 await testHardProviderCallCapAbortsContinuation();
 await testFinalReportAtProviderCallCapSucceeds();
