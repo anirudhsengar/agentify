@@ -10,6 +10,7 @@ import { createReadTool } from "@earendil-works/pi-coding-agent";
 import type { Concern } from "../../src/core/audit/schema/concerns.ts";
 import {
   checkpointExplorerConcernEvidence,
+  currentRepositoryCommit,
 } from "../../src/core/audit/explorer-receipts.ts";
 import { loadCanonicalMapAt, writeCanonicalMap } from "../../src/core/audit/map-storage.ts";
 import {
@@ -334,6 +335,59 @@ test("submission and compilation reject unsupported tracked-file symbol claims",
       const assessment = assessSpecialistEvidence(map, { cwd });
       assert.equal(assessment.accepted_concerns.includes(report.concern), !invalid,
         "compiler re-entry must enforce the same immutable symbol binding");
+    }
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("repair reuses only unchanged evidence attested at the current commit", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-attested-repair-"));
+  try {
+    for (const [file, source] of Object.entries({
+      "src/extract/mod.rs": "pub trait FromRequest {}\n",
+      "src/extract/rejection.rs": "pub enum Rejection {}\n",
+      "src/fresh.rs": "pub struct Fresh;\n",
+    })) {
+      fs.mkdirSync(path.dirname(path.join(cwd, file)), { recursive: true });
+      fs.writeFileSync(path.join(cwd, file), source);
+    }
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "attested repair fixture");
+    const previous = parseStructuredConcernReport(REPORT, "2026-08-29T00:00:00.000Z");
+    assert.ok(previous);
+    for (const scenario of ["append", "centrality", "flow", "invariant", "role", "stale", "failed", "unattested"]) {
+      const map = makeValidCodebaseMap({
+        concern_evidence: { concerns: [previous], not_concerns: [] }, expert_evidence: undefined,
+        explorer_receipts: {
+          repository_commit: scenario === "stale" ? "0".repeat(40) : currentRepositoryCommit(cwd)!,
+          run_id: "prior-trace",
+          receipts: [{ sequence: 1, mode: "concern_tracer", success: scenario !== "failed",
+            target_path: ".", focus: previous.concern, expected_concern: previous.concern,
+            report_concern: previous.concern, failure_kind: scenario === "failed" ? "timeout" : null,
+            observed_paths: ["src/extract/mod.rs", "src/extract/rejection.rs"],
+          }],
+        },
+      });
+      if (scenario === "unattested") delete map.explorer_receipts;
+      const report = structuredClone(previous);
+      report.touchpoints.push({ path: "src/fresh.rs", symbol: "Fresh", centrality: "supporting",
+        role: "Carries the newly observed request state.", line_range: null });
+      if (scenario === "centrality") report.touchpoints[1]!.centrality = "supporting";
+      if (scenario === "flow") report.flows[0]!.steps[0]!.what_happens = "Invents different extraction behavior.";
+      if (scenario === "invariant") report.invariants[0]!.rule = "Any extractor may consume the body twice.";
+      if (scenario === "role") report.touchpoints[0]!.role = "Invents a different responsibility.";
+      let recorded = false;
+      const tool = createConcernSubmissionTool("2026-08-29T00:00:00.000Z", () => { recorded = true; },
+        cwd, previous.concern, ["src/extract/mod.rs"], map, new Set(["src/fresh.rs"]));
+      const result = await tool.execute("repair", { report_json: JSON.stringify(report) } as never,
+        undefined, undefined, {} as never) as { isError?: boolean; content: Array<{ text?: string }> };
+      const valid = scenario === "append" || scenario === "centrality";
+      assert.equal(recorded, valid, `${scenario}: ${result.content[0]?.text}`);
+      assert.equal(result.isError === true, !valid, scenario);
     }
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
