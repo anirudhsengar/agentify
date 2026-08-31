@@ -844,7 +844,7 @@ async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
 }
 
 async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
-  observation: "read" | "grep-directory" | "grep-file" | "wrong-subtree" | "listing" | "failed-read" | "no-matches" | "none" | "cancelled" | "compact" | "ownership-context",
+  observation: "read" | "grep-directory" | "grep-file" | "wrong-subtree" | "listing" | "failed-read" | "no-matches" | "none" | "cancelled" | "compact" | "ownership-context" | "terminal-at-cap" | "terminal-early" | "invalid-at-cap",
 ): Promise<void> {
   const cwd = tempDir("spawn-budget-concern-portfolio");
   const controller = new AbortController();
@@ -879,6 +879,7 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
       stateDir: ".agentify/runtime/audit",
+      maxSubagentDurationMs: 500,
       ...stubExplorerArgs(),
       createSession: async (sessionOptions) => {
         assert.ok(sessionOptions);
@@ -888,9 +889,18 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
           sessionOptions.tools?.includes("submit_concern_report"),
           "the typed submission tool must be requested in the explorer session tool list",
         );
+        let aborted = false;
+        let release: (() => void) | undefined;
+        const listeners = new Set<(event: unknown) => void>();
         return {
           session: {
             messages: [],
+            subscribe(listener: (event: unknown) => void): () => void {
+              listeners.add(listener);
+              return () => listeners.delete(listener);
+            },
+            async abort(): Promise<void> { aborted = true; release?.(); },
+            clearQueue(): void {},
             async prompt(task: string): Promise<void> {
               if (observation === "ownership-context") {
                 assert.ok(task.includes(cwd), "the stateless tracer needs the actual repository tool root");
@@ -929,13 +939,28 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
                   "whitespace alone must reproduce the historical cap failure");
                 reportJson = JSON.stringify(body);
               }
+              const terminal = observation.startsWith("terminal-") || observation === "invalid-at-cap";
+              if (terminal) {
+                const calls = observation === "terminal-early" ? 1 : 8;
+                for (let call = 1; call <= calls; call += 1) {
+                  for (const listener of listeners) listener({ type: "message_end", message: {
+                    role: "assistant", stopReason: "toolUse",
+                    content: call === calls ? [{ type: "toolCall", name: "submit_concern_report" }] : [],
+                    usage: { input: 1, output: 1, cost: { total: 0 } },
+                  } });
+                  if (aborted) return;
+                }
+              }
               await submissionTool.execute(
                 "submit",
-                { report_json: reportJson },
+                { report_json: observation === "invalid-at-cap" ? "{}" : reportJson },
                 undefined,
                 undefined,
                 { cwd } as never,
               );
+              // A provider need not settle or emit prose after its validated
+              // terminal tool. Agentify must finish and cancel it itself.
+              if (terminal && !aborted) await new Promise<void>((resolve) => { release = resolve; });
             },
             dispose(): void {},
           },
@@ -954,7 +979,7 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
       undefined,
       { cwd } as never,
     );
-    const backedBySource = observation === "read" || observation === "compact" || observation === "ownership-context" || observation.startsWith("grep-");
+    const backedBySource = observation === "read" || observation === "compact" || observation === "ownership-context" || observation.startsWith("grep-") || observation.startsWith("terminal-");
     assert.equal((result as { isError?: boolean }).isError, backedBySource ? undefined : true, `${observation}: ${textFrom(result).slice(0,1_500)}`);
     if (observation === "ownership-context") {
       const details = result.details as { structured_concern?: { touchpoints: Array<{ centrality: string }> } };
@@ -1044,7 +1069,7 @@ await testOversizedReportsFailInsteadOfBecomingReceipts();
 await testDefaultsBoundSmallRepositoryAudits();
 await testParentCancellationStopsExplorer();
 await testSubagentTimeoutReturnsControlToAudit();
-for (const observation of ["read", "grep-directory", "grep-file", "wrong-subtree", "listing", "failed-read", "no-matches", "none", "cancelled", "compact", "ownership-context"] as const) {
+for (const observation of ["terminal-at-cap", "terminal-early", "invalid-at-cap", "read", "grep-directory", "grep-file", "wrong-subtree", "listing", "failed-read", "no-matches", "none", "cancelled", "compact", "ownership-context"] as const) {
   await testConcernTracerDefaultsLeaveRoomForARealPortfolio(observation);
 }
 
