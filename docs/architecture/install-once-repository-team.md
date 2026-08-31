@@ -436,6 +436,11 @@ reservation; cancellation, errors and synthetic zero usage retain the bound in
 the persisted checkpoint. Terminal evidence distinguishes reported cost from
 metadata-priced conservative upper bounds, never an invoice. Legacy unknown
 calls without reservations fail admission rather than inventing a free request.
+Refusing a prospective request consumes no allowance and does not permanently
+exhaust the shared budget: concurrent responses may release enough capacity for
+a later bounded retry. The refused request is never dispatched or charged.
+Actual limit violations remain terminal, and unfinished calls retain their
+reservations; no recovery clears or discounts them.
 The first
 real audit request establishes provider reachability; there is no connectivity
 model call outside the audit budget and log. SIGINT and SIGTERM

@@ -113,7 +113,7 @@ test("denied admission does not poison capacity released by concurrent responses
     budget.observeParentEvent({ type: "message_end", message: {
       role: "assistant", stopReason: "aborted", usage: { input: 0, output: 0, cost: { total: 0 } },
     } } as never, second);
-    assert.ok(budget.snapshot().reserved_input_tokens >= 80);
+    assert.ok((budget.snapshot().reserved_input_tokens ?? 0) >= 80);
     if (gate === "input" || gate === "output" || gate === "cost") {
       assert.throws(() => budget.recordProviderRequest(budget.beginSession(), reservation), AuditBudgetExceededError);
       assert.equal(budget.snapshot().model_calls, 3);

@@ -209,6 +209,9 @@ export class AuditResourceBudget {
   readonly #unresolvedFingerprints: string[];
   #failure: string | null = null;
 
+  // Request-capacity refusals must not set #failure: they spend nothing, and
+  // sibling responses may release reservations. Actual overruns remain fatal.
+
   constructor(
     overrides?: AuditBudgetOverrides,
     startedAt = Date.now(),
@@ -267,7 +270,7 @@ export class AuditResourceBudget {
   remainingOutputTokens(perRequestLimit: number): number {
     this.assertWithinBudget();
     const remaining = this.limits.maxOutputTokens - this.#outputTokens - this.#reservedOutputTokens;
-    if (remaining <= 0) this.fail(`output tokens reached ${this.limits.maxOutputTokens}`);
+    if (remaining <= 0) throw new AuditBudgetExceededError(`output tokens reached ${this.limits.maxOutputTokens}`);
     return Math.max(1, Math.min(perRequestLimit, remaining));
   }
 
@@ -302,7 +305,7 @@ export class AuditResourceBudget {
     const requestBound = Buffer.byteLength(serialized, "utf8");
     const remainingInput = this.limits.maxInputTokens - this.#inputTokens - this.#reservedInputTokens;
     if (remainingInput < requestBound) {
-      this.fail(
+      throw new AuditBudgetExceededError(
         `input token reserve ${remainingInput} is below the serialized provider request bound of ${requestBound}`,
       );
     }
@@ -322,7 +325,7 @@ export class AuditResourceBudget {
     }
     const remainingInput = this.limits.maxInputTokens - this.#inputTokens - this.#reservedInputTokens;
     if (remainingInput < contextWindow) {
-      this.fail(
+      throw new AuditBudgetExceededError(
         `input token reserve ${remainingInput} is below the selected model context window of ${contextWindow}`,
       );
     }
@@ -361,13 +364,13 @@ export class AuditResourceBudget {
         this.fail("invalid provider request reservation");
       }
       if (this.#inputTokens + this.#reservedInputTokens + reservation.inputTokens > this.limits.maxInputTokens) {
-        this.fail("input token reservation exceeds the aggregate budget");
+        throw new AuditBudgetExceededError("input token reservation exceeds the aggregate budget");
       }
       if (this.#outputTokens + this.#reservedOutputTokens + reservation.outputTokens > this.limits.maxOutputTokens) {
-        this.fail("output token reservation exceeds the aggregate budget");
+        throw new AuditBudgetExceededError("output token reservation exceeds the aggregate budget");
       }
       if (this.#costUsd + this.#reservedCostUsd + reservation.costUsd > this.limits.maxTotalCostUsd) {
-        this.fail("cost reservation exceeds the aggregate budget");
+        throw new AuditBudgetExceededError("cost reservation exceeds the aggregate budget");
       }
       this.#reservedInputTokens += reservation.inputTokens;
       this.#reservedOutputTokens += reservation.outputTokens;

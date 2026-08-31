@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Keep request-admission refusals separate from incurred budget violations. Concurrent responses may release capacity for a later bounded retry; refused calls spend nothing and interrupted reservations remain intact.
+
 - Resolve ownership-only proposals without retracing unchanged specialist bodies. Current-HEAD evidence, verified flows and independent adjacent ownership are required; source claims remain immutable and normalized review is invalidated.
 
 - Apply the bounded response ceiling to every explorer mode, not only concern tracing, so concurrent discovery cannot reserve unnecessarily unbounded outputs. APIs without a supported cap retain full reservations.
