@@ -1,6 +1,49 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { capProviderOutputTokens, forceProviderToolChoice } from "../src/core/pi-sdk-runtime.ts";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { createServer } from "node:http";
+import { capProviderOutputTokens, forceProviderToolChoice, PiSdkRuntime } from "../src/core/pi-sdk-runtime.ts";
+import { createReadOnlyExecutionPolicy } from "../src/core/security/execution-policy.ts";
+
+test("SDK admission rejection prevents HTTP dispatch, while admitted requests still dispatch", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-sdk-admission-"));
+  let requests = 0;
+  const server = createServer((_request, response) => {
+    requests += 1;
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    response.end('data: {"id":"fixture","choices":[{"index":0,"delta":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n');
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    fs.writeFileSync(path.join(cwd, "models.json"), JSON.stringify({ providers: {
+      openai: { baseUrl: `http://127.0.0.1:${address.port}/v1`, api: "openai-completions",
+        apiKey: "local-test-placeholder", models: [{ id: "admission-fixture", contextWindow: 32768, maxTokens: 128 }] },
+    } }));
+    const runtime = new PiSdkRuntime();
+    for (const reject of [true, false]) {
+      const before = requests;
+      let admissions = 0;
+      const result = await runtime.runSession({
+        cwd, configDir: cwd,
+        config: { schemaVersion: 1, thinkingLevel: "off", models: { primary: { provider: "openai", model: "admission-fixture" } } },
+        systemPrompt: "Local transport test.", userPrompt: "ok", tools: [], timeoutMs: 5000,
+        executionPolicy: createReadOnlyExecutionPolicy({ cwd, mode: "audit-readonly", tools: [] }),
+        onProviderRequest: () => { admissions += 1; if (reject) throw new Error("admission denied"); },
+      });
+      assert.equal(admissions, 1);
+      assert.equal(requests - before, reject ? 0 : 1, "denied SDK hooks must not dispatch their original payload");
+      assert.equal(result.diagnostics?.provider_requests, reject ? 0 : 1);
+    }
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
 
 test("required tool choice uses the Anthropic wire contract", () => {
   const payload = forceProviderToolChoice({ model: "fixture", tools: [{ name: "submit" }] }, "anthropic-messages", "submit");
