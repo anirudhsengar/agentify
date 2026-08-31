@@ -241,6 +241,9 @@ gaps; normalization changes invalidate the body digest and require fresh review.
 A source-rejected summary can be corrected without regenerating its specialist;
 scope boundaries, ownership, evidence and flows remain unchanged and unapproved
 until full review passes again.
+Successful corrections return fresh review findings within the same bounded
+repair session. Concurrent evidence changes abort stale review checkpoints;
+they are never overwritten to obtain closure.
 Incomplete reviews may retry once in a later bounded run; an unchanged source-backed
 finding remains cached until the specialist body or repository HEAD changes.
 This quality control does not replace manual release qualification.

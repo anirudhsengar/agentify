@@ -13,6 +13,7 @@ import {
   ExplorerReceiptTracker,
 } from "../audit/explorer-receipts.ts";
 import { DEFAULT_MAP_FILENAME, writeCanonicalMap } from "../audit/map-storage.ts";
+import { stableMapValueIdentity } from "../audit/map-delta.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
 import { loadBuilderPrompt } from "../audit/prompt.ts";
 import {
@@ -278,10 +279,18 @@ function persistSpecialistCompilation(
 function reviewCompiledPortfolio(
   context: RunContext, log: AgentifyLog, budget: AuditResourceBudget, compilation: SpecialistCompilationResult,
 ): Promise<SpecialistCompilationResult> {
+  let expected = loadCanonicalMapAt(context.cwd, AUDIT_STATE_RELATIVE_DIR);
   return reviewSpecialistCompilation({ ...context, auditLog: log }, compilation, budget, log.runId,
-    map => { writeCanonicalMap(context.cwd, map, {
-      stateDir: AUDIT_STATE_RELATIVE_DIR, mapFilename: DEFAULT_MAP_FILENAME,
-    }); });
+    map => {
+      const current = loadCanonicalMapAt(context.cwd, AUDIT_STATE_RELATIVE_DIR);
+      if (stableMapValueIdentity(current) !== stableMapValueIdentity(expected)) {
+        throw new Error("canonical map changed during specialist review; retry from current evidence");
+      }
+      writeCanonicalMap(context.cwd, map, {
+        stateDir: AUDIT_STATE_RELATIVE_DIR, mapFilename: DEFAULT_MAP_FILENAME,
+      });
+      expected = map;
+    });
 }
 
 function announceCompiledPortfolio(
@@ -300,6 +309,34 @@ async function repairSpecialistPortfolio(
 ): Promise<{ turns: number; cost_usd: number | null }> {
   const stateDir = AUDIT_STATE_RELATIVE_DIR;
   const mapTools = createWriteMapTools({ stateDir });
+  const repairMapTool: typeof mapTools.writeMapDeltaTool = {
+    ...mapTools.writeMapDeltaTool,
+    async execute(...args) {
+      const result = await mapTools.writeMapDeltaTool.execute(...args);
+      const proposal = args[1] as { claim_correction?: { concern?: unknown } };
+      if ((result as RepairWriteMapResult).isError || !proposal.claim_correction) return result;
+      const sourceMap = loadCanonicalMapAt(context.cwd, stateDir);
+      if (sourceMap === null) throw new Error("canonical map disappeared after claim correction");
+      const compilation = await reviewCompiledPortfolio(
+        { ...context, signal: args[2] ?? context.signal }, log, resourceBudget,
+        compileSpecialistEvidence(sourceMap, { cwd: context.cwd }),
+      );
+      persistSpecialistCompilation(context, sourceMap, compilation);
+      const record = compilation.map.specialist_reviews?.records.find(item =>
+        item.concern === proposal.claim_correction!.concern);
+      const feedback = JSON.stringify({
+        complete: compilation.complete,
+        concern: record?.concern, digest: record?.digest,
+        finding: record?.finding ?? null, additional_findings: record?.additional_findings ?? [],
+        reasons: compilation.reasons.slice(0, 3),
+      });
+      return { ...result, content: [...result.content, { type: "text" as const,
+        text: "Fresh normalized review after correction. Resolve the next named finding using its new digest "
+          + "within this repair session; null finding does not override unresolved structural or receipt obligations. "
+          + feedback.slice(0, 8_192),
+      }] };
+    },
+  };
   const systemPrompt = loadBuilderPrompt(stateDir);
   let turns = 0;
   let costUsd: number | null = null;
@@ -405,7 +442,7 @@ async function repairSpecialistPortfolio(
         tools: [],
         protectedPaths: [path.resolve(context.cwd)],
       }),
-      customTools: [mapTools.writeMapDeltaTool],
+      customTools: [repairMapTool],
       spawnExplorerAgentDir: defaultConfigDir(),
       spawnExplorerStateDir: stateDir,
       auditResourceBudget: resourceBudget,

@@ -505,7 +505,12 @@ Rejected concerns and non-convergent compilations are not reviewed. Early review
 preserves all structural failures and grants no installation authority; any later
 normalization change invalidates its exact-body digest and requires fresh review.
 Correction neither fabricates a retrace nor approves the body: its changed digest
-requires full normalized review inside the existing bounded repair loop. Legacy
+requires full normalized review inside the existing bounded repair loop. A successful
+claim correction returns fresh normalized review findings and the new body digest
+within the same repair session, so another false assertion need not consume a
+whole repair pass. Invalid corrections dispatch no review. All review requests
+share the existing call, token, cost and time budgets; a concurrent map change
+aborts the stale review checkpoint instead of overwriting newer evidence. Legacy
 failures without a typed finding still require retracing; failure prose cannot
 authorize a correction. All final compiler, receipt and atomicity gates remain.
 Before either a full map or delta is assessed, the write boundary removes

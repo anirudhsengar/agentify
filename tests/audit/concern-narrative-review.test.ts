@@ -24,7 +24,8 @@ const SOURCE = 'def normalize_time(value):\n    try:\n        return int(value)\
 const FALSE_CLAIM = "Numeric-string time values cannot be accepted.";
 const CORRECTION = "Numeric strings are accepted by int(); nonnumeric strings raise ValueError.";
 
-test("claim correction returns the next normalized review inside the same bounded repair session", async () => {
+for (const concurrent of [false, true]) {
+test(`claim correction reviews within one session without overwriting concurrent evidence: ${concurrent}`, async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-inline-review-"));
   const logs = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-inline-review-log-"));
   try {
@@ -65,6 +66,12 @@ test("claim correction returns the next normalized review inside the same bounde
         usage: { input: 50, output: 10, cost: { total: 0.001 } } } } as never);
       if (options.tools.includes("submit_specialist_review")) {
         reviews += 1;
+        if (concurrent && reviews === 2) {
+          const latest = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+          latest.open_questions.push("Concurrent evidence must survive review.");
+          writeCanonicalMap(cwd, latest,
+            { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
+        }
         const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
         const claim = Object.keys(claims).find(key => JSON.stringify(claims[key]).includes(FALSE_CLAIM));
         await options.customTools![0]!.execute("review", { checked_claims: Object.keys(claims),
@@ -98,10 +105,19 @@ test("claim correction returns the next normalized review inside the same bounde
       }
       return { turns: 1, costUsd: 0.001, aborted: false };
     } };
-    await runRepositoryAudit({ cwd, runtime, auditResourceBudget: budget,
+    const execution = runRepositoryAudit({ cwd, runtime, auditResourceBudget: budget,
       config: { schemaVersion: 1, models: {}, thinkingLevel: "high" },
       auditLog: new AgentifyLog({ cwd, configDir: logs }),
       ui: { info() {}, status() {}, error() {} } as never });
+    if (concurrent) {
+      await assert.rejects(execution, /canonical map changed during specialist review/);
+      const preserved = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+      assert.ok(preserved.open_questions.includes("Concurrent evidence must survive review."));
+      assert.ok(assessSpecialistReviews(preserved, cwd).length > 0);
+      assert.equal(budget.snapshot().model_calls, 4);
+      return;
+    }
+    await execution;
     assert.equal(reviews, 3);
     assert.equal(repairs, 1);
     const finalMap = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
@@ -114,6 +130,7 @@ test("claim correction returns the next normalized review inside the same bounde
     fs.rmSync(logs, { recursive: true, force: true });
   }
 });
+}
 
 test("normalized narrative review rejects contradictions and binds exact bodies without losing flows", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-narrative-review-"));
