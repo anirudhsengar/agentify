@@ -275,7 +275,19 @@ async function goNoGoSum(): Promise<void> {
       "main.go": "package main\n\nfunc main() {}\n",
     });
     const { blockers } = discoverRepositoryCommands(cwd, fakeRunner(cwd), false);
-    assert.ok(hasBlocker(blockers, "missing_dependency_lock"));
+    assert.equal(hasBlocker(blockers, "missing_dependency_lock"), false,
+      "a dependency-free module has no downloaded modules to checksum");
+    for (const dependency of [
+      "require example.com/dependency v1.2.3\n",
+      "require (\n\texample.com/dependency v1.2.3 // indirect\n)\n",
+    ]) {
+      writeRepo(cwd, { "go.mod": `module example.com/demo\n\ngo 1.22\n${dependency}` });
+      assert.equal(hasBlocker(discoverRepositoryCommands(cwd, fakeRunner(cwd), false).blockers,
+        "missing_dependency_lock"), true, "declared dependencies still require checksum evidence");
+    }
+    writeRepo(cwd, { "go.mod": "module example.com/demo\n\ngo 1.22\n// require is mentioned only in a comment\n" });
+    assert.equal(hasBlocker(discoverRepositoryCommands(cwd, fakeRunner(cwd), false).blockers,
+      "missing_dependency_lock"), false);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
