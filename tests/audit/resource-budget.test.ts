@@ -80,6 +80,47 @@ test("completed provider usage replaces only that session's reservation", () => 
   assert.equal(snapshot.model_calls, 2);
 });
 
+test("denied admission does not poison capacity released by concurrent responses", () => {
+  for (const gate of ["input", "output", "cost", "payload", "session", "output-headroom"] as const) {
+    const budget = new AuditResourceBudget({
+      maxInputTokens: gate === "input" || gate === "payload" || gate === "session" ? 200 : 1_000,
+      maxOutputTokens: gate === "output" ? 200 : gate === "output-headroom" ? 160 : 1_000,
+      maxTotalCostUsd: gate === "cost" ? 1 : 5,
+    });
+    const first = budget.beginSession();
+    const second = budget.beginSession();
+    const denied = budget.beginSession();
+    const reservation = { inputTokens: 80, outputTokens: 80, costUsd: 0.4 };
+    budget.recordProviderRequest(first, reservation);
+    budget.recordProviderRequest(second, reservation);
+    const request = () => {
+      if (gate === "payload") budget.assertProviderInputCapacity("x".repeat(78));
+      else if (gate === "session") budget.assertProviderSessionCapacity(80);
+      else if (gate === "output-headroom") budget.remainingOutputTokens(80);
+      else budget.recordProviderRequest(denied, reservation);
+    };
+    assert.throws(request, AuditBudgetExceededError, gate);
+    assert.equal(budget.snapshot().model_calls, 2, "no denied dispatch is counted");
+    assert.equal(budget.snapshot().reserved_input_tokens, 160, "denial cannot release another call's bound");
+    budget.observeParentEvent({ type: "message_end", message: {
+      role: "assistant", stopReason: "stop", usage: { input: 1, output: 1, cost: { total: 0.01 } },
+    } } as never, first);
+    assert.doesNotThrow(() => budget.assertWithinBudget(), gate);
+    assert.equal(budget.snapshot().reserved_input_tokens, 80, "only the completed call releases its bound");
+    if (gate === "output-headroom") assert.equal(budget.remainingOutputTokens(80), 79);
+    else assert.doesNotThrow(request, gate);
+    // Interruption never releases the remaining reservation or grants free retry capacity.
+    budget.observeParentEvent({ type: "message_end", message: {
+      role: "assistant", stopReason: "aborted", usage: { input: 0, output: 0, cost: { total: 0 } },
+    } } as never, second);
+    assert.ok(budget.snapshot().reserved_input_tokens >= 80);
+    if (gate === "input" || gate === "output" || gate === "cost") {
+      assert.throws(() => budget.recordProviderRequest(budget.beginSession(), reservation), AuditBudgetExceededError);
+      assert.equal(budget.snapshot().model_calls, 3);
+    }
+  }
+});
+
 test("usage reported at a deadline is charged before the deadline rejects it", () => {
   const budget = new AuditResourceBudget();
   const session = budget.beginSession();
