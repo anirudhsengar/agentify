@@ -529,6 +529,30 @@ test("explorer spawns share aggregate limits and receive mode-specific timeouts"
   assert.throws(() => budget.reserveExplorer("concern_tracer"), AuditBudgetExceededError);
 });
 
+test("discovery can use remaining shared resources after twenty-four explorers", () => {
+  // Captured live run: discovery plus coverage helpers exhausted the separate
+  // spawn cap with 81 model calls and over nine minutes still available.
+  const prior = {
+    elapsed_ms: 1_251_733, model_calls: 159, turns: 156,
+    input_tokens: 2_202_875, output_tokens: 126_182, cost_usd: 0.35363034,
+    explorer_spawns: 24, coverage_recovery_passes: 1, semantic_repair_passes: 1,
+    unreported_calls: 4, unreserved_calls: 0,
+    reserved_input_tokens: 4_000_000, reserved_output_tokens: 48_000, reserved_cost_usd: 1.2576,
+  };
+  const budget = new AuditResourceBudget(undefined, Date.now(), prior);
+  assert.ok(budget.reserveExplorer("concern_tracer") <= DEFAULT_AUDIT_BUDGETS.maxTracerDurationMs);
+  const session = budget.beginSession();
+  budget.recordProviderRequest(session, { inputTokens: 1_000_000, outputTokens: 12_000, costUsd: 0.3144 });
+  assert.equal(budget.snapshot().model_calls, 160);
+  assert.equal(budget.snapshot().unreported_calls, 5);
+  assert.equal(budget.snapshot().reserved_input_tokens, 5_000_000);
+  assert.equal(budget.snapshot().explorer_spawns, 25);
+  const exhausted = new AuditResourceBudget({ maxModelCalls: prior.model_calls }, Date.now(), prior);
+  assert.throws(() => exhausted.reserveExplorer("concern_tracer"), /model calls reached/);
+  const explicitlyRestricted = new AuditResourceBudget({ maxExplorerSpawns: 24 }, Date.now(), prior);
+  assert.throws(() => explicitlyRestricted.reserveExplorer("concern_tracer"), /explorer spawns reached/);
+});
+
 test("explorer usage contributes to the same call, token, and cost counters", () => {
   const budget = new AuditResourceBudget({ maxTotalCostUsd: 0.01 });
   assert.throws(

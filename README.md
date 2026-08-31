@@ -150,7 +150,7 @@ large repository through the optional `auditBudgets` object in
 | `maxTotalCostUsd` | 20 (provider-reported) |
 | `maxCoverageRecoveryPasses` / `maxSemanticRepairPasses` | 1 / 3 |
 | `maxRepeatedFingerprintStates` | 2 |
-| `maxExplorerSpawns` | 24 |
+| `maxExplorerSpawns` | 240 (within the shared call/time/token/cost limits) |
 
 Overrides are strictly validated and remain subject to finite safety ceilings.
 The output limit includes reported tokens, retained unanswered-request bounds,

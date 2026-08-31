@@ -102,7 +102,9 @@ export const DEFAULT_AUDIT_BUDGETS: Readonly<ResolvedAuditBudgets> = Object.free
   maxCoverageRecoveryPasses: 1,
   maxSemanticRepairPasses: 3,
   maxRepeatedFingerprintStates: 2,
-  maxExplorerSpawns: 24,
+  // Helpers and retraces share this envelope; actual requests still consume the
+  // aggregate call, time, token and cost limits before dispatch.
+  maxExplorerSpawns: 240,
 });
 
 const TERMINAL_CLEANUP_RESERVE_MS = 1_000;
