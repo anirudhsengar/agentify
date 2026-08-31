@@ -309,12 +309,14 @@ export class AuditResourceBudget {
   }
 
   observeParentEvent(event: AgentSessionEvent, session: SessionObservation): void {
-    this.expireSession(session);
     const value = event as {
       type?: string;
       message?: { role?: string; stopReason?: string; usage?: UsageShape };
     };
-    if (value.type !== "message_end" || value.message?.role !== "assistant") return;
+    if (value.type !== "message_end" || value.message?.role !== "assistant") {
+      this.expireSession(session);
+      return;
+    }
     const usage = value.message?.usage;
     session.calls += 1;
     session.turns += 1;
@@ -327,6 +329,8 @@ export class AuditResourceBudget {
       + recordUsageValue(usage?.cacheWrite);
     this.#outputTokens += recordUsageValue(usage?.output);
     this.#costUsd += cost;
+    // A deadline denies further work; it cannot erase usage already incurred.
+    this.expireSession(session);
     this.checkCounters();
     const observedInput = recordUsageValue(usage?.input)
       + recordUsageValue(usage?.cacheRead)

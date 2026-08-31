@@ -259,6 +259,7 @@ export class AgentifyLog {
   private totalCacheReadTokens = 0;
   private totalCacheWriteTokens = 0;
   private totalCostUsd = 0;
+  private aggregateUsage: Record<string, number> | undefined;
   private currentTurnStart: number | null = null;
   private turnLatencies: number[] = [];
 
@@ -434,6 +435,7 @@ export class AgentifyLog {
   }
 
   auditBudget(payload: AuditBudgetPayload): void {
+    this.aggregateUsage = { ...payload.usage };
     this.write("agentify.audit_budget", payload);
   }
 
@@ -471,6 +473,11 @@ export class AgentifyLog {
       total_cache_read_tokens: this.totalCacheReadTokens,
       total_cache_write_tokens: this.totalCacheWriteTokens,
       total_cost_usd: this.totalCostUsd,
+      total_usage_scope: "parent_sessions_this_invocation",
+      ...(this.aggregateUsage === undefined ? {} : {
+        aggregate_usage: this.aggregateUsage,
+        aggregate_usage_scope: "repository_commit_lineage",
+      }),
       mean_turn_latency_ms: meanLatency === null ? null : Math.round(meanLatency),
     });
     this.terminalWritten = true;

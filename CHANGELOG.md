@@ -4,6 +4,10 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Preserve aggregate parent/explorer lineage usage in terminal audit results,
+  distinguish it from invocation-local parent counters, and charge reported
+  usage even when its response arrives at the session deadline.
+
 ### Fixed
 
 - Tracer submissions receive bounded, actionable schema and size feedback
