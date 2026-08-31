@@ -20,6 +20,15 @@ test("reservation uses full context, bounded output, and the highest input/cache
   assert.throws(() => providerRequestReservation({ ...model, cost: { ...model.cost, input: NaN } }), /metadata/);
 });
 
+test("tiered model pricing reserves applicable rates without rejecting metadata arrays", () => {
+  const model = { contextWindow: 100_000, maxTokens: 10_000,
+    cost: { input: 1, output: 4, cacheRead: 0.1, cacheWrite: 2,
+      tiers: [{ inputTokensAbove: 50_000, input: 2, output: 6, cacheRead: 0.2, cacheWrite: 3 }] } };
+  assert.deepEqual(providerRequestReservation(model, 1_000), {
+    inputTokens: 100_000, outputTokens: 1_000, costUsd: 0.306,
+  });
+});
+
 test("legacy unanswered requests without bounds cannot silently authorize new paid calls", () => {
   const prior = { ...new AuditResourceBudget().snapshot(), model_calls: 1, turns: 0 };
   delete prior.unreported_calls;
