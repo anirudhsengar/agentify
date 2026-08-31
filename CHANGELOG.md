@@ -4,6 +4,10 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Collect tracked dependency evidence in bounded Git batches without dropping
+  every edge when a repository exceeds 512 source files. The aggregate byte
+  ceiling remains unchanged; unavailable evidence stays unresolved.
+
 - Respect MiniMax's Anthropic-compatible tool-selection contract: narrow the
   available tool set using `auto` instead of unsupported named forcing, and
   preserve configured reasoning during final evidence submission.

@@ -1100,31 +1100,37 @@ function repositoryBlobsAtHead(
   const paths = [...new Set(repositoryPaths)]
     .filter((repositoryPath) => !/[\r\n]/.test(repositoryPath))
     .sort((left, right) => left.localeCompare(right));
-  if (paths.length === 0 || paths.length > MODULE_EDGE_MAX_FILES) return new Map();
-  const result = spawnSync(
-    "git",
-    ["-C", cwd, "cat-file", "--batch"],
-    {
-      input: `${paths.map((repositoryPath) => `HEAD:${repositoryPath}`).join("\n")}\n`,
-      maxBuffer: MODULE_EDGE_MAX_BUFFER,
-      windowsHide: true,
-    },
-  );
-  if (result.error || result.status !== 0 || !Buffer.isBuffer(result.stdout)) return new Map();
+  if (paths.length === 0) return new Map();
   const blobs = new Map<string, string>();
-  let offset = 0;
-  for (const repositoryPath of paths) {
-    const headerEnd = result.stdout.indexOf(0x0a, offset);
-    if (headerEnd < 0) return new Map();
-    const header = result.stdout.subarray(offset, headerEnd).toString("utf8");
-    const size = /\sblob\s(\d+)$/.exec(header)?.[1];
-    if (size === undefined) return new Map();
-    const length = Number.parseInt(size, 10);
-    const contentStart = headerEnd + 1;
-    const contentEnd = contentStart + length;
-    if (!Number.isSafeInteger(length) || contentEnd >= result.stdout.length) return new Map();
-    blobs.set(repositoryPath, result.stdout.subarray(contentStart, contentEnd).toString("utf8"));
-    offset = contentEnd + 1;
+  let remainingBytes = MODULE_EDGE_MAX_BUFFER;
+  for (let batchStart = 0; batchStart < paths.length; batchStart += MODULE_EDGE_MAX_FILES) {
+    const batch = paths.slice(batchStart, batchStart + MODULE_EDGE_MAX_FILES);
+    if (remainingBytes <= 0) break;
+    const result = spawnSync(
+      "git",
+      ["-C", cwd, "cat-file", "--batch"],
+      {
+        input: `${batch.map((repositoryPath) => `HEAD:${repositoryPath}`).join("\n")}\n`,
+        maxBuffer: remainingBytes,
+        windowsHide: true,
+      },
+    );
+    if (result.error || result.status !== 0 || !Buffer.isBuffer(result.stdout)) break;
+    remainingBytes -= result.stdout.length;
+    let offset = 0;
+    for (const repositoryPath of batch) {
+      const headerEnd = result.stdout.indexOf(0x0a, offset);
+      if (headerEnd < 0) return new Map();
+      const header = result.stdout.subarray(offset, headerEnd).toString("utf8");
+      const size = /\sblob\s(\d+)$/.exec(header)?.[1];
+      if (size === undefined) return new Map();
+      const length = Number.parseInt(size, 10);
+      const contentStart = headerEnd + 1;
+      const contentEnd = contentStart + length;
+      if (!Number.isSafeInteger(length) || contentEnd >= result.stdout.length) return new Map();
+      blobs.set(repositoryPath, result.stdout.subarray(contentStart, contentEnd).toString("utf8"));
+      offset = contentEnd + 1;
+    }
   }
   return blobs;
 }
