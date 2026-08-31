@@ -345,6 +345,10 @@ these checks for persisted evidence. This rejects definite source contradictions
 lexical presence alone does not prove the described behavior. Valid evidence is
 checkpointed before receipt attestation;
 the builder records scout screening but does not retranscribe tracer evidence.
+Tracer tool details retain the exact validated body for this checkpoint. The
+parent model receives only a concise acknowledgement and bounded compiler
+feedback, not another copy of the complete specialist narrative. This reduces
+repeated context without dropping flows, ownership, or source attestation.
 Tracer defaults expose `read` and `grep`, with the same six-read/eight-call cap.
 Successful content reads and actual grep-match paths form an application-owned
 observation ledger; directory listings, failures, unmatched searches, and another

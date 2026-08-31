@@ -1595,6 +1595,13 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const submittedObservedPaths = submittedConcern
                 ? concernEvidencePaths(submittedConcern).filter((file) => observedPaths.has(file))
                 : [];
+            // The application checkpoints the complete typed body from details.
+            // Repeating it in parent model context adds no authority or evidence.
+            const modelReport = submittedConcern
+                ? `Typed concern validated: ${submittedConcern.flows.length} flows and ${submittedConcern.touchpoints.length} touchpoints. ` +
+                  "The complete body is returned in application-owned tool details for checkpointing. " +
+                  "Do not retranscribe it or rewrite recorded concerns; continue from the trusted compiler obligations."
+                : report;
             return {
                 content: [
                     {
@@ -1603,7 +1610,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                             `Sub-agent (mode=${mode}, model=${subAgentModelLabel}) explored ${params.target_path} in ${durationMs}ms. ` +
                             `provider_calls=${providerCalls}/${maxProviderCalls}, reads=${readCount}/${maxReads}, ` +
                             `bash=${bashCount}/${maxBash}, ${costText}${stepWarning}${costWarning}.\n\n` +
-                            report + feedbackText,
+                            modelReport + feedbackText,
                     },
                 ],
                 details: {

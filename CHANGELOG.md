@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Keep complete tracer reports in application-owned checkpoint data and send the parent only a bounded acknowledgement plus compiler obligations, avoiding repeated specialist JSON in model context.
+
 - Detect explicit bans on using AI to contribute, including verb-form policy wording, before repository mutation.
 
 - Allow dependency-free Go modules without `go.sum`; declared module requirements still need checksum evidence and successful isolated validation.

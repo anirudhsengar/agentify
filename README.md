@@ -199,6 +199,9 @@ permitted diagnostic map and no empty managed directories. A successful tracer
 is reusable only after its complete concern
 body has also been checkpointed. Concern checkpoints append and deduplicate by
 default so later bounded invocations cannot erase earlier tracer evidence.
+The parent receives a short typed-report acknowledgement and bounded compiler
+obligations; the complete concern stays in application-owned checkpoint data,
+without duplicating every flow and invariant in subsequent model requests.
 On attach, recorded concern evidence is deterministically compiled before any
 model-backed top-up audit; a normalizable fixed point can therefore finish
 without spending or resetting an exhausted model budget.

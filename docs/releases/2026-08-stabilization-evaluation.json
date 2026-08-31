@@ -27,8 +27,61 @@
       "authorized": true,
       "scope": "evaluation_harness_only",
       "requirements": ["outside_target", "immutable_content_hash", "exact_repository_sha_and_toolchain", "never_copied_or_committed_to_target", "never_repository_evidence", "dependency_validation_only", "report_original_state_and_lock_provenance", "no_readiness_override"],
-      "implementation": "pending",
+      "implementation": "external_python_capture_and_two_hash_required_replays_executed",
+      "executed_evidence": {
+        "repository": "pyjwt",
+        "repository_sha": "7144e4534c34810f4525dc4578a32addd8212cff",
+        "provenance": "/home/anirudh/Projects/agentify-evaluation/external-python-lock-IhaZuh/provenance.json",
+        "lock_sha256": "33d7b473621ee45da9d284ef5c1415468859ab3b2c42d2e68607ad927ae15ccf",
+        "manifest_sha256": "5af117d0914ad4e195ef350105e65609613e39f6f68cc7d7b3db863bd5dfabe3",
+        "toolchain": { "python": "3.14.7", "uv": "0.12.5", "harness_node": "26.7.0", "platform": "linux-x64" },
+        "original_lock_paths": [],
+        "lock_outside_target_read_only": true,
+        "tracked_file_hashes_and_status_unchanged": true,
+        "validation": "python -m pytest in an external exact-SHA checkout; two fresh virtual environments installed from the same hash-required wheel-only lock",
+        "rounds": [{ "passed": 365, "skipped": 4 }, { "passed": 365, "skipped": 4 }],
+        "skip_reason": "The four no-cryptography tests are skipped because cryptography is installed.",
+        "agentify_installation_credit": false,
+        "agentify_readiness_overridden": false
+      },
       "readiness_defect_status": "Committed-lock readiness requirements remain unchanged. External harness validation must not be represented as a passing Agentify installation."
+    }
+  },
+  "post_approval_development_evidence": {
+    "agentify_sha": "a2a25ab6e1e6483ffcb36370041a5e4205d5862e",
+    "local_node22_release": "passed_97_source_files_12_corpus_tests_5_packed_qualifications_scaffold_audit_zero",
+    "package_sha256": "531e80da555296ac4bc654d13f9c5d641be36a9c4a04a0325eaf681ce9d78313",
+    "ci": "passed_node22_node24_typecheck_audit_codeql_packed_scaffold",
+    "ci_url": "https://github.com/anirudhsengar/agentify/actions/runs/33375928332",
+    "hono_tracer_probe": {
+      "evidence_kind": "production_tracer_only_not_installation",
+      "artifact": "/home/anirudh/Projects/agentify-evaluation/narrative-probe-0R4Qrq/report.json",
+      "target_sha": "e2740d5a1bd0b4254e517e3af8b60789284bc7bd",
+      "model": "minimax/MiniMax-M3",
+      "thinking": "high",
+      "node": "22.19.0",
+      "elapsed_ms": 84512,
+      "model_calls": 4,
+      "turns": 4,
+      "input_tokens": 24552,
+      "output_tokens": 4963,
+      "reported_cost_usd": 0.01114008,
+      "target_clean": true,
+      "manual_quality": "failed",
+      "failure": "Claims matcher returns match.slice(1); source returns the full match array. Prepared-router absent-path invariant also omits the wildcard branch.",
+      "positive_evidence": "Correctly described SmartRouter stopping after the first successful candidate; did not repeat the old unconditional post-build add prohibition for PreparedRegExpRouter.",
+      "installation_credit": false
+    },
+    "source_review_experiments": {
+      "result": "failed_timeout_not_adopted_as_a_proven_quality_gate",
+      "read_backed": "/home/anirudh/Projects/agentify-evaluation/narrative-probe-1Pqkhn/report.json",
+      "immutable_source_backed": "/home/anirudh/Projects/agentify-evaluation/narrative-probe-tOcvxD/report.json",
+      "timeout_ms": 120000,
+      "provider_usage": "incomplete_for_interrupted_requests"
+    },
+    "excluded_probe": {
+      "artifact": "/home/anirudh/Projects/agentify-evaluation/narrative-probe-8rQ41O/report.json",
+      "reason": "Harness omitted thinking-level initialization and launched outside tool root. Its configuration=unchanged label is incorrect; no qualification credit. Corrected high-thinking probe is recorded separately."
     }
   },
   "latest_development_evidence": {
