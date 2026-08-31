@@ -25,7 +25,7 @@
     "heldout_rounds_passed": 0,
     "qualification_carries_forward_to_new_code": false
   },
-  "most_recent_exact_head_evidence": {
+  "prior_exact_head_component_evidence": {
     "agentify_sha": "18693b08d3b680eec8bc9d5cc49ba9dbb4063751",
     "local_node22_release": "passed_99_source_files_12_corpus_tests_5_packed_qualifications_scaffold_audit_zero",
     "local_node24_release": "passed_same_suite",
@@ -1812,7 +1812,7 @@
     "Live model qualification is nondeterministic; deterministic replay is the primary regression gate."
   ],
   "current_changed_file_inventory": {
-    "enumerated_sha": "8fab83d",
+    "enumerated_sha": "b6644cd808c09b1a336aa9c46ea2fad86b32cbce",
     "base_commit": "f2df9eb8563bfcb26919d82c7bf28c9fb7c19e8b",
     "files": [
       "AGENTS.md",
@@ -1831,6 +1831,7 @@
       "src/core/artifacts/managed-installation-paths.ts",
       "src/core/audit/concern-rejection.ts",
       "src/core/audit/coverage.ts",
+      "src/core/audit/defense/blacklist.ts",
       "src/core/audit/explorer-receipts.ts",
       "src/core/audit/log.ts",
       "src/core/audit/map-delta.ts",
@@ -1884,6 +1885,7 @@
       "tests/audit/builder-prompt-state-dir.test.ts",
       "tests/audit/concern-narrative-review.test.ts",
       "tests/audit/coverage-gate.test.ts",
+      "tests/audit/defense-hardening.test.ts",
       "tests/audit/exclusion-aware-semantic-closure.test.ts",
       "tests/audit/explorer-concern-checkpoint.test.ts",
       "tests/audit/explorer-concurrency.test.ts",

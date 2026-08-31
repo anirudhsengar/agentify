@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Preserve successful original tracer observations when repairing a normalized group of specialists. Claim-only repairs use the completion ledger's current-HEAD evidence union, retain original receipts and flows, and still require fresh full review; failed tracers supply no evidence.
+
 - Match dotenv protection at path-component boundaries, retaining protection for explicit `.env` suffixes, so ordinary source/test names containing `.env` are not misclassified as secret files. Review diagnostics identify inaccessible evidence paths.
 
 - Permit one argument-correction request after a rejected typed narrative-review submission, within the existing deadline and aggregate budget. Source verification remains strict; unrelated errors, prose and repeated invalid submissions grant no extra calls.

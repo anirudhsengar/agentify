@@ -10,6 +10,8 @@ Exact `f7edfe635f7fc254545e75937f467eb24e20b159` passed both local Node release 
 
 Commander exposed a false secret-path match on an ordinary test filename. Complete review evidence also exceeded the 256 KiB source cap in captured Commander and Hono portfolios. Separate deterministic regressions precede corrections; neither correction establishes live semantic closure. Remaining narrative errors, uncovered behavior, failed tracers and bounded-review failures still prevent qualification. There are zero passing installed-team manual reviews and zero qualifying unchanged-code rounds.
 
+Live component review reached the previously oversized Hono body on `1f6bde8` in 14,143 ms (one call, 95,810 input / 643 output tokens, USD 0.0199336 reported). Commander review on `5cc2a9f` read the previously blocked/oversized evidence in 24,854 ms (one call, 99,343 input / 1,226 output tokens, USD 0.0213398 reported). Both correctly returned concrete source-backed contradictions; neither qualifies a team. A subsequent Commander claim-repair probe exposed a separate receipt-identity mismatch after normalization grouped already-traced bodies. Its deterministic regression preserves the original observations and rejects evidence supplied only by failed tracers. Full normalized review remains mandatory.
+
 ## Previous development evidence — 2026-08-31 14:53 UTC
 
 Exact `18693b08d3b680eec8bc9d5cc49ba9dbb4063751` passed both local Node 22.19/24.19 release suites, all CI and CodeQL. Both locally qualified packages have SHA-256 `d4d1ba8fa8c1e504e9d066662eebb90c16888738de98c9d2554ba00145542ae6`. Live three-tracer cancellation returned in 15 ms with all unanswered calls fully reserved; a separate admission/retry probe completed 13 calls with fully reported usage. These are component proofs, not installation success.
@@ -73,7 +75,7 @@ The complete machine-readable evidence summary is [`2026-08-stabilization-evalua
 
 ## Changed-file policy
 
-The archived inventory is retained separately. The current machine-readable inventory enumerates all 115 changed branch paths through `f6ff3d2`; this milestone changes only already-listed paths. No temporary workflow, payload, archive or staging machinery is present. Delivery-integrity inspection must pass again on the exact final candidate.
+The archived inventory is retained separately. The current machine-readable inventory enumerates all 118 changed branch paths through `b6644cd`; this milestone changes only already-listed paths. No temporary workflow, payload, archive or staging machinery is present. Delivery-integrity inspection must pass again on the exact final candidate.
 
 ## Current development evidence
 

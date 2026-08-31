@@ -76,8 +76,11 @@ export function correctSpecialistClaim(
     || [proposal.statement, proposal.rationale].some(text => !text.trim() || text.length > 2_048)) {
     throw new Error("claim_correction requires a current-HEAD exact-body rejected pitfall or invariant");
   }
+  // Match the completion ledger: normalization can combine separately traced
+  // bodies without rewriting the original observations' concern identities.
+  // This exact-body repair changes no source, flow, scope or ownership.
   const observed = new Set(map.explorer_receipts.receipts.filter(receipt =>
-    receipt.mode === "concern_tracer" && receipt.success && receipt.report_concern === concern.concern
+    receipt.mode === "concern_tracer" && receipt.success
   ).flatMap(receipt => receipt.observed_paths ?? []));
   const authored = removeTrustedInferredAttachments(map).concern_evidence!.concerns
     .find(item => item.concern === concern.concern)!;
