@@ -129,7 +129,9 @@ mentions AI does not trigger the blocker.
 Finalization independently requires a current explorer receipt attestation.
 After deterministic compilation reaches its fixed point, each changed concern
 receives a separate read-only review using the configured primary model and the
-shared audit budget. The reviewer receives at most 512 KiB of immutable tracked
+shared audit budget. At most two independent concern reviews overlap; their
+results are applied in portfolio order, and a temporary request-capacity refusal
+is retried serially after the admitted sibling settles. The reviewer receives at most 512 KiB of immutable tracked
 regular source. Attachment relationships are independently recomputed from the
 evidence with prior inferred attachments removed, not from the final assessment
 where already-covered paths no longer require attachment. A complete assessment

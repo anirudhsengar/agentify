@@ -203,6 +203,56 @@ test("independent specialist bodies are reviewed with bounded overlap", async ()
   }
 });
 
+test("specialist review overlap falls back to serial admission when reservations do not fit", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-review-capacity-"));
+  try {
+    fs.writeFileSync(path.join(cwd, "clock.py"), SOURCE);
+    fs.writeFileSync(path.join(cwd, "retry.py"), SOURCE);
+    execFileSync("git", ["init", "-q", cwd]);
+    execFileSync("git", ["-C", cwd, "add", "."]);
+    execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+      "commit", "-qm", "review capacity fixture"]);
+    const concern = (name: string, file: string): Concern => ({
+      concern: name, one_line: `Convert ${name.toLowerCase()} with int().`, covers: `${name} conversion.`,
+      excludes: "Task scheduling.", flows: [{ name, description: "Convert caller input.", steps: [
+        { path: file, what_happens: "The helper receives caller input." },
+        { path: file, what_happens: "int(value) converts it or raises ValueError." },
+      ] }], touchpoints: [{ path: file, symbol: "normalize_time", role: "Owns integer conversion.",
+        line_range: null, centrality: "core" }], invariants: [], pitfalls: [],
+      entry_questions: ["Is the input integer-compatible?"], validation: [], spans_subtrees: [],
+      stability: "high", recurrence: "high", confidence: "high", last_updated: "2026-08-31T00:00:00.000Z",
+    });
+    const concerns = [concern("Deadline normalization", "clock.py"), concern("Retry normalization", "retry.py")];
+    const compilation = compileSpecialistEvidence(makeValidCodebaseMap({
+      concern_evidence: { concerns, not_concerns: [] }, expert_evidence: undefined,
+    }), { cwd });
+    let sessions = 0;
+    const runtime: AgentRuntime = { async runSession(options) {
+      sessions += 1;
+      options.onProviderRequest!({ inputTokens: 1_000, outputTokens: 100, costUsd: 0.1 });
+      await new Promise(resolve => setTimeout(resolve, 25));
+      const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
+      await options.customTools![0]!.execute("review", { checked_claims: Object.keys(claims), finding: null },
+        undefined, undefined, { cwd } as never);
+      options.onEvent?.({ type: "message_end", message: { role: "assistant", stopReason: "toolUse",
+        usage: { input: 50, output: 10, cost: { total: 0.01 } } } } as never);
+      return { turns: 0, costUsd: 0, aborted: false };
+    } };
+    const budget = new AuditResourceBudget({ maxOutputTokens: 150 });
+    const reviewed = await reviewSpecialistCompilation({ cwd, runtime,
+      config: { schemaVersion: 1, thinkingLevel: "off" }, ui: { status() {} } } as never,
+    compilation, budget, "capacity-review");
+    assert.equal(sessions, 3, "one refused sibling is retried after the admitted review settles");
+    assert.equal(budget.snapshot().model_calls, 2, "a refused request cannot consume call capacity");
+    assert.equal(budget.snapshot().unreported_calls, 0);
+    assert.deepEqual(reviewed.map.specialist_reviews?.records.map(record => record.concern),
+      concerns.map(item => item.concern));
+    assert.equal(reviewed.complete, true, reviewed.reasons.join("; "));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 for (const concurrent of [false, true, "corrections", "queued-cancel"] as const) {
 test(`claim correction reviews within one session without overwriting concurrent evidence: ${concurrent}`, async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-inline-review-"));

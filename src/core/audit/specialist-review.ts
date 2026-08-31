@@ -18,6 +18,7 @@ import type { SpecialistCompilationResult } from "./specialist-compiler.ts";
 
 const MAX_SOURCE_BYTES = 512 * 1_024;
 const REVIEW_TIMEOUT_MS = 90_000;
+const MAX_CONCURRENT_REVIEWS = 2;
 
 function exactSourceExcerpt(source: string | undefined, excerpt: string): string | null {
   if (!source || excerpt.trim().length === 0) return null;
@@ -313,12 +314,12 @@ export async function reviewSpecialistCompilation(
     (record.failure === null || record.retryable === false || record.run_id === runId)
     && map.concern_evidence?.concerns.some(concern =>
     record.concern === concern.concern && record.digest === specialistReviewDigest(concern)));
-  for (const concern of map.concern_evidence?.concerns ?? []) {
-    if (!compilation.assessment.accepted_concerns.includes(concern.concern)) continue;
+  type ReviewRecord = (typeof records)[number];
+  const review = async (concern: Concern): Promise<ReviewRecord | null> => {
     while (true) {
       const digest = specialistReviewDigest(concern);
       const cached = records.find(item => item.concern === concern.concern && item.digest === digest);
-      if (cached) break;
+      if (cached) return null;
       context.ui.status(`agentify: reviewing specialist ${concern.concern}`);
       let failure: string | null;
       let retryable = true;
@@ -336,15 +337,35 @@ export async function reviewSpecialistCompilation(
         event: { type: "specialist_review_result", concern: concern.concern,
           digest, repository_commit: commit, failure, retryable, pruned_claims: prunedClaims } });
       if (prunedClaims.length > 0) {
-        map.specialist_reviews = { repository_commit: commit, records };
-        checkpoint?.(structuredClone(map));
         continue;
       }
-      records.push({ concern: concern.concern, digest, run_id: runId, failure, retryable,
-        ...(finding ? { finding, ...(additional_findings?.length ? { additional_findings } : {}) } : {}) });
+      return { concern: concern.concern, digest, run_id: runId, failure, retryable,
+        ...(finding ? { finding, ...(additional_findings?.length ? { additional_findings } : {}) } : {}) };
+    }
+  };
+  const pending = (map.concern_evidence?.concerns ?? []).filter(concern =>
+    compilation.assessment.accepted_concerns.includes(concern.concern)
+    && !records.some(item => item.concern === concern.concern && item.digest === specialistReviewDigest(concern)));
+  for (let offset = 0; offset < pending.length; offset += MAX_CONCURRENT_REVIEWS) {
+    const batch = pending.slice(offset, offset + MAX_CONCURRENT_REVIEWS);
+    const settled = await Promise.allSettled(batch.map(review));
+    for (let index = 0; index < settled.length; index += 1) {
+      const result = settled[index]!;
+      let record: ReviewRecord | null;
+      if (result.status === "fulfilled") {
+        record = result.value;
+      } else {
+        if (!(result.reason instanceof AuditBudgetExceededError)) throw result.reason;
+        // Request-capacity refusal spends nothing. Wait for the admitted sibling,
+        // then retry serially; a real overrun remains fatal here.
+        budget.assertWithinBudget();
+        map.specialist_reviews = { repository_commit: commit, records };
+        checkpoint?.(structuredClone(map));
+        record = await review(batch[index]!);
+      }
+      if (record) records.push(record);
       map.specialist_reviews = { repository_commit: commit, records };
       checkpoint?.(structuredClone(map));
-      break;
     }
   }
   map.specialist_reviews = { repository_commit: commit, records };

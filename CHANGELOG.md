@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Review two independent immutable specialist bodies concurrently, applying results in deterministic portfolio order and falling back to serial admission when a sibling reservation cannot fit. Review limits and closure requirements are unchanged.
+
 - Attach tracked Maven/Gradle validation wrappers named by specialist commands and exact Java superclass dependencies during semantic normalization, including shared supporting inheritance without guessing ambiguous module ownership.
 - Remove the tracer's nominal report-size target so complete small bodies do not invent claims to fill space; the existing hard output cap remains unchanged.
 

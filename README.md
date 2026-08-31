@@ -231,7 +231,9 @@ normalized bodies already have current-HEAD narrative reviews. Changed bodies
 require fresh review with the configured primary model: 90 seconds and at most
 512 KiB of immutable source per concern. One provider request is allowed, plus
 one argument-correction request only after a rejected typed submission, within
-the same deadline and aggregate budget. Reviews report up to three source-backed
+the same deadline and aggregate budget. Two independent read-only bodies may be
+reviewed concurrently; results are applied in portfolio order, and temporary
+aggregate-reservation refusal falls back to serial admission. Reviews report up to three source-backed
 findings for atomic, exact-body correction, submitting immediately at the first
 decisive rejection without searching for a quota. A typed, complete review is
 required; unsupported assertions and incomplete reviews remain repair obligations.
