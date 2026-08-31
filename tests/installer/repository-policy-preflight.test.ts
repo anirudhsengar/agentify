@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 import {
   inspectRepositoryForInstallation,
@@ -58,6 +59,58 @@ class PolicyRunner implements InstallerProcessRunner {
     return result(1, "", `unexpected command: ${command}`);
   }
 }
+
+test("CLI policy refusal retains one external terminal diagnostic without model calls or repository writes", () => {
+  const cwd = createRepository("No unsupervised agentic tools.");
+  const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-policy-log-"));
+  try {
+    const script = `
+      import os from "node:os";
+      import childProcess from "node:child_process";
+      import { syncBuiltinESMExports } from "node:module";
+      const realSpawn = childProcess.spawnSync;
+      childProcess.spawnSync = (program, ...args) => program === "gh"
+        ? { status: 1, stdout: "", stderr: "fixture has no GitHub access" }
+        : realSpawn(program, ...args);
+      os.homedir = () => process.argv[2];
+      syncBuiltinESMExports();
+      const { PiSdkRuntime } = await import(${JSON.stringify(pathToFileURL(path.resolve("src/core/pi-sdk-runtime.ts")).href)});
+      PiSdkRuntime.prototype.runSession = async () => { throw new Error("MODEL_MUST_NOT_RUN"); };
+      const { main } = await import(${JSON.stringify(pathToFileURL(path.resolve("src/cli.ts")).href)});
+      process.chdir(process.argv[1]);
+      try { await main([]); } catch (error) { console.error(error.message); process.exitCode = 1; }
+    `;
+    const child = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script, cwd, configRoot], {
+      cwd: path.resolve("."), encoding: "utf8", timeout: 20_000,
+    });
+    assert.equal(child.status, 1, child.stderr);
+    assert.match(child.stderr, /repository is not safe to analyze/);
+    assert.doesNotMatch(child.stderr, /MODEL_MUST_NOT_RUN/);
+    const logDir = path.join(configRoot, ".agentify/logs/agentify");
+    assert.ok(fs.existsSync(logDir), "early refusal must retain an external audit diagnostic");
+    const logs = fs.readdirSync(logDir);
+    assert.equal(logs.length, 1);
+    const events = fs.readFileSync(path.join(logDir, logs[0]!), "utf8").trim().split("\n")
+      .map((line) => JSON.parse(line) as { event: string; payload: string });
+    assert.deepEqual(events.map((event) => event.event), ["agentify.run_end"]);
+    const terminal = JSON.parse(events[0]!.payload);
+    assert.equal(terminal.status, "error");
+    assert.equal(terminal.exit_code, 1);
+    assert.equal(terminal.files_written, 0);
+    assert.equal(terminal.total_turns, 0);
+    assert.equal(terminal.total_cost_usd, 0);
+    assert.match(terminal.error_message, /repository_policy_prohibits_ai/);
+    assert.match(terminal.error_message, /CONTRIBUTING.md/);
+    assert.match(child.stdout, /audit log written to/);
+    const status = spawnSync("git", ["-C", cwd, "status", "--porcelain=v1", "--untracked-files=all"], { encoding: "utf8" });
+    assert.equal(status.status, 0);
+    assert.equal(status.stdout, "");
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify")), false);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(configRoot, { recursive: true, force: true });
+  }
+});
 
 test("restrictive repository policy blocks analysis and installation before any persistent write", () => {
   const cwd = createRepository("Do not submit code written by LLM-powered coding tools because of uncertainty around their output's copyright.");
