@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
+import nodeFs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
@@ -94,6 +96,27 @@ test("disabled installation never removes an unrecognized or symlinked execution
       assert.equal(fs.readFileSync(target, "utf8"), "// agentify:managed\n// must not remove\n");
     }
   } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("execution removal reads ownership through a verified descriptor, not a checked pathname", (t) => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-disable-descriptor-"));
+  const runtime = path.join(cwd, ".github/agentify/task-runtime.mjs");
+  fs.mkdirSync(path.dirname(runtime), { recursive: true });
+  fs.writeFileSync(runtime, "// agentify:managed\n");
+  const readFile = nodeFs.readFileSync;
+  const read = t.mock.method(nodeFs, "readFileSync", (...args: Parameters<typeof nodeFs.readFileSync>) => {
+    assert.notEqual(args[0], runtime, "pathname content can change after metadata verification");
+    return readFile(...args);
+  });
+  try {
+    syncBuiltinESMExports();
+    assert.doesNotThrow(() => installScaffoldRuntime({ cwd, packageRoot: packageRoot(), taskPolicyConfiguration: configuration(false) }));
+    assert.equal(fs.existsSync(runtime), false);
+  } finally {
+    read.mock.restore();
+    syncBuiltinESMExports();
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });

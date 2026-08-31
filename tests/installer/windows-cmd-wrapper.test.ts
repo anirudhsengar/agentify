@@ -48,6 +48,31 @@ test("Windows npm stays a direct Node invocation, separate from batch wrappers",
   }
 });
 
+test("both Windows batch boundaries reject shell expansion and command operators", (t) => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-batch-input-"));
+  const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+  const calls: unknown[][] = [];
+  const spawn = t.mock.method(childProcess, "spawnSync", (...args: unknown[]) => {
+    calls.push(args);
+    return { status: 0, stdout: "", stderr: "" };
+  });
+  try {
+    fs.writeFileSync(path.join(cwd, "probe.bat"), "@echo off\r\n");
+    Object.defineProperty(process, "platform", { value: "win32" });
+    syncBuiltinESMExports();
+    for (const argument of ["test&echo injected", "%PATH%", "!PATH!", 'a"b', "x|y", "x>y", "x^y", "x\ny"]) {
+      assert.throws(() => DEFAULT_INSTALLER_PROCESS_RUNNER.run({ program: "probe.bat", args: [argument], cwd, timeoutMs: 1000 }), /unsafe.*batch/i);
+      assert.throws(() => resolveValidationInvocation(["probe.bat", argument], cwd), /unsafe.*batch/i);
+    }
+    assert.equal(calls.length, 0, "unsafe batch input must fail before spawning");
+  } finally {
+    Object.defineProperty(process, "platform", platform);
+    spawn.mock.restore();
+    syncBuiltinESMExports();
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("installer process runner executes Windows .bat wrappers via cmd.exe", () => {
   if (process.platform !== "win32") return;
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-bat-runner-"));
