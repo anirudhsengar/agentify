@@ -402,6 +402,9 @@ or substantively exempted path newly unresolved. Aggregate provider turns are co
 provider responses, not user or tool-result transport messages. Concern deltas
 default to recursive append with structural deduplication; an explicit merge
 strategy remains available for an intentional repair.
+Both model map-write boundaries reject any merged result that removes or changes
+a recorded concern body. Appending rejections cannot erase the portfolio; body
+replacement belongs to the attested tracer and removal to trusted reconciliation.
 Before either a full map or delta is assessed, the write boundary removes
 Agentify-managed paths from skeleton topography, entry/read-first lists,
 agentic-layer bleed paths, and repository process identities. The tool reports

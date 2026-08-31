@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Preserve traced specialist bodies across full-map and explicit delta merge writes; destructive model overwrites must use validated tracer replacement or compiler reconciliation.
+
 - Keep the installer audit log open through final validation and atomic
   installation. A rolled-back installation now emits one failed terminal
   result instead of retaining the earlier successful semantic-audit result.

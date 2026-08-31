@@ -59,6 +59,26 @@ export interface MapTools {
 
 type UnknownRecord = Record<string, unknown>;
 
+function concernOverwriteError(existing: CodebaseMap | null, proposed: CodebaseMap) {
+    const proposedBodies = new Map(
+        (proposed.concern_evidence?.concerns ?? []).map((concern) => [
+            concern.concern.trim().toLowerCase(), stableMapValueIdentity(concern),
+        ]),
+    );
+    const lost = existing?.concern_evidence?.concerns.find((concern) =>
+        proposedBodies.get(concern.concern.trim().toLowerCase()) !== stableMapValueIdentity(concern));
+    if (!lost) return undefined;
+    return {
+        content: [{ type: "text" as const, text:
+            `Error: map write would discard or change recorded concern ${JSON.stringify(lost.concern)}. `
+            + "Use write_map_delta with append to preserve traced bodies. Use concern_tracer with the exact "
+            + "identity for a validated replacement, or a substantive grouped_into rejection for compiler reconciliation.",
+        }],
+        isError: true,
+        details: undefined as unknown as Record<string, unknown>,
+    };
+}
+
 function isTopographyEntryPoint(value: unknown): boolean {
     if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
     const entry = value as UnknownRecord;
@@ -1170,6 +1190,8 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
             const validMap = validation.value;
             const existingMap = readCanonicalMap(ctx.cwd, context);
             const removedManagedPaths = stripAgentifyManagedRepositoryEvidence(validMap);
+            const overwriteError = concernOverwriteError(existingMap, validMap);
+            if (overwriteError) return overwriteError;
             const closure = formatCoverageClosure(validMap, ctx.cwd);
             if (existingMap !== null && isBootstrapDraft(existingMap)) {
                 const existingClosure = formatCoverageClosure(existingMap, ctx.cwd);
@@ -1509,6 +1531,8 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
 
             const validMap = mergedValidation.value;
             const removedManagedPaths = stripAgentifyManagedRepositoryEvidence(validMap);
+            const overwriteError = concernOverwriteError(existing, validMap);
+            if (overwriteError) return overwriteError;
             const needsTopographyEvidence =
                 dimension === "D1_topography"
                 && (
