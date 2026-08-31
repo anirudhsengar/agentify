@@ -194,6 +194,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function summarizeSessionEvent(event: unknown): unknown {
   if (!isRecord(event)) return event;
   const type = typeof event.type === "string" ? event.type : "unknown";
+  if (type === "specialist_review_result") {
+    return { type,
+      concern: typeof event.concern === "string" ? truncate(event.concern, 256) : null,
+      digest: typeof event.digest === "string" ? truncate(event.digest, 64) : null,
+      repository_commit: typeof event.repository_commit === "string" ? truncate(event.repository_commit, 64) : null,
+      failure: typeof event.failure === "string" ? truncate(event.failure, 2_048) : null,
+      retryable: typeof event.retryable === "boolean" ? event.retryable : null,
+    };
+  }
   if (type === "turn_end" || type === "agent_end") return { type };
   if (type === "tool_execution_start") {
     return { type, toolName: event.toolName ?? event.tool_name ?? "unknown", toolCallId: event.toolCallId ?? null };

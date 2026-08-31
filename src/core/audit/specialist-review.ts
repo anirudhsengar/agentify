@@ -203,7 +203,8 @@ export async function reviewSpecialistCompilation(
     map.specialist_reviews = { repository_commit: commit, records };
     checkpoint?.(structuredClone(map));
     context.auditLog?.sessionEvent({ pi_event_type: "specialist_review_result",
-      event: { concern: concern.concern, digest, repository_commit: commit, failure, retryable } });
+      event: { type: "specialist_review_result", concern: concern.concern,
+        digest, repository_commit: commit, failure, retryable } });
   }
   map.specialist_reviews = { repository_commit: commit, records };
   const reasons = assessSpecialistReviews(map, context.cwd);

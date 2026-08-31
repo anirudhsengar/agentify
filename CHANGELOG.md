@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Retain bounded, redacted narrative-review identities, source/body bindings, findings and retry classifications in the audit log without logging full source.
+
 - Retry incomplete narrative reviews once in a later bounded run, retaining prior resource reservations. Unchanged source-backed findings remain cached across runs; no failed review grants approval.
 
 - Allow up to 256 KiB of complete immutable source per normalized specialist review, accommodating implementation/test evidence without truncation. Larger inputs remain unresolved before provider dispatch; the one-call deadline and all claim-verification requirements remain unchanged.
