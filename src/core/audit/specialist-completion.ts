@@ -1537,7 +1537,18 @@ export function assessConcernGrounding(concern: ConcernRecord, cwd: string): str
     const symbols = [...concreteTouchpointSymbols(touchpoint.symbol)];
     return symbols.length === 0 ? [] : [{ path: repositoryPath, symbols }];
   });
-  const blobs = repositoryBlobsAtHead(cwd, claims.map((claim) => claim.path));
+  const blobs = repositoryBlobsAtHead(cwd, [...new Set([
+    ...claims.map((claim) => claim.path),
+    ...concern.flows.flatMap((flow) => flow.steps.map((step) => step.path)),
+  ])]);
+  for (const flow of concern.flows) {
+    if (flow.steps.length > 0 && flow.steps.every((step) => {
+      const source = blobs.get(step.path);
+      return source !== undefined && isPureRelativeReexport(source);
+    })) {
+      reasons.push(`flow "${flow.name}" only lists re-export facades; trace the delegated implementation through its effect`);
+    }
+  }
   for (const claim of claims) {
     const source = blobs.get(claim.path);
     if (source === undefined) {

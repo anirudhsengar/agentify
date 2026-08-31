@@ -4,6 +4,9 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Reject purported behavioral flows that only list re-export facades. Tracers
+  must follow delegated implementations; verified implementation flows remain valid.
+
 - Record preflight refusals as external terminal audit diagnostics, including
   actionable blocker details, without starting a model or writing repository files.
 
