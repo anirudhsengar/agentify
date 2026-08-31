@@ -82,6 +82,8 @@ test("the simple tracer envelope retains the complete nested concern contract", 
     "the model-visible JSON envelope must require conditional, not universal, claims");
   assert.match(prompt, /Pitfalls must come from observed failure behavior/,
     "failure modes need source grounding before independent narrative review");
+  assert.match(prompt, /no minimum report size/i,
+    "the tracer must not pad a grounded body toward an output-size target");
   assert.doesNotMatch(prompt, /this is the only enforcement/,
     "a touchpoint example must not encourage unproved repository-wide exclusivity");
 });
