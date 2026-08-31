@@ -21,6 +21,35 @@ function write(cwd: string, repositoryPath: string, content: string): void {
   fs.writeFileSync(destination, content);
 }
 
+test("README identity skips presentation markup and retains repository purpose", () => {
+  // Reduced from a held-out README.rst badge becoming the project description.
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-readme-purpose-"));
+  try {
+    write(cwd, "clock.py", "def normalize(value):\n    return int(value)\n");
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    const preflight: RepositoryInstallationPreflight = {
+      disposition: "analyzable-only", analysis_allowed: true, identity: null,
+      commands: [], allowed_write_paths: ["clock.py"], protected_paths: [".git"], blockers: [],
+    };
+    for (const content of [
+      "Clock Fixture\n=============\n\n.. image:: https://example.invalid/badge.svg\n   :target: https://example.invalid/build\n\n.. code-block:: python\n\n    print('This example is not the project description.')\n\nA Python library for deadline value conversion.\n",
+      "# Clock Fixture\n\n[Clock Fixture presentation (legacy slides)](https://example.invalid/slides)\n\nA Python library for deadline value conversion.\n",
+    ]) {
+      write(cwd, "README.rst", content);
+      git(cwd, "add", ".");
+      git(cwd, "commit", "-qm", "README purpose fixture");
+      const map = createRepositoryEvidenceDraft(cwd, preflight);
+      assert.equal(map.meta.project_type, "Clock Fixture: A Python library for deadline value conversion.");
+      assert.ok(map.meta.languages.includes("Python"));
+      assert.equal(git(cwd, "status", "--short"), "");
+    }
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("README-derived identity cannot retain dangling or reconstructed HTML markup", () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-readme-identity-"));
   try {
