@@ -731,6 +731,9 @@ test("one rejected submission explains multiple reference defects and its output
   assert.match(feedback, /one repository-relative file path/i);
   assert.match(feedback, /symbols.*line numbers.*prose/i);
   assert.match(feedback, /16000 bytes/);
+  assert.match(feedback, new RegExp(`covers: ${Buffer.byteLength(JSON.stringify(parsed.covers))} bytes`),
+    "oversized report repair needs exact section sizes, not repeated blind rewrites");
+  assert.match(feedback, /remove at least [1-9][0-9]* bytes/);
   assert.ok(Buffer.byteLength(feedback) < 4_096, "repair feedback must remain bounded");
   assert.equal(submissions, 0);
 });
