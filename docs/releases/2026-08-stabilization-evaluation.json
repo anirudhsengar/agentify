@@ -1,20 +1,22 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-08-31T06:09:00Z",
+  "generated_at": "2026-08-31T12:21:00Z",
   "report_status": "failed_product_qualification_approved_scope_in_progress",
   "release_ready": false,
   "final_candidate_sha": null,
   "most_recent_exact_head_evidence": {
-    "agentify_sha": "6733b1a6618047be305d04eed66a9fd25a72a178",
-    "local_node22_release": "passed_97_source_files_12_corpus_tests_5_packed_qualifications_scaffold_audit_zero",
-    "local_log": "/tmp/agentify-tiered-price-release.log",
-    "package_sha256": "7ea2deaa172acfa6cecb512f1c223f8435a8b5a22c463fc765b69a99b1d8f49d",
-    "ci": "not_yet_run_for_this_sha",
-    "codeql": "not_yet_run_for_this_sha",
+    "agentify_sha": "812eff8e327c39f1000cc9bcc004e87a58bf4d69",
+    "local_node22_release": "passed_98_source_files_12_corpus_tests_5_packed_qualifications_scaffold_audit_zero",
+    "local_log": "/tmp/agentify-grounded-review-combined-release.log",
+    "package_sha256": "d2c0f9f54a73c1cf416e14071a6f05d6ead1de6dcb27da4eec4b036fae38ba8f",
+    "ci": "in_progress",
+    "ci_url": "https://github.com/anirudhsengar/agentify/actions/runs/33391180038",
+    "codeql": "in_progress",
+    "codeql_url": "https://github.com/anirudhsengar/agentify/actions/runs/33391180001",
     "live_cancellation": {
-      "evidence": "/home/anirudh/Projects/agentify-evaluation/analysis-capability-MNCWIq/6733-live-cancellation.json",
+      "evidence": "/home/anirudh/Projects/agentify-evaluation/grounded-review-Dq6vm3/live-cancellation.json",
       "passed": true,
-      "cancellation_latency_ms": 44,
+      "cancellation_latency_ms": 22,
       "target_unchanged": true,
       "admitted_calls": 1,
       "completed_calls": 0,
@@ -28,6 +30,55 @@
     "manual_quality_reviews_passed": 0,
     "heldout_rounds_passed": 0,
     "qualification_carries_forward_to_new_code": false
+  },
+  "normalized_narrative_review_development": {
+    "production_sha": "812eff8e327c39f1000cc9bcc004e87a58bf4d69",
+    "boundary": "Review the exact normalized fixed-point concern bodies inside the existing bounded repair loop; bind application-owned reviews to HEAD and body digest; finalization independently rejects missing, failed or stale reviews.",
+    "deterministic_proof": "tests/audit/concern-narrative-review.test.ts",
+    "live_component_sha": "56daf7f0041e2a0e415c9a6a4b4cae3560230b95",
+    "live_components": [
+      {
+        "repository": "hono",
+        "evidence": "/home/anirudh/Projects/agentify-evaluation/analysis-capability-MNCWIq/56d-hono-negative-review.json",
+        "result": "correctly_rejected_unsupported_router_reuse_claim",
+        "elapsed_ms": 13254,
+        "model_calls": 1,
+        "reported_input_tokens": 18700,
+        "reported_output_tokens": 621,
+        "reported_cost_usd": 0.0044852
+      },
+      {
+        "repository": "pyjwt",
+        "evidence": "/home/anirudh/Projects/agentify-evaluation/analysis-capability-MNCWIq/56d-pyjwt-negative-review.json",
+        "result": "correctly_rejected_numeric_string_and_exception_narrative",
+        "elapsed_ms": 17025,
+        "model_calls": 1,
+        "reported_input_tokens": 20638,
+        "reported_output_tokens": 795,
+        "reported_cost_usd": 0.0050816
+      },
+      {
+        "repository": "pyjwt",
+        "evidence": "/home/anirudh/Projects/agentify-evaluation/analysis-capability-MNCWIq/56d-pyjwt-corrected-2-review.json",
+        "result": "accepted_controlled_manually_corrected_body_counterexample",
+        "elapsed_ms": 67274,
+        "model_calls": 1,
+        "reported_input_tokens": 20604,
+        "reported_output_tokens": 3607,
+        "reported_cost_usd": 0.0084492,
+        "generated_installation": false
+      }
+    ],
+    "component_scope": "These read-only probes isolate one body; they are neither full compiler qualification nor generated-team manual-review passes. Controlled corrections were external data only. Original bad installed PyJWT team remains unmodified.",
+    "fresh_installations": {
+      "agentify_sha": "812eff8e327c39f1000cc9bcc004e87a58bf4d69",
+      "status": "in_progress_no_success_claim",
+      "evidence_root": "/home/anirudh/Projects/agentify-evaluation/grounded-review-Dq6vm3",
+      "repositories": ["hono", "pyjwt"]
+    },
+    "hono_narrative_correctness_resolved": false,
+    "installed_manual_quality_reviews_passed": 0,
+    "unchanged_production_heldout_rounds_passed": 0
   },
   "latest_live_development": {
     "agentify_sha": "3e12ac294e7edf3269dd2b400270f78bd87284b8",
