@@ -14,6 +14,7 @@ import {
 } from "../../src/core/audit/schema.ts";
 import { createWriteMapTools, loadCanonicalMapAt } from "../../src/core/audit/write-map-tool.ts";
 import { runAgentifyApp } from "../../src/core/agentify-app.ts";
+import { AgentifyLog } from "../../src/core/audit/log.ts";
 import type {
   AgentRuntime,
   AgentRuntimeResult,
@@ -851,7 +852,35 @@ async function testAuditFailsWhenSpecialistEvidenceNeverRecorded(): Promise<void
   }
 }
 
+async function testInstallerOwnsFinalAuditResult(): Promise<void> {
+  const cwd = tempDir("gate-installer-terminal");
+  const configDir = tempDir("gate-installer-log");
+  const log = new AgentifyLog({ cwd, configDir });
+  try {
+    ensureGitRepository(cwd);
+    const options = {
+      args: [], cwd, ui: new SilentUi(), runtime: new CoverageClosureRuntime(), auditLog: log,
+      configOverride: { schemaVersion: 1 as const, provider: "openai" as const, thinkingLevel: "high" as const, models: {} },
+    };
+    await runAgentifyApp(options);
+    const events = (): Array<{ event: string; payload: string }> => fs.readFileSync(log.logPath, "utf8")
+      .trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    assert.ok(events().some((entry) => entry.event === "agentify.audit_budget"), "installer log must contain the real audit accounting");
+    assert.equal(events().filter((entry) => entry.event === "agentify.run_end").length, 0,
+      "successful semantic closure must not preempt a later installation failure");
+    log.runEnd({ exit_code: 1, status: "error", error_message: "installation canary rolled back" });
+    const terminals = events().filter((entry) => entry.event === "agentify.run_end");
+    assert.equal(terminals.length, 1);
+    assert.equal(JSON.parse(terminals[0]!.payload).status, "error");
+  } finally {
+    await log.close();
+    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(configDir, { recursive: true, force: true });
+  }
+}
+
 const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
+  { name: "installerOwnsFinalAuditResult", fn: testInstallerOwnsFinalAuditResult },
   { name: "closureAllCovered", fn: testClosureAllCovered },
   { name: "closureRejectsEmptyEvidence", fn: testClosureRejectsEmptyEvidence },
   { name: "closureRejectsMissingEvidenceCitations", fn: testClosureRejectsMissingEvidenceCitations },
