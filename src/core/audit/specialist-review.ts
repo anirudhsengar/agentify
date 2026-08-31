@@ -18,6 +18,20 @@ import type { SpecialistCompilationResult } from "./specialist-compiler.ts";
 const MAX_SOURCE_BYTES = 128 * 1_024;
 const REVIEW_TIMEOUT_MS = 90_000;
 
+function exactSourceExcerpt(source: string | undefined, excerpt: string): string | null {
+  if (!source || excerpt.trim().length === 0) return null;
+  if (source.includes(excerpt)) return excerpt;
+  // Restore only a common presentation margin. Relative indentation and every
+  // non-margin byte must still match; this is not whitespace-insensitive code.
+  const margins = new Set(source.split("\n").map(line => /^[ \t]+/.exec(line)?.[0]));
+  for (const margin of margins) {
+    if (!margin) continue;
+    const original = excerpt.split("\n").map(line => margin + line).join("\n");
+    if (source.includes(original)) return original;
+  }
+  return null;
+}
+
 export function specialistReviewDigest(concern: Concern): string {
   return createHash("sha256").update(stableMapValueIdentity(concern)).digest("hex");
 }
@@ -101,14 +115,15 @@ async function reviewConcern(
         || !Value.Check(SpecialistReviewSubmissionSchema, report)) throw new Error("invalid or expired specialist review");
       const checked = new Set(report.checked_claims);
       const finding = report.finding;
+      const excerpt = finding === null ? null : exactSourceExcerpt(sources.get(finding.path), finding.excerpt);
       if ([...checked].some(key => !Object.hasOwn(claims, key))
         || (finding === null && Object.keys(claims).some(key => !checked.has(key)))
         || (finding !== null && (!Object.hasOwn(claims, finding.claim)
-          || finding.excerpt.trim().length === 0
-          || !sources.get(finding.path)?.includes(finding.excerpt)))) {
+          || excerpt === null))) {
         throw new Error("review must cover known claims and quote exact supplied source");
       }
       submitted = structuredClone(report);
+      if (submitted.finding && excerpt !== null) submitted.finding.excerpt = excerpt;
       return { content: [{ type: "text", text: "Review recorded; stop." }], details: {} };
     },
   });
