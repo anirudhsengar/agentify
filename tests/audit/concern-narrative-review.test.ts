@@ -226,6 +226,56 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     assert.equal(stillFalse.complete, false, "accepting a correction proposal never bypasses semantic review");
     assert.match(stillFalse.reasons.join("; "), /Numeric strings are accepted/);
 
+    // Commander normalized several separately traced bodies into one owner.
+    // Their observed source stays attested under the original tracer identities.
+    const groupedSource = structuredClone(concern);
+    groupedSource.concern = "Numeric string regression coverage";
+    groupedSource.pitfalls = [];
+    groupedSource.flows = [{ name: "Exercise numeric string conversion", description: "Check the conversion contract.", steps: [
+      { path: "test_clock.py", what_happens: "Pass a numeric string to normalize_time." },
+      { path: "clock.py", what_happens: "Return the converted integer." },
+    ] }];
+    groupedSource.touchpoints.push({ path: "test_clock.py", symbol: null, line_range: null,
+      centrality: "supporting", role: "Exercises numeric string conversion." });
+    const groupedInput = attestCodebaseMap(makeValidCodebaseMap({
+      concern_evidence: { concerns: [structuredClone(concern), groupedSource], not_concerns: [{
+        candidate: groupedSource.concern, grouped_into: concern.concern,
+        why_rejected: "Subsumed by the retained normalization concern because both share the same implementation owner; the regression exercises its conversion contract.",
+      }] }, expert_evidence: undefined,
+    }), head);
+    delete groupedInput.specialist_reviews;
+    groupedInput.explorer_receipts!.receipts.forEach(receipt => {
+      if (receipt.mode === "concern_tracer") receipt.observed_paths = receipt.report_concern === concern.concern
+        ? ["clock.py"] : ["clock.py", "test_clock.py"];
+    });
+    const groupedCompilation = compileSpecialistEvidence(groupedInput, { cwd });
+    assert.equal(groupedCompilation.complete, true, groupedCompilation.reasons.join("; "));
+    assert.equal(groupedCompilation.map.concern_evidence!.concerns.length, 1);
+    const groupedRejected = await reviewSpecialistCompilation(context, groupedCompilation, budget, "grouped-review");
+    const groupedProposal = { ...proposal, digest: groupedRejected.map.specialist_reviews!.records[0]!.digest };
+    const groupedWrite = (map: typeof groupedRejected.map) => writeCanonicalMap(cwd, map,
+      { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
+    groupedWrite(groupedRejected.map);
+    const groupedRepair = await repair(groupedProposal);
+    assert.notEqual((groupedRepair as { isError?: boolean }).isError, true,
+      "a normalized body retains observations from every successful original tracer");
+    const groupedCorrected = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+    assert.deepEqual(groupedCorrected.explorer_receipts, groupedInput.explorer_receipts);
+    assert.deepEqual(groupedCorrected.concern_evidence!.concerns[0]!.flows,
+      groupedCompilation.map.concern_evidence!.concerns[0]!.flows);
+    assert.equal(assessSpecialistReviews(groupedCorrected, cwd).length, 1);
+    assert.equal((await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(groupedCorrected, { cwd }), budget, "grouped-review")).complete, true);
+    const failedObservation = structuredClone(groupedRejected.map);
+    failedObservation.explorer_receipts!.receipts.forEach(receipt => {
+      if (receipt.report_concern === groupedSource.concern) receipt.success = false;
+    });
+    groupedWrite(failedObservation);
+    const failedBefore = fs.readFileSync(tools.canonicalMapPath(cwd), "utf8");
+    assert.equal((await repair(groupedProposal) as { isError?: boolean }).isError, true,
+      "a failed tracer cannot supply a grouped observation");
+    assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), failedBefore);
+
     reviewedClaim = "invariants[0]";
     const invariantInput = structuredClone(correctedMap);
     invariantInput.concern_evidence!.concerns[0]!.invariants = [
