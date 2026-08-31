@@ -72,6 +72,15 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       assert.deepEqual(options.executionPolicy.allowedTools, []);
       assert.deepEqual(options.tools, ["submit_specialist_review"]);
       const input = JSON.parse(options.userPrompt) as { claims: Record<string, unknown>; evidence: Record<string, string> };
+      const schema = options.customTools![0]!.parameters as unknown as {
+        properties: { finding: { anyOf: Array<{ properties?: {
+          claim: { enum?: string[] }; excerpt: { description?: string };
+        } }> } };
+      };
+      const findingSchema = schema.properties.finding.anyOf.find(item => item.properties)?.properties;
+      assert.deepEqual(findingSchema?.claim.enum, Object.keys(input.claims),
+        "the provider must see exact claim IDs as an enum, not unconstrained text");
+      assert.match(findingSchema?.excerpt.description ?? "", /contiguous/);
       assert.equal(input.evidence["clock.py"], SOURCE, "review sees HEAD, not dirty bytes");
       options.onProviderRequest!({ inputTokens: 1_000, outputTokens: 100, costUsd: 0.1 });
       assert.throws(() => options.onProviderRequest!(), /provider-call limit/);
