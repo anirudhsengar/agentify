@@ -26,6 +26,8 @@ export const SpecialistReviewAttestationSchema = Type.Object({
     run_id: Type.String({ minLength: 1, maxLength: 256 }),
     // Null means a complete typed review of every claim, not missing review.
     failure: Type.Union([Type.Null(), Type.String({ minLength: 1, maxLength: 2_048 })]),
+    // Application-owned: incomplete execution may retry once in a later run.
+    retryable: Type.Optional(Type.Boolean()),
   }, { additionalProperties: false }), { maxItems: 128 }),
 }, { additionalProperties: false });
 

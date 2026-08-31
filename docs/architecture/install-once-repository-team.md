@@ -135,8 +135,10 @@ regular source, no filesystem or command tools, and one provider request within
 first unsupported assertion with a known claim ID and exact source excerpt, or
 an explicit complete checklist. Free-form prose and incomplete checklists cannot
 approve a team. Application-owned review records bind HEAD and the exact
-normalized concern digest. Identical failures remain unresolved without repeated
-calls; changed bodies invalidate approval. Review findings enter the existing
+normalized concern digest. Source-backed findings remain unresolved without repeated
+calls; changed bodies invalidate approval. Incomplete execution retries at most once
+per later bounded run, never within the same run. Legacy failed records without an
+outcome classification require rechecking, not implicit approval. Review findings enter the existing
 bounded semantic repair loop, and every repair completion checks the normalized
 result again. Finalization and same-HEAD reuse independently require matching
 reviews. This model review is a quality control, not a proof of arbitrary

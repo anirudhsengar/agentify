@@ -93,7 +93,7 @@ function immutableSources(cwd: string, commit: string, concern: Concern, deadlin
 
 async function reviewConcern(
   context: RunContext, concern: Concern, commit: string, budget: AuditResourceBudget,
-): Promise<string | null> {
+): Promise<{ failure: string | null; retryable: boolean }> {
   const deadline = Date.now() + budget.remainingDurationMs(REVIEW_TIMEOUT_MS);
   const sources = immutableSources(context.cwd, commit, concern, deadline);
   const claims = reviewClaims(concern);
@@ -157,10 +157,16 @@ async function reviewConcern(
     });
     budget.finishParentSession(session, result);
     budget.assertWithinBudget();
-    if (context.signal?.aborted || !submitted) return "bounded review did not produce a complete typed result";
-    if (currentRepositoryCommit(context.cwd) !== commit) return "repository HEAD changed during narrative review";
+    if (context.signal?.aborted || !submitted) return {
+      failure: "bounded review did not produce a complete typed result", retryable: true,
+    };
+    if (currentRepositoryCommit(context.cwd) !== commit) return {
+      failure: "repository HEAD changed during narrative review", retryable: true,
+    };
     const finding = submitted.finding;
-    return finding ? `${finding.claim}: ${finding.reason} (${finding.path}: ${finding.excerpt})`.slice(0, 2_048) : null;
+    return { failure: finding
+      ? `${finding.claim}: ${finding.reason} (${finding.path}: ${finding.excerpt})`.slice(0, 2_048) : null,
+    retryable: false };
   } finally {
     clearTimeout(timer);
     context.signal?.removeEventListener("abort", cancel);
@@ -177,24 +183,27 @@ export async function reviewSpecialistCompilation(
   if (commit === null) throw new Error("cannot bind specialist review to HEAD");
   const map = structuredClone(compilation.map);
   const previous = map.specialist_reviews?.repository_commit === commit ? map.specialist_reviews.records : [];
-  const records = previous.filter(record => map.concern_evidence?.concerns.some(concern =>
+  const records = previous.filter(record =>
+    (record.failure === null || record.retryable === false || record.run_id === runId)
+    && map.concern_evidence?.concerns.some(concern =>
     record.concern === concern.concern && record.digest === specialistReviewDigest(concern)));
   for (const concern of map.concern_evidence?.concerns ?? []) {
     const digest = specialistReviewDigest(concern);
-    const cached = previous.find(item => item.concern === concern.concern && item.digest === digest);
+    const cached = records.find(item => item.concern === concern.concern && item.digest === digest);
     if (cached) continue;
     context.ui.status(`agentify: reviewing normalized specialist ${concern.concern}`);
     let failure: string | null;
-    try { failure = await reviewConcern(context, concern, commit, budget); }
+    let retryable = true;
+    try { ({ failure, retryable } = await reviewConcern(context, concern, commit, budget)); }
     catch (error) {
       if (error instanceof AuditBudgetExceededError) throw error;
       failure = `Review unresolved: ${error instanceof Error ? error.message : String(error)}`.slice(0, 2_048);
     }
-    records.push({ concern: concern.concern, digest, run_id: runId, failure });
+    records.push({ concern: concern.concern, digest, run_id: runId, failure, retryable });
     map.specialist_reviews = { repository_commit: commit, records };
     checkpoint?.(structuredClone(map));
     context.auditLog?.sessionEvent({ pi_event_type: "specialist_review_result",
-      event: { concern: concern.concern, digest, repository_commit: commit, failure } });
+      event: { concern: concern.concern, digest, repository_commit: commit, failure, retryable } });
   }
   map.specialist_reviews = { repository_commit: commit, records };
   const reasons = assessSpecialistReviews(map, context.cwd);

@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Retry incomplete narrative reviews once in a later bounded run, retaining prior resource reservations. Unchanged source-backed findings remain cached across runs; no failed review grants approval.
+
 - Allow up to 256 KiB of complete immutable source per normalized specialist review, accommodating implementation/test evidence without truncation. Larger inputs remain unresolved before provider dispatch; the one-call deadline and all claim-verification requirements remain unchanged.
 
 - Set the aggregate output default to 400,000 tokens, including outstanding request reservations, so bounded recovery has headroom for uncappable responses. Explicit lower ceilings remain enforced; interrupted usage, cost, time, call and semantic-quality limits are unchanged.

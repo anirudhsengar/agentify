@@ -152,7 +152,7 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       const incomplete = await reviewSpecialistCompilation(context,
         compileSpecialistEvidence(correctedMap, { cwd }), budget, "incomplete-review");
       assert.equal(incomplete.complete, false, `${outcome} cannot approve a specialist`);
-      const callsAfterFailure = reviews;
+      const callsAfterFailure: number = reviews;
       mode = "normal";
       const sameRun = await reviewSpecialistCompilation(context,
         compileSpecialistEvidence(incomplete.map, { cwd }), budget, "incomplete-review");
@@ -162,7 +162,16 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
         compileSpecialistEvidence(incomplete.map, { cwd }), budget, "retry-review");
       assert.equal(reviews, callsAfterFailure + 1, "a new run must retry incomplete review once");
       assert.equal(retried.complete, true, retried.reasons.join("; "));
+      assert.equal(retried.map.specialist_reviews!.records.length, 1,
+        "replace incomplete records rather than shadowing a later valid result");
     }
+    const legacy = structuredClone(rejected.map);
+    delete legacy.specialist_reviews!.records[0]!.retryable;
+    const beforeLegacy = reviews;
+    const recheckedLegacy = await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(legacy, { cwd }), budget, "legacy-recheck");
+    assert.equal(reviews, beforeLegacy + 1);
+    assert.equal(recheckedLegacy.complete, false, "legacy failure is rechecked, never implicitly approved");
     assert.equal(budget.snapshot().unreported_calls, 1);
     assert.equal(budget.snapshot().unreserved_calls, 0);
     assert.equal(budget.snapshot().reserved_input_tokens, 1_000);
