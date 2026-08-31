@@ -175,6 +175,7 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     for (const invalid of [
       { ...proposal, digest: "0".repeat(64) }, { ...proposal, claim: "invariants[0]" },
       { ...proposal, claim: "flows[0]" }, { ...proposal, concern: "Other identity" },
+      { ...proposal, flow_step: 1 },
       { ...proposal, statement: "" }, { ...proposal, statement: "x".repeat(2_049) },
       { ...proposal, statement: FALSE_CLAIM, rationale: concern.pitfalls[0]!.consequence },
     ]) {
@@ -275,6 +276,52 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     assert.equal((await repair(groupedProposal) as { isError?: boolean }).isError, true,
       "a failed tracer cannot supply a grouped observation");
     assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), failedBefore);
+
+    // A captured command-parser flow attributed parsing effects to registration.
+    // Correct one rejected step without retracing or rewriting verified steps.
+    reviewedClaim = "flows[0]";
+    const flowInput = structuredClone(correctedMap);
+    flowInput.concern_evidence!.concerns[0]!.flows[0]!.steps = [
+      { path: "test_clock.py", what_happens: "Call normalize_time with a numeric string." },
+      { path: "clock.py", what_happens: FALSE_CLAIM },
+    ];
+    flowInput.explorer_receipts!.receipts.forEach(receipt => {
+      if (receipt.mode === "concern_tracer") receipt.observed_paths = ["clock.py", "test_clock.py"];
+    });
+    const flowRejected = await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(flowInput, { cwd }), budget, "flow-review");
+    assert.equal(flowRejected.complete, false);
+    const flowProposal = { ...proposal, claim: reviewedClaim, flow_step: 1,
+      digest: flowRejected.map.specialist_reviews!.records[0]!.digest };
+    groupedWrite(flowRejected.map);
+    const flowRepair = await repair(flowProposal);
+    assert.notEqual((flowRepair as { isError?: boolean }).isError, true,
+      "a rejected flow step must support a bounded correction with unchanged paths and order");
+    const flowCorrected = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+    const expectedFlowEvidence = structuredClone(flowInput.concern_evidence!);
+    expectedFlowEvidence.concerns[0]!.flows[0]!.steps[1]!.what_happens = CORRECTION;
+    assert.deepEqual(flowCorrected.concern_evidence, expectedFlowEvidence);
+    assert.deepEqual(flowCorrected.explorer_receipts, flowInput.explorer_receipts);
+    assert.equal(assessSpecialistReviews(flowCorrected, cwd).length, 1);
+    assert.equal((await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(flowCorrected, { cwd }), budget, "flow-review")).complete, true);
+    groupedWrite(flowRejected.map);
+    const stillFalseFlowRepair = await repair({ ...flowProposal, statement: `${FALSE_CLAIM} This still fails.` });
+    assert.notEqual((stillFalseFlowRepair as { isError?: boolean }).isError, true);
+    assert.equal((await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!, { cwd }),
+      budget, "still-false-flow")).complete, false,
+    "a flow correction never approves a remaining false assertion");
+    for (const invalid of [
+      { ...flowProposal, flow_step: undefined }, { ...flowProposal, flow_step: 0 },
+      { ...flowProposal, flow_step: 99 }, { ...flowProposal, flow_step: 0.5 },
+      { ...flowProposal, statement: FALSE_CLAIM },
+    ]) {
+      groupedWrite(flowRejected.map);
+      const before = fs.readFileSync(tools.canonicalMapPath(cwd), "utf8");
+      assert.equal((await repair(invalid) as { isError?: boolean }).isError, true);
+      assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), before);
+    }
 
     reviewedClaim = "invariants[0]";
     const invariantInput = structuredClone(correctedMap);

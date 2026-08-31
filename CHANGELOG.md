@@ -6,6 +6,10 @@ All notable changes to Agentify are documented here.
 
 - Preserve authored touchpoint roles during ownership normalization; compiler decisions remain structured ownership facts rather than unsupported source narratives.
 
+- Retarget explicit supporting-path delegations when verified normalization folds their owner into a retained concern. Missing or ambiguous owners remain unresolved; paths and flows are preserved without another model call.
+
+- Repair a source-rejected flow step without regenerating the specialist. Exact HEAD/body/finding bindings and the finding's path constrain the changed text; flow structure, all other steps and evidence remain unchanged and fresh full review is required.
+
 - Preserve successful original tracer observations when repairing a normalized group of specialists. Claim-only repairs use the completion ledger's current-HEAD evidence union, retain original receipts and flows, and still require fresh full review; failed tracers supply no evidence.
 
 - Match dotenv protection at path-component boundaries, retaining protection for explicit `.env` suffixes, so ordinary source/test names containing `.env` are not misclassified as secret files. Review diagnostics identify inaccessible evidence paths.

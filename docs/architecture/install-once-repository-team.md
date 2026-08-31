@@ -146,6 +146,11 @@ bounded semantic repair loop, and every repair completion checks the normalized
 result again. Finalization and same-HEAD reuse independently require matching
 reviews. This model review is a quality control, not a proof of arbitrary
 program semantics; release qualification still requires manual team inspection.
+Claim-only repair may replace a rejected pitfall/invariant or the text of one
+flow step at the finding's source path. A flow repair cannot change its name,
+description, paths, order, step count or other steps; its rationale is proposal
+justification, not replacement flow content. Changes to those structural fields
+require retracing. Every corrected body still needs fresh complete review.
 The CLI owns the external audit log through finalization. Semantic closure
 does not emit the terminal result before installation validation; exactly one
 terminal event records the committed installation or its failure and rollback.

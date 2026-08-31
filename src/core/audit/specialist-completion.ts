@@ -2253,6 +2253,7 @@ export function reconcileSubsumedConcernEvidence(map: CodebaseMap): CodebaseMap 
   const evidence = map.concern_evidence;
   if (evidence === undefined) return map;
   const concerns = [...evidence.concerns];
+  let notConcerns = evidence.not_concerns;
   const retired = new Set<string>();
   const groupedOwners = new Set<string>();
   const appendUnique = <T>(left: readonly T[], right: readonly T[]): T[] => {
@@ -2264,7 +2265,8 @@ export function reconcileSubsumedConcernEvidence(map: CodebaseMap): CodebaseMap 
       return true;
     })];
   };
-  for (const rejection of evidence.not_concerns) {
+  for (let index = 0; index < notConcerns.length; index += 1) {
+    const rejection = notConcerns[index]!;
     if (
       !isSubstantiveConcernRejection(rejection.why_rejected)
       || rejection.grouped_into === undefined
@@ -2311,6 +2313,10 @@ export function reconcileSubsumedConcernEvidence(map: CodebaseMap): CodebaseMap 
       last_updated: owner.last_updated > source.last_updated ? owner.last_updated : source.last_updated,
     };
     concerns.splice(sourceIndex, 1);
+    // The verified owner now retains this body's paths and flows. Preserve
+    // explicit delegations too, including later steps in a grouping chain.
+    notConcerns = notConcerns.map(entry => entry.grouped_into === source.concern
+      ? { ...entry, grouped_into: owner.concern } : entry);
     retired.add(source.concern.trim().toLowerCase());
     groupedOwners.add(owner.concern.trim().toLowerCase());
   }
@@ -2327,6 +2333,7 @@ export function reconcileSubsumedConcernEvidence(map: CodebaseMap): CodebaseMap 
     concern_evidence: {
       ...evidence,
       concerns: normalizedConcerns,
+      not_concerns: notConcerns,
     },
   };
 }
