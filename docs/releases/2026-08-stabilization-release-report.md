@@ -18,19 +18,34 @@ The complete machine-readable evidence summary is [`2026-08-stabilization-evalua
 
 ## Changed-file policy
 
-The archived 80-file inventory in the machine-readable report is not the current branch inventory. A complete fresh changed-file enumeration and forbidden-artifact inspection are still required on the final candidate.
+The archived 80-file inventory is retained separately. The current machine-readable inventory enumerates the stabilization branch through production commit `fdedf98077c86c520ac386f0736186936834a1e3`. Delivery-integrity inspection must pass again on the exact final candidate.
 
 ## Current development evidence
 
-- Exact `f58ad2e36419a3d8aa4fb7a4c606036b0e4d72f3` passed local release qualification and CI on Node 22/24, including package/scaffold, audit, and CodeQL. Its live generation still failed.
-- Hono, Gin, and Commander each failed two same-HEAD invocations, retaining six, nine, and eight draft concerns—not installed teams. Combined harness wall times were 1,829,722 ms, 1,766,563 ms, and 1,477,126 ms. Hono exceeded 30 minutes. Every invocation had one terminal event; original application-file hashes remained unchanged. Only the permitted diagnostic map changed.
-- Hono lost previously traced concern bodies during repair and reopened receipt/public-surface obligations. Gin exhausted its explorer allowance with unresolved clusters and an invalid delegated owner. Commander retained seven core owners for `lib/command.js` and lacked public-type ownership.
-- Actual installed-SDK tests reproduced denied HTTP requests escaping swallowed extension errors. Explicit transport cancellation now prevents dispatch, and synthetic denial messages are not charged as provider responses. Valid typed reports can execute at the tracer's local call limit and terminate the child without a prose acknowledgement.
-- Session deadlines no longer erase the existing bounded coverage-recovery allowance; aggregate time includes prior checkpoints and reported overruns remain charged. The unaccounted connectivity probe was removed from production installation; the real audit already provides credential recovery. Configured models, authentication, and budget limits were not changed.
-- Exact `5b36f352b4fda5f7fb61a446757c730d781dcd31` passed all 97 source tests and ten corpus cases. A later full run found a test comparing two clock snapshots across a millisecond boundary; `764384c` corrects that assertion. The next exact candidate still needs full release and live qualification.
-- Hono's newer draft narrows matcher-lock claims to SmartRouter, but backend implementation and Quick preset coverage remain incomplete. No narrative-quality or installed-team review pass is claimed.
-- Six fresh policy-screened held-outs are pinned: Preact, PyJWT, Chi, Thiserror, JCommander, and Mustache. They have not been live-qualified. Attrs remains read-only as a policy-negative case. No final candidate or two clean rounds have been established.
+- Exact production `20b3a9eb7d72b938a4a30b9e5e873c6bbeacef46` passed Node 22.19.0 `verify:release`: all 97 source test files, ten executable compiler/install corpus cases, scaffold, five packed-package qualifications, and dependency audit with zero vulnerabilities. Artifact SHA-256: `f877387cc9380a53b89d55c40e99a28129db4912f81568aeabd58c04c74d6358`. Later Go correction `fdedf98077c86c520ac386f0736186936834a1e3` requires a fresh exact-SHA release/CI run; no live results carry forward.
+- The latest completed live matrix used exact `83dd8578d2e7cca297ca124c318ef5ed9a4e236d`, package hash `c6be50d345f290a1e115bbb9ed2ce0b3e4f965cbc22da064952722a477bb3252`, Node 22.19.0, and unchanged configured models/authentication. That SHA passed CI on Node 22/24, package/scaffold, audit, and CodeQL, but failed product qualification.
 
+| Latest fresh live cases | Installed | Result |
+| --- | ---: | --- |
+| Commander, AQA, Cobra, Hono, Gin, Axum, Petclinic | 0/7 attempted | Failed; Click remains policy-prohibited pending replacement decision |
+| Preact, PyJWT, Chi, Thiserror, JCommander, Mustache — round 1 | 0/6 | Failed |
+| Held-out round 2 | Not run | No consecutive clean rounds |
+
+- All thirteen fresh model runs preserved original application-file hashes and each had one terminal event. Four terminal events falsely reported success before finalization rolled back: Chi, Mustache, PyJWT, and Petclinic. The subsequent installer-owned terminal correction has deterministic coverage but still needs live qualification.
+- Six runs hit the external 30-minute timeout; all thirteen had unanswered model requests, so reported cost and token totals are incomplete. Maps ranged up to 301,477 bytes. No complete runtime/accounting gate pass is claimed.
+- Petclinic initially used the wrong installed JDK. Java 17 was already available: this was a harness error, not unavailable tooling. A same-SHA continuation using JDK 17 and its prior validated map installed seven specialists and eight procedures, with `./gradlew check` and `./gradlew test` verified. It is not a clean qualification round.
+- Manual inspection **failed that installed team**. The vet specialist invents an Atom-feed contract, says caching is unused despite both repository methods having `@Cacheable("vets")`, and describes lazy loading despite `FetchType.EAGER`. It also confuses the backing Set initializer with the public sorted-list accessor. The root-landing specialist is overfragmented. Two complete profiles were reviewed; the other five were not fully reviewed. There are zero passing installed-team reviews, not three.
+- Hono's draft still falsely attributes a post-build add prohibition to PreparedRegExpRouter and says SmartRouter tries every candidate despite an early successful break. These claims are recorded as failures, not corrected or accepted.
+- Live tracer cancellation on 83dd stopped 11 ms after an actual provider response update and preserved a failed receipt with no repository writes. Final usage for the interrupted request was unavailable; cancellation passed its bounded probe, complete accounting did not.
+- Subsequent general corrections retain dependency evidence across 512-file batches, reuse unchanged attested tracer claims, defer terminal status until installation finishes, reject portfolio-erasing model writes, and recognize dependency-free Go modules without checksums. No repository-name conditions, closure relaxation, or model/authentication changes were introduced.
+
+## Decisions blocking final qualification
+
+Click's contribution prohibition conflicts with the requirement to install all eight named historical repositories. It needs reclassification as policy-negative and a replacement non-policy case; its policy will not be bypassed.
+
+Mustache and Thiserror intentionally ignore dependency lockfiles, and PyJWT has no committed lock. Agentify currently requires committed dependency locks for reproducible operational validation. Permission to use externally captured validation locks is a product decision, not an implemented exception. Dependency-free Go is a separate established ecosystem contract: [Go permits absent go.sum when there are no dependencies](https://go.dev/ref/mod).
+
+The machine-readable report records `release_ready=false`, `final_candidate_sha=null`, exact per-run provenance, failed gates, and the current complete changed-file inventory.
 ## Known limitations
 
 - Hono still fails convergence and has exposed false attachment, generic-portfolio, and unsupported narrative risks. Safe failure remains necessary but is not successful product qualification.
