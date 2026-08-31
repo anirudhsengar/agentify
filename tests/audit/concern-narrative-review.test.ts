@@ -78,7 +78,11 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       assert.equal(options.modelRole, "primary");
       assert.deepEqual(options.executionPolicy.allowedTools, []);
       assert.deepEqual(options.tools, ["submit_specialist_review"]);
-      const input = JSON.parse(options.userPrompt) as { claims: Record<string, unknown>; evidence: Record<string, string> };
+      const input = JSON.parse(options.userPrompt) as { claims: Record<string, unknown>; evidence: Record<string, string>;
+        compiler_attachments: typeof initial.assessment.attachments };
+      assert.ok(Array.isArray(input.compiler_attachments), "review needs application-owned path-relationship context");
+      if (reviews === 1) assert.deepEqual(input.compiler_attachments, initial.assessment.attachments);
+      assert.ok(input.compiler_attachments.every(attachment => attachment.paths.every(file => Object.hasOwn(input.evidence, file))));
       const schema = options.customTools![0]!.parameters as unknown as {
         properties: { finding: { anyOf: Array<{ properties?: {
           claim: { enum?: string[] }; excerpt: { description?: string };
