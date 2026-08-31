@@ -130,8 +130,10 @@ Finalization independently requires a current explorer receipt attestation.
 After deterministic compilation reaches its fixed point, each changed concern
 receives a separate read-only review using the configured primary model and the
 shared audit budget. The reviewer receives at most 512 KiB of immutable tracked
-regular source. Independently recomputed attachment relationships are supplied
-as structural context. Only exact compiler-generated annotations on supporting,
+regular source. Attachment relationships are independently recomputed from the
+evidence with prior inferred attachments removed, not from the final assessment
+where already-covered paths no longer require attachment. A complete assessment
+of that evidence supplies the structural context. Only exact compiler-generated annotations on supporting,
 symbol-free, range-free touchpoints are projected out of narrative role claims;
 their paths and structural fields remain reviewed. Authored or altered role text
 is never exempted by a marker prefix. This projection changes neither the

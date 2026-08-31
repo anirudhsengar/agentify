@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Re-prove supporting attachment annotations from pre-inference evidence during narrative review, so already-covered dependencies retain their provenance without exempting authored claims.
+
 - Correct source-rejected flow descriptions without regenerating verified steps. Description-only and step-only repairs are mutually exclusive, preserve ownership and evidence, and still require full normalized review.
 
 - Allow exact-review-rejected touchpoint descriptions to be corrected without retracing or changing tracked paths, symbols, centrality, or flows. Fresh normalized review remains mandatory.

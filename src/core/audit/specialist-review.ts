@@ -13,7 +13,7 @@ import type { Concern } from "./schema/concerns.ts";
 import type { CodebaseMap } from "./schema/codebase-map.ts";
 import { createSpecialistReviewSubmissionSchema, type SpecialistReviewSubmission } from "./schema/specialist-review.ts";
 import type { WriteMapDeltaParams } from "./schema/write-map-params.ts";
-import { concernEvidencePaths, removeTrustedInferredAttachments, type RepositoryConcernAttachment } from "./specialist-completion.ts";
+import { assessSpecialistEvidence, concernEvidencePaths, removeTrustedInferredAttachments, type RepositoryConcernAttachment } from "./specialist-completion.ts";
 import type { SpecialistCompilationResult } from "./specialist-compiler.ts";
 
 const MAX_SOURCE_BYTES = 512 * 1_024;
@@ -278,6 +278,11 @@ export async function reviewSpecialistCompilation(
   const commit = currentRepositoryCommit(context.cwd);
   if (commit === null) throw new Error("cannot bind specialist review to HEAD");
   const map = structuredClone(compilation.map);
+  // Covered paths disappear from the normalized assessment's attachment list.
+  // Re-prove annotations against authored evidence, not their own added paths.
+  const authored = removeTrustedInferredAttachments(map);
+  const proof = authored === map ? undefined : assessSpecialistEvidence(authored, { cwd: context.cwd });
+  const attachments = proof?.complete ? proof.attachments : [];
   const previous = map.specialist_reviews?.repository_commit === commit ? map.specialist_reviews.records : [];
   const records = previous.filter(record =>
     (record.failure === null || record.retryable === false || record.run_id === runId)
@@ -294,7 +299,7 @@ export async function reviewSpecialistCompilation(
     let finding: NonNullable<SpecialistReviewSubmission["finding"]> | undefined;
     let additional_findings: SpecialistReviewSubmission["additional_findings"];
     try { ({ failure, retryable, finding, additional_findings } = await reviewConcern(context, concern, commit, budget,
-      compilation.assessment.attachments)); }
+      attachments)); }
     catch (error) {
       if (error instanceof AuditBudgetExceededError) throw error;
       failure = `Review unresolved: ${error instanceof Error ? error.message : String(error)}`.slice(0, 2_048);

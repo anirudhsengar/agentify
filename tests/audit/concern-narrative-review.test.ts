@@ -57,6 +57,7 @@ test("review re-proves supporting attachments hidden by normalized coverage", as
     assert.ok(!compilation.assessment.attachments.some(attachment => attachment.paths.includes("clock/warnings.py")),
       "the normalized assessment no longer needs to attach a covered high-signal path");
     let inspected = false;
+    let alteredRole = false;
     const runtime: AgentRuntime = { async runSession(options) {
       const input = JSON.parse(options.userPrompt) as { claims: Record<string, { path?: string; role?: string }>;
         compiler_attachments: Array<{ paths: string[] }> };
@@ -65,8 +66,12 @@ test("review re-proves supporting attachments hidden by normalized coverage", as
         "review must reconstruct compiler-owned provenance before treating its role as source prose");
       const supporting = Object.values(input.claims).find(claim => claim.path === "clock/warnings.py");
       assert.ok(supporting);
-      assert.equal(Object.hasOwn(supporting, "role"), false);
-      await options.customTools![0]!.execute("review", { checked_claims: Object.keys(input.claims), finding: null },
+      assert.equal(Object.hasOwn(supporting, "role"), alteredRole,
+        "a compiler-looking prefix must not exempt an added behavioral claim");
+      const claim = Object.keys(input.claims).find(key => input.claims[key] === supporting)!;
+      await options.customTools![0]!.execute("review", { checked_claims: Object.keys(input.claims), finding: alteredRole
+        ? { claim, path: "clock/warnings.py", excerpt: "class ClockWarning(Warning):", reason: "This class does not convert deadlines." }
+        : null },
         undefined, undefined, { cwd } as never);
       return { turns: 0, costUsd: 0, aborted: false };
     } };
@@ -76,6 +81,14 @@ test("review re-proves supporting attachments hidden by normalized coverage", as
     assert.equal(reviewed.complete, true, reviewed.reasons.join("; "));
     assert.deepEqual(reviewed.map.concern_evidence, compilation.map.concern_evidence,
       "reconstructing proof cannot rewrite specialist bodies or core ownership");
+    alteredRole = true;
+    const forged = structuredClone(compilation);
+    forged.map.concern_evidence!.concerns[0]!.touchpoints.find(point => point.path === "clock/warnings.py")!.role +=
+      " This class converts deadlines.";
+    const rejected = await reviewSpecialistCompilation({ cwd, runtime, config: { schemaVersion: 1, thinkingLevel: "off" },
+      ui: { status() {} } } as never, forged, new AuditResourceBudget(), "forged-annotation");
+    assert.equal(rejected.complete, false, "re-proving a path cannot attest authored behavior");
+    assert.match(rejected.reasons.join("; "), /does not convert deadlines/);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
