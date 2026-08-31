@@ -21,6 +21,29 @@ test("usage reported at a deadline is charged before the deadline rejects it", (
   });
 });
 
+test("a session deadline preserves the aggregate allowance for bounded recovery", () => {
+  const budget = new AuditResourceBudget();
+  const expired = budget.beginSession();
+  budget.recordProviderRequest(expired);
+  expired.startedAt -= expired.maxDurationMs + 1;
+  assert.throws(() => budget.recordProviderRequest(expired), /session elapsed time/);
+  budget.finishParentSession(expired, { turns: 0, costUsd: 0.01, diagnostics: { provider_requests: 1 } });
+  budget.reserveCoverageRecoveryPass();
+  const recovery = budget.beginSession();
+  budget.recordProviderRequest(recovery);
+  assert.equal(budget.snapshot().model_calls, 2);
+  assert.equal(budget.snapshot().cost_usd, 0.01);
+  assert.throws(() => budget.recordProviderRequest(expired), /session elapsed time/);
+  assert.throws(() => budget.reserveCoverageRecoveryPass(), /coverage recovery passes/);
+});
+
+test("aggregate elapsed checks include time charged before a continuation", () => {
+  const budget = new AuditResourceBudget(undefined, Date.now() - 1_000, {
+    ...new AuditResourceBudget().snapshot(), elapsed_ms: DEFAULT_AUDIT_BUDGETS.maxTotalDurationMs - 500,
+  });
+  assert.throws(() => budget.assertWithinBudget(), /elapsed time exceeded/);
+});
+
 test("audit budget defaults bound every aggregate resource", () => {
   const limits = resolveAuditBudgets(undefined);
   assert.deepEqual(limits, DEFAULT_AUDIT_BUDGETS);

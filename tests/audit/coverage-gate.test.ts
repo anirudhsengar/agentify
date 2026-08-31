@@ -660,9 +660,16 @@ class ReceiptCheckpointRuntime implements AgentRuntime {
 
 class DeadlineRuntime implements AgentRuntime {
   abortedBySignal = false;
+  calls = 0;
+  constructor(private readonly recover = false) {}
 
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
+    this.calls += 1;
+    if (this.recover && this.calls === 2) return new CoverageClosureRuntime().runSession(options);
+    const partial = makeValidCodebaseMap();
+    partial.coverage.D1_topography.status = "gap";
+    writeMap(options.cwd, options.spawnExplorerStateDir ?? ".agentify/runtime/audit", partial);
     return new Promise((resolve) => {
       const fallback = setTimeout(
         () => resolve({ turns: 0, costUsd: null, aborted: false }),
@@ -683,9 +690,23 @@ async function testParentAuditSessionHasApplicationOwnedDeadline(): Promise<void
     const runtime = new DeadlineRuntime();
     await assert.rejects(
       runWithRuntime(cwd, runtime, { maxSessionDurationMs: 25 }),
-      /session elapsed time.*25ms/i,
+      /session elapsed time.*25ms|structured closure/i,
     );
     assert.equal(runtime.abortedBySignal, true, "application deadline must abort the hung runtime");
+    assert.equal(runtime.calls, 2, "one bounded recovery may use remaining aggregate time, then stop");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testDeadlineRecoveryCanInstall(): Promise<void> {
+  const cwd = tempDir("gate-deadline-recovery");
+  try {
+    const runtime = new DeadlineRuntime(true);
+    await runWithRuntime(cwd, runtime, { maxSessionDurationMs: 100 });
+    assert.equal(runtime.calls, 2);
+    assert.equal(runtime.abortedBySignal, true);
+    assert.ok(fs.existsSync(path.join(cwd, "AGENTS.md")), "validated recovery must reach installation");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -832,6 +853,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "auditFailsWhenSpecialistEvidenceNeverRecorded", fn: testAuditFailsWhenSpecialistEvidenceNeverRecorded },
   { name: "failedAuditRetainsApplicationAttestedExplorerCheckpoint", fn: testFailedAuditRetainsApplicationAttestedExplorerCheckpoint },
   { name: "parentAuditSessionHasApplicationOwnedDeadline", fn: testParentAuditSessionHasApplicationOwnedDeadline },
+  { name: "deadlineRecoveryCanInstall", fn: testDeadlineRecoveryCanInstall },
 ];
 
 let passed = 0;
