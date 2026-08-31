@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Serialize repair deltas while fresh narrative review is pending, rechecking queued cancellation and resource limits before mutation.
+
 - Return fresh normalized narrative findings immediately after a valid claim correction within the bounded repair session. Preserve concurrent evidence rather than overwriting it with a stale review checkpoint.
 
 - Permit bounded correction of a source-rejected specialist summary without retracing the whole body. Scope boundaries, paths, ownership and flows stay unchanged; exact-body/current-HEAD findings and fresh full review remain mandatory.

@@ -309,32 +309,43 @@ async function repairSpecialistPortfolio(
 ): Promise<{ turns: number; cost_usd: number | null }> {
   const stateDir = AUDIT_STATE_RELATIVE_DIR;
   const mapTools = createWriteMapTools({ stateDir });
+  const executeRepairDelta: typeof mapTools.writeMapDeltaTool.execute = async (...args) => {
+    const result = await mapTools.writeMapDeltaTool.execute(...args);
+    const proposal = args[1] as { claim_correction?: { concern?: unknown } };
+    if ((result as RepairWriteMapResult).isError || !proposal.claim_correction) return result;
+    const sourceMap = loadCanonicalMapAt(context.cwd, stateDir);
+    if (sourceMap === null) throw new Error("canonical map disappeared after claim correction");
+    const compilation = await reviewCompiledPortfolio(
+      { ...context, signal: args[2] ?? context.signal }, log, resourceBudget,
+      compileSpecialistEvidence(sourceMap, { cwd: context.cwd }),
+    );
+    persistSpecialistCompilation(context, sourceMap, compilation);
+    const record = compilation.map.specialist_reviews?.records.find(item =>
+      item.concern === proposal.claim_correction!.concern);
+    const feedback = JSON.stringify({
+      complete: compilation.complete,
+      concern: record?.concern, digest: record?.digest,
+      finding: record?.finding ?? null, additional_findings: record?.additional_findings ?? [],
+      reasons: compilation.reasons.slice(0, 3),
+    });
+    return { ...result, content: [...result.content, { type: "text" as const,
+      text: "Fresh normalized review after correction. Resolve the next named finding using its new digest "
+        + "within this repair session; null finding does not override unresolved structural or receipt obligations. "
+        + feedback.slice(0, 8_192),
+    }] };
+  };
+  let pendingDelta = Promise.resolve();
   const repairMapTool: typeof mapTools.writeMapDeltaTool = {
     ...mapTools.writeMapDeltaTool,
-    async execute(...args) {
-      const result = await mapTools.writeMapDeltaTool.execute(...args);
-      const proposal = args[1] as { claim_correction?: { concern?: unknown } };
-      if ((result as RepairWriteMapResult).isError || !proposal.claim_correction) return result;
-      const sourceMap = loadCanonicalMapAt(context.cwd, stateDir);
-      if (sourceMap === null) throw new Error("canonical map disappeared after claim correction");
-      const compilation = await reviewCompiledPortfolio(
-        { ...context, signal: args[2] ?? context.signal }, log, resourceBudget,
-        compileSpecialistEvidence(sourceMap, { cwd: context.cwd }),
-      );
-      persistSpecialistCompilation(context, sourceMap, compilation);
-      const record = compilation.map.specialist_reviews?.records.find(item =>
-        item.concern === proposal.claim_correction!.concern);
-      const feedback = JSON.stringify({
-        complete: compilation.complete,
-        concern: record?.concern, digest: record?.digest,
-        finding: record?.finding ?? null, additional_findings: record?.additional_findings ?? [],
-        reasons: compilation.reasons.slice(0, 3),
+    execute(...args) {
+      const result = pendingDelta.then(() => {
+        args[2]?.throwIfAborted();
+        context.signal?.throwIfAborted();
+        resourceBudget.assertWithinBudget();
+        return executeRepairDelta(...args);
       });
-      return { ...result, content: [...result.content, { type: "text" as const,
-        text: "Fresh normalized review after correction. Resolve the next named finding using its new digest "
-          + "within this repair session; null finding does not override unresolved structural or receipt obligations. "
-          + feedback.slice(0, 8_192),
-      }] };
+      pendingDelta = result.then(() => undefined, () => undefined);
+      return result;
     },
   };
   const systemPrompt = loadBuilderPrompt(stateDir);

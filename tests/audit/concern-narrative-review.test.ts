@@ -24,13 +24,13 @@ const SOURCE = 'def normalize_time(value):\n    try:\n        return int(value)\
 const FALSE_CLAIM = "Numeric-string time values cannot be accepted.";
 const CORRECTION = "Numeric strings are accepted by int(); nonnumeric strings raise ValueError.";
 
-for (const concurrent of [false, true, "corrections"] as const) {
+for (const concurrent of [false, true, "corrections", "queued-cancel"] as const) {
 test(`claim correction reviews within one session without overwriting concurrent evidence: ${concurrent}`, async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-inline-review-"));
   const logs = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-inline-review-log-"));
   try {
     fs.writeFileSync(path.join(cwd, "clock.py"), SOURCE);
-    if (concurrent === "corrections") fs.writeFileSync(path.join(cwd, "retries.py"), SOURCE);
+    if (typeof concurrent === "string") fs.writeFileSync(path.join(cwd, "retries.py"), SOURCE);
     fs.writeFileSync(path.join(cwd, "README.md"), "Test fixture evidence citation.\n");
     execFileSync("git", ["init", "-q", cwd]);
     execFileSync("git", ["-C", cwd, "add", "."]);
@@ -52,7 +52,7 @@ test(`claim correction reviews within one session without overwriting concurrent
       stability: "high", recurrence: "high", confidence: "high", last_updated: "2026-08-31T00:00:00.000Z",
     };
     const concerns = [concern];
-    if (concurrent === "corrections") {
+    if (typeof concurrent === "string") {
       concern.pitfalls = concern.pitfalls.slice(0, 1);
       const retries = JSON.parse(JSON.stringify(concern).replaceAll("clock.py", "retries.py")) as Concern;
       retries.concern = "Retry setting conversion";
@@ -70,6 +70,7 @@ test(`claim correction reviews within one session without overwriting concurrent
     writeCanonicalMap(cwd, map, { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
     let reviews = 0;
     let repairs = 0;
+    const queuedAbort = new AbortController();
     const budget = new AuditResourceBudget({ maxSemanticRepairPasses: 1 });
     const runtime: AgentRuntime = { async runSession(options) {
       options.onProviderRequest!({ inputTokens: 1_000, outputTokens: 100, costUsd: 0.1 });
@@ -77,6 +78,7 @@ test(`claim correction reviews within one session without overwriting concurrent
         usage: { input: 50, output: 10, cost: { total: 0.001 } } } } as never);
       if (options.tools.includes("submit_specialist_review")) {
         reviews += 1;
+        if (concurrent === "queued-cancel" && reviews === 3) queuedAbort.abort();
         if (concurrent === true && reviews === 2) {
           const latest = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
           latest.open_questions.push("Concurrent evidence must survive review.");
@@ -96,13 +98,18 @@ test(`claim correction reviews within one session without overwriting concurrent
       repairs += 1;
       assert.equal(repairs, 1, "narrative findings must not require another broad repair session");
       const tool = options.customTools!.find(item => item.name === "write_map_delta")!;
-      if (concurrent === "corrections") {
+      if (typeof concurrent === "string") {
         const current = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
-        const results = await Promise.allSettled(current.specialist_reviews!.records.map(record => tool.execute(
+        const results = await Promise.allSettled(current.specialist_reviews!.records.map((record, index) => tool.execute(
           record.concern, { delta: {}, claim_correction: { concern: record.concern, digest: record.digest,
             claim: record.finding!.claim, statement: CORRECTION, rationale: "Nonnumeric values fail conversion." } },
-          undefined, undefined, { cwd } as never,
+          index === 1 ? queuedAbort.signal : undefined, undefined, { cwd } as never,
         )));
+        if (concurrent === "queued-cancel") {
+          assert.equal(results[0]!.status, "fulfilled");
+          assert.equal(results[1]!.status, "rejected");
+          return { turns: 1, costUsd: 0.001, aborted: false };
+        }
         assert.ok(results.every(result => result.status === "fulfilled"
           && (result.value as { isError?: boolean }).isError !== true),
         "parallel corrections must complete without stale checkpoints or discarded results");
@@ -139,6 +146,14 @@ test(`claim correction reviews within one session without overwriting concurrent
       assert.ok(preserved.open_questions.includes("Concurrent evidence must survive review."));
       assert.ok(assessSpecialistReviews(preserved, cwd).length > 0);
       assert.equal(budget.snapshot().model_calls, 4);
+      return;
+    }
+    if (concurrent === "queued-cancel") {
+      await assert.rejects(execution, /did not reach semantic closure/);
+      const preserved = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+      assert.deepEqual(preserved.concern_evidence!.concerns.find(item => item.concern === concerns[1]!.concern), concerns[1]);
+      assert.ok(assessSpecialistReviews(preserved, cwd).length > 0);
+      assert.equal(budget.snapshot().model_calls, 5, "cancelled queued delta must not dispatch or mutate");
       return;
     }
     await execution;

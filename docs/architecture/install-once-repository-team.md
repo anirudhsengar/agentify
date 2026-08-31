@@ -510,8 +510,10 @@ claim correction returns fresh normalized review findings and the new body diges
 within the same repair session, so another false assertion need not consume a
 whole repair pass. Invalid corrections dispatch no review. All review requests
 share the existing call, token, cost and time budgets; a concurrent map change
-aborts the stale review checkpoint instead of overwriting newer evidence. Legacy
-failures without a typed finding still require retracing; failure prose cannot
+aborts the stale review checkpoint instead of overwriting newer evidence.
+Parallel delta proposals are serialized for the mutation-and-review interval;
+queued work rechecks cancellation and the shared budget before touching the map.
+Legacy failures without a typed finding still require retracing; failure prose cannot
 authorize a correction. All final compiler, receipt and atomicity gates remain.
 Before either a full map or delta is assessed, the write boundary removes
 Agentify-managed paths from skeleton topography, entry/read-first lists,
