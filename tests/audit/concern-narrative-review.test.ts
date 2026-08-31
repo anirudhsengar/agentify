@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
+import { Value } from "typebox/value";
 import type { Concern } from "../../src/core/audit/schema/concerns.ts";
 import { compileSpecialistEvidence } from "../../src/core/audit/specialist-compiler.ts";
 import { assessSpecialistReviews, reviewSpecialistCompilation } from "../../src/core/audit/specialist-review.ts";
@@ -360,6 +361,37 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     assert.deepEqual(invariantCorrected.concern_evidence, expectedInvariantEvidence);
     assert.equal((await reviewSpecialistCompilation(context,
       compileSpecialistEvidence(invariantCorrected, { cwd }), budget, "invariant-review")).complete, true);
+    // A captured summary asserted HTTPS-only despite an HTTP-or-HTTPS predicate.
+    // Correcting that one reviewed sentence must not require regenerating flows.
+    reviewedClaim = "one_line";
+    const summaryInput = structuredClone(correctedMap);
+    summaryInput.concern_evidence!.concerns[0]!.one_line = FALSE_CLAIM;
+    const summaryRejected = await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(summaryInput, { cwd }), budget, "summary-review");
+    assert.equal(summaryRejected.complete, false);
+    groupedWrite(summaryRejected.map);
+    const summaryProposal = { ...proposal, claim: reviewedClaim,
+      digest: summaryRejected.map.specialist_reviews!.records[0]!.digest };
+    assert.equal(Value.Check(tools.writeMapDeltaTool.parameters, { delta: {}, claim_correction: summaryProposal }), true,
+      "the provider-facing schema must admit correction of a rejected summary");
+    assert.notEqual((await repair(summaryProposal) as { isError?: boolean }).isError, true);
+    const summaryCorrected = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+    const expectedSummaryEvidence = structuredClone(summaryInput.concern_evidence!);
+    expectedSummaryEvidence.concerns[0]!.one_line = CORRECTION;
+    assert.deepEqual(summaryCorrected.concern_evidence, expectedSummaryEvidence);
+    assert.deepEqual(summaryCorrected.explorer_receipts, summaryInput.explorer_receipts);
+    assert.equal(assessSpecialistReviews(summaryCorrected, cwd).length, 1);
+    assert.equal((await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(summaryCorrected, { cwd }), budget, "summary-review")).complete, true);
+    for (const invalid of [
+      { ...summaryProposal, flow_step: 0 }, { ...summaryProposal, statement: FALSE_CLAIM },
+      { ...summaryProposal, claim: "covers" }, { ...summaryProposal, claim: "excludes" },
+    ]) {
+      groupedWrite(summaryRejected.map);
+      const before = fs.readFileSync(tools.canonicalMapPath(cwd), "utf8");
+      assert.equal((await repair(invalid) as { isError?: boolean }).isError, true);
+      assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), before);
+    }
     // Captured live review found three independent false assertions in one
     // body. One-finding passes stranded known errors at the global repair cap.
     const batchInput = structuredClone(repairInput);
