@@ -154,10 +154,12 @@ bounded semantic repair loop, and every repair completion checks the normalized
 result again. Finalization and same-HEAD reuse independently require matching
 reviews. This model review is a quality control, not a proof of arbitrary
 program semantics; release qualification still requires manual team inspection.
-Claim-only repair may replace a rejected pitfall/invariant or the text of one
-flow step at the finding's source path. A flow repair cannot change its name,
-description, paths, order, step count or other steps; its rationale is proposal
-justification, not replacement flow content. Changes to those structural fields
+Claim-only repair may replace a rejected pitfall/invariant, the text of one
+flow step at the finding's source path, or only the flow description with
+`flow_description: true`. Description and step selection are mutually exclusive;
+the finding must cite a source path already in that flow. A flow repair cannot
+change its name, paths, order, step count or unselected prose; its rationale is
+proposal justification, not replacement flow content. Changes to structural fields
 require retracing. Up to three distinct findings at the same body digest may be
 corrected atomically; a bad or unchanged member rejects the entire proposal.
 Every corrected body still needs fresh complete review. Existing single-finding

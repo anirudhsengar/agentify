@@ -101,8 +101,10 @@ export function correctSpecialistClaim(
     const finding = findings.find(item => item?.claim === correction.claim);
     const match = /^(pitfalls|invariants|flows|touchpoints)\[([0-9]+)\]$/.exec(correction.claim);
     if (!finding || (!match && correction.claim !== "one_line") || (match?.[1] === "flows"
-      ? !Number.isSafeInteger(correction.flow_step) || correction.flow_step! < 0 || correction.flow_step! > 511
-      : correction.flow_step !== undefined)
+      ? correction.flow_description === true ? correction.flow_step !== undefined
+        : correction.flow_description !== undefined || !Number.isSafeInteger(correction.flow_step)
+          || correction.flow_step! < 0 || correction.flow_step! > 511
+      : correction.flow_step !== undefined || correction.flow_description !== undefined)
       || [correction.statement, correction.rationale].some(text => !text.trim() || text.length > 2_048)) {
       throw new Error("claim_correction requires a current-HEAD exact-body rejected assertion and valid step selection");
     }
@@ -115,11 +117,15 @@ export function correctSpecialistClaim(
       if (!touchpoint) throw new Error("claim_correction names a missing touchpoint");
       touchpoint.role = correction.statement;
     } else if (match?.[1] === "flows") {
-      const step = body.flows[index]?.steps[correction.flow_step!];
-      if (!step || step.path !== finding.path) {
+      const flow = body.flows[index];
+      const step = flow?.steps[correction.flow_step!];
+      if (!flow || (correction.flow_description === true
+        ? !flow.steps.some(item => item.path === finding.path)
+        : !step || step.path !== finding.path)) {
         throw new Error("claim_correction requires a flow step at the reviewed source path");
       }
-      step.what_happens = correction.statement;
+      if (correction.flow_description === true) flow.description = correction.statement;
+      else step!.what_happens = correction.statement;
     } else if (match?.[1] === "pitfalls") {
       const claim = body.pitfalls[index];
       if (!claim) throw new Error("claim_correction names a missing pitfall");

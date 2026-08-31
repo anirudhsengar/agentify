@@ -241,8 +241,10 @@ gaps; normalization changes invalidate the body digest and require fresh review.
 A source-rejected summary can be corrected without regenerating its specialist;
 an exact-review-rejected touchpoint role may likewise be corrected as prose only:
 its tracked path, symbol, line range and core/supporting centrality cannot change.
-Scope boundaries, ownership, evidence and flows remain unchanged and unapproved
-until full review passes again.
+A rejected flow description may be corrected independently of its steps;
+description and step selection are mutually exclusive. Scope boundaries,
+ownership, evidence, ordered flow structure and unselected prose remain unchanged
+and unapproved until full review passes again.
 Successful corrections return fresh review findings within the same bounded
 repair session. Concurrent evidence changes abort stale review checkpoints;
 they are never overwritten to obtain closure.

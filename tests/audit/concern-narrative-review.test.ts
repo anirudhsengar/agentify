@@ -508,6 +508,9 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     const descriptionCorrected = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
     const expectedDescription = structuredClone(descriptionRejected.map);
     expectedDescription.concern_evidence!.concerns[0]!.flows[0]!.description = CORRECTION;
+    assert.deepEqual(descriptionCorrected.exploration_log.slice(0, -1), expectedDescription.exploration_log);
+    assert.equal(descriptionCorrected.exploration_log.at(-1)!.action, "gap_filler_delta");
+    expectedDescription.exploration_log = descriptionCorrected.exploration_log;
     assert.deepEqual(descriptionCorrected, expectedDescription);
     assert.equal(assessSpecialistReviews(descriptionCorrected, cwd).length, 1);
     assert.equal((await reviewSpecialistCompilation(context,

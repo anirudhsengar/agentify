@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Correct source-rejected flow descriptions without regenerating verified steps. Description-only and step-only repairs are mutually exclusive, preserve ownership and evidence, and still require full normalized review.
+
 - Allow exact-review-rejected touchpoint descriptions to be corrected without retracing or changing tracked paths, symbols, centrality, or flows. Fresh normalized review remains mandatory.
 
 - Serialize repair deltas while fresh narrative review is pending, rechecking queued cancellation and resource limits before mutation.

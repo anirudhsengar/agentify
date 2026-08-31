@@ -72,7 +72,10 @@ export const NON_CLOSING_DELTA_DIMENSIONS = ["specialist_evidence", "concern_evi
 const CLAIM_CORRECTION_FIELDS = {
   claim: Type.String({ pattern: "^(one_line|(pitfalls|invariants|flows|touchpoints)\\[[0-9]+\\])$" }),
   flow_step: Type.Optional(Type.Integer({ minimum: 0, maximum: 511,
-    description: "Zero-based step index, required only for a flows[i] finding. Its path must match the finding's source path." })),
+    description: "Zero-based step index for a flows[i] finding. Its path must match the finding's source path. Mutually exclusive with flow_description." })),
+  flow_description: Type.Optional(Type.Literal(true, {
+    description: "For a flows[i] finding, replace only its description instead of a step. Omit flow_step; all steps and their order remain unchanged.",
+  })),
   statement: Type.String({ minLength: 1, maxLength: 2_048 }),
   rationale: Type.String({ minLength: 1, maxLength: 2_048 }),
 };
@@ -87,7 +90,7 @@ export const WriteMapDeltaParamsSchema = Type.Object({
     })),
   }, {
     additionalProperties: false,
-    description: "Correct only an assertion rejected by a current-HEAD, exact-body narrative review. Use its exact concern, digest and claim ID. For one_line, statement replaces only that summary. For touchpoints, statement replaces only role prose, never path, symbol, line_range or centrality. For pitfalls/invariants, statement replaces risk/rule and rationale replaces consequence/why. For flows, flow_step selects one step and statement replaces only what_happens; rationale explains the correction without changing the flow description. Use delta: {}. Preserve paths, references, ownership, covers, excludes, flow names, order and all other steps. Fresh full review is mandatory; this proposal grants no approval.",
+    description: "Correct only an assertion rejected by a current-HEAD, exact-body narrative review. Use its exact concern, digest and claim ID. For one_line, statement replaces only that summary. For touchpoints, statement replaces only role prose, never path, symbol, line_range or centrality. For pitfalls/invariants, statement replaces risk/rule and rationale replaces consequence/why. For flows, choose flow_step to replace only that step's what_happens, or flow_description: true to replace only the description with statement. Never use both; rationale only explains the correction. Use delta: {}. Preserve paths, references, ownership, covers, excludes, flow names, order and all unselected prose. Fresh full review is mandatory; this proposal grants no approval.",
   })),
   core_owner: Type.Optional(Type.Object({
     path: SafeRelativePathSchema,
