@@ -77,4 +77,26 @@ async function testOnlyProviderResponsesCountAsTurns(): Promise<void> {
 
 await testStreamingUpdatesAreNotPersisted();
 await testOnlyProviderResponsesCountAsTurns();
-console.log("audit log tests passed (2/2).");
+const aggregateDir = tempDir("agentify-log-aggregate-");
+try {
+  const log = new AgentifyLog({ cwd: aggregateDir, configDir: aggregateDir });
+  log.recordMessageEnd("assistant", { input: 3, output: 2, cost: { total: 0.01 } });
+  // The persisted lineage includes explorers and previous invocations, unlike
+  // the parent-session counters. Preserve that distinction at the terminal.
+  const usage = { model_calls: 9, turns: 9, input_tokens: 41, output_tokens: 19, cost_usd: 0.08 };
+  log.auditBudget({ status: "within", limits: { maxModelCalls: 10 }, usage });
+  usage.model_calls = 999;
+  log.runEnd({ exit_code: 0, status: "success" });
+  await log.close();
+  const terminal = fs.readFileSync(log.logPath, "utf8").trim().split("\n")
+    .map((line) => JSON.parse(line) as { event: string; payload: string })
+    .find((entry) => entry.event === "agentify.run_end");
+  assert.ok(terminal);
+  const payload = JSON.parse(terminal.payload) as Record<string, unknown>;
+  assert.equal(payload.total_usage_scope, "parent_sessions_this_invocation");
+  assert.deepEqual(payload.aggregate_usage, { ...usage, model_calls: 9 });
+  assert.equal(payload.aggregate_usage_scope, "repository_commit_lineage");
+} finally {
+  fs.rmSync(aggregateDir, { recursive: true, force: true });
+}
+console.log("audit log tests passed (3/3).");
