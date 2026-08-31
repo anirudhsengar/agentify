@@ -24,7 +24,9 @@ import {
 } from "../../src/core/audit/spawn-explorer-tool.ts";
 import { assessSpecialistEvidence } from "../../src/core/audit/specialist-completion.ts";
 import { compileSpecialistEvidence } from "../../src/core/audit/specialist-compiler.ts";
-import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import { createWriteMapTools } from "../../src/core/audit/write-map-tools.ts";
+import { assessSpecialistReviews } from "../../src/core/audit/specialist-review.ts";
 
 const REPORT = `## Report
 \`\`\`json
@@ -116,6 +118,72 @@ function groundedExtractionRepository(): string {
   git(cwd, "commit", "-qm", "tracked extraction symbols");
   return cwd;
 }
+
+test("ownership-only repair preserves attested bodies without another tracer", async () => {
+  const cwd = groundedExtractionRepository();
+  try {
+    fs.writeFileSync(path.join(cwd, "src/state.rs"), "pub struct Context {}\n");
+    git(cwd, "add", "src/state.rs");
+    git(cwd, "commit", "-qm", "tracked request context");
+    const extraction = parseStructuredConcernReport(REPORT, "2026-08-31T00:00:00.000Z")!;
+    const context: Concern = {
+      ...structuredClone(extraction), concern: "Request context lifetime",
+      one_line: "Owns the context acquired while extracting a request.",
+      covers: "Request context acquisition and release.", excludes: "Typed rejection conversion.",
+      touchpoints: [extraction.touchpoints[0]!, {
+        path: "src/state.rs", symbol: "Context", role: "Owns request context lifetime.",
+        centrality: "core", line_range: null,
+      }],
+      flows: [{ name: "acquire request context", description: "Extraction acquires a request context.", steps: [
+        { path: "src/extract/mod.rs", what_happens: "Begins request extraction." },
+        { path: "src/state.rs", what_happens: "Acquires request-local context." },
+      ] }], invariants: [], pitfalls: [],
+    };
+    const original = attestCodebaseMap(makeValidCodebaseMap({
+      expert_evidence: undefined, concern_evidence: { concerns: [extraction, context], not_concerns: [] },
+    }), git(cwd, "rev-parse", "HEAD"));
+    const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+    const reset = () => writeCanonicalMap(cwd, original, {
+      stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json",
+    });
+    const resolve = (owner = extraction.concern, delta: unknown = {}) => tools.writeMapDeltaTool.execute!(
+      "ownership", { delta, core_owner: { path: "src/extract/mod.rs", concern: owner } } as never,
+      undefined, undefined, { cwd } as never,
+    );
+    reset();
+    const result = await resolve();
+    assert.notEqual((result as { isError?: boolean }).isError, true, JSON.stringify(result.content));
+    const repaired = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+    const expected = structuredClone(original.concern_evidence!);
+    expected.concerns[1]!.touchpoints[0]!.centrality = "supporting";
+    assert.deepEqual(repaired.concern_evidence, expected);
+    assert.deepEqual(repaired.explorer_receipts, original.explorer_receipts, "no fabricated retrace");
+    assert.ok(assessSpecialistReviews(repaired, cwd).some(reason => reason.includes(context.concern)),
+      "changed ownership must invalidate the normalized review");
+    await resolve();
+    assert.deepEqual(loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!.concern_evidence, expected);
+
+    for (const failure of ["stale", "unobserved", "supporting", "last-core", "no-flow", "body-change", "missing-owner"]) {
+      reset();
+      const input = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+      if (failure === "stale") input.explorer_receipts!.repository_commit = "0".repeat(40);
+      if (failure === "unobserved") input.explorer_receipts!.receipts[2]!.observed_paths = ["src/state.rs"];
+      if (failure === "supporting") input.concern_evidence!.concerns[0]!.touchpoints[0]!.centrality = "supporting";
+      if (failure === "last-core") input.concern_evidence!.concerns[1]!.touchpoints[1]!.centrality = "supporting";
+      if (failure === "no-flow") input.concern_evidence!.concerns[0]!.flows[0]!.steps = [
+        { path: "src/extract/rejection.rs", what_happens: "Converts rejection." },
+      ];
+      writeCanonicalMap(cwd, input, { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
+      const before = fs.readFileSync(tools.canonicalMapPath(cwd), "utf8");
+      const rejected = await resolve(failure === "missing-owner" ? "Unknown owner" : extraction.concern,
+        failure === "body-change" ? { concern_evidence: { concerns: [{ ...extraction, covers: "Forged behavior." }] } } : {});
+      assert.equal((rejected as { isError?: boolean }).isError, true, failure);
+      assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), before, failure);
+    }
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
 
 test("a valid structured tracer report is checkpointed without parent retranscription", () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-concern-checkpoint-"));
