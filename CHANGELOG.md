@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Derive repository identity from README headings and prose without mistaking reStructuredText badge directives, code examples, or standalone presentation links for project purpose.
+
 - Re-prove supporting attachment annotations from pre-inference evidence during narrative review, so already-covered dependencies retain their provenance without exempting authored claims.
 
 - Correct source-rejected flow descriptions without regenerating verified steps. Description-only and step-only repairs are mutually exclusive, preserve ownership and evidence, and still require full normalized review.

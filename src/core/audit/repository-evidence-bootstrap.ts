@@ -98,21 +98,31 @@ function sanitizeMarkdown(value: string): string {
 }
 
 function heading(content: string | null): string | null {
-  const raw = content?.match(/^#\s+(.+)$/mu)?.[1];
+  const raw = content?.match(/^#\s+(.+)$/mu)?.[1]
+    ?? content?.match(/^([^\r\n]+)\r?\n(?:={3,}|-{3,})[ \t]*$/mu)?.[1];
   const match = raw ? sanitizeMarkdown(raw) : null;
   return match && match.length <= 160 ? match : null;
 }
 
 function repositorySummary(content: string | null): string | null {
   if (!content) return null;
-  const withoutComments = content.replace(/<!--[\s\S]*?(?:-->|$)/gu, " ");
+  const withoutComments = content.replace(/<!--[\s\S]*?(?:-->|$)/gu, " ")
+    .replace(/^[^\r\n]+\r?\n(?:={3,}|-{3,})[ \t]*$/gmu, " ");
   let inFence = false;
+  let inDirective = false;
   for (const rawLine of withoutComments.split(/\r?\n/u)) {
     if (/^\s*```/u.test(rawLine)) {
       inFence = !inFence;
       continue;
     }
     if (inFence) continue;
+    if (/^\.\.\s/u.test(rawLine)) {
+      inDirective = true;
+      continue;
+    }
+    if (inDirective && /^(?:\s|$)/u.test(rawLine)) continue;
+    inDirective = false;
+    if (/^\s*(?:[=~^-]{3,}|\[[^\]]+\]\([^)]*\))\s*$/u.test(rawLine)) continue;
     if (/^\s*#/u.test(rawLine)) continue;
     const cleaned = sanitizeMarkdown(rawLine).replace(/^[>*|\s-]+|[>*|\s-]+$/gu, "").trim();
     const line = cleaned.length > 240 ? cleaned.match(/^.{24,239}?[.!?](?:\s|$)/u)?.[0]?.trim() ?? "" : cleaned;

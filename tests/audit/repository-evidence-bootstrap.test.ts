@@ -36,6 +36,7 @@ test("README identity skips presentation markup and retains repository purpose",
     for (const content of [
       "Clock Fixture\n=============\n\n.. image:: https://example.invalid/badge.svg\n   :target: https://example.invalid/build\n\n.. code-block:: python\n\n    print('This example is not the project description.')\n\nA Python library for deadline value conversion.\n",
       "# Clock Fixture\n\n[Clock Fixture presentation (legacy slides)](https://example.invalid/slides)\n\nA Python library for deadline value conversion.\n",
+      "# Clock Fixture\n\n```python\nprint('This example is not the project description.')\n```\n\nA Python library for [deadline value](https://example.invalid/guide) conversion.\n",
     ]) {
       write(cwd, "README.rst", content);
       git(cwd, "add", ".");
