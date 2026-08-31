@@ -4,7 +4,17 @@ Not release-ready. Do not merge PR #13. The earlier release recommendation is wi
 
 The approved gate separates high-quality specialist installation from operational execution readiness. A semantically complete `analysis-ready` team may count as an installation, while missing reproducible repository-owned validation keeps issue intake, publication, autonomous mutation and learning disabled. External harness locks never clear those execution blockers.
 
-## Current development evidence — 2026-08-31 16:40 UTC
+## Current development evidence — 2026-08-31 17:39 UTC
+
+Exact `80ba6a1f91caf56ac9756e63c2f2f43a9f3f028f` passed local Node 22/24 release suites, CI, and CodeQL. Root package SHA-256: `1df4285be019e677015c93437d9646d9ee0dbe181f13edf32bb781b3f7f1f1ba`; the independently qualified Node 24 worktree artifact differs as recorded in JSON.
+
+All four fresh runs failed to install: AQA (1,509,273 ms), Cobra (970,843 ms), Gin (1,800,300 ms; wall budget exceeded), and Axum (1,490,127 ms). Every run preserved tracked files, retained only the permitted diagnostic map, and emitted exactly one terminal result. Missing Rust tooling did not cause Axum's semantic failure and is not claimed as an exception. Unanswered calls retain explicit resource bounds; actual charges remain unknown.
+
+Cobra's first two narrative reviews timed out. Their retained reservations blocked later requests, whose admission errors the SDK hid as incomplete reviews. AQA, Gin and Axum repeatedly exceeded the 16 KB typed-report cap during narrow repair. Ownership and failed-tracer obligations remain unresolved. These are product failures, not qualification successes.
+
+Live cancellation returned in 5 ms. Separate first-decisive review experiments rejected a false Cobra claim in 23,296 ms and approved a controlled Petclinic body in 46,229 ms. The Cobra review's own distance explanation was incorrect: source recurrence gives 2, not its claimed 3. Findings remain proposals requiring source verification, not authoritative correction text. Neither component probe is an installed-team manual review. There are zero qualifying held-out rounds and zero passing installed-team reviews. Hono remains unqualified; `release_ready=false`, `final_candidate_sha=null`. Do not merge.
+
+## Previous development evidence — 2026-08-31 16:40 UTC
 
 Exact `86a547cc5e9b089e6d18b2a39083df60ecbf6dbb` passed local Node 22/24 release qualification, CI and CodeQL. Its root artifact is `3a0fb5a840d612a5499b239509962c3996826584a821731c963de6dc1d3002b1`; the Node 24 worktree artifact was independently qualified with the different hash recorded in the JSON report.
 

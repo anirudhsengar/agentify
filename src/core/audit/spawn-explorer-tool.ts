@@ -434,7 +434,11 @@ function decodeStructuredConcernObject(
     }
     const reportBytes = Buffer.byteLength(formatConcernReport(concern), "utf8");
     if (reportBytes > MAX_REPORT_BYTES) {
-        failures.push(`concern report exceeds ${MAX_REPORT_BYTES} bytes (${reportBytes}); remove redundant prose and resubmit concisely without dropping verified flow steps`);
+        const sections = Object.keys(ConcernSchema.properties).filter((key) => Object.hasOwn(concern, key))
+            .map((key) => [key, Buffer.byteLength(JSON.stringify(concern[key as keyof typeof concern]))] as const)
+            .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+            .slice(0, 3).map(([key, bytes]) => `${key}: ${bytes} bytes`).join(", ");
+        failures.push(`concern report exceeds ${MAX_REPORT_BYTES} bytes (${reportBytes}); remove at least ${reportBytes - MAX_REPORT_BYTES} bytes. Largest sections: ${sections}. Shorten redundant prose in freshly observed claims, without dropping verified flow steps or rewriting unread prior evidence`);
     }
     if (failures.length > 0) return { concern: null, error: failures.join(". ") };
     return { concern: concern as Concern, error: null };
