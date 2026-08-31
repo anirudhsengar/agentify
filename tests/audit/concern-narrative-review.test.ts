@@ -12,7 +12,8 @@ import type { AgentRuntime } from "../../src/core/types.ts";
 import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 import { finalizeOneTimeInstallation, prepareOneTimeInstallationState,
   type RepositoryInstallationPreflight } from "../../src/core/installer/index.ts";
-import { writeCanonicalMap } from "../../src/core/audit/map-storage.ts";
+import { loadCanonicalMapAt, writeCanonicalMap } from "../../src/core/audit/map-storage.ts";
+import { createWriteMapTools } from "../../src/core/audit/write-map-tools.ts";
 
 // Reduced from an installed held-out team's false numeric-string rejection.
 // Error-message wording does not override executable int() coercion.
@@ -119,11 +120,58 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       compileSpecialistEvidence(rejected.map, { cwd }), budget, "another-run");
     assert.equal(reviews, 1, "an unchanged contradiction must not consume more model calls");
     assert.equal(repeated.complete, false);
-    const correctedMap = structuredClone(rejected.map);
-    correctedMap.concern_evidence!.concerns[0]!.pitfalls[0] = {
+    // Mustache's live repair regenerated whole bodies for single rejected
+    // assertions, introducing unrelated errors and exhausting the budget.
+    // Correct only the reviewed claim; neither a retrace nor approval is forged.
+    const repairInput = attestCodebaseMap(rejected.map, head);
+    repairInput.specialist_reviews = structuredClone(rejected.map.specialist_reviews);
+    const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+    const save = () => writeCanonicalMap(cwd, repairInput,
+      { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
+    save();
+    const proposal = { concern: concern.concern, digest: repairInput.specialist_reviews!.records[0]!.digest,
+      claim: "pitfalls[0]", statement: CORRECTION, rationale: "Nonnumeric strings fail conversion." };
+    const repair = async (claimCorrection: unknown = proposal, delta: unknown = {}) =>
+      tools.writeMapDeltaTool.execute!("correct-claim", { delta, claim_correction: claimCorrection } as never,
+        undefined, undefined, { cwd } as never);
+    const repaired = await repair();
+    assert.notEqual((repaired as { isError?: boolean }).isError, true, JSON.stringify(repaired.content));
+    const correctedMap = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+    const expectedEvidence = structuredClone(repairInput.concern_evidence!);
+    expectedEvidence.concerns[0]!.pitfalls[0] = {
       risk: CORRECTION, consequence: "Nonnumeric strings fail conversion.", reference: "clock.py",
     };
+    assert.deepEqual(correctedMap.concern_evidence, expectedEvidence,
+      "a targeted correction must preserve all other claims, paths, flow steps and ownership");
+    assert.deepEqual(correctedMap.explorer_receipts, repairInput.explorer_receipts);
+    assert.equal(reviews, 1, "the proposal itself consumes no model call and grants no approval");
     assert.equal(assessSpecialistReviews(correctedMap, cwd).length, 1, "changed bodies invalidate review");
+    for (const invalid of [
+      { ...proposal, digest: "0".repeat(64) }, { ...proposal, claim: "invariants[0]" },
+      { ...proposal, claim: "flows[0]" }, { ...proposal, concern: "Other identity" },
+      { ...proposal, statement: "" }, { ...proposal, statement: "x".repeat(2_049) },
+    ]) {
+      save();
+      const before = fs.readFileSync(tools.canonicalMapPath(cwd), "utf8");
+      const invalidResult = await repair(invalid);
+      assert.equal((invalidResult as { isError?: boolean }).isError, true);
+      assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), before);
+    }
+    for (const fault of ["stale-head", "unreviewed", "approved", "unobserved", "forged-finding", "changed-body"]) {
+      save();
+      const input = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+      if (fault === "stale-head") input.specialist_reviews!.repository_commit = "0".repeat(40);
+      if (fault === "unreviewed") delete input.specialist_reviews;
+      if (fault === "approved") input.specialist_reviews!.records[0]!.failure = null;
+      if (fault === "unobserved") input.explorer_receipts!.receipts.forEach(item => { item.observed_paths = []; });
+      if (fault === "changed-body") input.concern_evidence!.concerns[0]!.covers = "Unreviewed new scope.";
+      writeCanonicalMap(cwd, input, { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
+      const before = fs.readFileSync(tools.canonicalMapPath(cwd), "utf8");
+      const invalidResult = await repair(proposal,
+        fault === "forged-finding" ? { specialist_reviews: repairInput.specialist_reviews } : {});
+      assert.equal((invalidResult as { isError?: boolean }).isError, true, fault);
+      assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), before, fault);
+    }
     const accepted = await reviewSpecialistCompilation(context,
       compileSpecialistEvidence(correctedMap, { cwd }), budget, "review-fixture");
     assert.equal(accepted.complete, true, accepted.reasons.join("; "));
