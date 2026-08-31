@@ -58,7 +58,7 @@ Agentify will retain the tracer as unresolved.
 - Use at most 6 repository-read tool calls. Start with the scout's seed paths,
  batch related searches, and select the strongest source, test, and public
  surface evidence instead of reading every matching file.
-- Target 8 KB and keep the complete report below the 16 KB hard cap. Preserve every distinct verified flow,
+- There is no minimum report size. Prefer the shortest complete report and keep it below the 16 KB hard cap. Preserve every distinct verified flow,
  invariant, failure mode, and boundary, but omit redundant peripheral matches
  and keep each field concise.
 - `STOP` after `submit_concern_report` confirms the body was recorded.
@@ -144,8 +144,8 @@ multiple errors, correct every reported field and other fields with the same
 shape together; do not spend a submission on each individual error. Every flow needs at
 least two ordered tracked steps. Include the touchpoints, invariants, failure
 modes, and entry questions warranted by verified behavior, not a field quota.
-Keep the complete object near 8 KB without dropping a distinct verified flow;
-never fill space with speculative claims. `validation` contains only observed executable commands.
+Do not pad toward a size target or drop a distinct verified flow; never fill
+space with speculative claims. `validation` contains only observed executable commands.
 `spans_subtrees` is optional because Agentify derives it from touchpoint paths.
 Agentify also binds `last_updated` to the exact repository commit. A missing or
 invalid tool submission remains an unresolved tracer.

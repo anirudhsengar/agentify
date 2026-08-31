@@ -5,6 +5,7 @@ All notable changes to Agentify are documented here.
 ## [Unreleased]
 
 - Attach tracked Maven/Gradle validation wrappers named by specialist commands and exact Java superclass dependencies during semantic normalization, including shared supporting inheritance without guessing ambiguous module ownership.
+- Remove the tracer's nominal report-size target so complete small bodies do not invent claims to fill space; the existing hard output cap remains unchanged.
 
 - Require tracer narratives to retain observed guards, configuration conditions and failure effects; remove an example encouraging unproved exclusivity. Independent normalized source review and all closure requirements remain unchanged.
 
