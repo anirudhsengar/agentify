@@ -4,6 +4,10 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Execute the tracer's final typed report tool at its call limit. A validated
+  submission ends the child session immediately, without paying for a prose
+  acknowledgement; invalid reports and cancelled tracers remain unresolved.
+
 - Cancel SDK transports explicitly when request admission fails: the SDK logs
   and swallows extension exceptions. Denied dispatches no longer escape the
   budget guard or count synthetic abort messages as provider responses.

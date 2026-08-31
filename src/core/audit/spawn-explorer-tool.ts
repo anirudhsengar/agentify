@@ -1180,6 +1180,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         let providerResponses = 0;
         let oversizedReportPath: string | null = null;
         const submission: { concern: Concern | null } = { concern: null };
+        let resolveSubmission: (() => void) | undefined;
+        const submissionComplete = new Promise<void>((resolve) => { resolveSubmission = resolve; });
 
         try {
             const toolsForMode: ReadonlyArray<string> = params.tools
@@ -1340,6 +1342,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 ? createConcernSubmissionTool(concernObservedAt as string, (concern) => {
                     if (stopped || signal?.aborted) throw new Error("explorer cancelled by parent audit");
                     submission.concern = concern;
+                    resolveSubmission?.();
                 }, ctx.cwd, expectedConcern, requiredScopePaths, existingMap ?? undefined, observedPaths)
                 : null;
             const sessionTools = concernSubmissionTool
@@ -1391,6 +1394,11 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                         return;
                     }
                     if (callCapReached) return;
+                    const toolCalls = Array.isArray(event.message.content)
+                        ? event.message.content.filter((block: unknown) => isRecord(block) && block.type === "toolCall")
+                        : [];
+                    const terminalReportRequested = mode === "concern_tracer"
+                        && toolCalls.length === 1 && toolCalls[0].name === "submit_concern_report";
                     providerResponses += 1;
                     providerCalls = Math.max(providerCalls, providerResponses);
                     if (toolOptions.resourceBudget && explorerBudgetSession) {
@@ -1410,6 +1418,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     if (
                         providerCalls >= maxProviderCalls
                         && event.message.stopReason !== "stop"
+                        && !terminalReportRequested
                         && !callCapReached
                     ) {
                         callCapReached = true;
@@ -1424,6 +1433,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             try {
                 await Promise.race([
                     session.prompt(task),
+                    submissionComplete,
                     callCapPromise,
                     parentCancellation,
                     new Promise<never>((_resolve, reject) => {
@@ -1446,6 +1456,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             // parent. Cancellation still forbids a successful receipt.
             if (admissionError !== undefined) throw admissionError;
             if (stopped || signal?.aborted) throw new Error("explorer cancelled by parent audit");
+            // The validated tool body is the final product, not a subsequent
+            // prose acknowledgement. Stop the SDK before another provider turn.
+            if (submission.concern !== null) abortSession();
 
             if (!session.subscribe) {
                 providerCalls = Math.max(providerCalls, session.messages.filter((message) => (
