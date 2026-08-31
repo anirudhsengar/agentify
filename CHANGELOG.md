@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Allow three independent read-only explorers to overlap under the shared request-reservation budget. Concurrent duplicate concerns/scouts are refused; ownership, cancellation and aggregate limits remain enforced.
+
 - Retain bounded, redacted narrative-review identities, source/body bindings, findings and retry classifications in the audit log without logging full source.
 
 - Retry incomplete narrative reviews once in a later bounded run, retaining prior resource reservations. Unchanged source-backed findings remain cached across runs; no failed review grants approval.

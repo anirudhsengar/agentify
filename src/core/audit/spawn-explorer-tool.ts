@@ -208,6 +208,7 @@ const SpawnExplorerParams = Type.Object({
 });
 
 let activeSpawnCount = 0;
+const ACTIVE_CONCERN_EXPLORATIONS = new Set<string>();
 
 interface BudgetRecovery {
     can_continue: boolean;
@@ -907,7 +908,8 @@ function extractSessionCostUsd(messages: ReadonlyArray<unknown>): number | null 
 
 export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): ToolDefinition {
     const maxTotalSpawns = toolOptions.maxTotalSpawns ?? DEFAULT_MAX_TOTAL_SPAWNS;
-    const maxConcurrentSpawns = toolOptions.maxConcurrentSpawns ?? DEFAULT_MAX_CONCURRENT_SPAWNS;
+    const maxConcurrentSpawns = toolOptions.maxConcurrentSpawns
+        ?? (toolOptions.resourceBudget ? 3 : DEFAULT_MAX_CONCURRENT_SPAWNS);
     const maxSubagentDurationMs = toolOptions.maxSubagentDurationMs ?? DEFAULT_SUBAGENT_TIMEOUT_MS;
     const maxTotalCostUsd = toolOptions.maxTotalCostUsd ?? DEFAULT_MAX_TOTAL_COST_USD;
     const { stateDir } = toolOptions;
@@ -1119,6 +1121,14 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 stateDir,
             );
         }
+        const activeConcernKey = mode === "concern_scout" || mode === "concern_tracer"
+            ? JSON.stringify([fs.realpathSync(ctx.cwd), mode,
+                mode === "concern_tracer" ? expectedConcern?.trim().toLowerCase() : "scout"])
+            : null;
+        if (activeConcernKey !== null && ACTIVE_CONCERN_EXPLORATIONS.has(activeConcernKey)) {
+            return makeBudgetError("Error: this concern exploration is already active; await its receipt before retrying.",
+                {}, stateDir);
+        }
         if (activeSpawnCount >= maxConcurrentSpawns) {
             return makeBudgetError(
                 `Error: spawn_explorer concurrency budget exhausted: ${activeSpawnCount}/${maxConcurrentSpawns} sub-agents already running. ` +
@@ -1166,6 +1176,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         }
 
         activeSpawnCount += 1;
+        if (activeConcernKey !== null) ACTIVE_CONCERN_EXPLORATIONS.add(activeConcernKey);
         totalSpawnCount += 1;
         const start = Date.now();
         const runId = buildRunId();
@@ -1700,6 +1711,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 // ignore disposal errors
             }
             activeSpawnCount -= 1;
+            if (activeConcernKey !== null) ACTIVE_CONCERN_EXPLORATIONS.delete(activeConcernKey);
         }
     },
     }) as unknown as ToolDefinition;

@@ -350,8 +350,12 @@ also reject later exact serialized requests before network dispatch when their
 conservative byte upper bound exceeds that reserve. Post-response accounting
 remains authoritative for actual usage, while both admission boundaries prevent
 an exhausted continuation from crossing the configured aggregate cap.
-Explorer sessions run one at a time so completed usage is reconciled before the
-next dispatch. Mode-specific repository-read and provider-call quotas are hard
+With the shared reservation budget, up to three independent read-only explorer
+sessions may overlap. Requests reserve aggregate tokens and cost before dispatch;
+concurrent duplicates of the same concern or scout are refused. Standalone tools
+without that budget retain the serial default. Completed bodies checkpoint against
+the latest map synchronously, and compiler ownership validation remains mandatory.
+Mode-specific repository-read and provider-call quotas are hard
 runtime limits and the call quota is reduced to the aggregate calls remaining.
 Agentify retains a final report completed at the exact limit, but aborts an
 explorer that requests continuation there. Aggregate exhaustion reports the

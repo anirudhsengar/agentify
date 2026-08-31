@@ -160,7 +160,10 @@ concern or procedure evidence.
 
 Every explorer uses the configured explorer model slot. The trusted runtime
 permits at most 24 explorers per
-audit, one active at once, and three minutes per explorer. Each explorer also has
+audit, three independent explorers active at once, and three minutes per explorer.
+After the scout returns, batch independent named concern traces in groups of up to
+three tool calls. Never dispatch duplicate scouts or the same concern concurrently.
+Reconcile completed receipts before dispatching dependent repairs. Each explorer also has
 a hard provider-call cap reported in its result. Treat tool-reported
 budget exhaustion as final: preserve gathered evidence, narrow only when a real
 budget remains, and leave unsupported claims as gaps.

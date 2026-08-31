@@ -238,6 +238,8 @@ Agentify-managed paths observed during the transaction are normalized out of
 repository topography and process evidence before the map can close.
 The explorer runtime permits only one successful concern scout per repository
 commit; resumed and repair sessions reuse its attested proposal set.
+Up to three independent read-only explorers can overlap under the shared resource
+reservation budget; duplicate active scouts and concern identities are refused.
 Each tracer dispatch binds one exact concern identity before model entry;
 renamed typed reports are rejected instead of creating duplicate specialists or
 silently satisfying a different scout proposal.
