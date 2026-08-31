@@ -116,7 +116,7 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     assert.match(rejected.reasons.join("; "), /Numeric strings are accepted/);
     assert.deepEqual(rejected.map.concern_evidence!.concerns[0]!.flows, concern.flows);
     const repeated = await reviewSpecialistCompilation(context,
-      compileSpecialistEvidence(rejected.map, { cwd }), budget, "review-fixture");
+      compileSpecialistEvidence(rejected.map, { cwd }), budget, "another-run");
     assert.equal(reviews, 1, "an unchanged contradiction must not consume more model calls");
     assert.equal(repeated.complete, false);
     const correctedMap = structuredClone(rejected.map);
@@ -152,6 +152,16 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       const incomplete = await reviewSpecialistCompilation(context,
         compileSpecialistEvidence(correctedMap, { cwd }), budget, "incomplete-review");
       assert.equal(incomplete.complete, false, `${outcome} cannot approve a specialist`);
+      const callsAfterFailure = reviews;
+      mode = "normal";
+      const sameRun = await reviewSpecialistCompilation(context,
+        compileSpecialistEvidence(incomplete.map, { cwd }), budget, "incomplete-review");
+      assert.equal(sameRun.complete, false);
+      assert.equal(reviews, callsAfterFailure, "incomplete review cannot loop within a run");
+      const retried = await reviewSpecialistCompilation(context,
+        compileSpecialistEvidence(incomplete.map, { cwd }), budget, "retry-review");
+      assert.equal(reviews, callsAfterFailure + 1, "a new run must retry incomplete review once");
+      assert.equal(retried.complete, true, retried.reasons.join("; "));
     }
     assert.equal(budget.snapshot().unreported_calls, 1);
     assert.equal(budget.snapshot().unreserved_calls, 0);
