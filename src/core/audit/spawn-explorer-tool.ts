@@ -1167,6 +1167,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
 
         let session: ExplorerSubSession | undefined;
         let stopped = false;
+        let admissionError: unknown;
         const abortSession = (): void => {
             if (stopped) return;
             stopped = true;
@@ -1249,39 +1250,47 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                             }
                         });
                         pi.on("before_provider_request", (event) => {
-                            if (stopped || signal?.aborted) throw new Error("explorer cancelled by parent audit");
-                            if (providerCalls >= maxProviderCalls) {
-                                throw new Error(`sub-agent reached hard provider call cap of ${maxProviderCalls} before dispatch`);
+                            try {
+                                if (stopped || signal?.aborted) throw new Error("explorer cancelled by parent audit");
+                                if (providerCalls >= maxProviderCalls) {
+                                    throw new Error(`sub-agent reached hard provider call cap of ${maxProviderCalls} before dispatch`);
+                                }
+                                let payload = mode === "concern_tracer"
+                                    ? capProviderOutputTokens(
+                                        event.payload,
+                                        subAgentModel.api,
+                                        MAX_CONCERN_RESPONSE_TOKENS,
+                                    )
+                                    : event.payload;
+                                if (
+                                    mode === "concern_tracer"
+                                    && submission.concern === null
+                                    && shouldForceConcernSubmission(
+                                        providerCalls,
+                                        maxProviderCalls,
+                                        repositoryReadCalls,
+                                        maxReads,
+                                    )
+                                ) {
+                                    payload = forceProviderToolChoice(
+                                        payload,
+                                        subAgentModel.api,
+                                        "submit_concern_report",
+                                    );
+                                }
+                                toolOptions.resourceBudget?.assertProviderInputCapacity(payload);
+                                if (toolOptions.resourceBudget && explorerBudgetSession) {
+                                    toolOptions.resourceBudget.recordProviderRequest(explorerBudgetSession);
+                                }
+                                providerCalls += 1;
+                                return payload;
+                            } catch (error) {
+                                // The SDK swallows extension exceptions. Abort its
+                                // transport before the original payload can escape.
+                                admissionError = error;
+                                abortSession();
+                                throw error;
                             }
-                            let payload = mode === "concern_tracer"
-                                ? capProviderOutputTokens(
-                                    event.payload,
-                                    subAgentModel.api,
-                                    MAX_CONCERN_RESPONSE_TOKENS,
-                                )
-                                : event.payload;
-                            if (
-                                mode === "concern_tracer"
-                                && submission.concern === null
-                                && shouldForceConcernSubmission(
-                                    providerCalls,
-                                    maxProviderCalls,
-                                    repositoryReadCalls,
-                                    maxReads,
-                                )
-                            ) {
-                                payload = forceProviderToolChoice(
-                                    payload,
-                                    subAgentModel.api,
-                                    "submit_concern_report",
-                                );
-                            }
-                            toolOptions.resourceBudget?.assertProviderInputCapacity(payload);
-                            if (toolOptions.resourceBudget && explorerBudgetSession) {
-                                toolOptions.resourceBudget.recordProviderRequest(explorerBudgetSession);
-                            }
-                            providerCalls += 1;
-                            return payload;
                         });
                         pi.on("tool_call", async (event) => {
                             if (stopped || signal?.aborted) {
@@ -1375,6 +1384,12 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 unsubscribe = session.subscribe((event: unknown) => {
                     if (!isRecord(event) || event.type !== "message_end" || !isRecord(event.message)) return;
                     if (event.message.role !== "assistant") return;
+                    if (admissionError !== undefined) {
+                        // A rejected request produces a synthetic SDK abort
+                        // message, not a provider response or billable call.
+                        resourceUsageRecorded = true;
+                        return;
+                    }
                     if (callCapReached) return;
                     providerResponses += 1;
                     providerCalls = Math.max(providerCalls, providerResponses);
@@ -1429,6 +1444,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             }
             // A synchronous completion can win Promise.race after aborting its
             // parent. Cancellation still forbids a successful receipt.
+            if (admissionError !== undefined) throw admissionError;
             if (stopped || signal?.aborted) throw new Error("explorer cancelled by parent audit");
 
             if (!session.subscribe) {

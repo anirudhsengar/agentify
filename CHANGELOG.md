@@ -4,6 +4,10 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Cancel SDK transports explicitly when request admission fails: the SDK logs
+  and swallows extension exceptions. Denied dispatches no longer escape the
+  budget guard or count synthetic abort messages as provider responses.
+
 - Respect explicit bans on unsupervised agent use in tracked policy/rules
   documents and GitHub pull-request templates before repository writes.
   Prohibition keywords now require word boundaries, avoiding false bans from

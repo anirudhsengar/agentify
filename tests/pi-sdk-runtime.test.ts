@@ -70,6 +70,8 @@ test("SDK admission rejection prevents HTTP dispatch, while admitted requests st
     assert.equal((denied as { isError?: boolean }).isError, true);
     assert.equal(explorerCreated, true, JSON.stringify(denied));
     assert.equal(requests, before, "explorer rejection must abort the actual SDK transport");
+    assert.equal(budget.snapshot().model_calls, 3, "a denied dispatch is not a fourth model call");
+    assert.equal((denied.details as { provider_calls: number }).provider_calls, 0);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

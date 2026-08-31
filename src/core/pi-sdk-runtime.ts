@@ -239,8 +239,16 @@ export class PiSdkRuntime implements AgentRuntime {
         (pi) => {
           pi.on("tool_call", makeDefenseHook({ executionPolicy: options.executionPolicy }));
           const admitProviderRequest = (payload: unknown): unknown => {
-            options.auditResourceBudget?.assertProviderInputCapacity(payload);
-            options.onProviderRequest?.();
+            try {
+              if (aborted || options.signal?.aborted) throw new Error("provider request cancelled");
+              options.auditResourceBudget?.assertProviderInputCapacity(payload);
+              options.onProviderRequest?.();
+            } catch (error) {
+              // SDK extension errors are logged and swallowed. Cancel the
+              // transport before its runner can dispatch the original payload.
+              abortSession();
+              throw error;
+            }
             providerRequests += 1;
             return payload;
           };
