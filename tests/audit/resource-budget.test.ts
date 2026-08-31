@@ -16,8 +16,9 @@ test("usage reported at a deadline is charged before the deadline rejects it", (
     type: "message_end",
     message: { role: "assistant", usage: { input: 7, cacheRead: 11, output: 3, cost: { total: 0.02 } } },
   } as never, session), /session elapsed time/);
-  assert.deepEqual(budget.snapshot(), {
-    ...budget.snapshot(), model_calls: 1, turns: 1, input_tokens: 18, output_tokens: 3, cost_usd: 0.02,
+  const usage = budget.snapshot();
+  assert.deepEqual(usage, {
+    ...usage, model_calls: 1, turns: 1, input_tokens: 18, output_tokens: 3, cost_usd: 0.02,
   });
 });
 
