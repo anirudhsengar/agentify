@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
-import * as fs from "node:fs";
-import * as path from "node:path";
+import { resolveValidationInvocation } from "../task-lifecycle/validation-runner.ts";
 import { PROVIDER_ENV_KEYS } from "../provider-auth.ts";
 import type {
   InstallerProcessRequest,
@@ -10,39 +9,6 @@ import type {
 
 const MAX_PROCESS_OUTPUT_BYTES = 1024 * 1024;
 const PROVIDER_ENV_KEY_SET = new Set<string>(PROVIDER_ENV_KEYS);
-
-function resolveWindowsCmdScript(
-  program: string,
-  args: readonly string[],
-  cwd: string,
-): string[] | null {
-  if (process.platform !== "win32") return null;
-  if (!/\.(?:bat|cmd)$/i.test(path.basename(program))) return null;
-  const resolved = path.isAbsolute(program) ? path.normalize(program) : path.resolve(cwd, program);
-  const root = path.resolve(cwd);
-  const relative = path.relative(root, resolved);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("Windows .bat/.cmd validation scripts must resolve inside the repository cwd");
-  }
-  const stat = fs.lstatSync(resolved);
-  if (stat.isSymbolicLink() || !stat.isFile()) {
-    throw new Error("Windows .bat/.cmd validation scripts must identify a regular local file");
-  }
-  // Node cannot spawn .bat/.cmd directly (EINVAL). Route through cmd.exe without shell:true
-  // so argv stays discrete and is not concatenated into an injectable shell string.
-  return ["/d", "/s", "/c", resolved, ...args];
-}
-
-function resolveInvocation(request: InstallerProcessRequest): {
-  program: string;
-  args: string[];
-} {
-  if (request.program === "npm" && process.platform === "win32") {
-    const npmCli = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
-    if (fs.existsSync(npmCli)) return { program: process.execPath, args: [npmCli, ...request.args] };
-  }
-  return { program: request.program, args: [...request.args] };
-}
 
 function sanitizedEnvironment(
   input: NodeJS.ProcessEnv | undefined,
@@ -76,7 +42,7 @@ function sanitizedEnvironment(
 
 export const DEFAULT_INSTALLER_PROCESS_RUNNER: InstallerProcessRunner = {
   run(request: InstallerProcessRequest): InstallerProcessResult {
-    const windowsScript = resolveWindowsCmdScript(request.program, request.args, request.cwd);
+    const invocation = resolveValidationInvocation([request.program, ...request.args], request.cwd);
     const options = {
       cwd: request.cwd,
       encoding: "utf-8" as const,
@@ -86,12 +52,9 @@ export const DEFAULT_INSTALLER_PROCESS_RUNNER: InstallerProcessRunner = {
       maxBuffer: MAX_PROCESS_OUTPUT_BYTES,
       windowsHide: true,
       shell: false,
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     };
-    // Keep shell-script arguments separate from direct executables, including npm's Node entry point.
-    const invocation = resolveInvocation(request);
-    const result = windowsScript
-      ? spawnSync("cmd.exe", windowsScript, options)
-      : spawnSync(invocation.program, invocation.args, options);
+    const result = spawnSync(invocation.command, invocation.args, options);
     const code = (result.error as NodeJS.ErrnoException | undefined)?.code;
     return {
       status: result.status,

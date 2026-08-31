@@ -4,6 +4,24 @@
   "report_status": "failed_product_qualification_approved_scope_in_progress",
   "release_ready": false,
   "final_candidate_sha": null,
+  "most_recent_exact_head_evidence": {
+    "agentify_sha": "60936a8adc8be07a7e232b897b49f726ac4d8cb6",
+    "capability": "Semantically complete analysis-ready installation with no execution authority; operational readiness evaluated separately.",
+    "local_node22_release": "passed_97_source_files_12_corpus_tests_5_packed_qualifications_scaffold_audit_zero",
+    "local_log": "/tmp/agentify-analysis-release-exact.log",
+    "package_sha256": "5a0a281084f12bbbc5e70b58d1163d25a48f5b6903086bcaccb71855acf1a31d",
+    "ci": "passed_node22_node24_typecheck_audit_packed_scaffold",
+    "ci_url": "https://github.com/anirudhsengar/agentify/actions/runs/33381305589",
+    "codeql": "failed_two_security_alerts_correction_in_progress",
+    "codeql_alerts": [
+      "https://github.com/anirudhsengar/agentify/security/code-scanning/64",
+      "https://github.com/anirudhsengar/agentify/security/code-scanning/63"
+    ],
+    "live_evaluations": "not_run",
+    "manual_quality_reviews_passed": 0,
+    "heldout_rounds_passed": 0,
+    "qualification_carries_forward_to_new_code": false
+  },
   "evidence_scope": "Candidate and changed-file inventory below are archived observations, not qualification of the current branch. Results cannot carry forward to changed production code.",
   "product_qualification_rule": "All eight eligible historical teams and at least five of six eligible held-outs in each of two unchanged-production rounds must install high-quality specialist teams. Analysis-ready installations qualify only after the same semantic-quality invariants pass; operational execution readiness is evaluated separately. Diagnostic-only fails unless required tooling is unavailable.",
   "evaluation_scope": "specialist compiler stabilization",

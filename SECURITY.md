@@ -93,6 +93,11 @@ instructions. Issue intake, autonomous mutation, publication and learning are
 disabled. An operational downgrade removes only recognized managed entry points
 inside the installation transaction; ambiguous ownership refuses the downgrade.
 External harness locks never establish repository-owned validation approval.
+Execution-file ownership reads use the same bounded, no-follow descriptor as
+metadata verification. Windows batch validation uses one shared resolver:
+repository-confined relative paths, quoted literal arguments, disabled AutoRun
+and delayed expansion, and no shell operators or environment expansion. Direct
+executables, including npm's Node entry point, retain ordinary argv dispatch.
 
 ## Credentials
 

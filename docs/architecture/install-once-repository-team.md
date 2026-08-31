@@ -439,6 +439,11 @@ ledger bound to exact current HEAD; no other invalid field is repaired.
 
 The trusted controller launches validation with fixed argv vectors and no direct
 shell option, although npm scripts may invoke shells and indirect programs.
+On Windows, batch wrappers necessarily enter `cmd.exe`. Installer and lifecycle
+validation share one resolver that confines the script to the checkout, quotes
+literal relative paths/arguments, rejects expansion and operator characters, and
+disables AutoRun/delayed expansion. The checkout root stays an OS process option,
+not command text. npm invokes its trusted Node entry point without a shell.
 Common credential variables are removed from validation child environments.
 Visible deployment, publication, cloud mutation, or infrastructure mutation is
 rejected as a guardrail. Installer validation receives filesystem isolation

@@ -8,6 +8,7 @@ import {
 import type { ArtifactWrite } from "./types.ts";
 import type { RepositoryTaskPolicyConfiguration } from "./installer/contracts.ts";
 import { isAgentifyOwnedTaskPolicyFile } from "./installer/task-policy.ts";
+import { readBoundedRegularFile } from "./installer/bounded-regular-file.ts";
 import { AGENTIFY_ANALYSIS_CONTROL_PATHS, AGENTIFY_INSTALLED_CONTROL_PATHS } from "./artifacts/managed-installation-paths.ts";
 
 const TASK_POLICY_PORTABLE_PATH = ".github/agentify-task-policy.json";
@@ -15,6 +16,7 @@ const RUNTIME_LOADER_PORTABLE_PATH = ".github/agentify/runtime-loader.mjs";
 const AGENTS_PORTABLE_PATH = "AGENTS.md";
 const SETUP_PORTABLE_PATH = "SETUP.md";
 const RUNTIME_VERSION_PLACEHOLDER = "__AGENTIFY_RUNTIME_VERSION__";
+const MAX_MANAGED_EXECUTABLE_BYTES = 32 * 1024 * 1024;
 
 export interface InstallScaffoldRuntimeOptions {
   cwd: string;
@@ -193,8 +195,8 @@ export function installScaffoldRuntime(options: InstallScaffoldRuntimeOptions): 
         if (stat.isSymbolicLink()) throw new Error(`Cannot disable execution through a symlink: ${portableRelative}`);
       }
       if (fs.existsSync(destination)) {
-        if (!fs.lstatSync(destination).isFile()
-          || !fs.readFileSync(destination, "utf8").includes(markerFor(destination))) {
+        const existing = readBoundedRegularFile(destination, MAX_MANAGED_EXECUTABLE_BYTES);
+        if (existing === null || !existing.toString("utf8").includes(markerFor(destination))) {
           throw new Error(`Cannot disable execution at user-owned path: ${portableRelative}`);
         }
         fs.unlinkSync(destination);

@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Verify managed execution-file ownership through bounded no-follow descriptors, and share literal-only, quoted Windows batch invocation between installer and task validation. Shell expansion/operators are rejected before dispatch; ordinary spaced arguments and shell-free npm remain supported.
+
 - Separate complete specialist-team installation (`analysis-ready`) from operational readiness. Missing reproducible validation retains a validated read-only team with actionable enablement requirements, no execution workflows/runtimes, and an unconfigured task policy; semantic and structural failures still roll back atomically. External evaluation locks never establish repository-owned readiness.
 
 - Keep complete tracer reports in application-owned checkpoint data and send the parent only a bounded acknowledgement plus compiler obligations, avoiding repeated specialist JSON in model context.

@@ -33,12 +33,15 @@ test("Windows npm stays a direct Node invocation, separate from batch wrappers",
     }
     assert.deepEqual(calls.map((call) => call.slice(0, 2)), [
       [node, [npmCli, "test"]],
-      ["cmd.exe", ["/d", "/s", "/c", path.join(cwd, "probe.bat"), "test"]],
+      ["cmd.exe", ["/d", "/v:off", "/s", "/c", '"".\\probe.bat" "test""']],
       ["git", ["test"]],
     ]);
     for (const call of calls) {
       assert.equal((call[2] as { shell: boolean }).shell, false);
     }
+    assert.equal((calls[1]![2] as { windowsVerbatimArguments: boolean }).windowsVerbatimArguments, true);
+    const spaced = resolveValidationInvocation(["probe.bat", "test path"], cwd);
+    assert.deepEqual(spaced.args, ["/d", "/v:off", "/s", "/c", '"".\\probe.bat" "test path""']);
   } finally {
     Object.defineProperty(process, "platform", platform);
     Object.defineProperty(process, "execPath", execPath);
@@ -120,9 +123,8 @@ test("validation invocation resolves Windows .bat wrappers through cmd.exe", () 
     fs.writeFileSync(path.join(cwd, "gradlew.bat"), "@echo off\r\necho gradle-ok\r\n");
     const invocation = resolveValidationInvocation(["gradlew.bat", "test"], cwd);
     assert.match(invocation.command.toLowerCase(), /cmd\.exe$/);
-    assert.deepEqual(invocation.args.slice(0, 3), ["/d", "/s", "/c"]);
-    assert.equal(invocation.args[3], path.join(cwd, "gradlew.bat"));
-    assert.deepEqual(invocation.args.slice(4), ["test"]);
+    assert.deepEqual(invocation.args, ["/d", "/v:off", "/s", "/c", '"".\\gradlew.bat" "test""']);
+    assert.equal(invocation.windowsVerbatimArguments, true);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
