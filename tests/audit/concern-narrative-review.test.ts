@@ -24,12 +24,13 @@ const SOURCE = 'def normalize_time(value):\n    try:\n        return int(value)\
 const FALSE_CLAIM = "Numeric-string time values cannot be accepted.";
 const CORRECTION = "Numeric strings are accepted by int(); nonnumeric strings raise ValueError.";
 
-for (const concurrent of [false, true]) {
+for (const concurrent of [false, true, "corrections"] as const) {
 test(`claim correction reviews within one session without overwriting concurrent evidence: ${concurrent}`, async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-inline-review-"));
   const logs = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-inline-review-log-"));
   try {
     fs.writeFileSync(path.join(cwd, "clock.py"), SOURCE);
+    if (concurrent === "corrections") fs.writeFileSync(path.join(cwd, "retries.py"), SOURCE);
     fs.writeFileSync(path.join(cwd, "README.md"), "Test fixture evidence citation.\n");
     execFileSync("git", ["init", "-q", cwd]);
     execFileSync("git", ["-C", cwd, "add", "."]);
@@ -50,8 +51,18 @@ test(`claim correction reviews within one session without overwriting concurrent
       invariants: [], entry_questions: ["Are deadlines numeric strings?"], validation: [], spans_subtrees: [],
       stability: "high", recurrence: "high", confidence: "high", last_updated: "2026-08-31T00:00:00.000Z",
     };
+    const concerns = [concern];
+    if (concurrent === "corrections") {
+      concern.pitfalls = concern.pitfalls.slice(0, 1);
+      const retries = JSON.parse(JSON.stringify(concern).replaceAll("clock.py", "retries.py")) as Concern;
+      retries.concern = "Retry setting conversion";
+      retries.one_line = "Convert retry settings to integers.";
+      retries.covers = "Retry-count configuration conversion.";
+      retries.excludes = "Deadline normalization and scheduling.";
+      concerns.push(retries);
+    }
     const compilation = compileSpecialistEvidence(makeValidCodebaseMap({
-      concern_evidence: { concerns: [concern], not_concerns: [] }, expert_evidence: undefined,
+      concern_evidence: { concerns, not_concerns: [] }, expert_evidence: undefined,
     }), { cwd });
     assert.equal(compilation.complete, true, compilation.reasons.join("; "));
     const map = attestCodebaseMap(compilation.map, head);
@@ -66,7 +77,7 @@ test(`claim correction reviews within one session without overwriting concurrent
         usage: { input: 50, output: 10, cost: { total: 0.001 } } } } as never);
       if (options.tools.includes("submit_specialist_review")) {
         reviews += 1;
-        if (concurrent && reviews === 2) {
+        if (concurrent === true && reviews === 2) {
           const latest = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
           latest.open_questions.push("Concurrent evidence must survive review.");
           writeCanonicalMap(cwd, latest,
@@ -75,7 +86,8 @@ test(`claim correction reviews within one session without overwriting concurrent
         const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
         const claim = Object.keys(claims).find(key => JSON.stringify(claims[key]).includes(FALSE_CLAIM));
         await options.customTools![0]!.execute("review", { checked_claims: Object.keys(claims),
-          finding: claim ? { claim, path: "clock.py", excerpt: "return int(value)", reason: CORRECTION } : null,
+          finding: claim ? { claim, path: (claims["touchpoints[0]"] as { path: string }).path,
+            excerpt: "return int(value)", reason: CORRECTION } : null,
         }, undefined, undefined, { cwd } as never);
         options.onEvent?.({ type: "tool_execution_end" } as never);
         return { turns: 1, costUsd: 0.001, aborted: true };
@@ -84,6 +96,18 @@ test(`claim correction reviews within one session without overwriting concurrent
       repairs += 1;
       assert.equal(repairs, 1, "narrative findings must not require another broad repair session");
       const tool = options.customTools!.find(item => item.name === "write_map_delta")!;
+      if (concurrent === "corrections") {
+        const current = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+        const results = await Promise.allSettled(current.specialist_reviews!.records.map(record => tool.execute(
+          record.concern, { delta: {}, claim_correction: { concern: record.concern, digest: record.digest,
+            claim: record.finding!.claim, statement: CORRECTION, rationale: "Nonnumeric values fail conversion." } },
+          undefined, undefined, { cwd } as never,
+        )));
+        assert.ok(results.every(result => result.status === "fulfilled"
+          && (result.value as { isError?: boolean }).isError !== true),
+        "parallel corrections must complete without stale checkpoints or discarded results");
+        return { turns: 1, costUsd: 0.001, aborted: false };
+      }
       for (let index = 0; index < 2; index += 1) {
         const current = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
         const record = current.specialist_reviews!.records.find(item => item.concern === concern.concern)!;
@@ -109,7 +133,7 @@ test(`claim correction reviews within one session without overwriting concurrent
       config: { schemaVersion: 1, models: {}, thinkingLevel: "high" },
       auditLog: new AgentifyLog({ cwd, configDir: logs }),
       ui: { info() {}, status() {}, error() {} } as never });
-    if (concurrent) {
+    if (concurrent === true) {
       await assert.rejects(execution, /canonical map changed during specialist review/);
       const preserved = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
       assert.ok(preserved.open_questions.includes("Concurrent evidence must survive review."));
@@ -118,13 +142,13 @@ test(`claim correction reviews within one session without overwriting concurrent
       return;
     }
     await execution;
-    assert.equal(reviews, 3);
+    assert.equal(reviews, concurrent === "corrections" ? 4 : 3);
     assert.equal(repairs, 1);
     const finalMap = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
     assert.deepEqual(assessSpecialistReviews(finalMap, cwd), []);
     assert.deepEqual(finalMap.concern_evidence!.concerns[0]!.flows, concern.flows);
     assert.equal(execFileSync("git", ["-C", cwd, "diff", "HEAD"], { encoding: "utf8" }), "");
-    assert.equal(budget.snapshot().model_calls, 5);
+    assert.equal(budget.snapshot().model_calls, concurrent === "corrections" ? 6 : 5);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
     fs.rmSync(logs, { recursive: true, force: true });
