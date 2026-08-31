@@ -1057,6 +1057,51 @@ async function testCancelledRequestAdmissionIsCharged(kind: "cancel" | "retry"):
   }
 }
 
+async function testAllExplorerModesBoundProviderOutput(): Promise<void> {
+  const cwd = tempDir("spawn-mode-output-bound");
+  try {
+    for (const api of ["anthropic-messages", "openai-codex-responses"] as const) {
+      for (const mode of ["topography", "conventions", "module_graph", "type_tracer", "concern_scout"] as const) {
+        const budget = new AuditResourceBudget({ maxOutputTokens: 50_000 });
+        let capped = false;
+        const tool = createSpawnExplorerTool({ agentDir: cwd, stateDir: ".agentify/runtime/audit",
+          resourceBudget: budget,
+          explorerModel: { ...stubExplorerArgs().explorerModel, api, contextWindow: 100_000, maxTokens: 128_000 },
+          createSession: async options => ({ session: {
+            messages: [], dispose() {}, async abort() {},
+            async prompt() {
+              assert.ok(options?.resourceLoader);
+              const handlers = options.resourceLoader.getExtensions().extensions
+                .flatMap(extension => extension.handlers.get("before_provider_request") ?? []);
+              for (const handler of handlers) {
+                const payload = await handler({ payload: { max_tokens: 128_000 } } as never,
+                  { cwd } as never) as { max_tokens?: number } | undefined;
+                if (payload?.max_tokens === 12_000) capped = true;
+              }
+            },
+          } }),
+        });
+        const result = await tool.execute("bounded-mode", { mode, target_path: "." } as never,
+          undefined, undefined, { cwd } as never);
+        if (api === "anthropic-messages") {
+          assert.equal(capped, true, `${mode} must cap a supported provider before reservation`);
+          assert.equal(budget.snapshot().model_calls, 1);
+          assert.equal(budget.snapshot().reserved_output_tokens, 12_000);
+          assert.equal(budget.snapshot().unreported_calls, 1);
+          assert.equal(budget.snapshot().unreserved_calls, 0);
+        } else {
+          assert.equal(capped, false, "uncappable APIs must not claim a reduced reservation");
+          assert.equal(budget.snapshot().model_calls, 0);
+          assert.match(textFrom(result), /output token reservation exceeds/);
+        }
+      }
+    }
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+await testAllExplorerModesBoundProviderOutput();
 await testCancelledRequestAdmissionIsCharged("cancel");
 await testCancelledRequestAdmissionIsCharged("retry");
 await testRejectsWhenTotalSpawnBudgetIsExhausted();
