@@ -4,7 +4,17 @@ Not release-ready. Do not merge PR #13. The earlier release recommendation is wi
 
 The approved gate separates high-quality specialist installation from operational execution readiness. A semantically complete `analysis-ready` team may count as an installation, while missing reproducible repository-owned validation keeps issue intake, publication, autonomous mutation and learning disabled. External harness locks never clear those execution blockers.
 
-## Current development evidence — 2026-08-31 18:36 UTC
+## Current development evidence — 2026-08-31 19:22 UTC
+
+Exact `9e99e8ec4f45973fdad716c17705c12c0ab5b6c1` passed local Node 22/24 full release suites, CI, package/scaffold and CodeQL, but all six fresh full-CLI runs FAILED to install. Commander (1,800,182 ms), AQA (1,800,430 ms), and Chi (1,800,150 ms) exceeded the wall budget. Petclinic (1,216,474 ms) and Mustache (1,783,515 ms) exhausted three repair passes with narrative findings unresolved. PyJWT (1,631,276 ms) exhausted output reservations with findings and a tracer failure outstanding. Every run retained only its diagnostic map, preserved tracked files and emitted one terminal result. None receives an installation credit or tooling waiver. Exact usage and artifact paths are recorded in JSON.
+
+Petclinic reached structural closure but required more narrative corrections than the pass-bound review feedback allowed. A reduced executable regression now corrects two independent false assertions within one bounded repair session. Valid claim corrections return fresh normalized review findings immediately; parallel deltas are serialized, queued work rechecks cancellation/budgets, and a concurrent outside map change cannot be overwritten. Separate regressions permit only source-review-rejected touchpoint role prose to change, preserving path, symbol, line range, centrality, scope and flows. The tool-schema snapshot was updated with its exact hash.
+
+The inline-feedback commit `80302af971a688dad8c9dd73863d70a7245d6df5` passed its exact Node 22 release suite and a 35 ms three-tracer live cancellation check with retained accounting bounds. Subsequent serialization and role corrections passed typecheck and 18 focused/corpus/schema checks; their combined exact-head release and live installation qualification remain pending. These proofs are not installed-team manual reviews.
+
+Zero qualifying held-out rounds and zero passing installed-team manual reviews. Hono narrative correctness remains unqualified. Reports retain `release_ready=false`, `final_candidate_sha=null`. Do not merge.
+
+## Previous development evidence — 2026-08-31 18:36 UTC
 
 Exact `776d86916dc03f5077a8f7bd6ec507b9152901ca` passed both local Node 22/24 release suites and all CI/CodeQL gates. The independently qualified root and Node 24 worktree package hashes are recorded in JSON; live runs used the latter unchanged.
 

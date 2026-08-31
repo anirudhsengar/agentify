@@ -239,7 +239,9 @@ Eligible bodies are reviewed even while unrelated structural gaps remain, so
 repair sees narrative and ownership failures together. Review cannot close those
 gaps; normalization changes invalidate the body digest and require fresh review.
 A source-rejected summary can be corrected without regenerating its specialist;
-scope boundaries, ownership, evidence and flows remain unchanged and unapproved
+an exact-review-rejected touchpoint role may likewise be corrected as prose only:
+its tracked path, symbol, line range and core/supporting centrality cannot change.
+Scope boundaries, ownership, evidence and flows remain unchanged and unapproved
 until full review passes again.
 Successful corrections return fresh review findings within the same bounded
 repair session. Concurrent evidence changes abort stale review checkpoints;

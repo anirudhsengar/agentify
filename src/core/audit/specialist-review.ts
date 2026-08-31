@@ -99,7 +99,7 @@ export function correctSpecialistClaim(
   const findings = [record.finding, ...record.additional_findings ?? []];
   for (const correction of corrections) {
     const finding = findings.find(item => item?.claim === correction.claim);
-    const match = /^(pitfalls|invariants|flows)\[([0-9]+)\]$/.exec(correction.claim);
+    const match = /^(pitfalls|invariants|flows|touchpoints)\[([0-9]+)\]$/.exec(correction.claim);
     if (!finding || (!match && correction.claim !== "one_line") || (match?.[1] === "flows"
       ? !Number.isSafeInteger(correction.flow_step) || correction.flow_step! < 0 || correction.flow_step! > 511
       : correction.flow_step !== undefined)
@@ -110,6 +110,10 @@ export function correctSpecialistClaim(
     const index = Number(match?.[2]);
     if (correction.claim === "one_line") {
       body.one_line = correction.statement;
+    } else if (match?.[1] === "touchpoints") {
+      const touchpoint = body.touchpoints[index];
+      if (!touchpoint) throw new Error("claim_correction names a missing touchpoint");
+      touchpoint.role = correction.statement;
     } else if (match?.[1] === "flows") {
       const step = body.flows[index]?.steps[correction.flow_step!];
       if (!step || step.path !== finding.path) {

@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Allow exact-review-rejected touchpoint descriptions to be corrected without retracing or changing tracked paths, symbols, centrality, or flows. Fresh normalized review remains mandatory.
+
 - Serialize repair deltas while fresh narrative review is pending, rechecking queued cancellation and resource limits before mutation.
 
 - Return fresh normalized narrative findings immediately after a valid claim correction within the bounded repair session. Preserve concurrent evidence rather than overwriting it with a stale review checkpoint.
