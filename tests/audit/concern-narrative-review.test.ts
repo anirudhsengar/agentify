@@ -490,6 +490,38 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), before);
     }
 
+    // Captured repair fixed the steps but left a contradictory flow summary.
+    // Description-only correction must preserve every verified step and owner.
+    const descriptionInput = structuredClone(flowCorrected);
+    delete descriptionInput.specialist_reviews;
+    descriptionInput.concern_evidence!.concerns[0]!.flows[0]!.description = FALSE_CLAIM;
+    const descriptionRejected = await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(descriptionInput, { cwd }), budget, "description-review");
+    assert.equal(descriptionRejected.complete, false);
+    const descriptionProposal = { ...proposal, claim: "flows[0]", flow_description: true,
+      digest: descriptionRejected.map.specialist_reviews!.records[0]!.digest };
+    assert.equal(Value.Check(tools.writeMapDeltaTool.parameters,
+      { delta: {}, claim_correction: descriptionProposal }), true);
+    groupedWrite(descriptionRejected.map);
+    assert.notEqual((await repair(descriptionProposal) as { isError?: boolean }).isError, true,
+      "a rejected flow description needs correction without regenerating its verified steps");
+    const descriptionCorrected = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+    const expectedDescription = structuredClone(descriptionRejected.map);
+    expectedDescription.concern_evidence!.concerns[0]!.flows[0]!.description = CORRECTION;
+    assert.deepEqual(descriptionCorrected, expectedDescription);
+    assert.equal(assessSpecialistReviews(descriptionCorrected, cwd).length, 1);
+    assert.equal((await reviewSpecialistCompilation(context,
+      compileSpecialistEvidence(descriptionCorrected, { cwd }), budget, "description-review")).complete, true);
+    for (const invalid of [
+      { ...descriptionProposal, flow_step: 1 }, { ...descriptionProposal, flow_description: false },
+      { ...descriptionProposal, claim: "pitfalls[0]" }, { ...descriptionProposal, statement: FALSE_CLAIM },
+    ]) {
+      groupedWrite(descriptionRejected.map);
+      const before = fs.readFileSync(tools.canonicalMapPath(cwd), "utf8");
+      assert.equal((await repair(invalid) as { isError?: boolean }).isError, true);
+      assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), before);
+    }
+
     reviewedClaim = "invariants[0]";
     const invariantInput = structuredClone(correctedMap);
     invariantInput.concern_evidence!.concerns[0]!.invariants = [
