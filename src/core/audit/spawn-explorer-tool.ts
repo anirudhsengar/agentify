@@ -1252,6 +1252,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                 );
                             }
                             toolOptions.resourceBudget?.assertProviderInputCapacity(payload);
+                            if (toolOptions.resourceBudget && explorerBudgetSession) {
+                                toolOptions.resourceBudget.recordProviderRequest(explorerBudgetSession);
+                            }
                             return payload;
                         });
                         pi.on("tool_call", async (event) => {

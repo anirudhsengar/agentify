@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { execFileSync } from "node:child_process";
 import { AgentifyLog } from "../../src/core/audit/log.ts";
 
 function tempDir(prefix: string): string {
@@ -83,7 +84,7 @@ try {
   log.recordMessageEnd("assistant", { input: 3, output: 2, cost: { total: 0.01 } });
   // The persisted lineage includes explorers and previous invocations, unlike
   // the parent-session counters. Preserve that distinction at the terminal.
-  const usage = { model_calls: 9, turns: 9, input_tokens: 41, output_tokens: 19, cost_usd: 0.08 };
+  const usage = { model_calls: 9, turns: 8, input_tokens: 41, output_tokens: 19, cost_usd: 0.08 };
   log.auditBudget({ status: "within", limits: { maxModelCalls: 10 }, usage });
   usage.model_calls = 999;
   log.runEnd({ exit_code: 0, status: "success" });
@@ -96,6 +97,13 @@ try {
   assert.equal(payload.total_usage_scope, "parent_sessions_this_invocation");
   assert.deepEqual(payload.aggregate_usage, { ...usage, model_calls: 9 });
   assert.equal(payload.aggregate_usage_scope, "repository_commit_lineage");
+  assert.equal(payload.unanswered_model_calls, 1);
+  assert.equal(payload.aggregate_cost_status, "incomplete_provider_usage");
+  const inspection = execFileSync(process.execPath, [
+    path.resolve("src/core/audit/scripts/inspect-log.mjs"), log.logPath,
+  ], { encoding: "utf8" });
+  assert.match(inspection, /lineage_usage:.*"model_calls":9/);
+  assert.match(inspection, /cost_status:.*incomplete_provider_usage/);
 } finally {
   fs.rmSync(aggregateDir, { recursive: true, force: true });
 }

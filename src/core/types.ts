@@ -63,6 +63,8 @@ export interface AgentRuntimeSessionOptions {
   customTools?: ToolDefinition[];
   signal?: AbortSignal;
   onEvent?: (event: AgentSessionEvent) => void;
+  /** Trusted admission hook; may reject before a provider request is sent. */
+  onProviderRequest?: () => void;
   /**
    * Wall-clock timeout in milliseconds. When exceeded, the session is
    * aborted. Undefined = no timeout.

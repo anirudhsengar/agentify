@@ -477,6 +477,9 @@ export class AgentifyLog {
       ...(this.aggregateUsage === undefined ? {} : {
         aggregate_usage: this.aggregateUsage,
         aggregate_usage_scope: "repository_commit_lineage",
+        unanswered_model_calls: Math.max(0, this.aggregateUsage.model_calls! - this.aggregateUsage.turns!),
+        aggregate_cost_status: this.aggregateUsage.model_calls! > this.aggregateUsage.turns!
+          ? "incomplete_provider_usage" : "provider_reported",
       }),
       mean_turn_latency_ms: meanLatency === null ? null : Math.round(meanLatency),
     });

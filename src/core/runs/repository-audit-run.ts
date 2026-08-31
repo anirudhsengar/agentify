@@ -395,6 +395,7 @@ async function repairSpecialistPortfolio(
             && !compileSpecialistEvidence(current, { cwd: context.cwd }).complete;
         },
       },
+      onProviderRequest: () => resourceBudget.recordProviderRequest(repairSessionBudget),
       onEvent: (event) => {
         try {
           resourceBudget.observeParentEvent(event, repairSessionBudget);

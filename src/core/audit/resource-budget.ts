@@ -128,6 +128,8 @@ interface UsageShape {
 
 interface SessionObservation {
   calls: number;
+  requests: number;
+  admissionsObserved: boolean;
   turns: number;
   costUsd: number;
   startedAt: number;
@@ -295,7 +297,18 @@ export class AuditResourceBudget {
     if (this.#costUsd >= this.limits.maxTotalCostUsd) {
       this.fail(`provider-reported cost reached $${this.limits.maxTotalCostUsd.toFixed(2)}`);
     }
-    return { calls: 0, turns: 0, costUsd: 0, startedAt: Date.now(), maxDurationMs };
+    return { calls: 0, requests: 0, admissionsObserved: false, turns: 0, costUsd: 0, startedAt: Date.now(), maxDurationMs };
+  }
+
+  recordProviderRequest(session: SessionObservation): void {
+    this.expireSession(session);
+    this.assertWithinBudget();
+    if (this.#modelCalls >= this.limits.maxModelCalls) {
+      this.fail(`model calls reached ${this.limits.maxModelCalls}`);
+    }
+    session.admissionsObserved = true;
+    session.requests += 1;
+    this.#modelCalls += 1;
   }
 
   expireSession(session: SessionObservation): void {
@@ -322,7 +335,12 @@ export class AuditResourceBudget {
     session.turns += 1;
     const cost = usageCost(usage);
     session.costUsd += cost;
-    this.#modelCalls += 1;
+    // Legacy/test runtimes may only emit responses. Real runtimes charge at
+    // admission, so an aborted request remains counted without a response.
+    if (session.calls > session.requests) {
+      this.#modelCalls += session.calls - session.requests;
+      session.requests = session.calls;
+    }
     this.#turns += 1;
     this.#inputTokens += recordUsageValue(usage?.input)
       + recordUsageValue(usage?.cacheRead)
@@ -365,11 +383,10 @@ export class AuditResourceBudget {
     this.assertWithinBudget();
     this.expireSession(session);
     const reportedCalls = result.diagnostics?.provider_requests ?? result.turns;
-    const additionalCalls = Math.max(0, reportedCalls - session.calls);
-    // Runtime `turns` counts delivered user/tool-result messages in some
-    // transports. Provider requests are the authoritative reconciliation
-    // source for both billable calls and provider turns.
-    const additionalTurns = Math.max(0, reportedCalls - session.turns);
+    const additionalCalls = Math.max(0, reportedCalls - session.requests);
+    // Legacy runtimes count tool-result deliveries as turns. With admission
+    // hooks, keep responses separate so unanswered requests remain visible.
+    const additionalTurns = session.admissionsObserved ? 0 : Math.max(0, reportedCalls - session.turns);
     const reportedCost = result.costUsd ?? 0;
     const additionalCost = Math.max(0, reportedCost - session.costUsd);
     this.#modelCalls += additionalCalls;

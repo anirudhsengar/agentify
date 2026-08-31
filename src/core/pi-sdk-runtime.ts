@@ -240,6 +240,7 @@ export class PiSdkRuntime implements AgentRuntime {
           pi.on("tool_call", makeDefenseHook({ executionPolicy: options.executionPolicy }));
           const admitProviderRequest = (payload: unknown): unknown => {
             options.auditResourceBudget?.assertProviderInputCapacity(payload);
+            options.onProviderRequest?.();
             providerRequests += 1;
             return payload;
           };

@@ -159,6 +159,11 @@ commit starts a new evidence lineage, while explicit overrides can raise the
 finite limits for an unusually large repository without erasing prior usage.
 Explorer work is serialized, and each mode has hard repository-read and
 provider-call caps that are reduced to the aggregate calls still available. A
+request is charged at dispatch admission, even if cancellation prevents a
+response. Terminal logs distinguish invocation-local parent counters from
+aggregate parent/explorer usage across the repository-commit lineage.
+Unanswered calls are explicit and mark provider cost accounting incomplete;
+missing provider usage must not be interpreted as a free request. A
 complete report at the exact call limit is retained; a request for another turn
 is aborted and remains unresolved. Budget failures name the current semantic
 obligations and their deterministic fingerprint.

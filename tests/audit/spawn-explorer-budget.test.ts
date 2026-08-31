@@ -954,6 +954,49 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
   }
 }
 
+async function testCancelledRequestAdmissionIsCharged(): Promise<void> {
+  const cwd = tempDir("spawn-admission-cancellation");
+  const controller = new AbortController();
+  const budget = new AuditResourceBudget({ maxModelCalls: 3 });
+  try {
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd,
+      stateDir: ".agentify/runtime/audit",
+      ...stubExplorerArgs(),
+      resourceBudget: budget,
+      createSession: async (options) => ({
+        session: {
+          messages: [],
+          subscribe(): () => void { return () => {}; },
+          async abort(): Promise<void> {},
+          clearQueue(): void {},
+          dispose(): void {},
+          async prompt(): Promise<void> {
+            const handlers = options!.resourceLoader!.getExtensions().extensions
+              .flatMap((extension) => extension.handlers.get("before_provider_request") ?? []);
+            assert.ok(handlers.length > 0);
+            for (const handler of handlers) await handler({ payload: {} } as never, { cwd } as never);
+            controller.abort();
+            for (const handler of handlers) {
+              await assert.rejects(async () => handler({ payload: {} } as never, { cwd } as never),
+                /cancelled by parent audit/);
+            }
+          },
+        },
+      }),
+    });
+    const result = await tool.execute("cancel-admitted-request",
+      { mode: "topography", target_path: "." } as never,
+      controller.signal, undefined, { cwd } as never);
+    assert.equal((result as { isError?: boolean }).isError, true);
+    assert.equal(budget.snapshot().model_calls, 1);
+    assert.equal(budget.snapshot().turns, 0);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+await testCancelledRequestAdmissionIsCharged();
 await testRejectsWhenTotalSpawnBudgetIsExhausted();
 await testInitialConcernScoutRejectsParentAuthoredPortfolioCaps();
 await testRefusesDuplicateCurrentHeadConcernScout();
