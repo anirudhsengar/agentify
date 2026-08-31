@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { packageRoot, PiSdkRuntime } from "./core/pi-sdk-runtime.ts";
 import { readPackageVersion } from "./core/package-version.ts";
 import { runAgentifyApp } from "./core/agentify-app.ts";
+import { AgentifyLog } from "./core/audit/log.ts";
 import {
   authPath,
   defaultConfigDir,
@@ -138,6 +139,15 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     for (const blocker of installerPreflight.blockers) {
       ui.error(`agentify: blocker [${blocker.code}]: ${blocker.message} ${blocker.remediation}`);
     }
+    const log = new AgentifyLog({ cwd: process.cwd(), configDir: defaultConfigDir() });
+    log.runEnd({
+      exit_code: 1,
+      status: "error",
+      error_message: installerPreflight.blockers
+        .map((blocker) => `[${blocker.code}]: ${blocker.message} ${blocker.remediation}`).join("\n"),
+    });
+    await log.close();
+    ui.info(`agentify: audit log written to ${log.logPath}`);
     throw new Error("repository is not safe to analyze or install; no Agentify files were changed");
   }
   const memoryRecovery = recoverTeamMemoryStore(process.cwd());

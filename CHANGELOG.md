@@ -4,6 +4,9 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Record preflight refusals as external terminal audit diagnostics, including
+  actionable blocker details, without starting a model or writing repository files.
+
 - Remove the unaccounted connectivity call before installation. The first real
   audit request establishes provider reachability under the same budget and
   logging as all other audit work; credential recovery remains available.
