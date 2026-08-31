@@ -78,6 +78,12 @@ test("the simple tracer envelope retains the complete nested concern contract", 
   ]) {
     assert.ok(prompt.includes(field), `tracer prompt is missing ${field}`);
   }
+  assert.match(prompt, /Preserve the conditions on every claim/,
+    "the model-visible JSON envelope must require conditional, not universal, claims");
+  assert.match(prompt, /Pitfalls must come from observed failure behavior/,
+    "failure modes need source grounding before independent narrative review");
+  assert.doesNotMatch(prompt, /this is the only enforcement/,
+    "a touchpoint example must not encourage unproved repository-wide exclusivity");
 });
 
 test("a tracer must submit as soon as its repository-read budget is exhausted", () => {
