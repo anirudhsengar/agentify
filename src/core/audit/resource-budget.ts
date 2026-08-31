@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { ModelCost } from "@earendil-works/pi-ai";
 
 export interface AuditBudgetOverrides {
   maxTotalDurationMs?: number;
@@ -68,14 +69,19 @@ export interface ProviderRequestReservation {
 export function providerRequestReservation(model: {
   contextWindow: number;
   maxTokens: number;
-  cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  cost: ModelCost;
 }, maxOutputTokens = model.maxTokens): ProviderRequestReservation {
   const inputTokens = model.contextWindow;
   const outputTokens = Math.min(model.maxTokens, maxOutputTokens);
-  const inputPrice = Math.max(model.cost.input, model.cost.cacheRead, model.cost.cacheWrite);
-  const costUsd = (inputTokens * inputPrice + outputTokens * model.cost.output) / 1_000_000;
+  const tiers = model.cost.tiers ?? [];
+  const rates = [model.cost, ...tiers.filter(tier => tier.inputTokensAbove < inputTokens)];
+  const inputPrice = Math.max(...rates.flatMap(rate => [rate.input, rate.cacheRead, rate.cacheWrite]));
+  const outputPrice = Math.max(...rates.map(rate => rate.output));
+  const costUsd = (inputTokens * inputPrice + outputTokens * outputPrice) / 1_000_000;
   if (![inputTokens, outputTokens].every(value => Number.isSafeInteger(value) && value > 0)
-    || !Object.values(model.cost).every(value => Number.isFinite(value) && value >= 0)) {
+    || !tiers.every(tier => Number.isSafeInteger(tier.inputTokensAbove) && tier.inputTokensAbove >= 0)
+    || ![model.cost, ...tiers].flatMap(rate => [rate.input, rate.output, rate.cacheRead, rate.cacheWrite])
+      .every(value => Number.isFinite(value) && value >= 0)) {
     throw new Error("selected model lacks finite token and price metadata for request reservation");
   }
   return { inputTokens, outputTokens, costUsd };
