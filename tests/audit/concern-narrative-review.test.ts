@@ -25,8 +25,9 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-narrative-review-"));
   try {
     fs.writeFileSync(path.join(cwd, "clock.py"), SOURCE);
+    fs.writeFileSync(path.join(cwd, "test_clock.py"), "from clock import normalize_time\nassert normalize_time('1') == 1\n");
     execFileSync("git", ["init", "-q", cwd]);
-    execFileSync("git", ["-C", cwd, "add", "clock.py"]);
+    execFileSync("git", ["-C", cwd, "add", "clock.py", "test_clock.py"]);
     execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
       "commit", "-qm", "clock coercion"]);
     const concern: Concern = {
@@ -46,6 +47,9 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       concern_evidence: { concerns: [concern], not_concerns: [] }, expert_evidence: undefined,
     }), { cwd });
     assert.equal(initial.complete, true, initial.reasons.join("; "));
+    assert.ok(initial.map.concern_evidence!.concerns[0]!.touchpoints.some(point =>
+      point.path === "test_clock.py" && point.role.startsWith("Trusted semantic closure attached")),
+    "the compiler must establish the mirrored attachment, not a fabricated receipt");
     assert.equal(assessSpecialistReviews(initial.map, cwd).length, 1);
     const head = execFileSync("git", ["-C", cwd, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
     const preflight = { analysis_allowed: true, disposition: "ready", blockers: [], commands: [],
@@ -126,6 +130,11 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     // Correct only the reviewed claim; neither a retrace nor approval is forged.
     const repairInput = attestCodebaseMap(rejected.map, head);
     repairInput.specialist_reviews = structuredClone(rejected.map.specialist_reviews);
+    // Actual Mustache compilation attached tests not read by the original tracer.
+    // They need deterministic provenance, not invented model observations.
+    repairInput.explorer_receipts!.receipts.forEach(receipt => {
+      if (receipt.mode === "concern_tracer") receipt.observed_paths = ["clock.py"];
+    });
     const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
     const save = () => writeCanonicalMap(cwd, repairInput,
       { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
