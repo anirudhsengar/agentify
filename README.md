@@ -248,6 +248,9 @@ and unapproved until full review passes again.
 Successful corrections return fresh review findings within the same bounded
 repair session. Concurrent evidence changes abort stale review checkpoints;
 they are never overwritten to obtain closure.
+When every finding names a surplus pitfall or invariant, Agentify removes only
+those rejected assertions and immediately reviews the shorter exact body again;
+the last failure mode or invariant still requires an evidence-backed correction.
 Incomplete reviews may retry once in a later bounded run; an unchanged source-backed
 finding remains cached until the specialist body or repository HEAD changes.
 This quality control does not replace manual release qualification.

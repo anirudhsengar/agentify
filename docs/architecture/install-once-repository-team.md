@@ -393,6 +393,10 @@ Requests reserve aggregate tokens and cost before dispatch;
 concurrent duplicates of the same concern or scout are refused. Standalone tools
 without that budget retain the serial default. Completed bodies checkpoint against
 the latest map synchronously, and compiler ownership validation remains mandatory.
+Source-backed review findings may deterministically remove surplus rejected
+pitfalls or invariants before immediate re-review. At least one item of each
+present category is retained, and scope, ownership, flows, and touchpoints are
+never changed by this pruning step.
 Mode-specific repository-read and provider-call quotas are hard
 runtime limits and the call quota is reduced to the aggregate calls remaining.
 Agentify retains a final report completed at the exact limit, but aborts an

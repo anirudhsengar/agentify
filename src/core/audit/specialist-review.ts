@@ -269,6 +269,31 @@ async function reviewConcern(
   }
 }
 
+function pruneRejectedSurplusClaims(
+  concern: Concern,
+  finding: NonNullable<SpecialistReviewSubmission["finding"]> | undefined,
+  additional: SpecialistReviewSubmission["additional_findings"],
+): string[] {
+  const findings = [finding, ...additional ?? []].filter((item): item is NonNullable<typeof item> => item !== undefined);
+  if (findings.length === 0) return [];
+  const parsed = findings.map(item => {
+    const match = /^(pitfalls|invariants)\[([0-9]+)\]$/.exec(item.claim);
+    return match ? { claim: item.claim, field: match[1] as "pitfalls" | "invariants", index: Number(match[2]) } : null;
+  });
+  if (parsed.some(item => item === null)) return [];
+  const claims = parsed as Array<NonNullable<(typeof parsed)[number]>>;
+  for (const field of ["pitfalls", "invariants"] as const) {
+    const indexes = claims.filter(item => item.field === field).map(item => item.index);
+    if (new Set(indexes).size !== indexes.length || indexes.some(index => concern[field][index] === undefined)
+      || concern[field].length - indexes.length < 1) return [];
+  }
+  for (const field of ["pitfalls", "invariants"] as const) {
+    const indexes = claims.filter(item => item.field === field).map(item => item.index).sort((a, b) => b - a);
+    for (const index of indexes) concern[field].splice(index, 1);
+  }
+  return claims.map(item => item.claim);
+}
+
 /** Review only fixed-point bodies; cached failures also remain repair obligations. */
 export async function reviewSpecialistCompilation(
   context: RunContext, compilation: SpecialistCompilationResult, budget: AuditResourceBudget, runId: string,
@@ -290,27 +315,37 @@ export async function reviewSpecialistCompilation(
     record.concern === concern.concern && record.digest === specialistReviewDigest(concern)));
   for (const concern of map.concern_evidence?.concerns ?? []) {
     if (!compilation.assessment.accepted_concerns.includes(concern.concern)) continue;
-    const digest = specialistReviewDigest(concern);
-    const cached = records.find(item => item.concern === concern.concern && item.digest === digest);
-    if (cached) continue;
-    context.ui.status(`agentify: reviewing specialist ${concern.concern}`);
-    let failure: string | null;
-    let retryable = true;
-    let finding: NonNullable<SpecialistReviewSubmission["finding"]> | undefined;
-    let additional_findings: SpecialistReviewSubmission["additional_findings"];
-    try { ({ failure, retryable, finding, additional_findings } = await reviewConcern(context, concern, commit, budget,
-      attachments)); }
-    catch (error) {
-      if (error instanceof AuditBudgetExceededError) throw error;
-      failure = `Review unresolved: ${error instanceof Error ? error.message : String(error)}`.slice(0, 2_048);
+    while (true) {
+      const digest = specialistReviewDigest(concern);
+      const cached = records.find(item => item.concern === concern.concern && item.digest === digest);
+      if (cached) break;
+      context.ui.status(`agentify: reviewing specialist ${concern.concern}`);
+      let failure: string | null;
+      let retryable = true;
+      let finding: NonNullable<SpecialistReviewSubmission["finding"]> | undefined;
+      let additional_findings: SpecialistReviewSubmission["additional_findings"];
+      try { ({ failure, retryable, finding, additional_findings } = await reviewConcern(context, concern, commit, budget,
+        attachments)); }
+      catch (error) {
+        if (error instanceof AuditBudgetExceededError) throw error;
+        failure = `Review unresolved: ${error instanceof Error ? error.message : String(error)}`.slice(0, 2_048);
+      }
+      const prunedClaims = failure === null || retryable ? []
+        : pruneRejectedSurplusClaims(concern, finding, additional_findings);
+      context.auditLog?.sessionEvent({ pi_event_type: "specialist_review_result",
+        event: { type: "specialist_review_result", concern: concern.concern,
+          digest, repository_commit: commit, failure, retryable, pruned_claims: prunedClaims } });
+      if (prunedClaims.length > 0) {
+        map.specialist_reviews = { repository_commit: commit, records };
+        checkpoint?.(structuredClone(map));
+        continue;
+      }
+      records.push({ concern: concern.concern, digest, run_id: runId, failure, retryable,
+        ...(finding ? { finding, ...(additional_findings?.length ? { additional_findings } : {}) } : {}) });
+      map.specialist_reviews = { repository_commit: commit, records };
+      checkpoint?.(structuredClone(map));
+      break;
     }
-    records.push({ concern: concern.concern, digest, run_id: runId, failure, retryable,
-      ...(finding ? { finding, ...(additional_findings?.length ? { additional_findings } : {}) } : {}) });
-    map.specialist_reviews = { repository_commit: commit, records };
-    checkpoint?.(structuredClone(map));
-    context.auditLog?.sessionEvent({ pi_event_type: "specialist_review_result",
-      event: { type: "specialist_review_result", concern: concern.concern,
-        digest, repository_commit: commit, failure, retryable } });
   }
   map.specialist_reviews = { repository_commit: commit, records };
   const reasons = [...new Set([...compilation.reasons, ...assessSpecialistReviews(map, context.cwd)])];
