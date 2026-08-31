@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Remove narrative-field and core-path quotas from tracing guidance; require counterexample checks against executable predicates, option preconditions and actual test assertions without relaxing report size or flow-preservation limits.
+
 - Forward provider resource reservations through semantic repair as well as initial discovery and coverage recovery, preserving bounds for interrupted repair requests.
 
 - Reserve model-bound input, output and metadata-priced cost before provider dispatch. Interrupted calls retain their reservations across restart; terminal logs distinguish reported usage from conservative upper bounds without presenting missing usage as zero cost.
