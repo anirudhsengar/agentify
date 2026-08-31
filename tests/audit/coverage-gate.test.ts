@@ -50,6 +50,29 @@ function isProbeCall(options: AgentRuntimeSessionOptions): boolean {
   return options.tools.length === 0;
 }
 
+async function testEveryModelRequestBelongsToTheAuditBudget(): Promise<void> {
+  const cwd = tempDir("gate-accounted-model-entry");
+  let calls = 0;
+  try {
+    const runtime: AgentRuntime = {
+      async runSession(options) {
+        calls += 1;
+        assert.ok(options.auditResourceBudget, "normal installation must not make an unaccounted connectivity request");
+        assert.ok(options.onProviderRequest);
+        options.onProviderRequest();
+        options.onEvent?.({ type: "message_end", message: {
+          role: "assistant", stopReason: "stop", usage: { input: 8, output: 2, cost: { total: 0.01 } },
+        } } as never);
+        return new CoverageClosureRuntime().runSession(options);
+      },
+    };
+    await runWithRuntime(cwd, runtime);
+    assert.equal(calls, 1, "the first real audit request also establishes provider reachability");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 function writeMap(cwd: string, stateDir: string, map: unknown): void {
   fs.mkdirSync(cwd, { recursive: true });
   fs.writeFileSync(path.join(cwd, "README.md"), "Test fixture evidence citation.");
@@ -857,6 +880,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "failedAuditRetainsApplicationAttestedExplorerCheckpoint", fn: testFailedAuditRetainsApplicationAttestedExplorerCheckpoint },
   { name: "parentAuditSessionHasApplicationOwnedDeadline", fn: testParentAuditSessionHasApplicationOwnedDeadline },
   { name: "deadlineRecoveryCanCloseAudit", fn: testDeadlineRecoveryCanCloseAudit },
+  { name: "everyModelRequestBelongsToTheAuditBudget", fn: testEveryModelRequestBelongsToTheAuditBudget },
 ];
 
 let passed = 0;
