@@ -477,9 +477,17 @@ export class AgentifyLog {
       ...(this.aggregateUsage === undefined ? {} : {
         aggregate_usage: this.aggregateUsage,
         aggregate_usage_scope: "repository_commit_lineage",
-        unanswered_model_calls: Math.max(0, this.aggregateUsage.model_calls! - this.aggregateUsage.turns!),
-        aggregate_cost_status: this.aggregateUsage.model_calls! > this.aggregateUsage.turns!
+        unanswered_model_calls: this.aggregateUsage.unreported_calls
+          ?? Math.max(0, this.aggregateUsage.model_calls! - this.aggregateUsage.turns!),
+        aggregate_cost_status: (this.aggregateUsage.unreported_calls
+          ?? Math.max(0, this.aggregateUsage.model_calls! - this.aggregateUsage.turns!)) > 0
           ? "incomplete_provider_usage" : "provider_reported",
+        ...(this.aggregateUsage.unreserved_calls === 0 ? {
+          aggregate_cost_upper_bound_usd: this.aggregateUsage.cost_usd! + (this.aggregateUsage.reserved_cost_usd ?? 0),
+          aggregate_input_upper_bound: this.aggregateUsage.input_tokens! + (this.aggregateUsage.reserved_input_tokens ?? 0),
+          aggregate_output_upper_bound: this.aggregateUsage.output_tokens! + (this.aggregateUsage.reserved_output_tokens ?? 0),
+          reservation_basis: "selected_model_context_output_limits_and_price_metadata",
+        } : {}),
       }),
       mean_turn_latency_ms: meanLatency === null ? null : Math.round(meanLatency),
     });

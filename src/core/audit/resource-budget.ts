@@ -51,6 +51,34 @@ export interface AuditResourceUsage {
   explorer_spawns: number;
   coverage_recovery_passes: number;
   semantic_repair_passes: number;
+  unreported_calls?: number;
+  unreserved_calls?: number;
+  reserved_input_tokens?: number;
+  reserved_output_tokens?: number;
+  reserved_cost_usd?: number;
+}
+
+export interface ProviderRequestReservation {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+/** Provider metadata bounds, not an invoice or invented measured usage. */
+export function providerRequestReservation(model: {
+  contextWindow: number;
+  maxTokens: number;
+  cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+}, maxOutputTokens = model.maxTokens): ProviderRequestReservation {
+  const inputTokens = model.contextWindow;
+  const outputTokens = Math.min(model.maxTokens, maxOutputTokens);
+  const inputPrice = Math.max(model.cost.input, model.cost.cacheRead, model.cost.cacheWrite);
+  const costUsd = (inputTokens * inputPrice + outputTokens * model.cost.output) / 1_000_000;
+  if (![inputTokens, outputTokens].every(value => Number.isSafeInteger(value) && value > 0)
+    || !Object.values(model.cost).every(value => Number.isFinite(value) && value >= 0)) {
+    throw new Error("selected model lacks finite token and price metadata for request reservation");
+  }
+  return { inputTokens, outputTokens, costUsd };
 }
 
 export const DEFAULT_AUDIT_BUDGETS: Readonly<ResolvedAuditBudgets> = Object.freeze({
@@ -134,6 +162,7 @@ interface SessionObservation {
   costUsd: number;
   startedAt: number;
   maxDurationMs: number;
+  reservations: Array<ProviderRequestReservation | undefined>;
 }
 
 function recordUsageValue(value: number | undefined): number {
@@ -162,6 +191,11 @@ export class AuditResourceBudget {
   #inputTokens = 0;
   #outputTokens = 0;
   #costUsd = 0;
+  #unreportedCalls = 0;
+  #unreservedCalls = 0;
+  #reservedInputTokens = 0;
+  #reservedOutputTokens = 0;
+  #reservedCostUsd = 0;
   #explorerSpawns = 0;
   #coverageRecoveryPasses = 0;
   #semanticRepairPasses = 0;
@@ -198,6 +232,11 @@ export class AuditResourceBudget {
     this.#inputTokens = Math.floor(usage.input_tokens);
     this.#outputTokens = Math.floor(usage.output_tokens);
     this.#costUsd = usage.cost_usd;
+    this.#unreportedCalls = usage.unreported_calls ?? Math.max(0, usage.model_calls - usage.turns);
+    this.#unreservedCalls = usage.unreserved_calls ?? this.#unreportedCalls;
+    this.#reservedInputTokens = usage.reserved_input_tokens ?? 0;
+    this.#reservedOutputTokens = usage.reserved_output_tokens ?? 0;
+    this.#reservedCostUsd = usage.reserved_cost_usd ?? 0;
     this.#explorerSpawns = Math.floor(usage.explorer_spawns);
     this.#coverageRecoveryPasses = Math.floor(usage.coverage_recovery_passes);
     this.#semanticRepairPasses = Math.floor(usage.semantic_repair_passes);
@@ -220,7 +259,7 @@ export class AuditResourceBudget {
 
   remainingOutputTokens(perRequestLimit: number): number {
     this.assertWithinBudget();
-    const remaining = this.limits.maxOutputTokens - this.#outputTokens;
+    const remaining = this.limits.maxOutputTokens - this.#outputTokens - this.#reservedOutputTokens;
     if (remaining <= 0) this.fail(`output tokens reached ${this.limits.maxOutputTokens}`);
     return Math.max(1, Math.min(perRequestLimit, remaining));
   }
@@ -254,7 +293,7 @@ export class AuditResourceBudget {
       this.fail("provider request cannot be serialized for input-budget admission");
     }
     const requestBound = Buffer.byteLength(serialized, "utf8");
-    const remainingInput = this.limits.maxInputTokens - this.#inputTokens;
+    const remainingInput = this.limits.maxInputTokens - this.#inputTokens - this.#reservedInputTokens;
     if (remainingInput < requestBound) {
       this.fail(
         `input token reserve ${remainingInput} is below the serialized provider request bound of ${requestBound}`,
@@ -274,7 +313,7 @@ export class AuditResourceBudget {
     if (!Number.isSafeInteger(contextWindow) || contextWindow < 1) {
       this.fail("selected model has no finite positive context window for input-budget admission");
     }
-    const remainingInput = this.limits.maxInputTokens - this.#inputTokens;
+    const remainingInput = this.limits.maxInputTokens - this.#inputTokens - this.#reservedInputTokens;
     if (remainingInput < contextWindow) {
       this.fail(
         `input token reserve ${remainingInput} is below the selected model context window of ${contextWindow}`,
@@ -297,15 +336,40 @@ export class AuditResourceBudget {
     if (this.#costUsd >= this.limits.maxTotalCostUsd) {
       this.fail(`provider-reported cost reached $${this.limits.maxTotalCostUsd.toFixed(2)}`);
     }
-    return { calls: 0, requests: 0, admissionsObserved: false, turns: 0, costUsd: 0, startedAt: Date.now(), maxDurationMs };
+    return { calls: 0, requests: 0, admissionsObserved: false, turns: 0, costUsd: 0, startedAt: Date.now(), maxDurationMs, reservations: [] };
   }
 
-  recordProviderRequest(session: SessionObservation): void {
+  recordProviderRequest(session: SessionObservation, reservation?: ProviderRequestReservation): void {
     this.expireSession(session);
     this.assertWithinBudget();
     if (this.#modelCalls >= this.limits.maxModelCalls) {
       this.fail(`model calls reached ${this.limits.maxModelCalls}`);
     }
+    if (reservation) {
+      if (this.#unreservedCalls > 0) {
+        this.fail("prior unanswered requests lack resource reservations; a fresh repository evidence lineage is required");
+      }
+      if (![reservation.inputTokens, reservation.outputTokens].every(value => Number.isSafeInteger(value) && value >= 0)
+        || !Number.isFinite(reservation.costUsd) || reservation.costUsd < 0) {
+        this.fail("invalid provider request reservation");
+      }
+      if (this.#inputTokens + this.#reservedInputTokens + reservation.inputTokens > this.limits.maxInputTokens) {
+        this.fail("input token reservation exceeds the aggregate budget");
+      }
+      if (this.#outputTokens + this.#reservedOutputTokens + reservation.outputTokens > this.limits.maxOutputTokens) {
+        this.fail("output token reservation exceeds the aggregate budget");
+      }
+      if (this.#costUsd + this.#reservedCostUsd + reservation.costUsd > this.limits.maxTotalCostUsd) {
+        this.fail("cost reservation exceeds the aggregate budget");
+      }
+      this.#reservedInputTokens += reservation.inputTokens;
+      this.#reservedOutputTokens += reservation.outputTokens;
+      this.#reservedCostUsd += reservation.costUsd;
+    } else {
+      this.#unreservedCalls += 1;
+    }
+    session.reservations.push(reservation);
+    this.#unreportedCalls += 1;
     session.admissionsObserved = true;
     session.requests += 1;
     this.#modelCalls += 1;
@@ -333,6 +397,25 @@ export class AuditResourceBudget {
       return;
     }
     const usage = value.message?.usage;
+    const admitted = session.reservations.length > 0;
+    const reservation = session.reservations.shift();
+    // SDK abort/error messages may contain synthetic zero usage. Keep the
+    // admitted upper bound indefinitely; cancellation is not a free response.
+    const completed = usage !== undefined && value.message.stopReason !== "aborted"
+      && value.message.stopReason !== "error"
+      && (!reservation || (Number.isFinite(usage.input) && Number.isFinite(usage.output)
+        && recordUsageValue(usage.input) + recordUsageValue(usage.cacheRead) + recordUsageValue(usage.cacheWrite) > 0
+        && Number.isFinite(typeof usage.cost === "number" ? usage.cost : usage.cost?.total)));
+    if (admitted && completed) {
+      this.#unreportedCalls -= 1;
+      if (reservation) {
+        this.#reservedInputTokens -= reservation.inputTokens;
+        this.#reservedOutputTokens -= reservation.outputTokens;
+        this.#reservedCostUsd = Math.max(0, this.#reservedCostUsd - reservation.costUsd);
+      } else {
+        this.#unreservedCalls -= 1;
+      }
+    }
     session.calls += 1;
     session.turns += 1;
     const cost = usageCost(usage);
@@ -476,6 +559,11 @@ export class AuditResourceBudget {
       explorer_spawns: this.#explorerSpawns,
       coverage_recovery_passes: this.#coverageRecoveryPasses,
       semantic_repair_passes: this.#semanticRepairPasses,
+      unreported_calls: this.#unreportedCalls,
+      unreserved_calls: this.#unreservedCalls,
+      reserved_input_tokens: this.#reservedInputTokens,
+      reserved_output_tokens: this.#reservedOutputTokens,
+      reserved_cost_usd: Number(this.#reservedCostUsd.toFixed(12)),
     };
   }
 
@@ -484,13 +572,13 @@ export class AuditResourceBudget {
       this.fail(`model calls exceeded ${this.limits.maxModelCalls}`);
     }
     if (this.#turns > this.limits.maxTurns) this.fail(`turns exceeded ${this.limits.maxTurns}`);
-    if (this.#inputTokens > this.limits.maxInputTokens) {
+    if (this.#inputTokens + this.#reservedInputTokens > this.limits.maxInputTokens) {
       this.fail(`input tokens exceeded ${this.limits.maxInputTokens}`);
     }
-    if (this.#outputTokens > this.limits.maxOutputTokens) {
+    if (this.#outputTokens + this.#reservedOutputTokens > this.limits.maxOutputTokens) {
       this.fail(`output tokens exceeded ${this.limits.maxOutputTokens}`);
     }
-    if (this.#costUsd > this.limits.maxTotalCostUsd) {
+    if (this.#costUsd + this.#reservedCostUsd > this.limits.maxTotalCostUsd) {
       this.fail(`provider-reported cost exceeded $${this.limits.maxTotalCostUsd.toFixed(2)}`);
     }
   }

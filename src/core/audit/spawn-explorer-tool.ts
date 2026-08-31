@@ -54,6 +54,7 @@ import {
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { Model, Api } from "@earendil-works/pi-ai";
 import type { AuditResourceBudget } from "./resource-budget.ts";
+import { providerRequestReservation } from "./resource-budget.ts";
 import { currentRepositoryCommit, mergeExplorerConcernEvidence } from "./explorer-receipts.ts";
 import { loadCanonicalMapAt } from "./map-storage.ts";
 import { stableMapValueIdentity } from "./map-delta.ts";
@@ -1320,7 +1321,11 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                 }
                                 toolOptions.resourceBudget?.assertProviderInputCapacity(payload);
                                 if (toolOptions.resourceBudget && explorerBudgetSession) {
-                                    toolOptions.resourceBudget.recordProviderRequest(explorerBudgetSession);
+                                    toolOptions.resourceBudget.recordProviderRequest(explorerBudgetSession,
+                                        providerRequestReservation(subAgentModel,
+                                            mode === "concern_tracer"
+                                                && capProviderOutputTokens(payload, subAgentModel.api, MAX_CONCERN_RESPONSE_TOKENS) !== payload
+                                                ? MAX_CONCERN_RESPONSE_TOKENS : undefined));
                                 }
                                 providerCalls += 1;
                                 return payload;

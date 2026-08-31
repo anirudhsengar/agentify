@@ -20,6 +20,7 @@ import {
   assertRequestedToolsAllowed,
 } from "./security/execution-policy.ts";
 import { createAgentifyModelRuntime } from "./pi-credential-store.ts";
+import { providerRequestReservation } from "./audit/resource-budget.ts";
 
 type UsageLike = {
   cost?: { total?: number };
@@ -252,7 +253,12 @@ export class PiSdkRuntime implements AgentRuntime {
             try {
               if (aborted || options.signal?.aborted) throw new Error("provider request cancelled");
               options.auditResourceBudget?.assertProviderInputCapacity(payload);
-              options.onProviderRequest?.();
+              options.onProviderRequest?.(selectedModel
+                ? providerRequestReservation(selectedModel,
+                  options.maxOutputTokens !== undefined
+                    && capProviderOutputTokens(payload, selectedModel.api, options.maxOutputTokens) !== payload
+                    ? options.maxOutputTokens : undefined)
+                : undefined);
             } catch (error) {
               // SDK extension errors are logged and swallowed. Cancel the
               // transport before its runner can dispatch the original payload.

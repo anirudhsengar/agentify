@@ -26,7 +26,8 @@ test("SDK admission rejection prevents HTTP dispatch, while admitted requests st
     assert.ok(address && typeof address === "object");
     fs.writeFileSync(path.join(cwd, "models.json"), JSON.stringify({ providers: {
       openai: { baseUrl: `http://127.0.0.1:${address.port}/v1`, api: "openai-completions",
-        apiKey: "local-test-placeholder", models: [{ id: "admission-fixture", contextWindow: 32768, maxTokens: 128 }] },
+        apiKey: "local-test-placeholder", models: [{ id: "admission-fixture", contextWindow: 32768, maxTokens: 128,
+          cost: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 1.25 } }] },
     } }));
     const runtime = new PiSdkRuntime();
     for (const reject of [true, false]) {
@@ -43,6 +44,23 @@ test("SDK admission rejection prevents HTTP dispatch, while admitted requests st
       assert.equal(requests - before, reject ? 0 : 1, "denied SDK hooks must not dispatch their original payload");
       assert.equal(result.diagnostics?.provider_requests, reject ? 0 : 1);
     }
+    const costBudget = new AuditResourceBudget({ maxTotalCostUsd: 0.01 });
+    const costSession = costBudget.beginSession();
+    const beforeCostRejection = requests;
+    const costResult = await runtime.runSession({
+      cwd, configDir: cwd,
+      config: { schemaVersion: 1, thinkingLevel: "off", models: { primary: { provider: "openai", model: "admission-fixture" } } },
+      systemPrompt: "Local cost admission test.", userPrompt: "ok", tools: [], timeoutMs: 5000,
+      executionPolicy: createReadOnlyExecutionPolicy({ cwd, mode: "audit-readonly", tools: [] }),
+      auditResourceBudget: costBudget,
+      onProviderRequest: (reservation) => {
+        assert.ok(reservation, "the real SDK must supply model-bound reservations");
+        costBudget.recordProviderRequest(costSession, reservation);
+      },
+    });
+    assert.equal(requests, beforeCostRejection, "cost reservation rejection must prevent HTTP dispatch");
+    assert.equal(costResult.diagnostics?.provider_requests, 0);
+    assert.equal(costBudget.snapshot().model_calls, 0);
     const { modelRuntime } = await createAgentifyModelRuntime({
       authFile: path.join(cwd, "auth.json"), modelsFile: path.join(cwd, "models.json"),
     });

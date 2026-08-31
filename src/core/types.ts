@@ -4,6 +4,7 @@ import type { AgentExecutionPolicy } from "./security/execution-policy.ts";
 import type {
   AuditBudgetOverrides,
   AuditResourceBudget,
+  ProviderRequestReservation,
 } from "./audit/resource-budget.ts";
 
 export type { AgentifyProvider } from "./provider-auth.ts";
@@ -64,7 +65,7 @@ export interface AgentRuntimeSessionOptions {
   signal?: AbortSignal;
   onEvent?: (event: AgentSessionEvent) => void;
   /** Trusted admission hook; may reject before a provider request is sent. */
-  onProviderRequest?: () => void;
+  onProviderRequest?: (reservation?: ProviderRequestReservation) => void;
   /**
    * Wall-clock timeout in milliseconds. When exceeded, the session is
    * aborted. Undefined = no timeout.

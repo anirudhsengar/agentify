@@ -172,6 +172,14 @@ response. Terminal logs distinguish invocation-local parent counters from
 aggregate parent/explorer usage across the repository-commit lineage.
 Unanswered calls are explicit and mark provider cost accounting incomplete;
 missing provider usage must not be interpreted as a free request. A
+request reserves its model's context-window input bound, enforced output ceiling
+(or model maximum where the backend cannot cap output), and the corresponding
+maximum metadata-priced cost before dispatch. Completed provider usage replaces
+that request's reservation; interrupted or synthetic-zero responses retain it
+across continuation. Logs separate measured usage from reserved upper bounds.
+These bounds use configured model prices, not a provider invoice. Legacy
+unanswered requests without reservations cannot authorize further paid calls.
+A
 complete report at the exact call limit is retained; a request for another turn
 is aborted and remains unresolved. Budget failures name the current semantic
 obligations and their deterministic fingerprint.

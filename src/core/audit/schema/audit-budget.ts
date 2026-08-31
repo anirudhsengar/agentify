@@ -10,6 +10,11 @@ export const AuditBudgetUsageSchema = Type.Object({
   explorer_spawns: Type.Integer({ minimum: 0 }),
   coverage_recovery_passes: Type.Integer({ minimum: 0 }),
   semantic_repair_passes: Type.Integer({ minimum: 0 }),
+  unreported_calls: Type.Optional(Type.Integer({ minimum: 0 })),
+  unreserved_calls: Type.Optional(Type.Integer({ minimum: 0 })),
+  reserved_input_tokens: Type.Optional(Type.Integer({ minimum: 0 })),
+  reserved_output_tokens: Type.Optional(Type.Integer({ minimum: 0 })),
+  reserved_cost_usd: Type.Optional(Type.Number({ minimum: 0 })),
 });
 
 export const AuditBudgetCheckpointSchema = Type.Object({

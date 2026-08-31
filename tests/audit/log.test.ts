@@ -78,13 +78,16 @@ async function testOnlyProviderResponsesCountAsTurns(): Promise<void> {
 
 await testStreamingUpdatesAreNotPersisted();
 await testOnlyProviderResponsesCountAsTurns();
+const reservationCases: Array<Record<string, number>> = [{}, { unreported_calls: 1, unreserved_calls: 0,
+  reserved_input_tokens: 100, reserved_output_tokens: 20, reserved_cost_usd: 0.5 }];
+for (const bounds of reservationCases) {
 const aggregateDir = tempDir("agentify-log-aggregate-");
 try {
   const log = new AgentifyLog({ cwd: aggregateDir, configDir: aggregateDir });
   log.recordMessageEnd("assistant", { input: 3, output: 2, cost: { total: 0.01 } });
   // The persisted lineage includes explorers and previous invocations, unlike
   // the parent-session counters. Preserve that distinction at the terminal.
-  const usage = { model_calls: 9, turns: 8, input_tokens: 41, output_tokens: 19, cost_usd: 0.08 };
+  const usage = { model_calls: 9, turns: 8, input_tokens: 41, output_tokens: 19, cost_usd: 0.08, ...bounds };
   log.auditBudget({ status: "within", limits: { maxModelCalls: 10 }, usage });
   usage.model_calls = 999;
   log.runEnd({ exit_code: 0, status: "success" });
@@ -99,6 +102,9 @@ try {
   assert.equal(payload.aggregate_usage_scope, "repository_commit_lineage");
   assert.equal(payload.unanswered_model_calls, 1);
   assert.equal(payload.aggregate_cost_status, "incomplete_provider_usage");
+  assert.equal(payload.aggregate_cost_upper_bound_usd, bounds.unreserved_calls === 0 ? 0.58 : undefined);
+  assert.equal(payload.aggregate_input_upper_bound, bounds.unreserved_calls === 0 ? 141 : undefined);
+  assert.equal(payload.aggregate_output_upper_bound, bounds.unreserved_calls === 0 ? 39 : undefined);
   const inspection = execFileSync(process.execPath, [
     path.resolve("src/core/audit/scripts/inspect-log.mjs"), log.logPath,
   ], { encoding: "utf8" });
@@ -107,4 +113,5 @@ try {
 } finally {
   fs.rmSync(aggregateDir, { recursive: true, force: true });
 }
-console.log("audit log tests passed (3/3).");
+}
+console.log("audit log tests passed (4/4).");

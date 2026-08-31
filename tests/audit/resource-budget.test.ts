@@ -6,7 +6,30 @@ import {
   DEFAULT_AUDIT_BUDGETS,
   resolveAuditBudgets,
   unresolvedObligationFingerprint,
+  providerRequestReservation,
 } from "../../src/core/audit/resource-budget.ts";
+
+test("reservation uses full context, bounded output, and the highest input/cache price", () => {
+  const model = { contextWindow: 100_000, maxTokens: 10_000,
+    cost: { input: 1, output: 4, cacheRead: 0.1, cacheWrite: 2 } };
+  assert.deepEqual(providerRequestReservation(model, 1_000), {
+    inputTokens: 100_000, outputTokens: 1_000, costUsd: 0.204,
+  });
+  assert.equal(providerRequestReservation(model).outputTokens, 10_000,
+    "a backend without a wire output ceiling reserves the model maximum");
+  assert.throws(() => providerRequestReservation({ ...model, cost: { ...model.cost, input: NaN } }), /metadata/);
+});
+
+test("legacy unanswered requests without bounds cannot silently authorize new paid calls", () => {
+  const prior = { ...new AuditResourceBudget().snapshot(), model_calls: 1, turns: 0 };
+  delete prior.unreported_calls;
+  delete prior.unreserved_calls;
+  const budget = new AuditResourceBudget(undefined, Date.now(), prior);
+  assert.equal(budget.snapshot().unreserved_calls, 1);
+  assert.throws(() => budget.recordProviderRequest(budget.beginSession(), {
+    inputTokens: 1, outputTokens: 1, costUsd: 0,
+  }), /prior unanswered requests lack resource reservations/);
+});
 
 test("interrupted requests retain bounded token and cost reservations across continuation", () => {
   const budget = new AuditResourceBudget({ maxTotalCostUsd: 1 });

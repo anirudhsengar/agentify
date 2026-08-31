@@ -381,7 +381,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
           return map !== null && !assessAuditCompletion(map, { cwd: context.cwd }).complete;
         },
       },
-      onProviderRequest: () => resourceBudget.recordProviderRequest(baseSessionBudget),
+      onProviderRequest: (reservation) => resourceBudget.recordProviderRequest(baseSessionBudget, reservation),
       onEvent: (event) => {
         try {
           resourceBudget.observeParentEvent(event, baseSessionBudget);
@@ -520,7 +520,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
           inactivityTimeoutMs: 5 * 60 * 1000,
           timeoutMs: recoverySessionDurationMs,
           maxOutputTokens: resourceBudget.remainingOutputTokens(AUDIT_MAX_OUTPUT_TOKENS),
-          onProviderRequest: () => resourceBudget.recordProviderRequest(recoverySessionBudget),
+          onProviderRequest: (reservation) => resourceBudget.recordProviderRequest(recoverySessionBudget, reservation),
           onEvent: (event) => {
             try {
               resourceBudget.observeParentEvent(event, recoverySessionBudget);
