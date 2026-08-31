@@ -913,7 +913,7 @@ function extractSessionCostUsd(messages: ReadonlyArray<unknown>): number | null 
 export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): ToolDefinition {
     const maxTotalSpawns = toolOptions.maxTotalSpawns ?? DEFAULT_MAX_TOTAL_SPAWNS;
     const maxConcurrentSpawns = toolOptions.maxConcurrentSpawns
-        ?? (toolOptions.resourceBudget ? 3 : DEFAULT_MAX_CONCURRENT_SPAWNS);
+        ?? (toolOptions.resourceBudget ? 2 : DEFAULT_MAX_CONCURRENT_SPAWNS);
     const maxSubagentDurationMs = toolOptions.maxSubagentDurationMs ?? DEFAULT_SUBAGENT_TIMEOUT_MS;
     const maxTotalCostUsd = toolOptions.maxTotalCostUsd ?? DEFAULT_MAX_TOTAL_COST_USD;
     const { stateDir } = toolOptions;

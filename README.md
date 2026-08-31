@@ -255,8 +255,9 @@ Agentify-managed paths observed during the transaction are normalized out of
 repository topography and process evidence before the map can close.
 The explorer runtime permits only one successful concern scout per repository
 commit; resumed and repair sessions reuse its attested proposal set.
-Up to three independent read-only explorers can overlap under the shared resource
-reservation budget; duplicate active scouts and concern identities are refused.
+Up to two independent read-only explorers can overlap under the shared resource
+reservation budget, leaving capacity for the uncappable parent request; duplicate
+active scouts and concern identities are refused.
 All explorer modes request at most 12,000 response tokens where the provider API
 supports a cap. Uncappable APIs retain their full model-limit reservation.
 Each tracer dispatch binds one exact concern identity before model entry;

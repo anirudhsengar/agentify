@@ -137,7 +137,7 @@ async function testPromptKeepsExplorerDispatchBounded(): Promise<void> {
     "builder prompt must state that concerns are not directories",
   );
   const budget = raw.match(
-    /at most 24 explorers per\n+audit, three independent explorers active at once, and ([a-z]+) minutes per explorer/,
+    /at most 24 explorers per\n+audit, two independent explorers active at once, and ([a-z]+) minutes per explorer/,
   );
   assert.ok(budget, "builder prompt must disclose the finite explorer budget");
   const timeoutWord = budget[1]?.toLowerCase();
