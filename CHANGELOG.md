@@ -6,6 +6,8 @@ All notable changes to Agentify are documented here.
 
 - Review normalized specialist narratives against bounded immutable source before installation. Typed reviews bind the exact concern body and HEAD; unsupported claims, incomplete reviews, stale evidence and timeouts remain repair obligations. Model-authored approval is rejected and finalization independently enforces the review gate.
 
+- Forward provider resource reservations through semantic repair as well as initial discovery and coverage recovery, preserving bounds for interrupted repair requests.
+
 - Reserve model-bound input, output and metadata-priced cost before provider dispatch. Interrupted calls retain their reservations across restart; terminal logs distinguish reported usage from conservative upper bounds without presenting missing usage as zero cost.
 
 - Verify managed execution-file ownership through bounded no-follow descriptors, and share literal-only, quoted Windows batch invocation between installer and task validation. Shell expansion/operators are rejected before dispatch; ordinary spaced arguments and shell-free npm remain supported.

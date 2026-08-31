@@ -424,6 +424,19 @@ class ProgressiveRepairRuntime implements AgentRuntime {
       this.repairCalls += 1;
       this.repairToolSets.push([...options.tools]);
       this.repairPrompts.push(options.userPrompt);
+      const budget = options.auditResourceBudget;
+      assert.ok(budget, "semantic repair must share the audit budget");
+      assert.ok(options.onProviderRequest);
+      options.onProviderRequest({ inputTokens: 100, outputTokens: 20, costUsd: 0.01 });
+      assert.equal(budget.snapshot().unreserved_calls, 0,
+        "repair must forward the provider reservation before dispatch");
+      assert.equal(budget.snapshot().reserved_cost_usd, 0.01);
+      options.onEvent?.({ type: "message_end", message: {
+        role: "assistant", stopReason: "toolUse",
+        usage: { input: 50, output: 10, cost: { total: 0.001 } },
+      } } as never);
+      assert.equal(budget.snapshot().reserved_cost_usd, 0,
+        "completed repair usage replaces its reservation");
       if (this.repairCalls <= 3) {
         const destination = path.join(
           options.cwd,
