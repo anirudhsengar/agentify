@@ -38,6 +38,7 @@ interface CorpusCase {
   target_commit: string;
   fixture_kind: "reduced-deterministic" | "captured-policy-and-audit-replay";
   portfolio_fixture?: string;
+  policy_fixture?: { path: string; text: string; source_url?: string };
   audit_events: string[];
   expected_core_ownership: string[];
   expected_rejected_candidates: string[];
@@ -187,11 +188,12 @@ function makePortfolioRepository(
 
 test("the stabilization corpus declares executable portfolio fixtures", () => {
   assert.equal(FIXTURE.schema_version, "2");
-  assert.equal(FIXTURE.cases.length, 9);
-  assert.equal(new Set(FIXTURE.cases.map((entry) => entry.repository)).size, 9);
+  assert.equal(FIXTURE.cases.length, 10);
+  assert.equal(new Set(FIXTURE.cases.map((entry) => entry.repository)).size, 10);
+  assert.equal(FIXTURE.cases.filter((entry) => entry.expected_installation_disposition === "install").length, 8);
   assert.deepEqual(
     FIXTURE.cases.map((entry) => entry.repository).sort(),
-    ["aqa-tests", "axum", "click", "cobra", "commander.js", "gin", "hono", "lobsters", "spring-petclinic"],
+    ["aqa-tests", "axum", "click", "cobra", "commander.js", "gin", "hono", "lobsters", "spring-petclinic", "sqlalchemy"],
   );
   for (const entry of FIXTURE.cases) {
     assert.match(entry.target_commit, /^[0-9a-f]{40}$/);
@@ -203,8 +205,9 @@ test("the stabilization corpus declares executable portfolio fixtures", () => {
     assert.equal(entry.budgets.turns, 0);
     assert.equal(entry.budgets.tokens, 0);
     assert.equal(entry.budgets.cost_usd, 0);
-    if (entry.repository === "lobsters") {
+    if (entry.policy_fixture) {
       assert.equal(entry.portfolio_fixture, undefined);
+      assert.equal(entry.expected_installation_disposition, "no-installation");
     } else {
       assert.equal(entry.portfolio_fixture, entry.repository);
       assert.ok(STABILIZATION_PORTFOLIOS[entry.portfolio_fixture!]);
@@ -212,7 +215,7 @@ test("the stabilization corpus declares executable portfolio fixtures", () => {
   }
 });
 
-for (const entry of FIXTURE.cases.filter((candidate) => candidate.repository !== "lobsters")) {
+for (const entry of FIXTURE.cases.filter((candidate) => candidate.portfolio_fixture)) {
   test(`${entry.repository}: evidence compiles and installs the expected portfolio`, () => {
     const startedAt = Date.now();
     const portfolioFixture = STABILIZATION_PORTFOLIOS[entry.portfolio_fixture!];
@@ -357,24 +360,46 @@ for (const entry of FIXTURE.cases.filter((candidate) => candidate.repository !==
   });
 }
 
-test("lobsters: restrictive tracked policy blocks before persistent mutation", () => {
-  const entry = FIXTURE.cases.find((candidate) => candidate.repository === "lobsters")!;
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-corpus-lobsters-"));
+// Keep Click's command/locality reduction executable without installing it or
+// counting it toward the eligible historical installation quota.
+test("click: behavioral reduction compiles read-only, outside the installation quota", () => {
+  const fixture = STABILIZATION_PORTFOLIOS.click!;
+  const { cwd, map } = makePortfolioRepository("click", fixture);
   try {
-    write(cwd, "AGENTS.md", "LLM-generated contributions are prohibited. Do not use AI for code, documentation, tests, or patches.\n");
-    write(cwd, "README.md", "Lobsters fixture\n");
-    git(cwd, "init", "-q");
-    git(cwd, "config", "user.name", "Agentify Corpus");
-    git(cwd, "config", "user.email", "agentify@example.invalid");
-    git(cwd, "add", ".");
-    git(cwd, "commit", "-qm", "restrictive policy fixture");
-    const policy = detectRestrictiveRepositoryPolicy(cwd, ["AGENTS.md", "README.md"]);
-    assert.equal(policy?.path, "AGENTS.md");
-    assert.deepEqual(entry.expected_unresolved_obligations, ["repository policy prohibits installation"]);
-    assert.equal(entry.expected_readiness, "blocked-before-mutation");
-    assert.equal(entry.expected_installation_disposition, "no-installation");
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.status, "compiled", compiled.reasons.join("; "));
+    assert.deepEqual(compiled.map.concern_evidence?.concerns.map((concern) => concern.concern), fixture.concerns.map((concern) => concern.name));
     assert.equal(fs.existsSync(path.join(cwd, ".agentify")), false);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+for (const entry of FIXTURE.cases.filter((candidate) => candidate.policy_fixture)) {
+test(`${entry.repository}: captured policy blocks before persistent mutation`, () => {
+  const startedAt = Date.now();
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), `agentify-corpus-policy-${entry.repository}-`));
+  try {
+    // Click delegates to an external policy: replay its captured text here,
+    // never copy that text into the real target or claim live URL resolution.
+    write(cwd, entry.policy_fixture!.path, entry.policy_fixture!.text);
+    write(cwd, "README.md", `${entry.repository} captured policy fixture\n`);
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Corpus");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "restrictive policy fixture");
+    const policy = detectRestrictiveRepositoryPolicy(cwd, [entry.policy_fixture!.path, "README.md"]);
+    assert.equal(policy?.path, entry.policy_fixture!.path);
+    assert.deepEqual(entry.expected_unresolved_obligations, ["repository policy prohibits installation"]);
+    assert.equal(entry.expected_readiness, "blocked-before-mutation");
+    assert.equal(entry.expected_installation_disposition, "no-installation");
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify")), false);
+    assert.equal(git(cwd, "status", "--porcelain"), "");
+    assert.equal(entry.budgets.output_bytes, 0);
+    assert.ok(Date.now() - startedAt <= entry.budgets.runtime_ms);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+}

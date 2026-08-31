@@ -31,11 +31,28 @@
     {
       "repository": "click",
       "target_commit": "36baa15ff831b939a22bc527cd76ce653ef6f66d",
+      "fixture_kind": "captured-policy-and-audit-replay",
+      "audit_events": ["delegated-Pallets-policy-reviewed", "installation-excluded-by-policy"],
+      "policy_fixture": {
+        "path": "docs/contributing.md",
+        "source_url": "https://palletsprojects.com/contributing/llm-ai",
+        "text": "If you are a new contributor, do not use LLM or AI tools to contribute at all.\n"
+      },
+      "expected_core_ownership": [],
+      "expected_rejected_candidates": ["all specialist proposals because repository policy prohibits LLM-authored persistent output"],
+      "expected_unresolved_obligations": ["repository policy prohibits installation"],
+      "expected_readiness": "blocked-before-mutation",
+      "expected_installation_disposition": "no-installation",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 0 }
+    },
+    {
+      "repository": "sqlalchemy",
+      "target_commit": "274adcbd2d3f82ea12f143256aaa7ea434f3a8ce",
       "fixture_kind": "reduced-deterministic",
-      "portfolio_fixture": "click",
-      "audit_events": ["local-clusters-discovered", "command-contract-classified"],
-      "expected_core_ownership": ["Command dispatch and Context lifecycle", "Shell completion protocol"],
-      "expected_rejected_candidates": ["prose validation command"],
+      "portfolio_fixture": "sqlalchemy",
+      "audit_events": ["pinned-policy-reviewed", "dependency-ordered-flush-traced", "bounded-pool-checkout-traced", "parameter-compilation-traced"],
+      "expected_core_ownership": ["ORM flush and unit-of-work ordering", "Connection checkout and overflow lifecycle", "SQL bind-parameter compilation"],
+      "expected_rejected_candidates": ["ORM package"],
       "expected_unresolved_obligations": [],
       "expected_readiness": "ready",
       "expected_installation_disposition": "install",
@@ -111,6 +128,10 @@
       "target_commit": "2f385d149e67f5ff78643dcf6d3cab0b24c0117c",
       "fixture_kind": "captured-policy-and-audit-replay",
       "audit_events": ["43 map mutations over 10250 seconds", "policy prohibition observed", "no scout or tracer receipts", "diagnostic map persisted"],
+      "policy_fixture": {
+        "path": "AGENTS.md",
+        "text": "LLM-generated contributions are prohibited. Do not use AI for code, documentation, tests, or patches.\n"
+      },
       "expected_core_ownership": [],
       "expected_rejected_candidates": ["all specialist proposals because repository policy prohibits LLM-authored persistent output"],
       "expected_unresolved_obligations": ["repository policy prohibits installation"],

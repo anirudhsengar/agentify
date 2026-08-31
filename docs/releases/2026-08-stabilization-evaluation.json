@@ -1,12 +1,36 @@
 {
   "schema_version": 1,
   "generated_at": "2026-08-31T06:09:00Z",
-  "report_status": "failed_product_qualification_product_decisions_pending",
+  "report_status": "failed_product_qualification_approved_scope_in_progress",
   "release_ready": false,
   "final_candidate_sha": null,
   "evidence_scope": "Candidate and changed-file inventory below are archived observations, not qualification of the current branch. Results cannot carry forward to changed production code.",
   "product_qualification_rule": "All eight non-policy historical teams and at least five of six non-policy held-outs in each of two unchanged-production rounds must install. Diagnostic-only fails unless required tooling is unavailable.",
   "evaluation_scope": "specialist compiler stabilization",
+  "approved_evaluation_decisions": {
+    "approved_at": "2026-08-31",
+    "historical_installation_replacement": {
+      "excluded": "click",
+      "exclusion_reason": "Pinned contribution guidance delegates to the Pallets AI policy. Retain refusal and read-only command/locality replay; no installation quota credit.",
+      "policy_url": "https://palletsprojects.com/contributing/llm-ai",
+      "replacement": "sqlalchemy",
+      "upstream": "sqlalchemy/sqlalchemy",
+      "fork": "anirudhsengar/sqlalchemy",
+      "target_sha": "274adcbd2d3f82ea12f143256aaa7ea434f3a8ce",
+      "rationale": "A demanding Python/Cython relational toolkit with ORM unit-of-work ordering, SQL compilation, connection pooling, dialects, and substantial behavioral tests. Selected for materially different contracts and complexity, before any installation outcome; not selected for ease.",
+      "reviewed_policy_paths": [".github/CONTRIBUTING.md", ".github/CODE_OF_CONDUCT.md", ".github/pull_request_template.md"],
+      "reviewed_external_policies": ["https://www.sqlalchemy.org/develop.html", "https://www.sqlalchemy.org/codeofconduct.html"],
+      "policy_disposition": "AI assistance permitted; upstream submissions restricted. Evaluation is local on the authenticated user's fork; no upstream issues, comments, or pull requests.",
+      "live_qualification": "not_run"
+    },
+    "external_validation_locks": {
+      "authorized": true,
+      "scope": "evaluation_harness_only",
+      "requirements": ["outside_target", "immutable_content_hash", "exact_repository_sha_and_toolchain", "never_copied_or_committed_to_target", "never_repository_evidence", "dependency_validation_only", "report_original_state_and_lock_provenance", "no_readiness_override"],
+      "implementation": "pending",
+      "readiness_defect_status": "Committed-lock readiness requirements remain unchanged. External harness validation must not be represented as a passing Agentify installation."
+    }
+  },
   "latest_development_evidence": {
     "release_ready": false,
     "final_candidate_sha": null,
@@ -634,14 +658,16 @@
         "contract_source": "https://go.dev/ref/mod"
       }
     ],
-    "product_decisions_required": [
+    "resolved_product_decisions": [
       {
         "decision": "Reclassify pinned Click as policy-negative and select a replacement eighth non-policy historical repository.",
-        "reason": "Its upstream contribution policy prohibits AI contributions; the task also forbids bypassing upstream policy in forks."
+        "reason": "Its upstream contribution policy prohibits AI contributions; the task also forbids bypassing upstream policy in forks.",
+        "status": "approved_replacement_sqlalchemy"
       },
       {
         "decision": "Decide whether library repositories may use an externally captured dependency lock for reproducible validation, rather than requiring a committed lock.",
-        "reason": "Mustache and Thiserror intentionally ignore lockfiles; PyJWT also lacks a committed lock. No lock-policy exception has been implemented."
+        "reason": "Mustache and Thiserror intentionally ignore lockfiles; PyJWT also lacks a committed lock. No lock-policy exception has been implemented.",
+        "status": "approved_harness_only_external_locks_no_readiness_override"
       }
     ],
     "artifact_directory": "/home/anirudh/Projects/agentify-evaluation/83dd8578d2e7cca297ca124c318ef5ed9a4e236d/artifacts",

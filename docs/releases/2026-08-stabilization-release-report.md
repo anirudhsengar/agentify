@@ -30,7 +30,7 @@ The archived 80-file inventory is retained separately. The current machine-reada
 
 | Latest fresh live cases | Installed | Result |
 | --- | ---: | --- |
-| Commander, AQA, Cobra, Hono, Gin, Axum, Petclinic | 0/7 attempted | Failed; Click remains policy-prohibited pending replacement decision |
+| Commander, AQA, Cobra, Hono, Gin, Axum, Petclinic | 0/7 attempted | Failed; Click is policy-negative, approved replacement SQLAlchemy not yet run |
 | Preact, PyJWT, Chi, Thiserror, JCommander, Mustache — round 1 | 0/6 | Failed |
 | Held-out round 2 | Not run | No consecutive clean rounds |
 
@@ -42,11 +42,11 @@ The archived 80-file inventory is retained separately. The current machine-reada
 - Live tracer cancellation on 83dd stopped 11 ms after an actual provider response update and preserved a failed receipt with no repository writes. Final usage for the interrupted request was unavailable; cancellation passed its bounded probe, complete accounting did not.
 - Subsequent general corrections retain dependency evidence across 512-file batches, reuse unchanged attested tracer claims, defer terminal status until installation finishes, reject portfolio-erasing model writes, and recognize dependency-free Go modules without checksums. No repository-name conditions, closure relaxation, or model/authentication changes were introduced.
 
-## Decisions blocking final qualification
+## Approved evaluation scope
 
-Click's contribution prohibition conflicts with the requirement to install all eight named historical repositories. It needs reclassification as policy-negative and a replacement non-policy case; its policy will not be bypassed.
+Click remains a policy/refusal regression and does not count toward installation success. Its command/locality reduction also remains executable read-only. The approved replacement is SQLAlchemy at `274adcbd2d3f82ea12f143256aaa7ea434f3a8ce`: a demanding Python/Cython relational toolkit covering unit-of-work ordering, pooling, and SQL compilation, selected before any installation outcome. All pinned contribution/conduct/PR policies and their linked developer policies were reviewed. AI assistance is permitted; no upstream submissions will be made. The evaluation fork is `anirudhsengar/sqlalchemy`. Live qualification is not yet run.
 
-Mustache and Thiserror intentionally ignore dependency lockfiles, and PyJWT has no committed lock. Agentify currently requires committed dependency locks for reproducible operational validation. Permission to use externally captured validation locks is a product decision, not an implemented exception. Dependency-free Go is a separate established ecosystem contract: [Go permits absent go.sum when there are no dependencies](https://go.dev/ref/mod).
+External immutable validation locks are approved **only in the evaluation harness**. They must stay outside targets, be content-hashed and bound to the repository SHA/toolchain, and never count as repository evidence or override readiness. Both original state and external provenance must be reported. Harness implementation is pending; the existing committed-lock readiness requirement is not silently waived. Dependency-free Go is a separate established ecosystem contract: [Go permits absent go.sum when there are no dependencies](https://go.dev/ref/mod).
 
 The machine-readable report records `release_ready=false`, `final_candidate_sha=null`, exact per-run provenance, failed gates, and the current complete changed-file inventory.
 ## Known limitations
@@ -54,7 +54,7 @@ The machine-readable report records `release_ready=false`, `final_candidate_sha=
 - Hono still fails convergence and has exposed false attachment, generic-portfolio, and unsupported narrative risks. Safe failure remains necessary but is not successful product qualification.
 - The reduced corpus now exercises real compilation, installation, readiness canaries, and validation-failure rollback, with only GitHub operations replayed. It does not replace live generation or maintainer-quality review.
 - Validation commands execute in disposable exact-HEAD checkouts with scrubbed credentials, but Agentify does not provide container or network isolation.
-- Pinned Click delegates contribution rules to Pallets' external policy. Its classification as an installation-required non-policy case conflicts with the task's policy constraints; no new Click writes or policy bypass have been performed.
+- Pinned Click delegates contribution rules to Pallets' external policy. The reduced refusal fixture replays captured policy text; it does not prove automatic live URL-policy resolution. No new Click writes or policy bypass have been performed.
 - Live model outcomes are nondeterministic. The executable replay corpus, compiler invariants, and package qualification remain the authoritative repeatable release gates.
 
 ## Recommendation

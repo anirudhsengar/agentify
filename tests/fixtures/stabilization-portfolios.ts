@@ -21,6 +21,69 @@ export interface StabilizationPortfolioFixture {
 }
 
 export const STABILIZATION_PORTFOLIOS: Record<string, StabilizationPortfolioFixture> = {
+  sqlalchemy: {
+    project_type: "Python SQL toolkit and object-relational mapper",
+    languages: ["Python", "Cython"],
+    // Reductions of mechanisms inspected at 274adcbd; not an upstream test suite.
+    sources: {
+      "lib/sqlalchemy/orm/session.py": "class Session:\n    def flush(self):\n        if self._flushing:\n            raise RuntimeError('Session is already flushing')\n        try:\n            self._flushing = True\n            self._flush()\n        finally:\n            self._flushing = False\n    def _flush(self):\n        flush_context = UOWTransaction(self)\n        flush_context.execute()\n",
+      "lib/sqlalchemy/orm/unitofwork.py": "class UOWTransaction:\n    def execute(self):\n        actions = self._generate_actions()\n        for record in topological.sort(self.dependencies, actions):\n            record.execute(self)\n",
+      "lib/sqlalchemy/pool/base.py": "class Pool:\n    def connect(self):\n        return _ConnectionFairy._checkout(self)\nclass _ConnectionFairy:\n    def close(self):\n        self._counter -= 1\n        if self._counter == 0:\n            self._checkin()\n",
+      "lib/sqlalchemy/pool/impl.py": "class QueuePool:\n    def _do_get(self):\n        wait = self._max_overflow > -1 and self._overflow >= self._max_overflow\n        try:\n            return self._pool.get(wait, self._timeout)\n        except Empty:\n            if wait:\n                raise TimeoutError('QueuePool limit reached')\n        if self._inc_overflow():\n            try:\n                return self._create_connection()\n            except:\n                self._dec_overflow()\n                raise\n",
+      "lib/sqlalchemy/sql/elements.py": "class ClauseElement:\n    def _compiler(self, dialect, **kw):\n        return dialect.statement_compiler(dialect, self, **kw)\n",
+      "lib/sqlalchemy/sql/compiler.py": "class SQLCompiler:\n    def visit_bindparam(self, bindparam, literal_binds=False):\n        if literal_binds:\n            return self.render_literal_bindparam(bindparam)\n        return self.bindparam_string(bindparam.key)\n",
+    },
+    concerns: [
+      {
+        name: "ORM flush and unit-of-work ordering",
+        covers: "Session flush reentrancy, dirty-state submission, dependency-ordered persistence actions, and flush failure cleanup.",
+        excludes: "SQL string compilation and connection pool capacity.",
+        flow: { name: "flush pending ORM changes", steps: [
+          { path: "lib/sqlalchemy/orm/session.py", what_happens: "Rejects reentrant flush, sets the flushing guard, and delegates pending work to the flush context." },
+          { path: "lib/sqlalchemy/orm/unitofwork.py", what_happens: "Generates persistence actions and executes acyclic actions in dependency order." },
+          { path: "lib/sqlalchemy/orm/session.py", what_happens: "Clears the flushing guard in finally, including when persistence raises." },
+        ] },
+        core: [
+          { path: "lib/sqlalchemy/orm/session.py", symbol: "Session.flush", role: "Owns flush entry, transactional submission, and reentrancy guard lifetime." },
+          { path: "lib/sqlalchemy/orm/unitofwork.py", symbol: "UOWTransaction.execute", role: "Orders and executes persistence actions from dependency edges." },
+        ],
+        invariant: { rule: "A Session cannot begin a second flush while its flushing guard is set.", why: "Reentrant work would overlap the active unit-of-work submission." },
+        entry_question: "Does this change alter flush ordering, dirty-state registration, or cleanup after persistence failure?",
+      },
+      {
+        name: "Connection checkout and overflow lifecycle",
+        covers: "Pool checkout proxies, QueuePool wait and overflow accounting, timeout behavior, and returning connections.",
+        excludes: "ORM flush dependency ordering and SQL bind rendering.",
+        flow: { name: "acquire and return a pooled connection", steps: [
+          { path: "lib/sqlalchemy/pool/base.py", what_happens: "Pool.connect delegates checkout to the connection proxy machinery." },
+          { path: "lib/sqlalchemy/pool/impl.py", what_happens: "QueuePool first tries its queue, waits at bounded overflow capacity, or creates an overflow connection." },
+          { path: "lib/sqlalchemy/pool/base.py", what_happens: "Closing the last proxy checkout checks the connection back into the pool." },
+        ] },
+        core: [
+          { path: "lib/sqlalchemy/pool/impl.py", symbol: "QueuePool._do_get", role: "Enforces queue wait, capacity, and overflow failure accounting." },
+          { path: "lib/sqlalchemy/pool/base.py", symbol: "Pool.connect", role: "Defines checkout proxy lifetime and connection return." },
+        ],
+        invariant: { rule: "Failed overflow connection creation decrements the overflow count before propagating the error.", why: "Failed creation must not permanently consume capacity." },
+        entry_question: "Does this affect timeout, overflow slots, invalidation, or when a checked-out connection returns?",
+      },
+      {
+        name: "SQL bind-parameter compilation",
+        covers: "Dialect-selected SQL compilation and the distinction between parameter placeholders and explicit literal binding.",
+        excludes: "Connection acquisition and ORM object-state persistence ordering.",
+        flow: { name: "compile a bound SQL value", steps: [
+          { path: "lib/sqlalchemy/sql/elements.py", what_happens: "Selects the dialect statement compiler for the clause element." },
+          { path: "lib/sqlalchemy/sql/compiler.py", what_happens: "Visits the bind parameter and renders a placeholder unless literal binding is explicitly requested." },
+        ] },
+        core: [
+          { path: "lib/sqlalchemy/sql/compiler.py", symbol: "SQLCompiler.visit_bindparam", role: "Owns parameter naming and explicit literal-rendering branches." },
+          { path: "lib/sqlalchemy/sql/elements.py", symbol: "ClauseElement._compiler", role: "Dispatches clause compilation through the selected dialect." },
+        ],
+        invariant: { rule: "Literal binding is opt-in, not the default bind-parameter rendering mode.", why: "Normal parameter handling must preserve the database parameter contract." },
+        entry_question: "Does this change placeholder naming, dialect dispatch, or explicit literal rendering?",
+      },
+    ],
+    rejected: [{ candidate: "ORM package", why: "A package boundary alone does not identify a behavioral contract." }],
+  },
   "commander.js": {
     project_type: "JavaScript command-line parsing library",
     languages: ["JavaScript", "TypeScript declarations"],
