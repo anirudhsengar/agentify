@@ -844,7 +844,7 @@ async function testSubagentTimeoutReturnsControlToAudit(): Promise<void> {
 }
 
 async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
-  observation: "read" | "grep-directory" | "grep-file" | "wrong-subtree" | "listing" | "failed-read" | "no-matches" | "none" | "cancelled" | "compact",
+  observation: "read" | "grep-directory" | "grep-file" | "wrong-subtree" | "listing" | "failed-read" | "no-matches" | "none" | "cancelled" | "compact" | "ownership-context",
 ): Promise<void> {
   const cwd = tempDir("spawn-budget-concern-portfolio");
   const controller = new AbortController();
@@ -861,6 +861,15 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
 \`\`\`json
 {"concern":"Repository orientation","one_line":"Owns the documented entry path.","covers":"The repository entry documentation.","excludes":"Runtime behavior outside the entry path.","flows":[{"name":"read entry documentation","description":"A reader follows the repository entry path.","steps":[{"path":"README.md","what_happens":"Introduces the repository."},{"path":"README.md","what_happens":"Provides the first operational reference."}]}],"touchpoints":[{"path":"README.md","symbol":null,"role":"Defines the entry documentation.","line_range":null,"centrality":"core"}],"invariants":[{"rule":"The entry remains documented.","why":"New contributors otherwise lack a starting point.","reference":"README.md"}],"pitfalls":[{"risk":"The entry documentation drifts.","consequence":"Repository orientation becomes unreliable.","reference":"README.md"}],"entry_questions":["Does this change alter the documented entry?"],"validation":[],"spans_subtrees":["README.md"],"stability":"high","recurrence":"medium","confidence":"high","adjacent_concerns":[],"blocker_reason":null}
 \`\`\``;
+    if (observation === "ownership-context") {
+      const existing = makeValidCodebaseMap();
+      type Concern = NonNullable<typeof existing.concern_evidence>["concerns"][number];
+      const prior = JSON.parse(report.slice(report.indexOf("{"), report.lastIndexOf("}") + 1)) as Concern;
+      existing.concern_evidence = { concerns: [{ ...prior, concern: "Entry dispatch" }], not_concerns: [] };
+      const dir = path.join(cwd, ".agentify/runtime/audit");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "codebase_map.json"), JSON.stringify(existing));
+    }
     const tool = createSpawnExplorerTool({
       agentDir: cwd,
       stateDir: ".agentify/runtime/audit",
@@ -876,7 +885,13 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
         return {
           session: {
             messages: [],
-            async prompt(): Promise<void> {
+            async prompt(task: string): Promise<void> {
+              if (observation === "ownership-context") {
+                assert.ok(task.includes(cwd), "the stateless tracer needs the actual repository tool root");
+                assert.ok(task.includes('"Entry dispatch"'), "the tracer needs existing core claims before proposing overlap");
+                assert.ok(task.includes('"README.md"'));
+                assert.match(task, /provisional.*claims/i);
+              }
               if (observation !== "none") {
                 const isGrep = observation.startsWith("grep-") || observation === "no-matches" || observation === "wrong-subtree";
                 const input = isGrep
@@ -931,7 +946,7 @@ async function testConcernTracerDefaultsLeaveRoomForARealPortfolio(
       undefined,
       { cwd } as never,
     );
-    const backedBySource = observation === "read" || observation === "compact" || observation.startsWith("grep-");
+    const backedBySource = observation === "read" || observation === "compact" || observation === "ownership-context" || observation.startsWith("grep-");
     assert.equal((result as { isError?: boolean }).isError, backedBySource ? undefined : true, observation);
     if (observation === "cancelled") {
       assert.equal(fs.existsSync(path.join(cwd, ".agentify/runtime/audit/codebase_map.json")), false,
@@ -1011,7 +1026,7 @@ await testOversizedReportsFailInsteadOfBecomingReceipts();
 await testDefaultsBoundSmallRepositoryAudits();
 await testParentCancellationStopsExplorer();
 await testSubagentTimeoutReturnsControlToAudit();
-for (const observation of ["read", "grep-directory", "grep-file", "wrong-subtree", "listing", "failed-read", "no-matches", "none", "cancelled", "compact"] as const) {
+for (const observation of ["read", "grep-directory", "grep-file", "wrong-subtree", "listing", "failed-read", "no-matches", "none", "cancelled", "compact", "ownership-context"] as const) {
   await testConcernTracerDefaultsLeaveRoomForARealPortfolio(observation);
 }
 
