@@ -12,6 +12,7 @@ import {
   checkpointExplorerConcernEvidence,
   currentRepositoryCommit,
   ExplorerReceiptTracker,
+  mergeExplorerConcernEvidence,
 } from "../../src/core/audit/explorer-receipts.ts";
 import { loadCanonicalMapAt, writeCanonicalMap } from "../../src/core/audit/map-storage.ts";
 import {
@@ -669,6 +670,13 @@ test("a source-reviewed identity finding permits one scope-preserving corrective
       undefined, undefined, {} as never) as { isError?: boolean; content: Array<{ text?: string }> };
     assert.equal(result.isError, undefined, result.content[0]?.text);
     assert.equal(recordedName, corrected.concern);
+    const prospective = (mergeExplorerConcernEvidence as unknown as (map: ReturnType<typeof makeValidCodebaseMap>,
+      concern: Concern, replacement: { concern: string; reason: string }) => ReturnType<typeof makeValidCodebaseMap>)(
+        map, corrected, { concern: previous.concern, reason: "The source owns extraction, not routing or rendering." });
+    assert.deepEqual(prospective.concern_evidence?.concerns.map(item => item.concern), [corrected.concern]);
+    assert.deepEqual(prospective.concern_evidence?.not_concerns.map(item =>
+      [item.candidate, item.grouped_into]), [[previous.concern, corrected.concern]],
+    "prospective compiler feedback must evaluate the same atomic identity replacement that checkpointing persists");
     writeCanonicalMap(cwd, { ...attestCodebaseMap(map, head), specialist_reviews: map.specialist_reviews },
       { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
     const beforeRename = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
