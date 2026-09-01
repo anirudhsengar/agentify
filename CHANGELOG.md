@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Require semantic repair to clear actionable typed narrative corrections before accepting unrelated ownership, rejection, attachment, or coverage deltas; each correction still receives immediate full normalized re-review.
+
 - Cancel a parent audit session synchronously inside a successful map write once coverage and specialist evidence are complete, handing failed receipt obligations to bounded recovery instead of retaining an unnecessary uncappable continuation reservation.
 
 - Cancel a specialist-review session synchronously when its typed submission is accepted, closing the SDK event gap that could admit an unnecessary second provider request and retain an unanswered reservation.

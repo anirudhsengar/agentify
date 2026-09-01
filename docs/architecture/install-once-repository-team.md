@@ -529,6 +529,9 @@ resolve an ownership conflict or invent a new source attachment.
 The repair prompt supplies only bounded rejected claims and their source findings.
 Eligible concern bodies receive narrative review before unrelated portfolio gaps
 close, allowing the same bounded repair pass to address both kinds of obligation.
+While any typed correction remains actionable, the trusted write boundary rejects
+unrelated ownership, attachment, rejection and coverage deltas. Correction and
+fresh review therefore precede structural work without weakening either gate.
 Rejected concerns and non-convergent compilations are not reviewed. Early review
 preserves all structural failures and grants no installation authority; any later
 normalization change invalidates its exact-body digest and requires fresh review.

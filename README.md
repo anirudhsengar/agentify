@@ -244,6 +244,10 @@ required; unsupported assertions and incomplete reviews remain repair obligation
 Eligible bodies are reviewed even while unrelated structural gaps remain, so
 repair sees narrative and ownership failures together. Review cannot close those
 gaps; normalization changes invalidate the body digest and require fresh review.
+While a typed source-backed correction is actionable, the write boundary rejects
+unrelated structural deltas. This keeps bounded repair focused on false claims;
+ownership and coverage work resumes after the corrected digest passes review or
+requires an explicit retrace.
 A source-rejected summary can be corrected without regenerating its specialist;
 an exact-review-rejected touchpoint role may likewise be corrected as prose only:
 its tracked path, symbol, line range and core/supporting centrality cannot change.
