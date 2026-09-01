@@ -805,6 +805,34 @@ test("a retracer cannot trade one covered repository obligation for another", as
     );
     assert.equal((monotonic as { isError?: boolean }).isError, undefined);
     assert.equal(submissions, 1);
+
+    const transferredMap = structuredClone(currentMap);
+    const adjacentOwner = structuredClone(currentConcern);
+    adjacentOwner.concern = "Public rejection fallback";
+    adjacentOwner.one_line = "Owns public rejection fallback behavior.";
+    adjacentOwner.covers = "Public extraction rejection fallback.";
+    adjacentOwner.excludes = "Request argument extraction.";
+    adjacentOwner.flows = [preservedFlow];
+    adjacentOwner.touchpoints = adjacentOwner.touchpoints
+      .filter(point => point.path !== "src/model/person.rs")
+      .map(point => ({ ...point, centrality: "supporting" as const }));
+    transferredMap.concern_evidence!.concerns.push(adjacentOwner);
+    const transferred = structuredClone(parsed);
+    transferred.flows = transferred.flows.filter(flow =>
+      (flow as { name?: string }).name !== preservedFlow.name);
+    const transferTool = factory("2026-08-29T00:00:00.000Z", () => {
+      submissions += 1;
+    }, cwd, currentConcern.concern, ["src/extract/mod.rs"], transferredMap);
+    const transfer = await transferTool.execute(
+      "submit-transferred-flow",
+      { report_json: JSON.stringify(transferred) } as never,
+      undefined,
+      undefined,
+      {} as never,
+    ) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    assert.notEqual(transfer.isError, true, transfer.content[0]?.text);
+    assert.equal(submissions, 2,
+      "a coherence retrace may remove a duplicated flow only when another existing concern preserves it exactly");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
