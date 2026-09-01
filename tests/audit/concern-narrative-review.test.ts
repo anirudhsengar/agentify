@@ -468,6 +468,8 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       assert.equal(options.modelRole, "primary");
       assert.match(options.systemPrompt, /inspect only unchecked claims backed by that same source file/,
         "bounded review should submit promptly while collecting only immediately local companion findings");
+      assert.match(options.systemPrompt, /Reject a catalog or framework layer whose flows do not share one failure domain/,
+        "normalized review must reject a directory or integration catalog even when each isolated claim is sourced");
       assert.match(options.systemPrompt, /Only return a null finding after every supplied claim is supported/,
         "early rejection must not weaken the complete approval checklist");
       assert.deepEqual(options.executionPolicy.allowedTools, []);
