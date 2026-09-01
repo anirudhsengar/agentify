@@ -97,7 +97,7 @@ export const DEFAULT_AUDIT_BUDGETS: Readonly<ResolvedAuditBudgets> = Object.free
   maxTurns: 240,
   maxInputTokens: 8_000_000,
   // Includes unanswered calls and the next request's full, possibly uncappable, maximum.
-  maxOutputTokens: 400_000,
+  maxOutputTokens: 640_000,
   maxTotalCostUsd: 20,
   maxCoverageRecoveryPasses: 1,
   maxSemanticRepairPasses: 3,
