@@ -507,6 +507,10 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
         "normalized review must reject a directory or integration catalog even when each isolated claim is sourced");
       assert.match(options.systemPrompt, /Before checking any individual assertion, decide whether the body is one coherent behavior/,
         "catalog rejection must precede expensive claim-by-claim falsification");
+      assert.match(options.systemPrompt, /read, create, update, and delete flows for one aggregate may be coherent/i,
+        "a repository-owned aggregate lifecycle must not be rejected merely because it contains several operations");
+      assert.match(options.systemPrompt, /shared data-integrity invariants and a behavior-specific core owner/i,
+        "aggregate lifecycle acceptance still needs stronger evidence than a shared package or noun");
       assert.match(options.systemPrompt, /Only return a null finding after every supplied claim is supported/,
         "early rejection must not weaken the complete approval checklist");
       assert.deepEqual(options.executionPolicy.allowedTools, []);
