@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Derive explorer overlap from the shared output envelope, admitting four bounded readers under the default budget while preserving one full parent continuation; tighter envelopes retain three- or two-reader ceilings.
+
 - Bind a substantive rejection's exact source-symbol name to one unique tracked declaration and only its direct symbol-referencing tests. Filename similarity, missing declarations, duplicate same-name definitions, and unrelated files remain unresolved.
 
 - Require each bounded specialist source review to answer through its only typed terminal on the first provider response. Exact excerpt validation and the existing one argument-correction retry remain unchanged.

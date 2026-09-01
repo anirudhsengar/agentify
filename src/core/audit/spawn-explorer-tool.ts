@@ -993,8 +993,10 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
     ) === outputCapProbe ? toolOptions.explorerModel.maxTokens : MAX_EXPLORER_RESPONSE_TOKENS;
     const maxConcurrentSpawns = toolOptions.maxConcurrentSpawns
         ?? (toolOptions.resourceBudget
-            ? toolOptions.resourceBudget.limits.maxOutputTokens
-                >= PARENT_RESPONSE_RESERVE_TOKENS + 3 * explorerResponseReserve ? 3 : 2
+            ? Math.max(2, Math.min(4, Math.floor(
+                (toolOptions.resourceBudget.limits.maxOutputTokens - PARENT_RESPONSE_RESERVE_TOKENS)
+                / explorerResponseReserve,
+            )))
             : DEFAULT_MAX_CONCURRENT_SPAWNS);
     const maxSubagentDurationMs = toolOptions.maxSubagentDurationMs ?? DEFAULT_SUBAGENT_TIMEOUT_MS;
     const maxTotalCostUsd = toolOptions.maxTotalCostUsd ?? DEFAULT_MAX_TOTAL_COST_USD;

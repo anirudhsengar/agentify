@@ -392,9 +392,9 @@ conservative byte upper bound exceeds that reserve. That exact bound becomes the
 retained input and metadata-priced cost reservation when the request is visible;
 post-response accounting remains authoritative for actual usage. Both admission
 boundaries prevent an exhausted continuation from crossing the configured cap.
-With the shared reservation budget, up to three independent read-only explorer
+With the shared reservation budget, up to four independent read-only explorer
 sessions may overlap when the configured output envelope preserves capacity for
-the uncappable parent request; tighter envelopes reduce that ceiling to two.
+the uncappable parent request; tighter envelopes reduce that ceiling to three or two.
 Requests reserve aggregate tokens and cost before dispatch;
 concurrent duplicates of the same concern or scout are refused. Standalone tools
 without that budget retain the serial default. Completed bodies checkpoint against
