@@ -1,7 +1,7 @@
 import * as crypto from "node:crypto";
 import * as path from "node:path";
 import { PI_SDK_VERSION } from "../pi-sdk-version.ts";
-import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { AgentSessionEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { AgentRuntimeResult } from "../types.ts";
 import { defaultConfigDir } from "../agentify-config.ts";
 import { AgentifyLog } from "../audit/log.ts";
@@ -331,6 +331,25 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
   const initialReceiptAssessment = explorerReceipts.assess(preExistingMap);
   const resourceBudget = context.auditResourceBudget
     ?? new AuditResourceBudget(context.config.auditBudgets);
+  const cancelAfterCompleteWrite = (tool: ToolDefinition, cancel: () => void): ToolDefinition => {
+    const execute = tool.execute;
+    if (!execute) return tool;
+    return {
+      ...tool,
+      async execute(...args) {
+        const result = await execute(...args);
+        const currentMap = loadCanonicalMapAt(context.cwd, stateDir);
+        if (currentMap && assessAuditCompletion(currentMap, { cwd: context.cwd }).complete
+          && explorerReceipts.assess(currentMap).complete) {
+          controlledClosure = true;
+          cancel();
+        }
+        return result;
+      },
+    };
+  };
+  const baseWriteMapTool = cancelAfterCompleteWrite(mapTools.writeMapTool, () => controller.abort());
+  const baseWriteMapDeltaTool = cancelAfterCompleteWrite(mapTools.writeMapDeltaTool, () => controller.abort());
   context.ui.status("agentify: auditing existing repository");
 
   try {
@@ -364,7 +383,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         tools: ["read", "grep", "find", "ls"],
         protectedPaths: [path.resolve(context.cwd)],
       }),
-      customTools: [mapTools.writeMapTool, mapTools.writeMapDeltaTool],
+      customTools: [baseWriteMapTool, baseWriteMapDeltaTool],
       spawnExplorerAgentDir: defaultConfigDir(),
       spawnExplorerStateDir: stateDir,
       auditResourceBudget: resourceBudget,
@@ -487,6 +506,12 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         specialistEvidenceMissing,
         explorerReceiptReasons: receiptAssessment.reasons,
       });
+      const recoveryWriteMapTool = cancelAfterCompleteWrite(
+        mapTools.writeMapTool, () => recoveryController.abort(),
+      );
+      const recoveryWriteMapDeltaTool = cancelAfterCompleteWrite(
+        mapTools.writeMapDeltaTool, () => recoveryController.abort(),
+      );
       try {
         const recoverySessionDurationMs = resourceBudget.remainingDurationMs();
         const recoverySessionBudget = resourceBudget.beginSession(recoverySessionDurationMs);
@@ -512,7 +537,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
             tools: ["read", "grep", "find", "ls"],
             protectedPaths: [path.resolve(context.cwd)],
           }),
-          customTools: [mapTools.writeMapTool, mapTools.writeMapDeltaTool],
+          customTools: [recoveryWriteMapTool, recoveryWriteMapDeltaTool],
           spawnExplorerAgentDir: defaultConfigDir(),
           spawnExplorerStateDir: stateDir,
           auditResourceBudget: resourceBudget,

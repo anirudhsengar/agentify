@@ -479,6 +479,11 @@ exhaust the shared budget: concurrent responses may release enough capacity for
 a later bounded retry. The refused request is never dispatched or charged.
 Actual limit violations remain terminal, and unfinished calls retain their
 reservations; no recovery clears or discounts them.
+When a successful `write_map` or `write_map_delta` call makes coverage,
+specialist evidence, and explorer receipt attestation complete, the application
+cancels that parent session inside the tool boundary before returning its
+result. Incomplete writes remain live for ordinary repair. This prevents the
+SDK event-delivery gap from admitting an unnecessary uncappable continuation.
 The first
 real audit request establishes provider reachability; there is no connectivity
 model call outside the audit budget and log. SIGINT and SIGTERM

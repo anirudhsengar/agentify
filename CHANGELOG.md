@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Cancel a parent audit session synchronously inside a successful map write once coverage, specialist evidence, and explorer receipts are complete, preventing an unnecessary uncappable continuation from retaining a full unanswered reservation.
+
 - Cancel a specialist-review session synchronously when its typed submission is accepted, closing the SDK event gap that could admit an unnecessary second provider request and retain an unanswered reservation.
 
 - Review two independent immutable specialist bodies concurrently, applying results in deterministic portfolio order and falling back to serial admission when a sibling reservation cannot fit. Review limits and closure requirements are unchanged.
