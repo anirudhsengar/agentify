@@ -573,13 +573,15 @@ function evidenceAtPath(concern: Concern, file: string): unknown {
     };
 }
 
-function reviewedIdentityCorrection(map: CodebaseMap | undefined, name: string | undefined, cwd: string | undefined): boolean {
-    if (!map || !name || !cwd || map.specialist_reviews?.repository_commit !== currentRepositoryCommit(cwd)) return false;
+function reviewedIdentityCorrectionReason(
+    map: CodebaseMap | undefined, name: string | undefined, cwd: string | undefined,
+): string | null {
+    if (!map || !name || !cwd || map.specialist_reviews?.repository_commit !== currentRepositoryCommit(cwd)) return null;
     const concern = map.concern_evidence?.concerns.find((entry) => entry.concern === name);
-    if (!concern) return false;
+    if (!concern) return null;
     const digest = createHash("sha256").update(stableMapValueIdentity(concern)).digest("hex");
-    return map.specialist_reviews.records.some((record) => record.concern === name && record.digest === digest
-        && record.retryable === false && record.finding?.claim === "concern");
+    return map.specialist_reviews.records.find((record) => record.concern === name && record.digest === digest
+        && record.retryable === false && record.finding?.claim === "concern")?.finding?.reason ?? null;
 }
 
 export function createConcernSubmissionTool(
@@ -621,7 +623,7 @@ export function createConcernSubmissionTool(
                 };
             }
             const correctiveRename = expectedConcern !== undefined && decoded.concern.concern !== expectedConcern
-                && reviewedIdentityCorrection(existingMap, expectedConcern, repositoryRoot)
+                && reviewedIdentityCorrectionReason(existingMap, expectedConcern, repositoryRoot) !== null
                 && !existingMap?.concern_evidence?.concerns.some((concern) =>
                     concern.concern.toLowerCase() === decoded.concern!.concern.toLowerCase());
             if (expectedConcern !== undefined && decoded.concern.concern !== expectedConcern && !correctiveRename) {
@@ -901,10 +903,13 @@ function roundCost(costUsd: number): number {
     return Number(costUsd.toFixed(12));
 }
 
-function currentCompilerFeedback(cwd: string, stateDir: string, concern: Concern) {
+function currentCompilerFeedback(
+    cwd: string, stateDir: string, concern: Concern,
+    replacement?: { concern: string; reason: string },
+) {
     const map = loadCanonicalMapAt(cwd, stateDir);
     if (map === null) return null;
-    const compiled = compileSpecialistEvidence(mergeExplorerConcernEvidence(map, concern), { cwd });
+    const compiled = compileSpecialistEvidence(mergeExplorerConcernEvidence(map, concern, replacement), { cwd });
     const assessment = compiled.assessment;
     const feedback = {
         status: compiled.status,
@@ -1117,7 +1122,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             ) ?? []
             : [];
         const priorConcern = attestedPriorConcern(existingMap ?? undefined, expectedConcern, ctx.cwd);
-        const canCorrectIdentity = reviewedIdentityCorrection(existingMap ?? undefined, expectedConcern, ctx.cwd);
+        const identityCorrectionReason = reviewedIdentityCorrectionReason(existingMap ?? undefined, expectedConcern, ctx.cwd);
+        const canCorrectIdentity = identityCorrectionReason !== null;
         const canRejectConcern = mode === "concern_tracer" && expectedConcern !== undefined
             && !existingMap?.concern_evidence?.concerns.some((concern) => concern.concern === expectedConcern);
 
@@ -1677,7 +1683,10 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             }
 
             const compilerFeedback = submittedConcern
-                ? currentCompilerFeedback(ctx.cwd, stateDir, submittedConcern)
+                ? currentCompilerFeedback(ctx.cwd, stateDir, submittedConcern,
+                    expectedConcern && submittedConcern.concern !== expectedConcern && identityCorrectionReason
+                        ? { concern: expectedConcern, reason: identityCorrectionReason }
+                        : undefined)
                 : null;
             const durationMs = Date.now() - start;
             const stepWarning =

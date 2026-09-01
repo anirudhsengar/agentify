@@ -413,22 +413,10 @@ export function checkpointExplorerConcernEvidence(
     map.specialist_reviews?.repository_commit === currentRepositoryCommit(cwd)
     && record.concern === replacesConcern && record.digest === replacedDigest
     && record.retryable === false && record.finding?.claim === "concern");
-  const mergedWithConcern = mergeExplorerConcernEvidence(map, concern);
-  const merged: CodebaseMap = !replacesConcern || replacesConcern.toLowerCase() === identity || !replacementFinding
-    ? mergedWithConcern
-    : {
-      ...mergedWithConcern,
-      concern_evidence: {
-        concerns: (mergedWithConcern.concern_evidence?.concerns ?? [])
-          .filter(candidate => candidate.concern !== replacesConcern),
-        not_concerns: [
-          ...(mergedWithConcern.concern_evidence?.not_concerns ?? [])
-            .filter(candidate => candidate.candidate !== replacesConcern),
-          { candidate: replacesConcern, grouped_into: concernName,
-            why_rejected: `Corrected to ${concernName}: ${replacementFinding.finding!.reason}` },
-        ],
-      },
-    };
+  const merged = mergeExplorerConcernEvidence(map, concern,
+    !replacesConcern || replacesConcern.toLowerCase() === identity || !replacementFinding
+      ? undefined
+      : { concern: replacesConcern, reason: replacementFinding.finding!.reason });
   if (!merged.concern_evidence?.concerns.some((candidate) => candidate.concern.trim().toLowerCase() === identity)) {
     return false;
   }
@@ -437,11 +425,20 @@ export function checkpointExplorerConcernEvidence(
 }
 
 /** Shared prospective merge for compiler feedback and the trusted checkpoint. */
-export function mergeExplorerConcernEvidence(map: CodebaseMap, concern: Record<string, unknown>): CodebaseMap {
+export interface ConcernIdentityReplacement {
+  concern: string;
+  reason: string;
+}
+
+export function mergeExplorerConcernEvidence(
+  map: CodebaseMap,
+  concern: Record<string, unknown>,
+  replacement?: ConcernIdentityReplacement,
+): CodebaseMap {
   const identity = stringField(concern.concern)?.toLowerCase();
   if (!identity) return map;
   const current = map.concern_evidence ?? { concerns: [], not_concerns: [] };
-  return mergeEvidenceIntoMap({
+  const merged = mergeEvidenceIntoMap({
     concern_evidence: {
       concerns: [
         ...current.concerns.filter((candidate) => candidate.concern.trim().toLowerCase() !== identity),
@@ -450,6 +447,20 @@ export function mergeExplorerConcernEvidence(map: CodebaseMap, concern: Record<s
       not_concerns: current.not_concerns.filter((candidate) => candidate.candidate.trim().toLowerCase() !== identity),
     },
   }, map);
+  if (!replacement || replacement.concern.toLowerCase() === identity) return merged;
+  return {
+    ...merged,
+    concern_evidence: {
+      concerns: (merged.concern_evidence?.concerns ?? [])
+        .filter(candidate => candidate.concern !== replacement.concern),
+      not_concerns: [
+        ...(merged.concern_evidence?.not_concerns ?? [])
+          .filter(candidate => candidate.candidate !== replacement.concern),
+        { candidate: replacement.concern, grouped_into: stringField(concern.concern)!,
+          why_rejected: `Corrected to ${stringField(concern.concern)!}: ${replacement.reason}` },
+      ],
+    },
+  };
 }
 
 function trackerFromAttestation(attestation: ExplorerReceiptAttestation): ExplorerReceiptTracker {
