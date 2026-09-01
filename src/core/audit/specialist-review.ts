@@ -5,6 +5,7 @@ import { Value } from "typebox/value";
 import { defaultConfigDir } from "../agentify-config.ts";
 import type { RunContext } from "../runs/run-context.ts";
 import { createReadOnlyExecutionPolicy } from "../security/execution-policy.ts";
+import { isSubstantiveConcernRejection } from "./concern-rejection.ts";
 import { ZERO_ACCESS_PATH_REGEX } from "./defense/blacklist.ts";
 import { currentRepositoryCommit } from "./explorer-receipts.ts";
 import { stableMapValueIdentity } from "./map-delta.ts";
@@ -14,7 +15,7 @@ import type { CodebaseMap } from "./schema/codebase-map.ts";
 import { createSpecialistReviewSubmissionSchema, type SpecialistReviewSubmission } from "./schema/specialist-review.ts";
 import type { WriteMapDeltaParams } from "./schema/write-map-params.ts";
 import { assessSpecialistEvidence, concernEvidencePaths, removeTrustedInferredAttachments, type RepositoryConcernAttachment } from "./specialist-completion.ts";
-import type { SpecialistCompilationResult } from "./specialist-compiler.ts";
+import { compileSpecialistEvidence, type SpecialistCompilationResult } from "./specialist-compiler.ts";
 
 const MAX_SOURCE_BYTES = 512 * 1_024;
 const REVIEW_TIMEOUT_MS = 90_000;
@@ -300,8 +301,8 @@ function pruneRejectedSurplusClaims(
   return claims.map(item => item.claim);
 }
 
-/** Review only fixed-point bodies; cached failures also remain repair obligations. */
-export async function reviewSpecialistCompilation(
+/** Review fixed-point bodies once; cached failures remain repair obligations. */
+async function reviewSpecialistCompilationOnce(
   context: RunContext, compilation: SpecialistCompilationResult, budget: AuditResourceBudget, runId: string,
   checkpoint?: (map: CodebaseMap) => void,
 ): Promise<SpecialistCompilationResult> {
@@ -378,4 +379,41 @@ export async function reviewSpecialistCompilation(
   const complete = compilation.complete && reasons.length === 0;
   return { ...compilation, map, complete,
     status: complete ? compilation.status : "incomplete", reasons };
+}
+
+function retireReviewedIncoherentConcerns(map: CodebaseMap, cwd: string): CodebaseMap {
+  const commit = currentRepositoryCommit(cwd);
+  if (commit === null || map.specialist_reviews?.repository_commit !== commit) return map;
+  const retired = new Map((map.concern_evidence?.concerns ?? []).flatMap(concern => {
+    const record = map.specialist_reviews!.records.find(candidate => candidate.concern === concern.concern
+      && candidate.digest === specialistReviewDigest(concern) && candidate.retryable === false
+      && candidate.finding?.claim === "concern");
+    if (!record?.finding || !isSubstantiveConcernRejection(record.finding.reason)) return [];
+    return [[concern.concern, `${record.finding.reason} Evidence: ${record.finding.path}: ${record.finding.excerpt}`] as const];
+  }));
+  if (retired.size === 0) return map;
+  const next = structuredClone(map);
+  const evidence = next.concern_evidence!;
+  evidence.concerns = evidence.concerns.filter(concern => !retired.has(concern.concern));
+  evidence.not_concerns = [
+    ...evidence.not_concerns.filter(rejection => !retired.has(rejection.candidate)),
+    ...[...retired].map(([candidate, why_rejected]) => ({ candidate, why_rejected })),
+  ];
+  next.specialist_reviews!.records = next.specialist_reviews!.records.filter(record => !retired.has(record.concern));
+  return next;
+}
+
+/** Review and normalize until exact source-reviewed incoherent bodies are retired. */
+export async function reviewSpecialistCompilation(
+  context: RunContext, compilation: SpecialistCompilationResult, budget: AuditResourceBudget, runId: string,
+  checkpoint?: (map: CodebaseMap) => void,
+): Promise<SpecialistCompilationResult> {
+  let current = compilation;
+  while (true) {
+    const reviewed = await reviewSpecialistCompilationOnce(context, current, budget, runId, checkpoint);
+    const retired = retireReviewedIncoherentConcerns(reviewed.map, context.cwd);
+    if (retired === reviewed.map) return reviewed;
+    checkpoint?.(structuredClone(retired));
+    current = compileSpecialistEvidence(retired, { cwd: context.cwd });
+  }
 }

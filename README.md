@@ -252,6 +252,10 @@ required; unsupported assertions and incomplete reviews remain repair obligation
 Before claim-by-claim falsification, review rejects a catalog or framework layer whose flows lack one shared
 failure domain or invariant set; individually sourced claims cannot make an
 incoherent specialist installable.
+An exact current-HEAD nonretryable concern-level finding retires that reviewed
+body during normalization and records the finding as its substantive rejection;
+Agentify does not spend another tracer call merely to restate the same evidence.
+Retryable reviews and findings about individual claims remain unresolved.
 Eligible bodies are reviewed even while unrelated structural gaps remain, so
 repair sees narrative and ownership failures together. Review cannot close those
 gaps; normalization changes invalidate the body digest and require fresh review.

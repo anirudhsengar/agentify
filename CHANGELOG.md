@@ -6,7 +6,7 @@ All notable changes to Agentify are documented here.
 
 - Require each bounded specialist source review to answer through its only typed terminal on the first provider response. Exact excerpt validation and the existing one argument-correction retry remain unchanged.
 
-- Let a current non-retryable concern-level source review retire an incoherent accepted body through the existing exact-HEAD typed rejection terminal. Unreviewed bodies and local-claim findings cannot remove verified concerns.
+- Deterministically retire an exact current-HEAD body when its non-retryable primary source review rejects concern-level coherence, then recompile ownership and review any changed survivors. This removes the redundant tracer that previously restated the same rejection; retryable, stale, unreviewed, and local-claim findings cannot remove concerns.
 
 - Retain the conservative serialized-byte input bound for an exact visible provider request instead of the model's entire context window, and price unanswered-request upper bounds from that input ceiling. Full-context pre-session admission remains in place for provider requests the SDK may not expose.
 

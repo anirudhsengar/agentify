@@ -563,9 +563,12 @@ Repository-owned read, create, update, and delete flows for one aggregate may
 remain one lifecycle only when immutable source establishes shared data-integrity
 invariants and a behavior-specific core owner. A shared package, noun, or model
 relationship is not sufficient evidence.
-When a current exact body has such a scope finding, semantic repair schedules
-that retrace before local claim corrections in bodies that may become obsolete.
-The accepted identity and verified flow-preservation checks remain mandatory.
+When a current exact body has such a nonretryable concern-level finding, the
+normalizer deterministically retires that exact digest and records the validated
+current-HEAD finding as its substantive rejection. It recompiles ownership and
+reviews any remaining body whose normalization changed; no second tracer merely
+restates the same rejection. Retryable findings and findings about local claims
+remain repair obligations.
 Retracing may remove a duplicated flow from an incoherent body only when another
 existing concern preserves its exact name and ordered tracked step paths. Unique
 verified flows and changes that reopen tracked obligations still fail closed.
