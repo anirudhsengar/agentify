@@ -122,6 +122,11 @@ focus_acknowledged: <echo of FOCUS>
  form a coherent lifecycle when they share data-integrity invariants and a
  behavior-specific core owner; a package, noun, or model relationship alone is
  not that proof.
+ Substitutable implementations form one coherent strategy family when source
+ proves one public behavioral contract plus selection or fallback invariants.
+ Components may likewise form one concern when they jointly establish
+ one repository-owned operational outcome and a joint invariant. A shared theme,
+ directory, or API alone remains insufficient.
 
 - **The overlap test.** Two concerns that both touch the same file are
  normal and expected. Auth and checkout both touch the request

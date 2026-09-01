@@ -100,6 +100,11 @@ would specialize in to work on it well.
    Review the scout's rejections as well as its proposals: size, locality, and
    cross-cutting use are not reasons for rejection. Public lifecycle and
    continuation contracts may be the library's primary product behavior.
+   Substitutable implementations form one coherent strategy family when source
+   proves one public behavioral contract plus selection or fallback invariants.
+   Components may likewise form one concern when they jointly establish
+   one repository-owned operational outcome and a joint invariant. A shared theme,
+   directory, or API alone remains insufficient.
    Check the cited invariant before copying a rejection of such behavior;
    do not absorb it into a catalog merely because both use one interface.
    Merge overlapping behavioral candidates by rejecting the narrower names as

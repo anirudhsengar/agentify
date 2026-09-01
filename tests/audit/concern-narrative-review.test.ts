@@ -511,6 +511,10 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
         "a repository-owned aggregate lifecycle must not be rejected merely because it contains several operations");
       assert.match(options.systemPrompt, /shared data-integrity invariants and a behavior-specific core owner/i,
         "aggregate lifecycle acceptance still needs stronger evidence than a shared package or noun");
+      assert.match(options.systemPrompt, /substitutable implementations.*public behavioral contract.*selection/is,
+        "normalized review must retain a source-proven strategy family");
+      assert.match(options.systemPrompt, /components.*one repository-owned operational outcome.*joint invariant/is,
+        "normalized review must retain a source-proven operational outcome");
       assert.match(options.systemPrompt, /Only return a null finding after every supplied claim is supported/,
         "early rejection must not weaken the complete approval checklist");
       assert.deepEqual(options.executionPolicy.allowedTools, []);
