@@ -440,6 +440,56 @@ test("specialist compilation leaves disjoint shared-symbol claims unresolved", (
   }
 });
 
+test("an explicit unique-symbol rejection binds its tracked implementation and direct test", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-symbol-rejection-"));
+  try {
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    write(cwd, "README.md", "Fixture application.\n");
+    write(cwd, "src/main/java/org/example/DomainService.java", "class DomainService { void run() {} }\n");
+    write(cwd, "src/main/java/org/example/Application.java",
+      "class Application { void start() { new DomainService().run(); } }\n");
+    write(cwd, "src/main/java/org/example/WelcomeController.java", "class WelcomeController { String welcome() { return \"welcome\"; } }\n");
+    write(cwd, "src/test/java/org/example/WelcomeControllerTests.java",
+      "class WelcomeControllerTests { WelcomeController controller = new WelcomeController(); }\n");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "symbol rejection fixture");
+    const map = makeValidCodebaseMap();
+    delete map.expert_evidence;
+    map.meta.project_type = "Java application";
+    map.meta.languages = ["Java"];
+    map.skeleton.top_level_tree = ["src/main/java", "src/test/java"];
+    map.skeleton.entry_points = [{ path: "src/main/java/org/example/Application.java",
+      role: "Application entry point", language: "Java", run_command: "java Application" }];
+    map.skeleton.first_5_files_for_fresh_agent = [{ path: "src/main/java/org/example/Application.java",
+      why: "Starts the domain behavior." }];
+    map.skeleton.code_test_mirror = { observed: true, pattern: "src/test mirrors src/main" };
+    map.module_graph.edges = [{ from: "src/main/java/org/example/Application.java",
+      to: "src/main/java/org/example/DomainService.java", kind: "direct call" }];
+    map.pitfalls = [];
+    map.concern_evidence = { concerns: [concern({
+      name: "Domain service execution", covers: "Application startup and domain service execution.",
+      excludes: "Demo welcome rendering.", flow: ["src/main/java/org/example/Application.java",
+        "src/main/java/org/example/DomainService.java"], touchpoints: [
+        { path: "src/main/java/org/example/Application.java", symbol: "Application.start",
+          role: "Starts the service.", line_range: null, centrality: "core" },
+        { path: "src/main/java/org/example/DomainService.java", symbol: "DomainService.run",
+          role: "Runs domain behavior.", line_range: null, centrality: "core" },
+      ],
+    })], not_concerns: [{ candidate: "WelcomeController demo flow",
+      why_rejected: "WelcomeController is a demo-only side flow without domain invariants or a recurring specialist body." }] };
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.ok(compiled.assessment.exempted_paths.includes("src/main/java/org/example/WelcomeController.java"),
+      "the exact declared symbol must bind the substantive rejection to its unique tracked definition");
+    assert.ok(compiled.assessment.exempted_paths.includes("src/test/java/org/example/WelcomeControllerTests.java"),
+      "a direct test reference inherits the exact symbol-backed disposition");
+    assert.ok(!compiled.assessment.uncovered_clusters.some(cluster => cluster.cluster_key === "welcomecontroller"));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("a path-backed rejection cannot delegate behavior to a nonexistent concern", () => {
   const cwd = createAqaShapedRepository();
   try {
