@@ -59,6 +59,62 @@ test("structural coherence failures are retraced before local claim corrections"
     "claim-by-claim repair must wait because retracing can replace the invalid body and its review obligations");
 });
 
+test("an exact current source review retires an incoherent body without another tracer", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-reviewed-retirement-"));
+  try {
+    fs.mkdirSync(path.join(cwd, "src/extract"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "src/extract/mod.rs"), "pub trait FromRequest {}\npub struct Rejection;\n");
+    execFileSync("git", ["init", "-q", cwd]);
+    execFileSync("git", ["-C", cwd, "add", "."]);
+    execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+      "commit", "-qm", "extraction fixture"]);
+    const body: Concern = {
+      concern: "Extraction and rejection catalog",
+      one_line: "Groups extraction and rejection behaviors.",
+      covers: "Request extraction and rejection conversion.",
+      excludes: "Routing and response rendering.",
+      flows: [{ name: "Extract or reject", description: "Extract a request or convert rejection.", steps: [
+        { path: "src/extract/mod.rs", what_happens: "FromRequest reads request state." },
+        { path: "src/extract/mod.rs", what_happens: "A separate rejection path returns an error." },
+      ] }],
+      touchpoints: [{ path: "src/extract/mod.rs", symbol: "FromRequest", role: "Defines extraction.",
+        line_range: null, centrality: "core" }],
+      invariants: [{ rule: "Extraction and rejection share one failure domain.",
+        why: "The catalog treats them as one behavior.", reference: "src/extract/mod.rs" }],
+      pitfalls: [], entry_questions: ["Is this extraction or rejection work?"], validation: [], spans_subtrees: [],
+      stability: "high", recurrence: "high", confidence: "high", last_updated: "2026-09-01T00:00:00.000Z",
+    };
+    const compilation = compileSpecialistEvidence(makeValidCodebaseMap({
+      concern_evidence: { concerns: [body], not_concerns: [] }, expert_evidence: undefined,
+    }), { cwd });
+    assert.ok(compilation.assessment.accepted_concerns.includes(body.concern), compilation.reasons.join("; "));
+    let sessions = 0;
+    const runtime: AgentRuntime = { async runSession(options) {
+      sessions += 1;
+      const claims = (JSON.parse(options.userPrompt) as { claims: Record<string, unknown> }).claims;
+      options.onProviderRequest?.({ inputTokens: 100, outputTokens: 100, costUsd: 0.01 });
+      options.onEvent?.({ type: "message_end", message: { role: "assistant", stopReason: "toolUse",
+        usage: { input: 50, output: 10, cost: { total: 0.001 } } } } as never);
+      await options.customTools![0]!.execute("review", {
+        checked_claims: Object.keys(claims),
+        finding: { claim: "concern", path: "src/extract/mod.rs", excerpt: "pub trait FromRequest {}",
+          reason: "Extraction and rejection are separate behaviors without one shared failure domain or invariant set." },
+      }, undefined, undefined, { cwd } as never);
+      return { turns: 1, costUsd: 0.001, aborted: true };
+    } };
+    const reviewed = await reviewSpecialistCompilation({ cwd, runtime,
+      config: { schemaVersion: 1, models: {}, thinkingLevel: "high" }, ui: { status() {} } as never,
+    }, compilation, new AuditResourceBudget(), "direct-retirement");
+    assert.equal(sessions, 1);
+    assert.deepEqual(reviewed.map.concern_evidence?.concerns, [],
+      "the validated primary review is the terminal evidence; a second tracer is redundant");
+    assert.equal(reviewed.map.concern_evidence?.not_concerns.at(-1)?.candidate, body.concern);
+    assert.deepEqual(structuralNarrativeRetraces(reviewed.map), []);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("review re-proves supporting attachments hidden by normalized coverage", async () => {
   // Reduced from PyJWT: a high-signal dependency disappears from the final
   // assessment once attached, unlike an implementation/test mirror.
