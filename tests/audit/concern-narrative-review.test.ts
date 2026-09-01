@@ -7,7 +7,8 @@ import test from "node:test";
 import { Value } from "typebox/value";
 import type { Concern } from "../../src/core/audit/schema/concerns.ts";
 import { compileSpecialistEvidence } from "../../src/core/audit/specialist-compiler.ts";
-import { assessSpecialistReviews, reviewSpecialistCompilation } from "../../src/core/audit/specialist-review.ts";
+import { assessSpecialistReviews, reviewSpecialistCompilation,
+  specialistReviewDigest } from "../../src/core/audit/specialist-review.ts";
 import { AuditResourceBudget } from "../../src/core/audit/resource-budget.ts";
 import type { AgentRuntime } from "../../src/core/types.ts";
 import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
@@ -15,7 +16,8 @@ import { finalizeOneTimeInstallation, prepareOneTimeInstallationState,
   type RepositoryInstallationPreflight } from "../../src/core/installer/index.ts";
 import { loadCanonicalMapAt, writeCanonicalMap } from "../../src/core/audit/map-storage.ts";
 import { createWriteMapTools } from "../../src/core/audit/write-map-tools.ts";
-import { runRepositoryAudit } from "../../src/core/runs/repository-audit-run.ts";
+import { actionableNarrativeCorrections, runRepositoryAudit,
+  structuralNarrativeRetraces } from "../../src/core/runs/repository-audit-run.ts";
 import { AgentifyLog } from "../../src/core/audit/log.ts";
 
 // Reduced from an installed held-out team's false numeric-string rejection.
@@ -23,6 +25,39 @@ import { AgentifyLog } from "../../src/core/audit/log.ts";
 const SOURCE = 'def normalize_time(value):\n    try:\n        return int(value)\n    except ValueError:\n        raise ValueError("Time must be an integer")\n';
 const FALSE_CLAIM = "Numeric-string time values cannot be accepted.";
 const CORRECTION = "Numeric strings are accepted by int(); nonnumeric strings raise ValueError.";
+
+test("structural coherence failures are retraced before local claim corrections", () => {
+  const concern = (name: string): Concern => ({
+    concern: name, one_line: "Owns one behavior.", covers: "One behavior.", excludes: "Other behavior.",
+    flows: [{ name: "Run behavior", description: "Runs one behavior.", steps: [
+      { path: "clock.py", what_happens: "Receives input." },
+      { path: "clock.py", what_happens: "Returns converted output." },
+    ] }], touchpoints: [{ path: "clock.py", symbol: "normalize_time", role: "Owns conversion.",
+      line_range: null, centrality: "core" }],
+    invariants: [], pitfalls: [{ risk: FALSE_CLAIM, consequence: "Strings fail.", reference: "clock.py" }],
+    entry_questions: ["Is the input numeric?"], validation: [], spans_subtrees: [],
+    stability: "high", recurrence: "high", confidence: "high", last_updated: "2026-08-31T00:00:00.000Z",
+  });
+  const catalog = concern("Owner lifecycle catalog");
+  const local = concern("Deadline normalization");
+  const map = makeValidCodebaseMap({
+    concern_evidence: { concerns: [catalog, local], not_concerns: [] }, expert_evidence: undefined,
+  });
+  map.specialist_reviews = { repository_commit: "0".repeat(40), records: [
+    { concern: catalog.concern, digest: specialistReviewDigest(catalog), run_id: "review", retryable: false,
+      failure: "concern: unrelated flows", finding: { claim: "concern", path: "clock.py",
+        excerpt: "return int(value)", reason: "The body combines separate failure domains." } },
+    { concern: local.concern, digest: specialistReviewDigest(local), run_id: "review", retryable: false,
+      failure: "pitfalls[0]: contradicted", finding: { claim: "pitfalls[0]", path: "clock.py",
+        excerpt: "return int(value)", reason: CORRECTION } },
+  ] };
+  assert.deepEqual(structuralNarrativeRetraces(map), [{
+    concern: catalog.concern, digest: specialistReviewDigest(catalog), claim: "concern",
+    finding: map.specialist_reviews.records[0]!.finding,
+  }]);
+  assert.deepEqual(actionableNarrativeCorrections(map), [],
+    "claim-by-claim repair must wait because retracing can replace the invalid body and its review obligations");
+});
 
 test("review re-proves supporting attachments hidden by normalized coverage", async () => {
   // Reduced from PyJWT: a high-signal dependency disappears from the final
