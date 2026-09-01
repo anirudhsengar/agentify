@@ -149,7 +149,9 @@ additional findings only if already established rather than searching for a quot
 It submits a typed result: up to three
 unsupported assertions, each with a known claim ID and exact source excerpt, or
 an explicit complete checklist. Free-form prose and incomplete checklists cannot
-approve a team. Application-owned review records bind HEAD and the exact
+approve a team. Acceptance aborts the review session before returning from the
+submission tool, so the runtime cannot begin another provider request while a
+later tool-completion event is pending. Application-owned review records bind HEAD and the exact
 normalized concern digest. Source-backed findings remain unresolved without repeated
 calls; changed bodies invalidate approval. Incomplete execution retries at most once
 per later bounded run, never within the same run. Legacy failed records without an

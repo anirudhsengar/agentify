@@ -218,6 +218,7 @@ async function reviewConcern(
       submitted = structuredClone(report);
       if (submitted.finding) submitted.finding.excerpt = excerpts[0]!;
       submitted.additional_findings?.forEach((item, index) => { item.excerpt = excerpts[index + 1]!; });
+      cancel();
       return { content: [{ type: "text", text: "Review recorded; stop." }], details: {} };
     },
   });
