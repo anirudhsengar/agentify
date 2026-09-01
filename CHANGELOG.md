@@ -4,7 +4,7 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
-- Cancel a parent audit session synchronously inside a successful map write once coverage, specialist evidence, and explorer receipts are complete, preventing an unnecessary uncappable continuation from retaining a full unanswered reservation.
+- Cancel a parent audit session synchronously inside a successful map write once coverage and specialist evidence are complete, handing failed receipt obligations to bounded recovery instead of retaining an unnecessary uncappable continuation reservation.
 
 - Cancel a specialist-review session synchronously when its typed submission is accepted, closing the SDK event gap that could admit an unnecessary second provider request and retain an unanswered reservation.
 

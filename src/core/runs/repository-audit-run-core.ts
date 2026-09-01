@@ -339,8 +339,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       async execute(...args) {
         const result = await execute(...args);
         const currentMap = loadCanonicalMapAt(context.cwd, stateDir);
-        if (currentMap && assessAuditCompletion(currentMap, { cwd: context.cwd }).complete
-          && explorerReceipts.assess(currentMap).complete) {
+        if (currentMap && assessAuditCompletion(currentMap, { cwd: context.cwd }).complete) {
           controlledClosure = true;
           cancel();
         }

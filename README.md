@@ -187,10 +187,10 @@ A
 complete report at the exact call limit is retained; a request for another turn
 is aborted and remains unresolved. Budget failures name the current semantic
 obligations and their deterministic fingerprint.
-Once a map write establishes complete coverage, specialist evidence, and
-attested explorer receipts, the parent session is cancelled before the write
-tool returns. This prevents the SDK from dispatching an unnecessary
-continuation whose uncappable output bound would otherwise remain reserved.
+Once a map write establishes complete coverage and specialist evidence, the
+parent session is cancelled before the write tool returns. Receipt failures
+remain explicit and pass to bounded recovery; they do not keep the broad parent
+alive long enough to dispatch an unnecessary uncappable continuation.
 Model-supplied explorer limits may only narrow trusted mode defaults. Explorer
 usage is charged to the aggregate budget after every provider response, and a
 report over 16 KB is rejected as incomplete evidence rather than truncated into
