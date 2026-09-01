@@ -202,6 +202,59 @@ test("spawned tracers return and checkpoint a typed rejection without a concern 
   }
 });
 
+test("a current source review may retire an incoherent accepted concern atomically", async () => {
+  const cwd = groundedExtractionRepository();
+  const stateDir = ".agentify/runtime/audit";
+  try {
+    const concern = parseStructuredConcernReport(REPORT, "2026-09-01T00:00:00.000Z")!;
+    const head = currentRepositoryCommit(cwd)!;
+    writeCanonicalMap(cwd, makeValidCodebaseMap({
+      concern_evidence: { concerns: [concern], not_concerns: [] }, expert_evidence: undefined,
+      specialist_reviews: { repository_commit: head, records: [{ concern: concern.concern,
+        digest: specialistReviewDigest(concern), run_id: "review", retryable: false,
+        failure: "concern: unrelated extraction and rejection behaviors",
+        finding: { claim: "concern", path: "src/extract/mod.rs", excerpt: "pub trait FromRequest {}",
+          reason: "The body combines unrelated behaviors without one failure domain or invariant set." } }] },
+    }), { stateDir, mapFilename: "codebase_map.json" });
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd, stateDir,
+      explorerModel: { id: "fixture", provider: "fixture", api: "openai-completions" } as Model<Api>,
+      createSession: async options => ({ session: {
+        messages: [], dispose(): void {},
+        async prompt(): Promise<void> {
+          const input = { path: "src/extract/mod.rs" };
+          const read = await createReadTool(cwd).execute("observe", input);
+          for (const extension of options!.resourceLoader!.getExtensions().extensions) {
+            for (const handler of extension.handlers.get("tool_result") ?? []) {
+              await handler({ type: "tool_result", toolCallId: "observe", toolName: "read",
+                input, ...read, isError: false }, { cwd } as never);
+            }
+          }
+          const reject = options?.customTools?.find(candidate => candidate.name === "submit_concern_rejection");
+          assert.ok(reject, "a current concern-level source review must expose the typed retirement terminal");
+          const result = await reject.execute("reject", {
+            reason: "Extraction and rejection have separate effects and invariant sets, so the reviewed catalog is not one specialist body.",
+            evidence_path: "src/extract/mod.rs", excerpt: "pub trait FromRequest {}",
+          }, undefined, undefined, { cwd } as never);
+          assert.notEqual((result as { isError?: boolean }).isError, true, JSON.stringify(result.content));
+        },
+      } }),
+    });
+    const result = await tool.execute("retrace", {
+      mode: "concern_tracer", target_path: ".", concern: concern.concern,
+    } as never, undefined, undefined, { cwd } as never);
+    assert.notEqual((result as { isError?: boolean }).isError, true, JSON.stringify(result.content));
+    assert.equal(checkpointExplorerConcernEvidence(cwd, stateDir, {
+      type: "tool_execution_end", toolName: "spawn_explorer", result,
+    }), true);
+    const persisted = loadCanonicalMapAt(cwd, stateDir)!;
+    assert.deepEqual(persisted.concern_evidence?.concerns, []);
+    assert.equal(persisted.concern_evidence?.not_concerns[0]?.candidate, concern.concern);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("a tracer must submit as soon as its repository-read budget is exhausted", () => {
   assert.equal(shouldForceConcernSubmission(4, 8, 5, 6), false);
   assert.equal(shouldForceConcernSubmission(4, 8, 6, 6), true);
