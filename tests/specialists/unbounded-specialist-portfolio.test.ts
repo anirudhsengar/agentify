@@ -69,6 +69,30 @@ test("concern discovery rejects generic catalogs built from unrelated behaviors"
   );
 });
 
+test("concern discovery retains coherent strategy and operational-outcome families", () => {
+  const scout = fs.readFileSync(
+    new URL("../../src/core/audit/prompts/explorers/concern_scout.md", import.meta.url),
+    "utf8",
+  );
+  const tracer = fs.readFileSync(
+    new URL("../../src/core/audit/prompts/explorers/concern_tracer.md", import.meta.url),
+    "utf8",
+  );
+  const builder = fs.readFileSync(
+    new URL("../../src/core/audit/prompts/builder.md", import.meta.url),
+    "utf8",
+  );
+
+  for (const prompt of [scout, tracer, builder]) {
+    assert.match(prompt, /substitutable implementations.*public behavioral contract.*selection|selection.*substitutable implementations.*public behavioral contract/is,
+      "router and matcher strategy families must not be split into implementation-shaped specialists");
+    assert.match(prompt, /components.*one repository-owned operational outcome.*joint invariant/is,
+      "configuration and runtime mechanisms may form one operational body of knowledge");
+    assert.match(prompt, /shared (?:theme|directory|API).*alone.*insufficient/is,
+      "the exception must not admit generic framework catalogs");
+  }
+});
+
 test("specialist discovery does not mistake local public behavior for generic mechanics", () => {
   const scout = fs.readFileSync(
     new URL("../../src/core/audit/prompts/explorers/concern_scout.md", import.meta.url), "utf8",
