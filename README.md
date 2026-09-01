@@ -237,9 +237,10 @@ require fresh review with the configured primary model: 90 seconds and at most
 one argument-correction request only after a rejected typed submission, within
 the same deadline and aggregate budget. Two independent read-only bodies may be
 reviewed concurrently; results are applied in portfolio order, and temporary
-aggregate-reservation refusal falls back to serial admission. Reviews report up to three source-backed
-findings for atomic, exact-body correction, submitting immediately at the first
-decisive rejection without searching for a quota. A typed, complete review is
+aggregate-reservation refusal falls back to serial admission. Reviews seek and
+report up to three source-backed findings for atomic, exact-body correction,
+submitting early when the bounded deadline would otherwise be at risk. Three is
+a ceiling, not a quota. A typed, complete review is
 required; unsupported assertions and incomplete reviews remain repair obligations.
 Eligible bodies are reviewed even while unrelated structural gaps remain, so
 repair sees narrative and ownership failures together. Review cannot close those
