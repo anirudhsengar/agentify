@@ -329,6 +329,14 @@ test(`claim correction reviews within one session without overwriting concurrent
       repairs += 1;
       assert.equal(repairs, 1, "narrative findings must not require another broad repair session");
       const tool = options.customTools!.find(item => item.name === "write_map_delta")!;
+      if (concurrent === false) {
+        const structural = await tool.execute("structural-first", {
+          delta: { open_questions: ["Structural work must wait for the source-backed correction."] },
+        } as never, undefined, undefined, { cwd } as never);
+        assert.equal((structural as { isError?: boolean }).isError, true,
+          "repair must reject unrelated structural mutations while a typed narrative correction is actionable");
+        assert.match(JSON.stringify(structural.content), /narrative correction/i);
+      }
       if (typeof concurrent === "string") {
         const current = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
         const results = await Promise.allSettled(current.specialist_reviews!.records.map((record, index) => tool.execute(
