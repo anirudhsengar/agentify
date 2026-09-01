@@ -554,6 +554,9 @@ even when each isolated source claim is accurate.
 When a current exact body has such a scope finding, semantic repair schedules
 that retrace before local claim corrections in bodies that may become obsolete.
 The accepted identity and verified flow-preservation checks remain mandatory.
+Retracing may remove a duplicated flow from an incoherent body only when another
+existing concern preserves its exact name and ordered tracked step paths. Unique
+verified flows and changes that reopen tracked obligations still fail closed.
 Invalid corrections dispatch no review. All review requests
 share the existing call, token, cost and time budgets; a concurrent map change
 aborts the stale review checkpoint instead of overwriting newer evidence.

@@ -670,14 +670,15 @@ export function createConcernSubmissionTool(
                 );
                 if (concernIndex >= 0) {
                     const existingConcern = existingMap.concern_evidence.concerns[concernIndex]!;
+                    const preservesFlow = (candidate: Concern, flow: Concern["flows"][number]): boolean =>
+                        candidate.flows.some((candidateFlow) =>
+                            candidateFlow.name.trim().toLowerCase() === flow.name.trim().toLowerCase()
+                            && candidateFlow.steps.length === flow.steps.length
+                            && candidateFlow.steps.every((step, index) => step.path === flow.steps[index]!.path));
                     const missingFlow = existingConcern.flows.find((flow) =>
-                        !decoded.concern!.flows.some((candidate) =>
-                            candidate.name.trim().toLowerCase() === flow.name.trim().toLowerCase()
-                            && candidate.steps.length === flow.steps.length
-                            && candidate.steps.every((step, index) =>
-                                step.path === flow.steps[index]!.path
-                            )
-                        )
+                        !preservesFlow(decoded.concern!, flow)
+                        && !existingMap.concern_evidence!.concerns.some((candidate, index) =>
+                            index !== concernIndex && preservesFlow(candidate, flow))
                     );
                     if (missingFlow !== undefined) {
                         return {
