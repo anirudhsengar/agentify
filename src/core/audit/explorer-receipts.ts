@@ -382,8 +382,15 @@ export function checkpointExplorerConcernEvidence(
   if (isRecord(details.structured_rejection)) {
     const candidate = stringField(details.structured_rejection.candidate);
     const whyRejected = stringField(details.structured_rejection.why_rejected);
+    const existing = map.concern_evidence?.concerns.find((concern) =>
+      concern.concern.trim().toLowerCase() === candidate?.toLowerCase());
+    const digest = existing === undefined ? null
+      : createHash("sha256").update(stableMapValueIdentity(existing)).digest("hex");
+    const reviewedRetirement = existing !== undefined && map.specialist_reviews?.repository_commit === currentRepositoryCommit(cwd)
+      && map.specialist_reviews.records.some((record) => record.concern === existing.concern
+        && record.digest === digest && record.retryable === false && record.finding?.claim === "concern");
     if (!candidate || !whyRejected || !isSubstantiveConcernRejection(whyRejected)
-      || map.concern_evidence?.concerns.some((concern) => concern.concern.trim().toLowerCase() === candidate.toLowerCase())) {
+      || (existing !== undefined && !reviewedRetirement)) {
       return false;
     }
     const evidence = map.concern_evidence ?? { concerns: [], not_concerns: [] };
@@ -391,11 +398,16 @@ export function checkpointExplorerConcernEvidence(
       ...map,
       concern_evidence: {
         ...evidence,
+        concerns: evidence.concerns.filter((entry) => entry !== existing),
         not_concerns: [
           ...evidence.not_concerns.filter((entry) => entry.candidate.trim().toLowerCase() !== candidate.toLowerCase()),
           { candidate, why_rejected: whyRejected },
         ],
       },
+      ...(existing === undefined ? {} : { specialist_reviews: {
+        ...map.specialist_reviews!,
+        records: map.specialist_reviews!.records.filter((record) => record.concern !== existing.concern),
+      } }),
     }, { stateDir, mapFilename: "codebase_map.json" });
     return true;
   }

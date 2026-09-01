@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Let a current non-retryable concern-level source review retire an incoherent accepted body through the existing exact-HEAD typed rejection terminal. Unreviewed bodies and local-claim findings cannot remove verified concerns.
+
 - Retain the conservative serialized-byte input bound for an exact visible provider request instead of the model's entire context window, and price unanswered-request upper bounds from that input ceiling. Full-context pre-session admission remains in place for provider requests the SDK may not expose.
 
 - Permit a third independent evidence reader only when the aggregate output envelope still preserves one full parent continuation; tighter budgets retain the two-reader ceiling and every request remains subject to shared admission.

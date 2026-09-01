@@ -210,6 +210,15 @@ test("a current source review may retire an incoherent accepted concern atomical
     const head = currentRepositoryCommit(cwd)!;
     writeCanonicalMap(cwd, makeValidCodebaseMap({
       concern_evidence: { concerns: [concern], not_concerns: [] }, expert_evidence: undefined,
+    }), { stateDir, mapFilename: "codebase_map.json" });
+    assert.equal(checkpointExplorerConcernEvidence(cwd, stateDir, {
+      type: "tool_execution_end", toolName: "spawn_explorer", details: {
+        mode: "concern_tracer", structured_rejection: { candidate: concern.concern,
+          why_rejected: "The proposed body combines unrelated failure domains. Evidence: src/extract/mod.rs contains \"pub trait FromRequest {}\"." },
+      },
+    }), false, "an unreviewed accepted body cannot be retired");
+    writeCanonicalMap(cwd, makeValidCodebaseMap({
+      concern_evidence: { concerns: [concern], not_concerns: [] }, expert_evidence: undefined,
       specialist_reviews: { repository_commit: head, records: [{ concern: concern.concern,
         digest: specialistReviewDigest(concern), run_id: "review", retryable: false,
         failure: "concern: unrelated extraction and rejection behaviors",

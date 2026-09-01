@@ -432,8 +432,10 @@ these checks for persisted evidence. Before a body exists, a tracer may instead
 use a distinct typed rejection terminal only when observed immutable source proves
 the scout identity is an incoherent catalog or has no complete behavioral flow.
 The application validates the exact excerpt, checkpoints the rejection, and
-attests its observed path. Existing accepted bodies cannot use this terminal;
-they must be coherently retraced. This rejects definite source contradictions;
+attests its observed path. An existing body may use this terminal only when its
+exact current-HEAD digest has a non-retryable concern-level source review;
+checkpointing atomically replaces that body with the rejection. Unreviewed bodies
+and local claim findings cannot retire it. This rejects definite source contradictions;
 lexical presence alone does not prove the described behavior. Valid evidence is
 checkpointed before receipt attestation;
 the builder records scout screening but does not retranscribe tracer evidence.

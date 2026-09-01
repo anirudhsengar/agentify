@@ -207,7 +207,9 @@ schema-validates and checkpoints the complete concern body before attesting the
 receipt. A new scout proposal that observed source proves is an incoherent catalog
 or lacks an end-to-end flow can use a separate typed rejection terminal; Agentify
 checks its exact HEAD excerpt and checkpoints the substantive rejection instead of
-spending repeated full-body traces. A bounded retry on the same HEAD resumes verified work without parsing
+spending repeated full-body traces. The same terminal may retire an existing body
+only when its exact current-HEAD digest has a non-retryable concern-level source
+review; unreviewed bodies and local claim findings cannot remove it. A bounded retry on the same HEAD resumes verified work without parsing
 free-form prose or asking the parent model to retranscribe it.
 Nested append checkpoints retain earlier concern bodies and deduplicate exact
 cumulative resends. Tool-result delivery is not counted as a provider call or

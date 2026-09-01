@@ -1133,7 +1133,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         const identityCorrectionReason = reviewedIdentityCorrectionReason(existingMap ?? undefined, expectedConcern, ctx.cwd);
         const canCorrectIdentity = identityCorrectionReason !== null;
         const canRejectConcern = mode === "concern_tracer" && expectedConcern !== undefined
-            && !existingMap?.concern_evidence?.concerns.some((concern) => concern.concern === expectedConcern);
+            && (canCorrectIdentity
+                || !existingMap?.concern_evidence?.concerns.some((concern) => concern.concern === expectedConcern));
 
         const ownershipClaims: Array<[string, string, string | null]> = [];
         let ownershipBytes = 2;
@@ -1303,7 +1304,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             ? `${params.target_path}${summarySuffix}${constraintsBlock}`
             : `${params.target_path} ${params.focus ?? ""}${summarySuffix}${constraintsBlock}` +
               (expectedConcern ? canCorrectIdentity
-                ? `\n- The current source review rejected the identity ${JSON.stringify(expectedConcern)}. Submit one scope-preserving replacement with a precise maintainer name; do not reuse another accepted identity.`
+                ? `\n- The current source review rejected ${JSON.stringify(expectedConcern)}. Submit one scope-preserving replacement with a precise maintainer name, or use submit_concern_rejection when observed source proves the body is not one coherent specialty; do not reuse another accepted identity.`
                 : `\n- Required concern identity: ${JSON.stringify(expectedConcern)}. Use it verbatim.` : "");
 
         let session: ExplorerSubSession | undefined;
