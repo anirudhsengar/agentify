@@ -466,8 +466,8 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     const runtime: AgentRuntime = { async runSession(options) {
       reviews += 1;
       assert.equal(options.modelRole, "primary");
-      assert.match(options.systemPrompt, /Submit immediately when you find ONE decisive/,
-        "a decisive rejection must not wait for a three-finding quota");
+      assert.match(options.systemPrompt, /Seek up to three decisive/,
+        "bounded review should surface already-present contradictions together instead of rediscovering one per repair cycle");
       assert.match(options.systemPrompt, /Only return a null finding after every supplied claim is supported/,
         "early rejection must not weaken the complete approval checklist");
       assert.deepEqual(options.executionPolicy.allowedTools, []);
