@@ -42,8 +42,16 @@ Agentify will retain the tracer as unresolved.
 - `MUST` trace the concern named in `FOCUS` and no other. If you find
  a second concern along the way, note it in `adjacent_concerns` and
  keep tracing yours.
-- `MUST` finish by calling `submit_concern_report`. Put the complete
- concern object in its `report_json` argument as compact JSON without a markdown
+- Before authoring a body, decide whether the named proposal is one coherent
+ behavior whose flows share one failure domain or invariant set. A shared
+ directory, helper API, framework layer, lifecycle label, or test harness is
+ not enough. If observed source proves the proposal is a catalog of unrelated
+ behaviors or has no end-to-end behavioral flow, call
+ `submit_concern_rejection` with one exact observed source excerpt and the
+ behavior-specific reason. Do not force a body or spend another trace on it.
+- `MUST` finish by calling `submit_concern_report` for a coherent concern, or
+ `submit_concern_rejection` for a source-proven incoherent scout proposal. Put
+ a complete concern object in `report_json` as compact JSON without a markdown
  fence. Correct a rejected submission only from observed evidence within the
  remaining budget. Do not print or fence JSON as prose.
 - Do not modify any files. You are read-only.
@@ -98,7 +106,7 @@ Agentify will retain the tracer as unresolved.
    performance claims without tracing the mechanism that establishes them.
 8. Derive `entry_questions` — what a task touching this concern must
  answer *before* implementing.
-9. Call `submit_concern_report`. `STOP`.
+9. Call the applicable submission tool. `STOP`.
 
 ## Report
 

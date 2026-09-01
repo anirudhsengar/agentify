@@ -374,9 +374,30 @@ export function checkpointExplorerConcernEvidence(
   const details = nestedResult && isRecord(nestedResult.details)
     ? nestedResult.details
     : isRecord(event.details) ? event.details : null;
-  if (!details || details.mode !== "concern_tracer" || !isRecord(details.structured_concern)) return false;
+  if (!details || details.mode !== "concern_tracer") return false;
   const map = loadCanonicalMapAt(cwd, stateDir);
   if (!map) return false;
+  if (isRecord(details.structured_rejection)) {
+    const candidate = stringField(details.structured_rejection.candidate);
+    const whyRejected = stringField(details.structured_rejection.why_rejected);
+    if (!candidate || !whyRejected || !isSubstantiveConcernRejection(whyRejected)
+      || map.concern_evidence?.concerns.some((concern) => concern.concern.trim().toLowerCase() === candidate.toLowerCase())) {
+      return false;
+    }
+    const evidence = map.concern_evidence ?? { concerns: [], not_concerns: [] };
+    writeCanonicalMap(cwd, {
+      ...map,
+      concern_evidence: {
+        ...evidence,
+        not_concerns: [
+          ...evidence.not_concerns.filter((entry) => entry.candidate.trim().toLowerCase() !== candidate.toLowerCase()),
+          { candidate, why_rejected: whyRejected },
+        ],
+      },
+    }, { stateDir, mapFilename: "codebase_map.json" });
+    return true;
+  }
+  if (!isRecord(details.structured_concern)) return false;
   const concern = details.structured_concern;
   const concernName = stringField(concern.concern);
   if (!concernName) return false;

@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Let bounded concern tracers substantively reject a new incoherent scout proposal through a separate typed terminal backed by an exact observed HEAD excerpt. The rejection is checkpointed and attested without fabricating a specialist body or repeating an untraceable catalog.
+
 - Reject normalized catalog/framework-layer specialists before claim-by-claim falsification when their sourced flows do not share one failure domain or invariant set. Common directories, integration APIs, lifecycle stages, and test harnesses do not establish behavioral coherence; rejected scope requires retracing rather than prose repair.
 
 - Increase the finite aggregate output default to 640,000 tokens so an evidence-complete audit can retain two honestly unanswered request bounds and still admit the next uncappable narrative review. Explicit lower ceilings, measured usage, cost, calls, time, and semantic closure remain unchanged.

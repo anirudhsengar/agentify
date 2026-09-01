@@ -426,7 +426,12 @@ concern schema, binds its freshness to the exact HEAD commit timestamp, and
 requires every cited touchpoint, flow step, invariant, and pitfall path to be a
 regular tracked HEAD file. Concrete touchpoint symbols must occur in bounded
 HEAD blob reads, including compound and qualified names. The compiler repeats
-these checks for persisted evidence. This rejects definite source contradictions;
+these checks for persisted evidence. Before a body exists, a tracer may instead
+use a distinct typed rejection terminal only when observed immutable source proves
+the scout identity is an incoherent catalog or has no complete behavioral flow.
+The application validates the exact excerpt, checkpoints the rejection, and
+attests its observed path. Existing accepted bodies cannot use this terminal;
+they must be coherently retraced. This rejects definite source contradictions;
 lexical presence alone does not prove the described behavior. Valid evidence is
 checkpointed before receipt attestation;
 the builder records scout screening but does not retranscribe tracer evidence.

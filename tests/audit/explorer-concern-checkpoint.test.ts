@@ -143,6 +143,64 @@ test("a tracer can substantively reject an incoherent scout proposal from observ
   }
 });
 
+test("spawned tracers return and checkpoint a typed rejection without a concern body", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-spawned-rejection-"));
+  const stateDir = ".agentify/runtime/audit";
+  try {
+    fs.mkdirSync(path.join(cwd, "src/helpers"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "src/helpers/catalog.ts"),
+      "export const parseCookie = () => null;\nexport const streamBody = () => null;\n");
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "independent helper behaviors");
+    writeCanonicalMap(cwd, makeValidCodebaseMap({
+      concern_evidence: { concerns: [], not_concerns: [] }, expert_evidence: undefined,
+    }), { stateDir, mapFilename: "codebase_map.json" });
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd, stateDir,
+      explorerModel: { id: "fixture", provider: "fixture", api: "openai-completions" } as Model<Api>,
+      createSession: async options => ({ session: {
+        messages: [], dispose(): void {},
+        async prompt(): Promise<void> {
+          const input = { path: "src/helpers/catalog.ts" };
+          const read = await createReadTool(cwd).execute("observe", input);
+          for (const extension of options!.resourceLoader!.getExtensions().extensions) {
+            for (const handler of extension.handlers.get("tool_result") ?? []) {
+              await handler({ type: "tool_result", toolCallId: "observe", toolName: "read",
+                input, ...read, isError: false }, { cwd } as never);
+            }
+          }
+          const reject = options?.customTools?.find(candidate => candidate.name === "submit_concern_rejection");
+          assert.ok(reject, "new scout proposals must expose the typed rejection terminal");
+          const result = await reject.execute("reject", {
+            reason: "Cookie parsing and streaming have separate effects and invariant sets; their shared helper directory is only a catalog.",
+            evidence_path: "src/helpers/catalog.ts",
+            excerpt: "export const parseCookie = () => null;",
+          }, undefined, undefined, { cwd } as never);
+          assert.notEqual((result as { isError?: boolean }).isError, true, JSON.stringify(result.content));
+        },
+      } }),
+    });
+    const result = await tool.execute("trace", {
+      mode: "concern_tracer", target_path: ".", concern: "Helper catalog",
+    } as never, undefined, undefined, { cwd } as never);
+    assert.notEqual((result as { isError?: boolean }).isError, true, JSON.stringify(result.content));
+    assert.equal((result.details as { structured_concern: unknown }).structured_concern, null);
+    assert.equal((result.details as { structured_rejection: { candidate: string } }).structured_rejection.candidate,
+      "Helper catalog");
+    assert.deepEqual((result.details as { observed_paths: string[] }).observed_paths, ["src/helpers/catalog.ts"]);
+    assert.equal(checkpointExplorerConcernEvidence(cwd, stateDir, {
+      type: "tool_execution_end", toolName: "spawn_explorer", result,
+    }), true);
+    assert.equal(loadCanonicalMapAt(cwd, stateDir)?.concern_evidence?.not_concerns[0]?.candidate,
+      "Helper catalog");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("a tracer must submit as soon as its repository-read budget is exhausted", () => {
   assert.equal(shouldForceConcernSubmission(4, 8, 5, 6), false);
   assert.equal(shouldForceConcernSubmission(4, 8, 6, 6), true);
@@ -152,12 +210,17 @@ test("a tracer must submit as soon as its repository-read budget is exhausted", 
     ["submit_concern_report"],
   );
   assert.deepEqual(
+    activeExplorerToolsAfterRead("concern_tracer", 6, 6,
+      ["read", "grep", "submit_concern_report", "submit_concern_rejection"]),
+    ["submit_concern_report", "submit_concern_rejection"],
+  );
+  assert.deepEqual(
     activeExplorerToolsAfterRead("module_graph", 10, 10, ["read", "grep"]),
     ["read", "grep"],
   );
   assert.match(
     concernSubmissionSteerMessage("concern_tracer", 6, 6) ?? "",
-    /call submit_concern_report now; do not request another repository tool/iu,
+    /call submit_concern_report or submit_concern_rejection now; do not request another repository tool/iu,
   );
   assert.equal(concernSubmissionSteerMessage("concern_tracer", 5, 6), null);
   assert.equal(concernSubmissionSteerMessage("module_graph", 6, 6), null);

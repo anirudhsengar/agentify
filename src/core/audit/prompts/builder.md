@@ -114,7 +114,11 @@ would specialize in to work on it well.
 4. For each candidate worth keeping, run `concern_tracer` with the proposal's
    exact name in `concern` and the name plus seed paths in `focus`. One tracer per
    concern. Agentify rejects renamed reports, validates each complete report, and
-   checkpoints it directly; do not retranscribe it.
+   checkpoints it directly; do not retranscribe it. The tracer may instead submit
+   one application-validated, source-backed rejection when the proposed identity
+   itself is an incoherent catalog or has no end-to-end behavioral flow. That
+   terminal rejection is checkpointed directly; do not trace the rejected identity
+   again or invent a concern body to satisfy the scout ledger.
 5. Use `write_map_delta` only for scout rejections or later evidence changes that
    are not already in a checkpointed tracer report. Concern evidence closes no
    coverage dimension: omit the `dimension` parameter.

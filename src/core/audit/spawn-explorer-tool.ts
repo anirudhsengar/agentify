@@ -56,6 +56,7 @@ import type { Model, Api } from "@earendil-works/pi-ai";
 import type { AuditResourceBudget } from "./resource-budget.ts";
 import { providerRequestReservation } from "./resource-budget.ts";
 import { currentRepositoryCommit, mergeExplorerConcernEvidence } from "./explorer-receipts.ts";
+import { isSubstantiveConcernRejection } from "./concern-rejection.ts";
 import { loadCanonicalMapAt } from "./map-storage.ts";
 import { stableMapValueIdentity } from "./map-delta.ts";
 import { Type } from "typebox";
@@ -522,7 +523,7 @@ export function activeExplorerToolsAfterRead(
     activeTools: ReadonlyArray<string>,
 ): string[] {
     return mode === "concern_tracer" && repositoryReadCalls >= maxReads
-        ? ["submit_concern_report"]
+        ? activeTools.filter((name) => name === "submit_concern_report" || name === "submit_concern_rejection")
         : [...activeTools];
 }
 
@@ -532,7 +533,7 @@ export function concernSubmissionSteerMessage(
     maxReads: number,
 ): string | null {
     return mode === "concern_tracer" && repositoryReadCalls === maxReads
-        ? "Repository evidence collection is complete. Call submit_concern_report now; do not request another repository tool."
+        ? "Repository evidence collection is complete. Call submit_concern_report or submit_concern_rejection now; do not request another repository tool."
         : null;
 }
 
@@ -721,6 +722,59 @@ export function createConcernSubmissionTool(
                 content: [{ type: "text", text: "Typed concern report recorded. Stop now." }],
                 details: { recorded: true, concern: decoded.concern.concern as string | null },
             };
+        },
+    });
+}
+
+export interface ConcernRejection {
+    candidate: string;
+    why_rejected: string;
+    evidence_path: string;
+}
+
+const ConcernRejectionSubmissionSchema = Type.Object({
+    reason: Type.String({ minLength: 20, maxLength: 2_048 }),
+    evidence_path: Type.String({ minLength: 1, maxLength: 1_024 }),
+    excerpt: Type.String({ minLength: 1, maxLength: 2_048 }),
+}, { additionalProperties: false });
+
+/** Record why an untraced scout proposal is not one coherent specialty. */
+export function createConcernRejectionSubmissionTool(
+    expectedConcern: string,
+    repositoryRoot: string,
+    observedPaths: ReadonlySet<string>,
+    onSubmit: (rejection: ConcernRejection) => void,
+): ToolDefinition {
+    return defineTool({
+        name: "submit_concern_rejection",
+        label: "Reject incoherent concern",
+        description:
+            "Reject the application-bound scout proposal only when observed immutable source proves it combines unrelated failure domains or lacks an end-to-end behavioral flow.",
+        parameters: ConcernRejectionSubmissionSchema,
+        async execute(_id, params) {
+            const evidencePath = params.evidence_path.trim().replaceAll("\\", "/");
+            const reason = params.reason.trim();
+            if (path.isAbsolute(evidencePath) || evidencePath.startsWith("../")
+                || !observedPaths.has(evidencePath) || !isSubstantiveConcernRejection(reason)) {
+                return { content: [{ type: "text", text: "Error: rejection requires a substantive reason and an observed repository-relative source path." }],
+                    isError: true, details: { recorded: false, candidate: expectedConcern } };
+            }
+            const commit = currentRepositoryCommit(repositoryRoot);
+            const source = commit && spawnSync("git", ["-C", repositoryRoot, "show", `${commit}:${evidencePath}`], {
+                encoding: "utf8", maxBuffer: 512 * 1_024, windowsHide: true,
+            });
+            if (!source || source.status !== 0 || !source.stdout.includes(params.excerpt)) {
+                return { content: [{ type: "text", text: "Error: rejection excerpt must match observed immutable HEAD source exactly." }],
+                    isError: true, details: { recorded: false, candidate: expectedConcern } };
+            }
+            const rejection: ConcernRejection = {
+                candidate: expectedConcern,
+                why_rejected: `${reason} Evidence: ${evidencePath} contains ${JSON.stringify(params.excerpt)}.`,
+                evidence_path: evidencePath,
+            };
+            onSubmit(rejection);
+            return { content: [{ type: "text", text: "Typed concern rejection recorded. Stop now." }],
+                details: { recorded: true, candidate: expectedConcern } };
         },
     });
 }
@@ -1048,6 +1102,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             ) ?? []
             : [];
         const priorConcern = attestedPriorConcern(existingMap ?? undefined, expectedConcern, ctx.cwd);
+        const canRejectConcern = mode === "concern_tracer" && expectedConcern !== undefined
+            && !existingMap?.concern_evidence?.concerns.some((concern) => concern.concern === expectedConcern);
 
         const ownershipClaims: Array<[string, string, string | null]> = [];
         let ownershipBytes = 2;
@@ -1232,7 +1288,10 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         let providerCalls = 0;
         let providerResponses = 0;
         let oversizedReportPath: string | null = null;
-        const submission: { concern: Concern | null } = { concern: null };
+        const submission: { concern: Concern | null; rejection: ConcernRejection | null } = {
+            concern: null,
+            rejection: null,
+        };
         let resolveSubmission: (() => void) | undefined;
         const submissionComplete = new Promise<void>((resolve) => { resolveSubmission = resolve; });
 
@@ -1316,6 +1375,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                 if (
                                     mode === "concern_tracer"
                                     && submission.concern === null
+                                    && submission.rejection === null
+                                    && !canRejectConcern
                                     && shouldForceConcernSubmission(
                                         providerCalls,
                                         maxProviderCalls,
@@ -1366,7 +1427,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                         mode,
                                         repositoryReadCalls,
                                         maxReads,
-                                        [...toolsForMode, "submit_concern_report"],
+                                        [...toolsForMode, "submit_concern_report",
+                                            ...(canRejectConcern ? ["submit_concern_rejection"] : [])],
                                     ));
                                     const steerMessage = concernSubmissionSteerMessage(
                                         mode,
@@ -1398,8 +1460,18 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     resolveSubmission?.();
                 }, ctx.cwd, expectedConcern, requiredScopePaths, existingMap ?? undefined, observedPaths)
                 : null;
+            const concernRejectionTool = canRejectConcern && expectedConcern
+                ? createConcernRejectionSubmissionTool(expectedConcern, ctx.cwd, observedPaths, rejection => {
+                    if (stopped || signal?.aborted) throw new Error("explorer cancelled by parent audit");
+                    submission.rejection = rejection;
+                    resolveSubmission?.();
+                })
+                : null;
+            const customTools = [concernSubmissionTool, concernRejectionTool].filter(
+                (tool): tool is ToolDefinition => tool !== null,
+            );
             const sessionTools = concernSubmissionTool
-                ? [...toolsForMode, concernSubmissionTool.name]
+                ? [...toolsForMode, ...customTools.map(tool => tool.name)]
                 : [...toolsForMode];
             signal?.throwIfAborted();
             const { session: createdSession } = await createSession({
@@ -1408,7 +1480,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 model: subAgentModel,
                 thinkingLevel: parentThinkingLevel === "unknown" ? undefined : parentThinkingLevel,
                 tools: sessionTools,
-                customTools: concernSubmissionTool ? [concernSubmissionTool] : [],
+                customTools,
                 resourceLoader,
             });
             session = createdSession;
@@ -1451,7 +1523,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                         ? event.message.content.filter((block: unknown) => isRecord(block) && block.type === "toolCall")
                         : [];
                     const terminalReportRequested = mode === "concern_tracer"
-                        && toolCalls.length === 1 && toolCalls[0].name === "submit_concern_report";
+                        && toolCalls.length === 1
+                        && ["submit_concern_report", "submit_concern_rejection"].includes(toolCalls[0].name as string);
                     providerResponses += 1;
                     providerCalls = Math.max(providerCalls, providerResponses);
                     if (toolOptions.resourceBudget && explorerBudgetSession) {
@@ -1511,7 +1584,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             if (stopped || signal?.aborted) throw new Error("explorer cancelled by parent audit");
             // The validated tool body is the final product, not a subsequent
             // prose acknowledgement. Stop the SDK before another provider turn.
-            if (submission.concern !== null) abortSession();
+            if (submission.concern !== null || submission.rejection !== null) abortSession();
 
             if (!session.subscribe) {
                 providerCalls = Math.max(providerCalls, session.messages.filter((message) => (
@@ -1527,11 +1600,14 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             // Extract the final assistant text from the sub-agent's
             // message history and return it as the tool result.
             const submittedConcern = submission.concern as Concern | null;
-            if (mode === "concern_tracer" && submittedConcern === null) {
-                throw new Error("concern_tracer did not call submit_concern_report with a valid typed concern");
+            const submittedRejection = submission.rejection as ConcernRejection | null;
+            if (mode === "concern_tracer" && submittedConcern === null && submittedRejection === null) {
+                throw new Error("concern_tracer did not submit a valid typed concern or substantive rejection");
             }
             const rawReport = submittedConcern
                 ? formatConcernReport(submittedConcern)
+                : submittedRejection
+                ? `## Rejected concern\n${JSON.stringify(submittedRejection)}`
                 : extractFinalAssistantText(
                     session.messages as ReadonlyArray<{ role?: string; content?: unknown }>,
                 );
@@ -1546,7 +1622,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             const structuredConcern = mode === "concern_tracer"
                 ? { concern: submittedConcern, error: null }
                 : null;
-            if (structuredConcern?.concern === null) {
+            if (structuredConcern?.concern === null && submittedRejection === null) {
                 throw new Error(structuredConcern.error ?? "concern_tracer report is invalid");
             }
 
@@ -1609,13 +1685,15 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
 
             const submittedObservedPaths = submittedConcern
                 ? concernEvidencePaths(submittedConcern).filter((file) => observedPaths.has(file))
-                : [];
+                : submittedRejection ? [submittedRejection.evidence_path] : [];
             // The application checkpoints the complete typed body from details.
             // Repeating it in parent model context adds no authority or evidence.
             const modelReport = submittedConcern
                 ? `Typed concern validated: ${submittedConcern.flows.length} flows and ${submittedConcern.touchpoints.length} touchpoints. ` +
                   "The complete body is returned in application-owned tool details for checkpointing. " +
                   "Do not retranscribe it or rewrite recorded concerns; continue from the trusted compiler obligations."
+                : submittedRejection
+                ? `Typed rejection validated for ${JSON.stringify(submittedRejection.candidate)} and returned in application-owned tool details. Do not trace it again.`
                 : report;
             return {
                 content: [
@@ -1644,6 +1722,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     report_truncated_path: truncatedPath || null,
                     report_concern: structuredConcern?.concern?.concern ?? null,
                     structured_concern: structuredConcern?.concern ?? null,
+                    structured_rejection: submittedRejection,
                     ...(submittedObservedPaths.length > 0 ? { observed_paths: submittedObservedPaths } : {}),
                     compiler_feedback: compilerFeedback,
                     reads: readCount,
