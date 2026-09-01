@@ -242,6 +242,9 @@ the first decisive finding promptly and inspect at most two unchecked claims
 from that same source file for immediately evident companion findings. Three is
 a ceiling, not a quota. A typed, complete review is
 required; unsupported assertions and incomplete reviews remain repair obligations.
+Review also rejects a catalog or framework layer whose flows lack one shared
+failure domain or invariant set; individually sourced claims cannot make an
+incoherent specialist installable.
 Eligible bodies are reviewed even while unrelated structural gaps remain, so
 repair sees narrative and ownership failures together. Review cannot close those
 gaps; normalization changes invalidate the body digest and require fresh review.

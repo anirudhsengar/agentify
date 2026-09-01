@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Reject normalized catalog/framework-layer specialists whose sourced flows do not share one failure domain or invariant set. Common directories, integration APIs, lifecycle stages, and test harnesses do not establish behavioral coherence; rejected scope requires retracing rather than prose repair.
+
 - Increase the finite aggregate output default to 640,000 tokens so an evidence-complete audit can retain two honestly unanswered request bounds and still admit the next uncappable narrative review. Explicit lower ceilings, measured usage, cost, calls, time, and semantic closure remain unchanged.
 
 - Require semantic repair to clear actionable typed narrative corrections before accepting unrelated ownership, rejection, attachment, or coverage deltas; each correction still receives immediate full normalized re-review.
