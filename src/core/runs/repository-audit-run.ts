@@ -56,7 +56,18 @@ function rotatingWindow<T>(values: readonly T[], limit: number, pass: number): T
   return result;
 }
 
-function actionableNarrativeCorrections(map: CodebaseMap) {
+export function structuralNarrativeRetraces(map: CodebaseMap) {
+  return (map.specialist_reviews?.records ?? []).flatMap(record => {
+    const body = map.concern_evidence?.concerns.find(concern => concern.concern === record.concern);
+    const finding = record.finding;
+    if (!record.failure || !finding || !body || record.digest !== specialistReviewDigest(body)
+      || !["concern", "covers", "excludes"].includes(finding.claim)) return [];
+    return [{ concern: record.concern, digest: record.digest, claim: finding.claim, finding }];
+  });
+}
+
+export function actionableNarrativeCorrections(map: CodebaseMap) {
+  if (structuralNarrativeRetraces(map).length > 0) return [];
   return (map.specialist_reviews?.records ?? []).flatMap(record => {
     const body = map.concern_evidence?.concerns.find(concern => concern.concern === record.concern);
     if (!record.failure || !body || record.digest !== specialistReviewDigest(body)) return [];
@@ -81,6 +92,7 @@ function repairPrompt(
   compilationReasons: ReadonlyArray<string> = [],
 ): string {
   const currentFailures = [...assessment.reasons, ...compilationReasons];
+  const structuralRetraces = structuralNarrativeRetraces(map);
   const narrativeCorrections = actionableNarrativeCorrections(map);
   const coreConflictReasons = currentFailures.filter((reason) =>
     /multiple core owners/i.test(reason)
@@ -127,6 +139,8 @@ function repairPrompt(
     "The repository's coverage map is complete, but its specialist portfolio failed the trusted semantic-quality gate.",
     `Repair pass ${pass}/${maxRepairPasses}; ${assessment.uncovered_paths.length} tracked paths and ${assessment.uncovered_clusters.length} local implementation/test clusters remain in total.`,
     `Current failures: ${currentFailures.slice(0, 12).join("; ")}.`,
+    `Structural narrative retraces: ${JSON.stringify(structuralRetraces)}.`,
+    "Resolve every listed structural narrative retrace before local claim corrections. Run concern_tracer with the exact existing concern identity and a narrow focus on the cited incoherence; preserve verified flows and core scope while making the body one failure domain or invariant set. Do not reject or rename an accepted body. Agentify intentionally withholds claim corrections until these retraces clear because the replacement body can remove obsolete local claims.",
     "A narrative review finding is a source-backed correction obligation. For a listed correction, use write_map_delta with delta: {} and claim_correction: {concern, digest, claim, statement, rationale}; use the exact identifiers below. For a pitfall/invariant, correct only that assertion and its consequence/explanation. For a flow finding, choose flow_step (zero-based index at the finding's path) to replace only that step's what_happens, or flow_description: true to replace only the description with statement. Never use both; rationale only explains the correction. Flow names, paths, order and all unselected prose stay unchanged. All other claims, references and ownership are preserved, and full normalized review remains mandatory. Findings requiring new paths or changed flow structure require retracing the exact concern. Covered paths do not excuse false claims; never reject real behavior or suppress review to close it.",
     `Bounded narrative corrections: ${JSON.stringify(narrativeCorrections)}.`,
     "Apply every listed narrative correction before writing unrelated ownership, attachment, rejection, or coverage changes. The application rejects unrelated map deltas while a typed correction remains actionable.",
