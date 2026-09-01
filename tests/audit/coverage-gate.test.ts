@@ -141,12 +141,12 @@ class CoverageClosureRuntime implements AgentRuntime {
 }
 
 class SynchronousClosureRuntime implements AgentRuntime {
-  constructor(private readonly complete = true) {}
+  constructor(private readonly complete = true, private readonly withReceipts = true) {}
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
     const map = makeValidCodebaseMap();
     if (!this.complete) map.coverage.D6_validation.status = "gap";
-    emitExplorerReceipts(options, map);
+    if (this.withReceipts) emitExplorerReceipts(options, map);
     const tool = options.customTools?.find((candidate) => candidate.name === "write_map");
     assert.ok(tool?.execute);
     await tool.execute("close-map", { map } as never, options.signal, undefined, { cwd: options.cwd } as never);
@@ -602,6 +602,16 @@ async function testIncompleteMapRemainsRepairableAfterToolReturn(): Promise<void
   }
 }
 
+async function testCompleteMapWithReceiptGapsHandsOffBeforeToolReturn(): Promise<void> {
+  const cwd = tempDir("gate-synchronous-receipt-repair");
+  try {
+    await assert.rejects(runWithRuntime(cwd, new SynchronousClosureRuntime(true, false)),
+      /synchronous closure boundary observed/);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 // --- specialist evidence completion gate ------------------------------------
 
 function testSpecialistEvidenceRequiredForCompletion(): void {
@@ -937,6 +947,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "intentionalCoverageClosureIsNotReportedAsAbort", fn: testIntentionalCoverageClosureIsNotReportedAsAbort },
   { name: "completeMapCancelsBeforeToolReturn", fn: testCompleteMapCancelsBeforeToolReturn },
   { name: "incompleteMapRemainsRepairableAfterToolReturn", fn: testIncompleteMapRemainsRepairableAfterToolReturn },
+  { name: "completeMapWithReceiptGapsHandsOffBeforeToolReturn", fn: testCompleteMapWithReceiptGapsHandsOffBeforeToolReturn },
   { name: "specialistEvidenceRequiredForCompletion", fn: testSpecialistEvidenceRequiredForCompletion },
   { name: "writeMapGuidesSpecialistEvidence", fn: testWriteMapGuidesSpecialistEvidence },
   { name: "attachSkipsAuditOnlyWhenSpecialistEvidenceRecorded", fn: testAttachSkipsAuditOnlyWhenSpecialistEvidenceRecorded },
