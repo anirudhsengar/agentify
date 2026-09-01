@@ -538,10 +538,11 @@ normalization change invalidates its exact-body digest and requires fresh review
 Correction neither fabricates a retrace nor approves the body: its changed digest
 requires full normalized review inside the existing bounded repair loop. A successful
 claim correction returns fresh normalized review findings and the new body digest
-within the same repair session. Review seeks up to three already-evident
-contradictions per bounded request so one concern does not rediscover independent
-false claims across avoidable repair cycles; three is a ceiling, never a completion
-quota. Invalid corrections dispatch no review. All review requests
+within the same repair session. Review submits the first decisive contradiction
+promptly, then inspects at most two unchecked claims backed by that same source
+file for immediately evident companions. It never continues into another source
+file after the first finding; three is a ceiling, never a completion quota.
+Invalid corrections dispatch no review. All review requests
 share the existing call, token, cost and time budgets; a concurrent map change
 aborts the stale review checkpoint instead of overwriting newer evidence.
 Parallel delta proposals are serialized for the mutation-and-review interval;

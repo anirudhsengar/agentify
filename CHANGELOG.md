@@ -39,7 +39,7 @@ All notable changes to Agentify are documented here.
 
 - Report exact byte reductions and the largest typed-concern sections when rejecting oversized tracer output, preserving the existing cap, prior evidence, and verified flows.
 
-- Seek up to three decisive narrative contradictions per bounded review so independent false claims in one concern can be corrected together; three remains a ceiling rather than a completion quota, and approval still requires every claim.
+- Submit the first decisive narrative contradiction promptly, then inspect at most two unchecked claims backed by the same source file for immediately evident companions. This keeps atomic multi-finding repair without open-ended searches; three remains a ceiling rather than a completion quota, and approval still requires every claim.
 
 - Review up to three source-backed narrative findings per body and correct them atomically at one exact-body digest. Existing one-finding records remain valid; forged, duplicate, unreviewed or no-progress batch edits fail without writes. Review deadlines, call limits and full post-correction review remain unchanged.
 
