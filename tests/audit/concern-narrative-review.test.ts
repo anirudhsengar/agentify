@@ -266,6 +266,9 @@ test("specialist review overlap falls back to serial admission when reservations
     let sessions = 0;
     const runtime: AgentRuntime = { async runSession(options) {
       sessions += 1;
+      assert.equal(options.forceRequiredToolChoice, true,
+        "a bounded source review must require its only typed terminal on the first provider response");
+      assert.equal(options.recoveryPromptIfToolNotCalled?.requiredToolName, "submit_specialist_review");
       options.onProviderRequest!({ inputTokens: 1_000, outputTokens: 100, costUsd: 0.1 });
       await new Promise(resolve => setTimeout(resolve, 25));
       const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
