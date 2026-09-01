@@ -17,6 +17,7 @@ import { loadCanonicalMapAt, writeCanonicalMap } from "../../src/core/audit/map-
 import {
   activeExplorerToolsAfterRead,
   concernSubmissionSteerMessage,
+  createConcernRejectionSubmissionTool,
   createConcernSubmissionTool,
   createSpawnExplorerTool,
   parseStructuredConcernReport,
@@ -86,6 +87,60 @@ test("the simple tracer envelope retains the complete nested concern contract", 
     "the tracer must not pad a grounded body toward an output-size target");
   assert.doesNotMatch(prompt, /this is the only enforcement/,
     "a touchpoint example must not encourage unproved repository-wide exclusivity");
+  assert.match(prompt, /submit_concern_rejection/,
+    "an incoherent scout proposal needs a bounded typed rejection instead of repeated full-body traces");
+  assert.match(prompt, /one failure domain or invariant set/i,
+    "coherence must be checked before authoring a persistent body");
+});
+
+test("a tracer can substantively reject an incoherent scout proposal from observed immutable source", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-concern-rejection-"));
+  try {
+    fs.mkdirSync(path.join(cwd, "src/helpers"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "src/helpers/catalog.ts"),
+      "export const parseCookie = () => null;\nexport const streamBody = () => null;\n");
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "independent helper behaviors");
+    const rejection = { candidate: "Helper catalog", why_rejected: "", evidence_path: "" };
+    const tool = createConcernRejectionSubmissionTool(
+      "Helper catalog", cwd, new Set(["src/helpers/catalog.ts"]), value => Object.assign(rejection, value),
+    );
+    const accepted = await tool.execute("reject", {
+      reason: "Cookie parsing and response streaming have different entry points, effects, and failure invariants; a shared helper subtree does not make one specialty.",
+      evidence_path: "src/helpers/catalog.ts",
+      excerpt: "export const parseCookie = () => null;",
+    } as never, undefined, undefined, { cwd } as never);
+    assert.notEqual((accepted as { isError?: boolean }).isError, true, JSON.stringify(accepted.content));
+    assert.equal(rejection.candidate, "Helper catalog");
+    assert.match(rejection.why_rejected, /different entry points, effects, and failure invariants/);
+    assert.equal(rejection.evidence_path, "src/helpers/catalog.ts");
+
+    const unobserved = await createConcernRejectionSubmissionTool(
+      "Helper catalog", cwd, new Set(), () => assert.fail("unobserved rejection must not persist"),
+    ).execute("reject", {
+      reason: "Independent behaviors do not share one failure domain or invariant set.",
+      evidence_path: "src/helpers/catalog.ts",
+      excerpt: "export const parseCookie = () => null;",
+    } as never, undefined, undefined, { cwd } as never);
+    assert.equal((unobserved as { isError?: boolean }).isError, true);
+
+    writeCanonicalMap(cwd, makeValidCodebaseMap({
+      concern_evidence: { concerns: [], not_concerns: [] }, expert_evidence: undefined,
+    }), { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
+    assert.equal(checkpointExplorerConcernEvidence(cwd, ".agentify/runtime/audit", {
+      type: "tool_execution_end", toolName: "spawn_explorer", details: {
+        mode: "concern_tracer", structured_rejection: rejection,
+      },
+    }), true);
+    assert.deepEqual(loadCanonicalMapAt(cwd, ".agentify/runtime/audit")?.concern_evidence?.not_concerns, [{
+      candidate: rejection.candidate, why_rejected: rejection.why_rejected,
+    }]);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
 });
 
 test("a tracer must submit as soon as its repository-read budget is exhausted", () => {
