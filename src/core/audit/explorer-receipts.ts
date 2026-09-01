@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import type {
   CodebaseMap,
@@ -7,6 +8,7 @@ import type {
 import { isSubstantiveConcernRejection } from "./concern-rejection.ts";
 import { mergeEvidenceIntoMap } from "./map-draft.ts";
 import { loadCanonicalMapAt, writeCanonicalMap } from "./map-storage.ts";
+import { stableMapValueIdentity } from "./map-delta.ts";
 import { concernEvidencePaths, removeTrustedInferredAttachments } from "./specialist-completion.ts";
 
 type ExplorerMode = "concern_scout" | "concern_tracer";
@@ -402,7 +404,31 @@ export function checkpointExplorerConcernEvidence(
   const concernName = stringField(concern.concern);
   if (!concernName) return false;
   const identity = concernName.toLowerCase();
-  const merged = mergeExplorerConcernEvidence(map, concern);
+  const replacesConcern = stringField(details.replaces_concern);
+  const replacedBody = replacesConcern === null ? null : map.concern_evidence?.concerns.find(candidate =>
+    candidate.concern === replacesConcern);
+  const replacedDigest = replacedBody === null || replacedBody === undefined ? null
+    : createHash("sha256").update(stableMapValueIdentity(replacedBody)).digest("hex");
+  const replacementFinding = replacesConcern === null ? null : map.specialist_reviews?.records.find(record =>
+    map.specialist_reviews?.repository_commit === currentRepositoryCommit(cwd)
+    && record.concern === replacesConcern && record.digest === replacedDigest
+    && record.retryable === false && record.finding?.claim === "concern");
+  const mergedWithConcern = mergeExplorerConcernEvidence(map, concern);
+  const merged: CodebaseMap = !replacesConcern || replacesConcern.toLowerCase() === identity || !replacementFinding
+    ? mergedWithConcern
+    : {
+      ...mergedWithConcern,
+      concern_evidence: {
+        concerns: (mergedWithConcern.concern_evidence?.concerns ?? [])
+          .filter(candidate => candidate.concern !== replacesConcern),
+        not_concerns: [
+          ...(mergedWithConcern.concern_evidence?.not_concerns ?? [])
+            .filter(candidate => candidate.candidate !== replacesConcern),
+          { candidate: replacesConcern, grouped_into: concernName,
+            why_rejected: `Corrected to ${concernName}: ${replacementFinding.finding!.reason}` },
+        ],
+      },
+    };
   if (!merged.concern_evidence?.concerns.some((candidate) => candidate.concern.trim().toLowerCase() === identity)) {
     return false;
   }

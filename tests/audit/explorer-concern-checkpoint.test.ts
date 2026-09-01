@@ -648,7 +648,7 @@ test("a source-reviewed identity finding permits one scope-preserving corrective
     git(cwd, "config", "user.email", "agentify@example.invalid");
     git(cwd, "add", ".");
     git(cwd, "commit", "-qm", "request extraction");
-    const previous = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null") as Concern;
+    const previous = parseStructuredConcernReport(REPORT, "2026-09-01T00:00:00.000Z")!;
     previous.concern = "Request framework utilities (routing, extraction, rendering)";
     const head = currentRepositoryCommit(cwd)!;
     const map = makeValidCodebaseMap({
@@ -661,14 +661,30 @@ test("a source-reviewed identity finding permits one scope-preserving corrective
     });
     const corrected = structuredClone(previous);
     corrected.concern = "Request extraction and typed rejection contracts";
-    let recorded: Concern | null = null;
-    const tool = createConcernSubmissionTool("2026-09-01T00:00:00.000Z", concern => { recorded = concern; },
+    let recordedName = "";
+    const tool = createConcernSubmissionTool("2026-09-01T00:00:00.000Z", concern => { recordedName = concern.concern; },
       cwd, previous.concern, ["src/extract/mod.rs", "src/extract/rejection.rs"], map,
       new Set(["src/extract/mod.rs", "src/extract/rejection.rs"]));
     const result = await tool.execute("correct-identity", { report_json: JSON.stringify(corrected) } as never,
       undefined, undefined, {} as never) as { isError?: boolean; content: Array<{ text?: string }> };
     assert.equal(result.isError, undefined, result.content[0]?.text);
-    assert.equal(recorded?.concern, corrected.concern);
+    assert.equal(recordedName, corrected.concern);
+    writeCanonicalMap(cwd, { ...attestCodebaseMap(map, head), specialist_reviews: map.specialist_reviews },
+      { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
+    const beforeRename = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+    assert.equal(beforeRename.specialist_reviews?.repository_commit, head);
+    assert.equal(beforeRename.specialist_reviews?.records[0]?.digest, specialistReviewDigest(previous));
+    assert.equal(beforeRename.specialist_reviews?.records[0]?.finding?.claim, "concern");
+    assert.equal(checkpointExplorerConcernEvidence(cwd, ".agentify/runtime/audit", {
+      type: "tool_execution_end", toolName: "spawn_explorer", result: { details: {
+        mode: "concern_tracer", expected_concern: previous.concern,
+        structured_concern: corrected, replaces_concern: previous.concern,
+      } },
+    }), true);
+    const persisted = loadCanonicalMapAt(cwd, ".agentify/runtime/audit")!;
+    assert.deepEqual(persisted.concern_evidence?.concerns.map(item => item.concern), [corrected.concern]);
+    assert.deepEqual(persisted.concern_evidence?.not_concerns.map(item =>
+      [item.candidate, item.grouped_into]), [[previous.concern, corrected.concern]]);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

@@ -118,7 +118,8 @@ would specialize in to work on it well.
    Keep `concern_evidence.concerns` empty until a tracer has verified a concern.
 4. For each candidate worth keeping, run `concern_tracer` with the proposal's
    exact name in `concern` and the name plus seed paths in `focus`. One tracer per
-   concern. Agentify rejects renamed reports, validates each complete report, and
+   concern. Agentify rejects renamed reports unless a current source review rejects
+   that identity and requests one scope-preserving corrective name. It validates each complete report and
    checkpoints it directly; do not retranscribe it. The tracer may instead submit
    one application-validated, source-backed rejection when the proposed identity
    itself is an incoherent catalog or has no end-to-end behavioral flow. That

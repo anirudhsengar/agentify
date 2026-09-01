@@ -5,6 +5,7 @@ All notable changes to Agentify are documented here.
 ## [Unreleased]
 
 - Keep source-proven strategy families and jointly required operational mechanisms coherent during specialist discovery and review, while continuing to reject catalogs joined only by a theme, directory, or API.
+- Permit one source-reviewed, scope-preserving concern identity correction while retaining the rejected former name as an attested disposition.
 
 - Let bounded concern tracers substantively reject a new incoherent scout proposal through a separate typed terminal backed by an exact observed HEAD excerpt. The rejection is checkpointed and attested without fabricating a specialist body or repeating an untraceable catalog.
 

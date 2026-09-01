@@ -39,6 +39,7 @@
 // dispatch is bounded by total/concurrent/time
 // budgets so a bad audit cannot spawn unbounded work.
 
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -572,6 +573,15 @@ function evidenceAtPath(concern: Concern, file: string): unknown {
     };
 }
 
+function reviewedIdentityCorrection(map: CodebaseMap | undefined, name: string | undefined, cwd: string | undefined): boolean {
+    if (!map || !name || !cwd || map.specialist_reviews?.repository_commit !== currentRepositoryCommit(cwd)) return false;
+    const concern = map.concern_evidence?.concerns.find((entry) => entry.concern === name);
+    if (!concern) return false;
+    const digest = createHash("sha256").update(stableMapValueIdentity(concern)).digest("hex");
+    return map.specialist_reviews.records.some((record) => record.concern === name && record.digest === digest
+        && record.retryable === false && record.finding?.claim === "concern");
+}
+
 export function createConcernSubmissionTool(
     observedAt: string,
     onSubmit: (concern: Concern) => void,
@@ -610,7 +620,11 @@ export function createConcernSubmissionTool(
                     details: { recorded: false, concern: null },
                 };
             }
-            if (expectedConcern !== undefined && decoded.concern.concern !== expectedConcern) {
+            const correctiveRename = expectedConcern !== undefined && decoded.concern.concern !== expectedConcern
+                && reviewedIdentityCorrection(existingMap, expectedConcern, repositoryRoot)
+                && !existingMap?.concern_evidence?.concerns.some((concern) =>
+                    concern.concern.toLowerCase() === decoded.concern!.concern.toLowerCase());
+            if (expectedConcern !== undefined && decoded.concern.concern !== expectedConcern && !correctiveRename) {
                 return {
                     content: [{
                         type: "text",
@@ -1103,6 +1117,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             ) ?? []
             : [];
         const priorConcern = attestedPriorConcern(existingMap ?? undefined, expectedConcern, ctx.cwd);
+        const canCorrectIdentity = reviewedIdentityCorrection(existingMap ?? undefined, expectedConcern, ctx.cwd);
         const canRejectConcern = mode === "concern_tracer" && expectedConcern !== undefined
             && !existingMap?.concern_evidence?.concerns.some((concern) => concern.concern === expectedConcern);
 
@@ -1273,7 +1288,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         const task = mode === "custom"
             ? `${params.target_path}${summarySuffix}${constraintsBlock}`
             : `${params.target_path} ${params.focus ?? ""}${summarySuffix}${constraintsBlock}` +
-              (expectedConcern ? `\n- Required concern identity: ${JSON.stringify(expectedConcern)}. Use it verbatim.` : "");
+              (expectedConcern ? canCorrectIdentity
+                ? `\n- The current source review rejected the identity ${JSON.stringify(expectedConcern)}. Submit one scope-preserving replacement with a precise maintainer name; do not reuse another accepted identity.`
+                : `\n- Required concern identity: ${JSON.stringify(expectedConcern)}. Use it verbatim.` : "");
 
         let session: ExplorerSubSession | undefined;
         let stopped = false;
@@ -1723,6 +1740,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     report_truncated_path: truncatedPath || null,
                     report_concern: structuredConcern?.concern?.concern ?? null,
                     structured_concern: structuredConcern?.concern ?? null,
+                    ...(structuredConcern?.concern?.concern && expectedConcern
+                        && structuredConcern.concern.concern !== expectedConcern
+                        ? { replaces_concern: expectedConcern } : {}),
                     structured_rejection: submittedRejection,
                     ...(submittedObservedPaths.length > 0 ? { observed_paths: submittedObservedPaths } : {}),
                     compiler_feedback: compilerFeedback,

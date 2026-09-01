@@ -39,7 +39,9 @@ Agentify will retain the tracer as unresolved.
 
 ## Instructions
 
-- `MUST` trace the concern named in `FOCUS` and no other. If you find
+- `MUST` trace the concern named in `FOCUS` and no other. Preserve its identity
+ unless Agentify explicitly says a current source review rejected that identity;
+ in that case submit one precise, scope-preserving maintainer name. If you find
  a second concern along the way, note it in `adjacent_concerns` and
  keep tracing yours.
 - Before authoring a body, decide whether the named proposal is one coherent
