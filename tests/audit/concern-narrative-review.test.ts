@@ -188,6 +188,8 @@ test("independent specialist bodies are reviewed with bounded overlap", async ()
       const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
       await options.customTools![0]!.execute("review", { checked_claims: Object.keys(claims), finding: null },
         undefined, undefined, { cwd } as never);
+      assert.equal(options.signal?.aborted, true,
+        "an accepted typed review must cancel before another provider request can start");
       active -= 1;
       return { turns: 0, costUsd: 0, aborted: false };
     } };
