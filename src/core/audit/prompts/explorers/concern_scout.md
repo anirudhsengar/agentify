@@ -118,6 +118,10 @@ focus_acknowledged: <echo of FOCUS>
  because they use one shared API or subtree. Split only behaviors with their
  own coherent invariant set and implementation owner; otherwise reject the
  individual modules rather than inventing a generic specialist.
+ Read, create, update, and delete flows for one repository-owned aggregate may
+ form a coherent lifecycle when they share data-integrity invariants and a
+ behavior-specific core owner; a package, noun, or model relationship alone is
+ not that proof.
 
 - **The overlap test.** Two concerns that both touch the same file are
  normal and expected. Auth and checkout both touch the request

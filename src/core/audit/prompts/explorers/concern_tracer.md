@@ -45,7 +45,10 @@ Agentify will retain the tracer as unresolved.
 - Before authoring a body, decide whether the named proposal is one coherent
  behavior whose flows share one failure domain or invariant set. A shared
  directory, helper API, framework layer, lifecycle label, or test harness is
- not enough. If observed source proves the proposal is a catalog of unrelated
+ not enough. Read, create, update, and delete flows for one aggregate may be
+ coherent when source establishes shared data-integrity invariants and a
+ behavior-specific core owner; a shared package, noun, or model relationship
+ alone remains insufficient. If observed source proves the proposal is a catalog of unrelated
  behaviors or has no end-to-end behavioral flow, call
  `submit_concern_rejection` with one exact observed source excerpt and the
  behavior-specific reason. Do not force a body or spend another trace on it.

@@ -10,6 +10,8 @@ All notable changes to Agentify are documented here.
 
 - Permit a coherence retrace to remove a duplicated flow from one body only when another existing concern preserves the exact flow name and ordered tracked step paths; unique verified flows and newly uncovered tracked obligations remain rejected.
 
+- Distinguish a source-proven aggregate lifecycle from a catalog during tracing and normalized review: related read/create/update/delete flows may stay together only when they share data-integrity invariants and a behavior-specific core owner.
+
 - Reject normalized catalog/framework-layer specialists before claim-by-claim falsification when their sourced flows do not share one failure domain or invariant set. Common directories, integration APIs, lifecycle stages, and test harnesses do not establish behavioral coherence; rejected scope requires retracing rather than prose repair.
 
 - Increase the finite aggregate output default to 640,000 tokens so an evidence-complete audit can retain two honestly unanswered request bounds and still admit the next uncappable narrative review. Explicit lower ceilings, measured usage, cost, calls, time, and semantic closure remain unchanged.

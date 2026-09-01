@@ -551,6 +551,10 @@ Before checking individual assertions, the same review rejects a catalog or fram
 one failure domain or invariant set. A common directory, integration API,
 lifecycle stage, or test harness cannot substitute for behavioral coherence,
 even when each isolated source claim is accurate.
+Repository-owned read, create, update, and delete flows for one aggregate may
+remain one lifecycle only when immutable source establishes shared data-integrity
+invariants and a behavior-specific core owner. A shared package, noun, or model
+relationship is not sufficient evidence.
 When a current exact body has such a scope finding, semantic repair schedules
 that retrace before local claim corrections in bodies that may become obsolete.
 The accepted identity and verified flow-preservation checks remain mandatory.
