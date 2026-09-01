@@ -542,7 +542,7 @@ within the same repair session. Review submits the first decisive contradiction
 promptly, then inspects at most two unchecked claims backed by that same source
 file for immediately evident companions. It never continues into another source
 file after the first finding; three is a ceiling, never a completion quota.
-The same review rejects a catalog or framework layer when its flows do not share
+Before checking individual assertions, the same review rejects a catalog or framework layer when its flows do not share
 one failure domain or invariant set. A common directory, integration API,
 lifecycle stage, or test harness cannot substitute for behavioral coherence,
 even when each isolated source claim is accurate.
