@@ -453,6 +453,8 @@ test("an explicit unique-symbol rejection binds its tracked implementation and d
     write(cwd, "src/main/java/org/example/WelcomeController.java", "class WelcomeController { String welcome() { return \"welcome\"; } }\n");
     write(cwd, "src/test/java/org/example/WelcomeControllerTests.java",
       "class WelcomeControllerTests { WelcomeController controller = new WelcomeController(); }\n");
+    write(cwd, "src/test/java/org/example/WelcomeControllerSnapshotTests.java",
+      "class WelcomeControllerSnapshotTests { String snapshot = \"welcome\"; }\n");
     git(cwd, "add", ".");
     git(cwd, "commit", "-qm", "symbol rejection fixture");
     const map = makeValidCodebaseMap();
@@ -484,7 +486,16 @@ test("an explicit unique-symbol rejection binds its tracked implementation and d
       "the exact declared symbol must bind the substantive rejection to its unique tracked definition");
     assert.ok(compiled.assessment.exempted_paths.includes("src/test/java/org/example/WelcomeControllerTests.java"),
       "a direct test reference inherits the exact symbol-backed disposition");
-    assert.ok(!compiled.assessment.uncovered_clusters.some(cluster => cluster.cluster_key === "welcomecontroller"));
+    assert.ok(!compiled.assessment.exempted_paths.includes("src/test/java/org/example/WelcomeControllerSnapshotTests.java"),
+      "a matching filename without a direct symbol reference is not evidence");
+
+    write(cwd, "src/other/java/org/example/WelcomeController.java", "class WelcomeController {}\n");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "ambiguous duplicate symbol");
+    const ambiguous = compileSpecialistEvidence(map, { cwd });
+    assert.ok(!ambiguous.assessment.exempted_paths.includes("src/main/java/org/example/WelcomeController.java"));
+    assert.ok(!ambiguous.assessment.exempted_paths.includes("src/other/java/org/example/WelcomeController.java"),
+      "same-name definitions in unrelated subtrees remain unresolved");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

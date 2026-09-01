@@ -218,7 +218,11 @@ wording cannot close an obligation. Fixed-point normalization removes an
 append-only acceptance entry only when its candidate semantically matches an
 accepted concern; unrelated malformed screening decisions remain unresolved.
 Path-backed rejections may name exact tracked paths in a descriptive candidate
-label, but do not exempt substring-related paths. Application timers enforce parent-session
+label, but do not exempt substring-related paths. A rejection that instead names
+one exact source symbol is bound only when immutable HEAD contains one unique
+tracked declaration; only tests with a direct reference to that symbol inherit
+the disposition. Matching filename stems and duplicate declarations remain
+unresolved. Application timers enforce parent-session
 deadlines, and an interrupted CLI rolls its pending installation back before
 exiting. A later invocation may resume only the exact diagnostic-map-only
 topology with a current-HEAD application receipt ledger; extra, stale, or

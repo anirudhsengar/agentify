@@ -1680,6 +1680,46 @@ function rejectionCoversPath(
   return exactPathMention.test(rejection.candidate);
 }
 
+function symbolBackedRejectionPaths(
+  rejections: readonly NonNullable<CodebaseMap["concern_evidence"]>["not_concerns"][number][],
+  candidates: readonly string[],
+  cwd: string,
+): Set<string> {
+  const declarationCandidates = candidates.filter((repositoryPath) => !isTestRepositoryPath(repositoryPath))
+    .map((repositoryPath) => ({ repositoryPath,
+      symbol: path.posix.basename(repositoryPath).replace(/\.[^.]+$/, "") }))
+    .filter(({ symbol }) => /^[A-Za-z_$][A-Za-z0-9_$]{3,}$/.test(symbol)
+      && rejections.some((rejection) => new RegExp(`\\b${symbol}\\b`).test(rejection.candidate)));
+  const sources = repositoryBlobsAtHead(cwd, declarationCandidates.map(candidate => candidate.repositoryPath));
+  const declarations = new Map<string, string[]>();
+  for (const { repositoryPath, symbol } of declarationCandidates) {
+    const source = sources.get(repositoryPath);
+    if (source === undefined) continue;
+    const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (!new RegExp(`\\b(?:class|record|interface|enum|trait|struct|module|def|function|fn|func|type)\\s+${escaped}\\b`)
+      .test(source)) continue;
+    const paths = declarations.get(symbol) ?? [];
+    paths.push(repositoryPath);
+    declarations.set(symbol, paths);
+  }
+  const unique = [...declarations].flatMap(([symbol, paths]) => paths.length === 1 ? [{ symbol, path: paths[0]! }] : []);
+  const matched = new Set<string>();
+  for (const rejection of rejections) {
+    const definitions = unique.filter(({ symbol }) => new RegExp(`\\b${symbol}\\b`).test(rejection.candidate));
+    for (const definition of definitions) matched.add(definition.path);
+    const possibleTests = candidates.filter((repositoryPath) => isTestRepositoryPath(repositoryPath)
+      && definitions.some(({ symbol }) => path.posix.basename(repositoryPath).includes(symbol)));
+    const testSources = repositoryBlobsAtHead(cwd, possibleTests);
+    for (const testPath of possibleTests) {
+      const source = testSources.get(testPath);
+      if (source !== undefined && definitions.some(({ symbol }) => new RegExp(`\\b${symbol}\\b`).test(source))) {
+        matched.add(testPath);
+      }
+    }
+  }
+  return matched;
+}
+
 function concreteTouchpointSymbols(value: string | null): Set<string> {
   if (value === null) return new Set();
   return new Set(value.split(/[,/|]/).map((candidate) =>
@@ -1745,6 +1785,7 @@ function pathsMentionedByRejections(
   map: CodebaseMap,
   candidates: readonly string[],
   acceptedConcerns: readonly ConcernRecord[],
+  cwd: string | undefined,
 ): string[] {
   const mentioned = new Set<string>();
   const rejections = (map.concern_evidence?.not_concerns ?? [])
@@ -1752,9 +1793,9 @@ function pathsMentionedByRejections(
       isSubstantiveConcernRejection(entry.why_rejected)
       && rejectionHasGroundedDisposition(entry, acceptedConcerns)
     );
-  for (const candidate of candidates) {
-    if (rejections.some((entry) => rejectionCoversPath(entry, candidate))) mentioned.add(candidate);
-  }
+  const symbolBacked = cwd === undefined ? new Set<string>() : symbolBackedRejectionPaths(rejections, candidates, cwd);
+  for (const candidate of candidates) if (symbolBacked.has(candidate)
+    || rejections.some((entry) => rejectionCoversPath(entry, candidate))) mentioned.add(candidate);
   return [...mentioned].sort((left, right) => left.localeCompare(right));
 }
 
@@ -2212,7 +2253,7 @@ export function assessSpecialistEvidence(
     }
   }
   const covered = [...coveredSet].sort((left, right) => left.localeCompare(right));
-  const exempted = pathsMentionedByRejections(map, highSignal, acceptedConcernRecords);
+  const exempted = pathsMentionedByRejections(map, highSignal, acceptedConcernRecords, repository.cwd);
   const exemptedSet = new Set(exempted);
   const uncovered = highSignal.filter((candidate) =>
     !coveredSet.has(candidate)

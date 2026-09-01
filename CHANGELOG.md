@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Bind a substantive rejection's exact source-symbol name to one unique tracked declaration and only its direct symbol-referencing tests. Filename similarity, missing declarations, duplicate same-name definitions, and unrelated files remain unresolved.
+
 - Require each bounded specialist source review to answer through its only typed terminal on the first provider response. Exact excerpt validation and the existing one argument-correction retry remain unchanged.
 
 - Deterministically retire an exact current-HEAD body when its non-retryable primary source review rejects concern-level coherence, then recompile ownership and review any changed survivors. This removes the redundant tracer that previously restated the same rejection; retryable, stale, unreviewed, and local-claim findings cannot remove concerns.

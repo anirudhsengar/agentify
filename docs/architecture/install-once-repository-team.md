@@ -437,7 +437,11 @@ exact current-HEAD digest has a non-retryable concern-level source review;
 checkpointing atomically replaces that body with the rejection. Unreviewed bodies
 and local claim findings cannot retire it. This rejects definite source contradictions;
 lexical presence alone does not prove the described behavior. Valid evidence is
-checkpointed before receipt attestation;
+checkpointed before receipt attestation. For non-delegating substantive
+rejections that name an exact source symbol instead of a path, deterministic
+closure resolves only a unique tracked HEAD declaration and tests that directly
+reference it. Basename similarity, absent declarations and duplicate same-name
+definitions provide no disposition.
 the builder records scout screening but does not retranscribe tracer evidence.
 Tracer tool details retain the exact validated body for this checkpoint. The
 parent model receives only a concise acknowledgement and bounded compiler
