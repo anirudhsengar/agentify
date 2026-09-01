@@ -27,7 +27,7 @@ import { assessSpecialistEvidence } from "../../src/core/audit/specialist-comple
 import { compileSpecialistEvidence } from "../../src/core/audit/specialist-compiler.ts";
 import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 import { createWriteMapTools } from "../../src/core/audit/write-map-tools.ts";
-import { assessSpecialistReviews } from "../../src/core/audit/specialist-review.ts";
+import { assessSpecialistReviews, specialistReviewDigest } from "../../src/core/audit/specialist-review.ts";
 
 const REPORT = `## Report
 \`\`\`json
@@ -635,6 +635,43 @@ test("the tracer cannot rename its application-bound concern identity", async ()
   assert.equal(result.isError, true);
   assert.match(result.content[0]?.text ?? "", /must exactly match.*Request parsing and rejection contracts/i);
   assert.equal(submissions, 0);
+});
+
+test("a source-reviewed identity finding permits one scope-preserving corrective rename", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-concern-rename-"));
+  try {
+    fs.mkdirSync(path.join(cwd, "src/extract"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "src/extract/mod.rs"), "pub trait FromRequest {}\n");
+    fs.writeFileSync(path.join(cwd, "src/extract/rejection.rs"), "pub enum Rejection {}\n");
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "request extraction");
+    const previous = JSON.parse(REPORT.match(/```json\s*([\s\S]*?)```/u)?.[1] ?? "null") as Concern;
+    previous.concern = "Request framework utilities (routing, extraction, rendering)";
+    const head = currentRepositoryCommit(cwd)!;
+    const map = makeValidCodebaseMap({
+      concern_evidence: { concerns: [previous], not_concerns: [] }, expert_evidence: undefined,
+      specialist_reviews: { repository_commit: head, records: [{ concern: previous.concern,
+        digest: specialistReviewDigest(previous), run_id: "review", retryable: false,
+        failure: "concern: identity overstates the traced extraction scope",
+        finding: { claim: "concern", path: "src/extract/mod.rs", excerpt: "pub trait FromRequest {}",
+          reason: "The source owns extraction, not routing or rendering." } }] },
+    });
+    const corrected = structuredClone(previous);
+    corrected.concern = "Request extraction and typed rejection contracts";
+    let recorded: Concern | null = null;
+    const tool = createConcernSubmissionTool("2026-09-01T00:00:00.000Z", concern => { recorded = concern; },
+      cwd, previous.concern, ["src/extract/mod.rs", "src/extract/rejection.rs"], map,
+      new Set(["src/extract/mod.rs", "src/extract/rejection.rs"]));
+    const result = await tool.execute("correct-identity", { report_json: JSON.stringify(corrected) } as never,
+      undefined, undefined, {} as never) as { isError?: boolean; content: Array<{ text?: string }> };
+    assert.equal(result.isError, undefined, result.content[0]?.text);
+    assert.equal(recorded?.concern, corrected.concern);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
 });
 
 test("a retracer cannot replace the application-bound concern scope", async () => {
