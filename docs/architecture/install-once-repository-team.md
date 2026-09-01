@@ -538,6 +538,10 @@ resolve an ownership conflict or invent a new source attachment.
 The repair prompt supplies only bounded rejected claims and their source findings.
 Eligible concern bodies receive narrative review before unrelated portfolio gaps
 close, allowing the same bounded repair pass to address both kinds of obligation.
+Each review exposes one application-owned typed terminal and requires it on the
+first bounded provider response. An exact-excerpt argument error may use the
+existing single correction request; missing or free-form output cannot consume an
+unconstrained continuation.
 While any typed correction remains actionable, the trusted write boundary rejects
 unrelated ownership, attachment, rejection and coverage deltas. Correction and
 fresh review therefore precede structural work without weakening either gate.
