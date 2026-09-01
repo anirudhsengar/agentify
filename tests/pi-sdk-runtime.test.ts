@@ -27,7 +27,7 @@ test("SDK admission rejection prevents HTTP dispatch, while admitted requests st
     fs.writeFileSync(path.join(cwd, "models.json"), JSON.stringify({ providers: {
       openai: { baseUrl: `http://127.0.0.1:${address.port}/v1`, api: "openai-completions",
         apiKey: "local-test-placeholder", models: [{ id: "admission-fixture", contextWindow: 32768, maxTokens: 128,
-          cost: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 1.25 } }] },
+          cost: { input: 1, output: 100, cacheRead: 0.1, cacheWrite: 1.25 } }] },
     } }));
     const runtime = new PiSdkRuntime();
     for (const reject of [true, false]) {
@@ -57,6 +57,8 @@ test("SDK admission rejection prevents HTTP dispatch, while admitted requests st
       auditResourceBudget: costBudget,
       onProviderRequest: (reservation) => {
         assert.ok(reservation, "the real SDK must supply model-bound reservations");
+        assert.ok(reservation.inputTokens < 32768,
+          "a visible exact request must retain its serialized bound, not the full model context");
         costBudget.recordProviderRequest(costSession, reservation);
       },
     }), AuditBudgetExceededError, "preserve typed budget exhaustion across SDK extension dispatch");

@@ -388,9 +388,10 @@ rather than resetting counters; a new commit begins a new evidence lineage.
 Before a parent or explorer session starts, the selected model's complete
 context window must fit in the remaining input-token reserve. Provider hooks
 also reject later exact serialized requests before network dispatch when their
-conservative byte upper bound exceeds that reserve. Post-response accounting
-remains authoritative for actual usage, while both admission boundaries prevent
-an exhausted continuation from crossing the configured aggregate cap.
+conservative byte upper bound exceeds that reserve. That exact bound becomes the
+retained input and metadata-priced cost reservation when the request is visible;
+post-response accounting remains authoritative for actual usage. Both admission
+boundaries prevent an exhausted continuation from crossing the configured cap.
 With the shared reservation budget, up to three independent read-only explorer
 sessions may overlap when the configured output envelope preserves capacity for
 the uncappable parent request; tighter envelopes reduce that ceiling to two.

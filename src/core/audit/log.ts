@@ -495,7 +495,7 @@ export class AgentifyLog {
           aggregate_cost_upper_bound_usd: this.aggregateUsage.cost_usd! + (this.aggregateUsage.reserved_cost_usd ?? 0),
           aggregate_input_upper_bound: this.aggregateUsage.input_tokens! + (this.aggregateUsage.reserved_input_tokens ?? 0),
           aggregate_output_upper_bound: this.aggregateUsage.output_tokens! + (this.aggregateUsage.reserved_output_tokens ?? 0),
-          reservation_basis: "selected_model_context_output_limits_and_price_metadata",
+          reservation_basis: "serialized_request_input_model_output_limits_and_price_metadata",
         } : {}),
       }),
       mean_turn_latency_ms: meanLatency === null ? null : Math.round(meanLatency),

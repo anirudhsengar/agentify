@@ -160,10 +160,11 @@ smaller limit still rejects any request whose full bound would exceed it.
 Parent audit requests and explorer sub-sessions consume the same aggregate call,
 turn, token, cost, and elapsed-time budget. A tool-use continuation must leave
 enough input capacity for another request at the just-observed context size.
-Before every new parent or explorer session, Agentify reserves the selected
-model's full context window so the SDK's initial request cannot cross the
-remaining budget. Later requests are also checked against a conservative
-serialized-payload upper bound; a same-HEAD restart cannot overshoot a nearly
+Before every new parent or explorer session, Agentify requires the selected
+model's full context window to fit so an SDK request that is not exposed to the
+provider hook cannot cross the remaining budget. Once an exact request is
+visible, its conservative serialized-byte input bound is retained with the
+output and cost reservations; a same-HEAD restart cannot overshoot a nearly
 exhausted checkpoint before provider usage is reported.
 Diagnostic-only continuation at the same repository commit consumes the same
 persisted aggregate usage; restarting the CLI does not reset the budget. A new
@@ -176,11 +177,12 @@ response. Terminal logs distinguish invocation-local parent counters from
 aggregate parent/explorer usage across the repository-commit lineage.
 Unanswered calls are explicit and mark provider cost accounting incomplete;
 missing provider usage must not be interpreted as a free request. A
-request reserves its model's context-window input bound, enforced output ceiling
-(or model maximum where the backend cannot cap output), and the corresponding
-maximum metadata-priced cost before dispatch. Completed provider usage replaces
-that request's reservation; interrupted or synthetic-zero responses retain it
-across continuation. Logs separate measured usage from reserved upper bounds.
+request reserves its conservative serialized-byte input bound, enforced output
+ceiling (or model maximum where the backend cannot cap output), and the
+corresponding maximum metadata-priced cost before dispatch. Completed provider
+usage replaces that request's reservation; interrupted or synthetic-zero
+responses retain it across continuation. Logs separate measured usage from
+reserved upper bounds.
 These bounds use configured model prices, not a provider invoice. Legacy
 unanswered requests without reservations cannot authorize further paid calls.
 A

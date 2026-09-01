@@ -70,8 +70,8 @@ export function providerRequestReservation(model: {
   contextWindow: number;
   maxTokens: number;
   cost: ModelCost;
-}, maxOutputTokens = model.maxTokens): ProviderRequestReservation {
-  const inputTokens = model.contextWindow;
+}, maxOutputTokens = model.maxTokens, maxInputTokens = model.contextWindow): ProviderRequestReservation {
+  const inputTokens = Math.min(model.contextWindow, maxInputTokens);
   const outputTokens = Math.min(model.maxTokens, maxOutputTokens);
   const tiers = model.cost.tiers ?? [];
   const rates = [model.cost, ...tiers.filter(tier => tier.inputTokensAbove < inputTokens)];

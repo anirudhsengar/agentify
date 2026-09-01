@@ -67,7 +67,7 @@ test("three default-budget readers overlap while duplicate concerns and a fourth
     await Promise.all(runs);
     assert.equal(budget.snapshot().turns, 1);
     assert.equal(budget.snapshot().unreported_calls, 2);
-    assert.equal(budget.snapshot().reserved_input_tokens, 200,
+    assert.equal(budget.snapshot().reserved_input_tokens, 40,
       "one completed reader releases only its own reservation, not interrupted siblings");
     assert.equal(budget.snapshot().unreserved_calls, 0);
   } finally {

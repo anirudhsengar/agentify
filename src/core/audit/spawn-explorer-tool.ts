@@ -1423,12 +1423,13 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                         subAgentModel.provider,
                                     );
                                 }
-                                toolOptions.resourceBudget?.assertProviderInputCapacity(payload);
+                                const inputTokenBound = toolOptions.resourceBudget?.assertProviderInputCapacity(payload);
                                 if (toolOptions.resourceBudget && explorerBudgetSession) {
                                     toolOptions.resourceBudget.recordProviderRequest(explorerBudgetSession,
                                         providerRequestReservation(subAgentModel,
                                             capProviderOutputTokens(payload, subAgentModel.api, MAX_EXPLORER_RESPONSE_TOKENS) !== payload
-                                                ? MAX_EXPLORER_RESPONSE_TOKENS : undefined));
+                                                ? MAX_EXPLORER_RESPONSE_TOKENS : undefined,
+                                            inputTokenBound));
                                 }
                                 providerCalls += 1;
                                 return payload;

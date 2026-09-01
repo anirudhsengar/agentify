@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Retain the conservative serialized-byte input bound for an exact visible provider request instead of the model's entire context window, and price unanswered-request upper bounds from that input ceiling. Full-context pre-session admission remains in place for provider requests the SDK may not expose.
+
 - Permit a third independent evidence reader only when the aggregate output envelope still preserves one full parent continuation; tighter budgets retain the two-reader ceiling and every request remains subject to shared admission.
 
 - Keep source-proven strategy families and jointly required operational mechanisms coherent during specialist discovery and review, while continuing to reject catalogs joined only by a theme, directory, or API.

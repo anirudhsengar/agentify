@@ -253,12 +253,13 @@ export class PiSdkRuntime implements AgentRuntime {
           const admitProviderRequest = (payload: unknown): unknown => {
             try {
               if (aborted || options.signal?.aborted) throw new Error("provider request cancelled");
-              options.auditResourceBudget?.assertProviderInputCapacity(payload);
+              const inputTokenBound = options.auditResourceBudget?.assertProviderInputCapacity(payload);
               options.onProviderRequest?.(selectedModel
                 ? providerRequestReservation(selectedModel,
                   options.maxOutputTokens !== undefined
                     && capProviderOutputTokens(payload, selectedModel.api, options.maxOutputTokens) !== payload
-                    ? options.maxOutputTokens : undefined)
+                    ? options.maxOutputTokens : undefined,
+                  inputTokenBound)
                 : undefined);
             } catch (error) {
               // SDK extension errors are logged and swallowed. Cancel the
