@@ -302,6 +302,13 @@ export const SPECIALIST_FIXTURE_TRACKED_FILES = [
   "tests/billing.test.ts",
 ];
 
+/** Minimal immutable source for the concrete symbols claimed by this fixture. */
+export const SPECIALIST_FIXTURE_SOURCES: Record<string, string> = {
+  "src/auth/verify.ts": "export function verifyCredential() {}\n",
+  "src/middleware/session.ts": "export function requireSession() {}\nexport function currentCustomer() {}\n",
+  "src/billing/index.ts": "export function buildInvoice() {}\n",
+};
+
 /**
  * A map carrying only the superseded `expert_evidence` shape, for exercising
  * the migration path an installation predating the concern contract takes.

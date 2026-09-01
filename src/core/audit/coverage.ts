@@ -1,6 +1,9 @@
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CodebaseMap } from "./schema.ts";
+
+const AGENTIFY_GENERATED_EVIDENCE_PATH = /^(?:\.agentify(?:\/|$)|\.github\/agentify(?:\/|$)|\.github\/agentify-task-policy\.json$|\.github\/workflows\/agentify-(?:issue|learn)\.yml$)/;
 
 export const COVERAGE_DIMENSIONS = [
     "D1_topography",
@@ -209,10 +212,62 @@ function evidencePathUnderRoot(cwd: string, citationPath: string): { absolute: s
     return { absolute: resolved, underRoot };
 }
 
-function verifyCitationTarget(cwd: string, citation: EvidenceCitationLike): string | null {
+function trackedRegularFilesAtHead(cwd: string): Set<string> | undefined {
+    const result = spawnSync(
+        "git",
+        ["-C", cwd, "ls-tree", "-r", "-z", "--full-tree", "HEAD"],
+        { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
+    );
+    if (result.status !== 0) return undefined;
+    const modes = new Map<string, string>();
+    for (const entry of result.stdout.split("\0")) {
+        const match = entry.match(/^(100644|100755|120000) blob [0-9a-f]+\t(.+)$/);
+        if (match?.[1] !== undefined && match[2] !== undefined) modes.set(match[2], match[1]);
+    }
+    const tracked = new Set<string>();
+    const resolvesToRegular = (repositoryPath: string, depth = 0): boolean => {
+        const mode = modes.get(repositoryPath);
+        if (mode === "100644" || mode === "100755") return true;
+        if (mode !== "120000" || depth >= 4) return false;
+        const targetResult = spawnSync(
+            "git",
+            ["-C", cwd, "show", `HEAD:${repositoryPath}`],
+            { encoding: "utf8", maxBuffer: 4 * 1024 },
+        );
+        const target = targetResult.status === 0 ? targetResult.stdout : "";
+        if (!target || target.includes("\0") || path.posix.isAbsolute(target)) return false;
+        const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(repositoryPath), target));
+        return resolved !== ".." && !resolved.startsWith("../")
+            && resolvesToRegular(resolved, depth + 1);
+    };
+    for (const repositoryPath of modes.keys()) {
+        if (resolvesToRegular(repositoryPath)) tracked.add(repositoryPath);
+    }
+    return tracked;
+}
+
+function verifyCitationTarget(
+    cwd: string,
+    citation: EvidenceCitationLike,
+    trackedFiles: ReadonlySet<string> | undefined,
+): string | null {
     const { absolute, underRoot } = evidencePathUnderRoot(cwd, citation.path);
     if (!underRoot) {
         return `covered but evidence citation path escapes repository root: ${citation.path}`;
+    }
+    const repositoryPath = path.relative(path.resolve(cwd), absolute).replaceAll(path.sep, "/");
+    if (AGENTIFY_GENERATED_EVIDENCE_PATH.test(repositoryPath)) {
+        return `covered but Agentify-generated evidence path cannot describe the repository: ${citation.path}`;
+    }
+    if (trackedFiles !== undefined) {
+        const tracked = trackedFiles.has(repositoryPath);
+        if (citation.kind === "positive" && !tracked) {
+            return `covered but positive evidence path is not a regular file tracked at repository HEAD: ${citation.path}`;
+        }
+        if (citation.kind === "absence" && tracked) {
+            return `covered but absence evidence path is tracked at repository HEAD: ${citation.path}`;
+        }
+        return null;
     }
     let exists: boolean;
     try {
@@ -233,6 +288,7 @@ function assessEvidenceCitations(
     entry: { evidence?: readonly EvidenceCitationLike[] },
     dimension: CoverageDimension,
     cwd?: string,
+    trackedFiles?: ReadonlySet<string>,
 ): string | null {
     const evidence = entry.evidence;
     if (!Array.isArray(evidence) || evidence.length === 0) {
@@ -243,7 +299,7 @@ function assessEvidenceCitations(
             return `covered but ${dimension} evidence is missing path, excerpt, or kind`;
         }
         if (cwd !== undefined) {
-            const failure = verifyCitationTarget(cwd, citation);
+            const failure = verifyCitationTarget(cwd, citation, trackedFiles);
             if (failure !== null) return failure;
         }
     }
@@ -263,6 +319,9 @@ export function assessCoverageClosure(
     const closed: CoverageDimension[] = [];
     const unresolved: CoverageDimension[] = [];
     const reasons: Record<string, string> = {};
+    const trackedFiles = options?.cwd === undefined
+        ? undefined
+        : trackedRegularFilesAtHead(options.cwd);
 
     for (const dimension of COVERAGE_DIMENSIONS) {
         const entry = map.coverage?.[dimension];
@@ -276,7 +335,12 @@ export function assessCoverageClosure(
             reasons[dimension] = "covered but evidence_summary is empty";
             continue;
         }
-        const evidenceFailure = assessEvidenceCitations(entry, dimension, options?.cwd);
+        const evidenceFailure = assessEvidenceCitations(
+            entry,
+            dimension,
+            options?.cwd,
+            trackedFiles,
+        );
         if (evidenceFailure !== null) {
             unresolved.push(dimension);
             reasons[dimension] = evidenceFailure;

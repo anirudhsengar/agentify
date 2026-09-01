@@ -20,6 +20,7 @@ import {
   assertRequestedToolsAllowed,
 } from "./security/execution-policy.ts";
 import { createAgentifyModelRuntime } from "./pi-credential-store.ts";
+import { providerRequestReservation } from "./audit/resource-budget.ts";
 
 type UsageLike = {
   cost?: { total?: number };
@@ -39,8 +40,18 @@ function record(value: unknown): value is Record<string, unknown> {
  * Unknown APIs retain their existing prompt/recovery behavior instead of
  * receiving a guessed wire shape.
  */
-export function forceProviderToolChoice(payload: unknown, api: string, toolName: string): unknown {
+export function forceProviderToolChoice(payload: unknown, api: string, toolName: string, provider?: string): unknown {
   if (!record(payload)) return payload;
+  if (api === "anthropic-messages" && (provider === "minimax" || provider === "minimax-cn")) {
+    // MiniMax's Messages contract supports only auto/none, not named forcing:
+    // https://platform.minimax.io/docs/api-reference/text-chat-anthropic
+    // Restrict available tools without disabling the configured reasoning.
+    return {
+      ...payload,
+      ...(Array.isArray(payload.tools) ? { tools: payload.tools.filter((tool) => record(tool) && tool.name === toolName) } : {}),
+      tool_choice: { type: "auto" },
+    };
+  }
   if (api === "anthropic-messages") {
     const next = { ...payload };
     delete next.output_config;
@@ -171,8 +182,10 @@ export class PiSdkRuntime implements AgentRuntime {
       options.config,
       options.modelRole ?? "primary",
     );
+    options.auditResourceBudget?.assertProviderSessionCapacity(selectedModel?.contextWindow ?? 0);
     let sawRequiredRecoveryTool = false;
     let providerRequests = 0;
+    let admissionFailure: { error: unknown } | undefined;
     let forcedToolChoiceRequests = 0;
     let cappedOutputRequests = 0;
     const eventCounts = new Map<string, number>();
@@ -199,6 +212,16 @@ export class PiSdkRuntime implements AgentRuntime {
           agentDir: options.spawnExplorerAgentDir,
           stateDir: options.spawnExplorerStateDir,
           explorerModel: explorerModelForSpawn,
+          resourceBudget: options.auditResourceBudget,
+          maxTotalSpawns: options.auditResourceBudget?.limits.maxExplorerSpawns,
+          maxTotalCostUsd: options.auditResourceBudget?.limits.maxTotalCostUsd,
+          maxSubagentDurationMs: options.auditResourceBudget
+            ? Math.max(
+              options.auditResourceBudget.limits.maxScoutDurationMs,
+              options.auditResourceBudget.limits.maxTracerDurationMs,
+              options.auditResourceBudget.limits.maxExplorerDurationMs,
+            )
+            : undefined,
         }),
       );
     }
@@ -227,42 +250,73 @@ export class PiSdkRuntime implements AgentRuntime {
       extensionFactories: [
         (pi) => {
           pi.on("tool_call", makeDefenseHook({ executionPolicy: options.executionPolicy }));
+          const admitProviderRequest = (payload: unknown): unknown => {
+            try {
+              if (aborted || options.signal?.aborted) throw new Error("provider request cancelled");
+              const inputTokenBound = options.auditResourceBudget?.assertProviderInputCapacity(payload);
+              options.onProviderRequest?.(selectedModel
+                ? providerRequestReservation(selectedModel,
+                  options.maxOutputTokens !== undefined
+                    && capProviderOutputTokens(payload, selectedModel.api, options.maxOutputTokens) !== payload
+                    ? options.maxOutputTokens : undefined,
+                  inputTokenBound)
+                : undefined);
+            } catch (error) {
+              // SDK extension errors are logged and swallowed. Cancel the
+              // transport before its runner can dispatch the original payload.
+              admissionFailure = { error };
+              abortSession();
+              throw error;
+            }
+            providerRequests += 1;
+            return payload;
+          };
           if (recovery && options.forceRequiredToolChoice === true) {
             pi.on("before_provider_request", (event) => {
-              providerRequests += 1;
               const api = selectedModel?.api ?? "";
               const boundedPayload = options.maxOutputTokens === undefined
                 ? event.payload
                 : capProviderOutputTokens(event.payload, api, options.maxOutputTokens);
               if (options.maxOutputTokens !== undefined) cappedOutputRequests += 1;
-              if (sawRequiredRecoveryTool || recovery.shouldRecover?.() === false) return boundedPayload;
+              if (sawRequiredRecoveryTool || recovery.shouldRecover?.() === false) {
+                return admitProviderRequest(boundedPayload);
+              }
               forcedToolChoiceRequests += 1;
-              return forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName);
+              return admitProviderRequest(
+                forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName, selectedModel?.provider),
+              );
             });
           } else if (recovery && options.forceRequiredToolChoiceAfterTurns !== undefined) {
             const turnBudget = options.forceRequiredToolChoiceAfterTurns;
             pi.on("before_provider_request", (event) => {
-              providerRequests += 1;
               const api = selectedModel?.api ?? "";
               const boundedPayload = options.maxOutputTokens === undefined
                 ? event.payload
                 : capProviderOutputTokens(event.payload, api, options.maxOutputTokens);
               if (options.maxOutputTokens !== undefined) cappedOutputRequests += 1;
-              if (sawRequiredRecoveryTool || recovery.shouldRecover?.() === false) return boundedPayload;
-              if (providerRequests < turnBudget) return boundedPayload;
+              if (sawRequiredRecoveryTool || recovery.shouldRecover?.() === false) {
+                return admitProviderRequest(boundedPayload);
+              }
+              if (providerRequests + 1 < turnBudget) return admitProviderRequest(boundedPayload);
               forcedToolChoiceRequests += 1;
-              return forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName);
+              return admitProviderRequest(
+                forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName, selectedModel?.provider),
+              );
             });
           } else if (options.maxOutputTokens !== undefined) {
             pi.on("before_provider_request", (event) => {
-              providerRequests += 1;
               cappedOutputRequests += 1;
-              return capProviderOutputTokens(event.payload, selectedModel?.api ?? "", options.maxOutputTokens ?? 1);
+              return admitProviderRequest(
+                capProviderOutputTokens(
+                  event.payload,
+                  selectedModel?.api ?? "",
+                  options.maxOutputTokens ?? 1,
+                ),
+              );
             });
           } else {
             pi.on("before_provider_request", (event) => {
-              providerRequests += 1;
-              return event.payload;
+              return admitProviderRequest(event.payload);
             });
           }
         },
@@ -315,6 +369,7 @@ export class PiSdkRuntime implements AgentRuntime {
     };
     const promptUntilAbort = async (userPrompt: string): Promise<void> => {
       await Promise.race([session.prompt(userPrompt), abortPromise]);
+      if (admissionFailure) throw admissionFailure.error;
     };
     let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
     const resetInactivityTimer = (): void => {

@@ -170,6 +170,11 @@ export const ConcernEvidenceSchema = Type.Object({
     not_concerns: Type.Array(Type.Object({
         candidate: Type.String({ minLength: 1 }),
         why_rejected: Type.String({ minLength: 1 }),
+        grouped_into: Type.Optional(Type.String({
+            minLength: 1,
+            description:
+                "Exact retained concern identity when trusted normalization should union this candidate's already-attested evidence into one inseparable file-level owner.",
+        })),
     }), {
         description:
             "Candidate concerns considered and rejected, with the reason. Recorded so " +

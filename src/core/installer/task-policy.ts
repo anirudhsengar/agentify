@@ -47,7 +47,7 @@ export function isAgentifyOwnedTaskPolicyFile(policyPath: string): boolean {
 export const VALIDATION_EXECUTION: RepositoryValidationExecution = {
   mode: "maintainer-approved-unsandboxed",
   child_environment_credentials: "removed",
-  repository_mutation: "detected-and-rejected",
+  repository_mutation: "disposable-checkout",
   network_isolation: "not-provided",
   os_sandbox: "not-provided",
 };
@@ -223,7 +223,12 @@ export function buildRepositoryTaskPolicyConfiguration(
       validation_execution: VALIDATION_EXECUTION,
       validation_approval: approvalCurrent ? validationApproval : null,
       policy: null,
-      instructions: "Agentify remains fail-closed until every installer readiness blocker is resolved, installer attestation for unsandboxed repository validation is recorded, and validation passes.",
+      instructions: [
+        "Execution is disabled. A validated specialist team may be analysis-ready; this policy grants no autonomous mutation, issue intake, PR publication, or learning authority.",
+        ...preflight.blockers.map((blocker) => `[${blocker.code}] ${blocker.message} ${blocker.remediation}`),
+        "To enable execution, rerun Agentify after repository-owned deterministic tests and reproducible dependency inputs are verified at the current HEAD, with current maintainer attestation of the credential-scrubbed, disposable-checkout, unsandboxed network/OS posture.",
+        "Do not manufacture a repository lockfile to enable installation. External evaluation locks are harness-only artifacts, never repository-owned evidence or execution approval.",
+      ].join("\n"),
     };
   }
 
@@ -258,6 +263,6 @@ export function buildRepositoryTaskPolicyConfiguration(
     validation_execution: VALIDATION_EXECUTION,
     validation_approval: validationApproval,
     policy,
-    instructions: "This repository-specific policy was generated from verified repository identity, tracked application paths, passing validation commands, and installer attestation of unsandboxed repository validation.",
+    instructions: "This repository-specific policy was generated from verified repository identity, tracked application paths, validation passed in a disposable exact-HEAD checkout, and installer attestation of the remaining unsandboxed network/OS posture.",
   };
 }

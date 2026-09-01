@@ -2,7 +2,12 @@ import type { CoverageClosureOptions } from "./coverage.ts";
 import type { CodebaseMap } from "./schema/index.ts";
 import {
   assessSpecialistEvidence,
+  removeTrustedInferredAttachments,
+  reconcileAuxiliaryDuplicateConcerns,
+  reconcileExplicitlyRetainedCandidates,
+  reconcileScoutConcernIdentities,
   reconcileSpecialistEvidence,
+  reconcileSubsumedConcernEvidence,
   type SpecialistEvidenceAssessment,
 } from "./specialist-completion.ts";
 
@@ -48,11 +53,56 @@ export function compileSpecialistEvidence(
 ): SpecialistCompilationResult {
   let current = map;
   let normalized = false;
+  let inferredAttachmentsRecomputed = false;
+  const inputFingerprint = mapFingerprint(map);
   const seen = new Set<string>();
 
   for (let iteration = 1; iteration <= MAX_SPECIALIST_COMPILATION_ITERATIONS; iteration += 1) {
+    const withCanonicalConcernIdentities = reconcileScoutConcernIdentities(current);
+    if (withCanonicalConcernIdentities !== current) {
+      current = withCanonicalConcernIdentities;
+      normalized = true;
+      continue;
+    }
+    const withoutRetainedCandidates = reconcileExplicitlyRetainedCandidates(current);
+    if (withoutRetainedCandidates !== current) {
+      current = withoutRetainedCandidates;
+      normalized = true;
+      continue;
+    }
+    const withoutSafelySubsumedConcerns = reconcileSubsumedConcernEvidence(current);
+    if (withoutSafelySubsumedConcerns !== current) {
+      current = withoutSafelySubsumedConcerns;
+      normalized = true;
+      continue;
+    }
+    const withoutTrustedAttachments = inferredAttachmentsRecomputed
+      ? current
+      : removeTrustedInferredAttachments(current);
+    inferredAttachmentsRecomputed = true;
+    if (withoutTrustedAttachments !== current) {
+      const baseAssessment = assessSpecialistEvidence(withoutTrustedAttachments, options);
+      if (baseAssessment.complete) {
+        const rebuilt = reconcileSpecialistEvidence(withoutTrustedAttachments, baseAssessment);
+        if (mapFingerprint(rebuilt) !== mapFingerprint(current)) {
+          current = rebuilt;
+          normalized = true;
+          continue;
+        }
+      } else {
+        current = withoutTrustedAttachments;
+        normalized = true;
+        continue;
+      }
+    }
     const assessment = assessSpecialistEvidence(current, options);
     if (!assessment.complete) {
+      const repaired = reconcileAuxiliaryDuplicateConcerns(current, assessment);
+      if (repaired !== current) {
+        current = repaired;
+        normalized = true;
+        continue;
+      }
       return {
         status: "incomplete",
         complete: false,
@@ -84,14 +134,15 @@ export function compileSpecialistEvidence(
 
     const reconciled = reconcileSpecialistEvidence(current, assessment);
     if (reconciled === current) {
+      const outputUnchanged = fingerprint === inputFingerprint;
       return {
         status: "compiled",
         complete: true,
         phase: "fixed-point",
-        map: current,
+        map: outputUnchanged ? map : current,
         assessment,
         iterations: iteration,
-        normalized,
+        normalized: normalized && !outputUnchanged,
         reasons: [],
       };
     }
@@ -113,14 +164,15 @@ export function compileSpecialistEvidence(
     }
 
     if (reconciledFingerprint === fingerprint) {
+      const outputUnchanged = reconciledFingerprint === inputFingerprint;
       return {
         status: "compiled",
         complete: true,
         phase: "fixed-point",
-        map: reconciled,
+        map: outputUnchanged ? map : reconciled,
         assessment: postNormalization,
         iterations: iteration,
-        normalized: true,
+        normalized: !outputUnchanged,
         reasons: [],
       };
     }

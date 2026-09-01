@@ -1,20 +1,20 @@
 {
   "serialization": {
     "codebase_map": {
-      "sha256": "ffd164a80170cf6b0fcf6658a906293d4fd5fa35c6bff6080d2b427223f7dd6a",
-      "bytes": 57282
+      "sha256": "7b223500130a181b93b513372e3c01e937933fc6526143a79360bb7704413edf",
+      "bytes": 62389
     },
     "partial_codebase_map": {
-      "sha256": "e71e027affb3ef8b0054b24187ed190e81dd52ebacc9d7fa51e3b27d8c163934",
-      "bytes": 56713
+      "sha256": "f8510472807c6de9624fdb2a97580c6a56c5709cabbc95caab55514d0431f7b3",
+      "bytes": 56930
     },
     "write_map_params": {
       "sha256": "31495d351ed9f3b38ca146bb3c16d48839b09dc196c846027d0f27ed1e51a3e6",
       "bytes": 1533
     },
     "write_map_delta_params": {
-      "sha256": "49e572b90f4e8f72f6fe58b7271a0a9fad5ab2555c2a2d28472f55fb8685308e",
-      "bytes": 3702
+      "sha256": "57c8bdcb9c7d73ae6f365639977248ee0e90a6507ea28a850a871c154aa219c6",
+      "bytes": 7231
     }
   },
   "required": {
@@ -70,6 +70,9 @@
       "customization_evidence",
       "expert_evidence",
       "concern_evidence",
+      "audit_budget_checkpoint",
+      "explorer_receipts",
+      "specialist_reviews",
       "artifact_intents"
     ],
     "partial_codebase_map": [
@@ -99,6 +102,8 @@
       "mode"
     ],
     "write_map_delta_params": [
+      "claim_correction",
+      "core_owner",
       "dimension",
       "confidence",
       "evidence_summary",
@@ -158,7 +163,7 @@
   "defaults": {
     "schema_version": "1",
     "write_mode": "auto",
-    "merge_strategy": "shallow_overwrite"
+    "write_mode": "auto"
   },
   "bounds": {
     "agent_guide_sections": {
@@ -171,6 +176,6 @@
     },
     "write_map_file_description": "Path (absolute or cwd-relative) to an already-existing JSON file containing the codebase map. Audit sessions cannot create this file; normally submit `map` inline with mode `auto`, which safely creates a private draft when needed. The tool reads, validates, and writes the canonical map to the explicitly configured audit state directory (currently .agentify/runtime/audit/codebase_map.json).",
     "write_mode_description": "Persist mode. `inline` (strict) errors if the inline map exceeds 100KB. `file` (strict) requires explicit `map_file`. `auto` (default and recommended) safely creates a private draft when an inline map exceeds the cap.",
-    "merge_strategy_description": "How to merge the delta into the canonical map. `shallow_overwrite` (default) replaces matching top-level keys. `deep_merge` recursively merges objects. `append` pushes onto existing arrays."
+    "merge_strategy_description": "How to merge the delta into the canonical map. When omitted, ordinary deltas use `shallow_overwrite` while deltas containing concern_evidence use `append` so bounded checkpoints are monotonic. `deep_merge` recursively merges objects; explicit `shallow_overwrite` replaces matching top-level keys; `append` pushes onto existing arrays."
   }
 }

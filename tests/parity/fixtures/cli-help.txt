@@ -10,9 +10,10 @@ Options:
 
 Install Agentify once in an existing GitHub repository. Agentify audits the
 codebase, creates a persistent orchestrator and evidence-backed read-only
-specialists, installs the controlled GitHub runtime, and verifies readiness.
+specialists, and verifies readiness. A validated team may be analysis-ready with
+execution disabled; only operational readiness installs the GitHub runtime.
 
-After installation, authorized GitHub issues are the normal work interface.
+When operationally ready, authorized GitHub issues are the normal work interface.
 Agentify plans with the orchestrator and specialists, gives exactly one builder
 write authority on an isolated task branch, validates the change, obtains a
 role-separated automated read-only review, and opens an unmerged draft pull request. A human

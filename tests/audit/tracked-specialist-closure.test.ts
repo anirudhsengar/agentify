@@ -16,9 +16,12 @@ import type {
   AgentRuntime,
   AgentRuntimeResult,
   AgentRuntimeSessionOptions,
+  AgentifyConfig,
   AgentifyUi,
 } from "../../src/core/types.ts";
-import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import type { RepositoryInstallationPreflight } from "../../src/core/installer/contracts.ts";
+import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import { concernEvidencePaths } from "../../src/core/audit/specialist-completion.ts";
 
 type Concern = NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
 type Centrality = Concern["touchpoints"][number]["centrality"];
@@ -356,7 +359,29 @@ test("an existing tracked-complete map reconciles without rerunning the model", 
   try {
     const mapPath = path.join(repository.cwd, ".agentify", "runtime", "audit", "codebase_map.json");
     fs.mkdirSync(path.dirname(mapPath), { recursive: true });
-    fs.writeFileSync(mapPath, `${JSON.stringify(aqaShapedMap(), null, 2)}\n`);
+    const existing = attestCodebaseMap(aqaShapedMap(), repository.head);
+    existing.meta.project_type = "unknown";
+    existing.meta.languages = [];
+    fs.writeFileSync(mapPath, `${JSON.stringify(existing, null, 2)}\n`);
+    const repositoryPreflight: RepositoryInstallationPreflight = {
+      disposition: "ready",
+      analysis_allowed: true,
+      identity: {
+        repository_id: "fixture",
+        full_name: "fixture/aqa-tests",
+        default_branch: "main",
+        current_commit: repository.head,
+        current_branch: "main",
+        origin_url: "https://github.com/fixture/aqa-tests.git",
+        actor_login: "fixture",
+        actor_permission: "write",
+        default_branch_policy: "unknown",
+      },
+      commands: [],
+      allowed_write_paths: [],
+      protected_paths: [".git"],
+      blockers: [],
+    };
 
     const runtime = new FailIfModelRuns();
     const ui = new RepairUi();
@@ -366,6 +391,7 @@ test("an existing tracked-complete map reconciles without rerunning the model", 
       ui,
       runtime,
       configOverride: { schemaVersion: 1, provider: "openai", thinkingLevel: "high", models: {} },
+      repositoryPreflight,
     });
 
     assert.equal(runtime.calls, 0);
@@ -373,6 +399,8 @@ test("an existing tracked-complete map reconciles without rerunning the model", 
     assert.ok(ui.messages.some((message) => /no model audit was rerun/i.test(message)));
 
     const persisted = JSON.parse(fs.readFileSync(mapPath, "utf8")) as CodebaseMap;
+    assert.notEqual(persisted.meta.project_type.toLowerCase(), "unknown");
+    assert.ok(persisted.meta.languages.length > 0);
     assert.equal(persisted.concern_evidence?.concerns.length, 4);
     assert.ok(persisted.concern_evidence?.not_concerns.some((entry) =>
       entry.candidate === "TKG playlist compilation and generated Make topology"
@@ -388,10 +416,27 @@ test("an existing tracked-complete map reconciles without rerunning the model", 
 class ProgressiveRepairRuntime implements AgentRuntime {
   baseCalls = 0;
   repairCalls = 0;
+  repairToolSets: string[][] = [];
+  repairPrompts: string[] = [];
 
   async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
     if (/trusted semantic-quality gate/i.test(options.userPrompt)) {
       this.repairCalls += 1;
+      this.repairToolSets.push([...options.tools]);
+      this.repairPrompts.push(options.userPrompt);
+      const budget = options.auditResourceBudget;
+      assert.ok(budget, "semantic repair must share the audit budget");
+      assert.ok(options.onProviderRequest);
+      options.onProviderRequest({ inputTokens: 100, outputTokens: 20, costUsd: 0.01 });
+      assert.equal(budget.snapshot().unreserved_calls, 0,
+        "repair must forward the provider reservation before dispatch");
+      assert.equal(budget.snapshot().reserved_cost_usd, 0.01);
+      options.onEvent?.({ type: "message_end", message: {
+        role: "assistant", stopReason: "toolUse",
+        usage: { input: 50, output: 10, cost: { total: 0.001 } },
+      } } as never);
+      assert.equal(budget.snapshot().reserved_cost_usd, 0,
+        "completed repair usage replaces its reservation");
       if (this.repairCalls <= 3) {
         const destination = path.join(
           options.cwd,
@@ -405,7 +450,7 @@ class ProgressiveRepairRuntime implements AgentRuntime {
             this.repairCalls,
           );
         }
-        fs.writeFileSync(destination, `${JSON.stringify(repaired, null, 2)}
+        fs.writeFileSync(destination, `${JSON.stringify(attestCodebaseMap(repaired, git(options.cwd, "rev-parse", "HEAD")), null, 2)}
 `);
         options.onEvent?.({
           type: "tool_execution_end",
@@ -428,6 +473,7 @@ class ProgressiveRepairRuntime implements AgentRuntime {
               target_path: ".",
               focus: concern.concern,
               report_concern: concern.concern,
+              observed_paths: concernEvidencePaths(concern),
             },
           } as never);
         }
@@ -461,6 +507,7 @@ class ProgressiveRepairRuntime implements AgentRuntime {
             target_path: ".",
             focus: concern.concern,
             report_concern: concern.concern,
+            observed_paths: concernEvidencePaths(concern),
           },
         } as never);
       }
@@ -495,6 +542,21 @@ test("progressive semantic repair may exceed two passes while each pass closes t
 
     assert.equal(runtime.baseCalls, 1);
     assert.equal(runtime.repairCalls, 3);
+    assert.ok(runtime.repairPrompts.every((prompt) =>
+      /group the already-attested bodies/i.test(prompt)
+      && /grouped_into set to one exact existing broader concern identity/i.test(prompt)
+      && /unions their flows, touchpoints, invariants, pitfalls, questions, and validation/i.test(prompt)
+      && /resolve every obligation in the current bounded cluster batch/i.test(prompt)
+      && /batch exact not_concerns decisions into one write_map_delta/i.test(prompt)
+      && /core_owner: \{path, concern\}/.test(prompt)
+      && /if ownership is ambiguous, keep it unresolved/i.test(prompt)
+      && !/resolve the earliest distinct behavior/i.test(prompt)
+    ));
+    assert.deepEqual(
+      runtime.repairToolSets,
+      Array.from({ length: 3 }, () => ["write_map_delta", "spawn_explorer"]),
+      "repair parents must act on the supplied obligations instead of rereading broad repository state",
+    );
     assert.equal(result.turns, 4);
     assert.ok(ui.messages.some((message) => /retained 4 tracked specialist concern/i.test(message)));
 
@@ -520,6 +582,267 @@ test("progressive semantic repair may exceed two passes while each pass closes t
     const runEnds = events.filter((event) => event.event === "agentify.run_end");
     assert.equal(runEnds.length, 1, "coverage and semantic repair must share one terminal outcome");
     assert.equal((JSON.parse(runEnds[0]!.payload) as { status: string }).status, "success");
+    const budgetEvents = events.filter((event) => event.event === "agentify.audit_budget");
+    assert.equal(budgetEvents.length, 1, "one aggregate budget result must accompany the terminal outcome");
+    assert.equal((JSON.parse(budgetEvents[0]!.payload) as { status: string }).status, "within");
+  } finally {
+    if (previousHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previousHome;
+    fs.rmSync(temporaryHome, { recursive: true, force: true });
+    fs.rmSync(repository.cwd, { recursive: true, force: true });
+  }
+});
+
+test("configured semantic repair pass budgets fail closed with an obligation fingerprint", async () => {
+  const repository = createRepository();
+  const previousHome = process.env["HOME"];
+  const temporaryHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-repair-budget-home-"));
+  process.env["HOME"] = temporaryHome;
+  try {
+    const initial = aqaShapedMap();
+    initial.concern_evidence = {
+      concerns: [initial.concern_evidence!.concerns.at(-1)!],
+      not_concerns: initial.concern_evidence!.not_concerns,
+    };
+    const mapPath = path.join(repository.cwd, ".agentify", "runtime", "audit", "codebase_map.json");
+    fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+    fs.writeFileSync(mapPath, `${JSON.stringify(initial, null, 2)}\n`);
+
+    const runtime = new ProgressiveRepairRuntime();
+    const config = {
+      schemaVersion: 1,
+      provider: "openai",
+      thinkingLevel: "high",
+      models: {},
+      auditBudgets: { maxSemanticRepairPasses: 2 },
+    } as AgentifyConfig;
+    await assert.rejects(
+      runRepositoryAudit({ cwd: repository.cwd, ui: new RepairUi(), runtime, config }),
+      /unresolved-obligation fingerprint [0-9a-f]{64}/i,
+    );
+    assert.equal(runtime.baseCalls, 1);
+    assert.equal(runtime.repairCalls, 2, "configured semantic repair pass cap must be enforced");
+    const logDirectory = path.join(temporaryHome, ".agentify", "logs", "agentify");
+    const logFile = fs.readdirSync(logDirectory).find((name) => name.endsWith(".jsonl"));
+    assert.ok(logFile);
+    const events = fs.readFileSync(path.join(logDirectory, logFile), "utf8")
+      .trim().split("\n").map((line) => JSON.parse(line) as { event: string; payload: string });
+    assert.equal(events.filter((event) => event.event === "agentify.run_end").length, 1);
+    const budgetEvents = events.filter((event) => event.event === "agentify.audit_budget");
+    assert.equal(budgetEvents.length, 1);
+    assert.equal((JSON.parse(budgetEvents[0]!.payload) as { status: string }).status, "exhausted");
+  } finally {
+    if (previousHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previousHome;
+    fs.rmSync(temporaryHome, { recursive: true, force: true });
+    fs.rmSync(repository.cwd, { recursive: true, force: true });
+  }
+});
+
+class InterruptedRepairRuntime implements AgentRuntime {
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    const mapPath = path.join(
+      options.cwd,
+      options.spawnExplorerStateDir ?? ".agentify/runtime/audit",
+      "codebase_map.json",
+    );
+    const current = JSON.parse(fs.readFileSync(mapPath, "utf8")) as CodebaseMap;
+    if (/trusted semantic-quality gate/i.test(options.userPrompt)) {
+      const repaired = aqaShapedMap();
+      repaired.explorer_receipts = current.explorer_receipts;
+      fs.writeFileSync(mapPath, `${JSON.stringify(repaired, null, 2)}\n`);
+      const concern = "External containerized test harness lifecycle";
+      options.onEvent?.({
+        type: "tool_execution_end",
+        toolName: "spawn_explorer",
+        resultText: `Sub-agent (mode=concern_tracer) explored external in 1ms.\n\n## Report\nconcern: ${concern}\n`,
+        details: {
+          mode: "concern_tracer",
+          target_path: "external",
+          focus: concern,
+          report_concern: concern,
+          observed_paths: concernEvidencePaths(repaired.concern_evidence!.concerns.find((candidate) => candidate.concern === concern)!),
+        },
+      } as never);
+      throw new Error("simulated repair interruption");
+    }
+
+    options.onEvent?.({
+      type: "tool_execution_end",
+      toolName: "spawn_explorer",
+      resultText: "Sub-agent (mode=concern_scout) explored . in 1ms.\n\n## Report\n",
+      details: {
+        mode: "concern_scout",
+        target_path: ".",
+        focus: null,
+        report_concern: null,
+      },
+    } as never);
+    for (const concern of current.concern_evidence?.concerns ?? []) {
+      options.onEvent?.({
+        type: "tool_execution_end",
+        toolName: "spawn_explorer",
+        resultText: `Sub-agent (mode=concern_tracer) explored . in 1ms.\n\n## Report\nconcern: ${concern.concern}\n`,
+        details: {
+          mode: "concern_tracer",
+          target_path: ".",
+          focus: concern.concern,
+          report_concern: concern.concern,
+          observed_paths: concernEvidencePaths(concern),
+        },
+      } as never);
+    }
+    return { turns: 1, costUsd: 0, aborted: false };
+  }
+}
+
+test("semantic repair checkpoints successful tracer receipts before an interrupted session exits", async () => {
+  const repository = createRepository();
+  const previousHome = process.env["HOME"];
+  const temporaryHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-repair-receipt-home-"));
+  process.env["HOME"] = temporaryHome;
+  try {
+    const initial = aqaShapedMap();
+    initial.concern_evidence = {
+      concerns: [initial.concern_evidence!.concerns.at(-1)!],
+      not_concerns: initial.concern_evidence!.not_concerns,
+    };
+    const mapPath = path.join(repository.cwd, ".agentify", "runtime", "audit", "codebase_map.json");
+    fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+    fs.writeFileSync(mapPath, `${JSON.stringify(initial, null, 2)}\n`);
+
+    await assert.rejects(
+      runRepositoryAudit({
+        cwd: repository.cwd,
+        ui: new RepairUi(),
+        runtime: new InterruptedRepairRuntime(),
+        config: { schemaVersion: 1, provider: "openai", thinkingLevel: "high", models: {} },
+      }),
+      /simulated repair interruption/i,
+    );
+
+    const persisted = JSON.parse(fs.readFileSync(mapPath, "utf8")) as CodebaseMap;
+    assert.ok(
+      persisted.explorer_receipts?.receipts.some((receipt) =>
+        receipt.success
+        && receipt.mode === "concern_tracer"
+        && receipt.report_concern === "External containerized test harness lifecycle"
+      ),
+      "a successful tracer must remain attested even when the parent repair session is interrupted",
+    );
+  } finally {
+    if (previousHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previousHome;
+    fs.rmSync(temporaryHome, { recursive: true, force: true });
+    fs.rmSync(repository.cwd, { recursive: true, force: true });
+  }
+});
+
+test("aggregate model-call exhaustion reports the unresolved semantic obligations", async () => {
+  const repository = createRepository();
+  const previousHome = process.env["HOME"];
+  const temporaryHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-call-budget-home-"));
+  process.env["HOME"] = temporaryHome;
+  try {
+    const runtime: AgentRuntime = {
+      async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+        for (let index = 0; index < 2; index += 1) {
+          options.onEvent?.({
+            type: "message_end",
+            message: {
+              role: "assistant",
+              stopReason: "toolUse",
+              usage: { input: 1, output: 1, cost: { total: 0 } },
+            },
+          } as never);
+        }
+        return {
+          turns: 2,
+          costUsd: 0,
+          aborted: true,
+          diagnostics: { provider_requests: 2 },
+        } as AgentRuntimeResult;
+      },
+    };
+    const config = {
+      schemaVersion: 1,
+      provider: "openai",
+      thinkingLevel: "high",
+      models: {},
+      auditBudgets: { maxModelCalls: 1 },
+    } as AgentifyConfig;
+    await assert.rejects(
+      runRepositoryAudit({ cwd: repository.cwd, ui: new RepairUi(), runtime, config }),
+      (error: unknown) => {
+        assert.match(String(error), /model calls reached 1 while requesting continuation/i);
+        assert.match(String(error), /unresolved-obligation fingerprint [0-9a-f]{64}/i);
+        assert.match(String(error), /D2_module_boundaries/i);
+        return true;
+      },
+    );
+  } finally {
+    if (previousHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previousHome;
+    fs.rmSync(temporaryHome, { recursive: true, force: true });
+    fs.rmSync(repository.cwd, { recursive: true, force: true });
+  }
+});
+
+test("same-HEAD audit continuation cannot reset an exhausted aggregate model-call budget", async () => {
+  const repository = createRepository();
+  const previousHome = process.env["HOME"];
+  const temporaryHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-continuation-budget-home-"));
+  process.env["HOME"] = temporaryHome;
+  try {
+    const mapPath = path.join(repository.cwd, ".agentify", "runtime", "audit", "codebase_map.json");
+    fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+    fs.writeFileSync(mapPath, `${JSON.stringify(aqaShapedMap(), null, 2)}\n`);
+    let sessions = 0;
+    const runtime: AgentRuntime = {
+      async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+        sessions += 1;
+        options.onEvent?.({
+          type: "message_end",
+          message: {
+            role: "assistant",
+            stopReason: "toolUse",
+            usage: { input: 1, output: 1, cost: { total: 0 } },
+          },
+        } as never);
+        return {
+          turns: 1,
+          costUsd: 0,
+          aborted: true,
+          diagnostics: { provider_requests: 1 },
+        } as AgentRuntimeResult;
+      },
+    };
+    const config = {
+      schemaVersion: 1,
+      provider: "openai",
+      thinkingLevel: "high",
+      models: {},
+      auditBudgets: { maxModelCalls: 1, maxTurns: 1 },
+    } as AgentifyConfig;
+
+    await assert.rejects(
+      runRepositoryAudit({ cwd: repository.cwd, ui: new RepairUi(), runtime, config }),
+      /resource budget exhausted.*model calls reached 1/i,
+    );
+    await assert.rejects(
+      runRepositoryAudit({ cwd: repository.cwd, ui: new RepairUi(), runtime, config }),
+      /resource budget exhausted.*model calls reached 1/i,
+    );
+    assert.equal(
+      sessions,
+      1,
+      "a continuation at the same repository commit must consume the prior invocation's usage",
+    );
+    const persisted = JSON.parse(fs.readFileSync(mapPath, "utf8")) as CodebaseMap & {
+      audit_budget_checkpoint?: { repository_commit?: string; usage?: { model_calls?: number } };
+    };
+    assert.equal(persisted.audit_budget_checkpoint?.repository_commit, repository.head);
+    assert.equal(persisted.audit_budget_checkpoint?.usage?.model_calls, 1);
   } finally {
     if (previousHome === undefined) delete process.env["HOME"];
     else process.env["HOME"] = previousHome;

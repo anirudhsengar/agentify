@@ -13,6 +13,7 @@ import {
   conciseProcessFailure,
   DEFAULT_INSTALLER_PROCESS_RUNNER,
 } from "./process-runner.ts";
+import { detectRestrictiveRepositoryPolicy } from "./repository-policy.ts";
 
 interface GitHubRepositoryResponse {
   id?: unknown;
@@ -204,6 +205,22 @@ export function inspectRepositoryForInstallation(
     analysisAllowed = false;
   }
 
+  const tracked = runner.run({ program: "git", args: ["ls-files", "-z"], cwd, timeoutMs: 20_000 });
+  const trackedPaths = successful(tracked)
+    ? tracked.stdout.split("\0").filter((candidate) => candidate.length > 0)
+    : [];
+  const restrictivePolicy = successful(tracked)
+    ? detectRestrictiveRepositoryPolicy(cwd, trackedPaths)
+    : null;
+  if (restrictivePolicy !== null) {
+    blockers.push(blocker(
+      "repository_policy_prohibits_ai",
+      `Tracked repository policy ${restrictivePolicy.path} explicitly prohibits AI/LLM-authored persistent repository work: ${restrictivePolicy.summary}`,
+      "A repository maintainer must change or explicitly supersede that tracked policy before Agentify may analyze, generate diagnostics, or install files.",
+    ));
+    analysisAllowed = false;
+  }
+
   const ghVersion = runner.run({ program: "gh", args: ["--version"], cwd, timeoutMs: 10_000 });
   if (!successful(ghVersion)) {
     blockers.push(blocker(
@@ -310,7 +327,6 @@ export function inspectRepositoryForInstallation(
     options.runValidation === true,
   );
   blockers.push(...commandDiscovery.blockers);
-  const tracked = runner.run({ program: "git", args: ["ls-files", "-z"], cwd, timeoutMs: 20_000 });
   const allowedWritePaths = successful(tracked) ? trackedWritePaths(cwd, tracked.stdout) : [];
   if (allowedWritePaths.length === 0) {
     blockers.push(blocker(

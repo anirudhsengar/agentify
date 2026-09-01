@@ -81,7 +81,15 @@ Supported build manifests include:
 | Make-based | `Makefile` | `make test`, `check`, `lint`, or `typecheck` targets | — |
 | Shell | `build.sh`, `compile.sh`, `test.sh`, `lint.sh`, `get.sh`, `setup.sh`, etc. | `bash build.sh`, `bash test.sh`, etc. Install scripts (`get.sh`, `setup.sh`) are identified but not executed as validation | — |
 
-Agentify may analyze a repository that is not ready for issue execution, but it keeps issue intake disabled until every readiness blocker is resolved.
+Specialist-team installation and operational execution are separate capabilities.
+A complete, grounded, validated team can install as `analysis-ready` when
+repository-owned validation is not reproducible. Issue intake, PR publication,
+autonomous mutation, and learning remain disabled: execution workflows and
+runtimes are absent and the task policy is unconfigured. Generated instructions
+record the blockers and evidence needed to enable execution by rerunning Agentify.
+Agentify never creates a missing repository lockfile to obtain readiness.
+Immutable external evaluation locks are harness artifacts, not repository
+evidence or permission to enable execution.
 
 ### Local requirements
 
@@ -114,6 +122,216 @@ agentify models set "anthropic/<model-id>"
 
 `agentify login` offers exactly the authentication methods the Pi model runtime supports for each provider: OAuth subscription sign-in where available (browser or device-code flow), otherwise an API key. Credentials are read from provider environment variables, the stored OAuth/API-key credentials from login, or a masked interactive prompt. They are never accepted as command-line values or written to the repository.
 
+Before model exploration, Agentify seeds the audit map from immutable bytes at
+the installer-preflight commit. This deterministically records repository
+identity, languages and formats, tracked topography, verified test commands,
+build metadata, and documentation metrics without trusting dirty working-tree
+content. Semantic contracts and specialist concerns still require traced,
+current-HEAD evidence; deterministic seeding cannot close them by inference.
+Same-HEAD continuation maps retain their accumulated semantic evidence while
+placeholder identity and empty topography are refreshed from the same immutable
+preflight snapshot before any provider call.
+Positive coverage citations must likewise name regular files tracked at exact
+HEAD. Agentify-generated paths cannot establish repository facts, and absence
+citations ignore dirty or generated working-tree bytes.
+
+Audit resource limits are finite by default and may be raised for an unusually
+large repository through the optional `auditBudgets` object in
+`~/.agentify/config.json`. Omitted fields retain these defaults:
+
+| Field | Default |
+| --- | ---: |
+| `maxTotalDurationMs` | 1,800,000 (30 minutes) |
+| `maxSessionDurationMs` | 720,000 (12 minutes) |
+| `maxScoutDurationMs` / `maxTracerDurationMs` | 180,000 each |
+| `maxExplorerDurationMs` | 120,000 |
+| `maxModelCalls` / `maxTurns` | 240 each |
+| `maxInputTokens` / `maxOutputTokens` | 8,000,000 / 640,000 |
+| `maxTotalCostUsd` | 20 (provider-reported) |
+| `maxCoverageRecoveryPasses` / `maxSemanticRepairPasses` | 1 / 3 |
+| `maxRepeatedFingerprintStates` | 2 |
+| `maxExplorerSpawns` | 240 (within the shared call/time/token/cost limits) |
+
+Overrides are strictly validated and remain subject to finite safety ceilings.
+The output limit includes reported tokens, retained unanswered-request bounds,
+and the next request's output reservation. Its 640,000-token default leaves
+headroom for providers that cannot cap individual responses; a configured
+smaller limit still rejects any request whose full bound would exceed it.
+Parent audit requests and explorer sub-sessions consume the same aggregate call,
+turn, token, cost, and elapsed-time budget. A tool-use continuation must leave
+enough input capacity for another request at the just-observed context size.
+Before every new parent or explorer session, Agentify requires the selected
+model's full context window to fit so an SDK request that is not exposed to the
+provider hook cannot cross the remaining budget. Once an exact request is
+visible, its conservative serialized-byte input bound is retained with the
+output and cost reservations; a same-HEAD restart cannot overshoot a nearly
+exhausted checkpoint before provider usage is reported.
+Diagnostic-only continuation at the same repository commit consumes the same
+persisted aggregate usage; restarting the CLI does not reset the budget. A new
+commit starts a new evidence lineage, while explicit overrides can raise the
+finite limits for an unusually large repository without erasing prior usage.
+Explorer work is serialized, and each mode has hard repository-read and
+provider-call caps that are reduced to the aggregate calls still available. A
+request is charged at dispatch admission, even if cancellation prevents a
+response. Terminal logs distinguish invocation-local parent counters from
+aggregate parent/explorer usage across the repository-commit lineage.
+Unanswered calls are explicit and mark provider cost accounting incomplete;
+missing provider usage must not be interpreted as a free request. A
+request reserves its conservative serialized-byte input bound, enforced output
+ceiling (or model maximum where the backend cannot cap output), and the
+corresponding maximum metadata-priced cost before dispatch. Completed provider
+usage replaces that request's reservation; interrupted or synthetic-zero
+responses retain it across continuation. Logs separate measured usage from
+reserved upper bounds.
+These bounds use configured model prices, not a provider invoice. Legacy
+unanswered requests without reservations cannot authorize further paid calls.
+A
+complete report at the exact call limit is retained; a request for another turn
+is aborted and remains unresolved. Budget failures name the current semantic
+obligations and their deterministic fingerprint.
+Once a map write establishes complete coverage and specialist evidence, the
+parent session is cancelled before the write tool returns. Receipt failures
+remain explicit and pass to bounded recovery; they do not keep the broad parent
+alive long enough to dispatch an unnecessary uncappable continuation.
+Model-supplied explorer limits may only narrow trusted mode defaults. Explorer
+usage is charged to the aggregate budget after every provider response, and a
+report over 16 KB is rejected as incomplete evidence rather than truncated into
+a successful receipt. Concern tracers are additionally capped at six repository
+reads and eight provider calls so one verbose trace cannot starve the rest of
+an evidence-backed portfolio. A 12,000-token response ceiling leaves room for
+configured reasoning; the stricter 16 KB final-report gate remains authoritative.
+Scout proposals are application-attested obligations: each must be resolved by
+a successful tracer or a substantive `not_concerns` rejection. Agentify
+requires each tracer to call an application-owned typed submission tool, then
+schema-validates and checkpoints the complete concern body before attesting the
+receipt. A new scout proposal that observed source proves is an incoherent catalog
+or lacks an end-to-end flow can use a separate typed rejection terminal; Agentify
+checks its exact HEAD excerpt and checkpoints the substantive rejection instead of
+spending repeated full-body traces. The same terminal may retire an existing body
+only when its exact current-HEAD digest has a non-retryable concern-level source
+review; unreviewed bodies and local claim findings cannot remove it. A bounded retry on the same HEAD resumes verified work without parsing
+free-form prose or asking the parent model to retranscribe it.
+Nested append checkpoints retain earlier concern bodies and deduplicate exact
+cumulative resends. Tool-result delivery is not counted as a provider call or
+turn. `not_concerns` entries must actually reject their candidate; acceptance
+wording cannot close an obligation. Fixed-point normalization removes an
+append-only acceptance entry only when its candidate semantically matches an
+accepted concern; unrelated malformed screening decisions remain unresolved.
+Path-backed rejections may name exact tracked paths in a descriptive candidate
+label, but do not exempt substring-related paths. A rejection that instead names
+one exact source symbol is bound only when immutable HEAD contains one unique
+tracked declaration; only tests with a direct reference to that symbol inherit
+the disposition. Matching filename stems and duplicate declarations remain
+unresolved. Application timers enforce parent-session
+deadlines, and an interrupted CLI rolls its pending installation back before
+exiting. A later invocation may resume only the exact diagnostic-map-only
+topology with a current-HEAD application receipt ledger; extra, stale, or
+unattested state is never claimed. Each bounded continuation retains its newest
+diagnostic checkpoint on failure, while operational installation state is
+rolled back. Semantic, ownership, materialization, and structural failures restore
+the exact prior state; a fresh failed run retains only its permitted diagnostic
+map and no empty managed directories. Operational validation blockers alone may
+retain the complete team as `analysis-ready`, with execution capabilities absent.
+A successful tracer
+is reusable only after its complete concern
+body has also been checkpointed. Concern checkpoints append and deduplicate by
+default so later bounded invocations cannot erase earlier tracer evidence.
+The parent receives a short typed-report acknowledgement and bounded compiler
+obligations; the complete concern stays in application-owned checkpoint data,
+without duplicating every flow and invariant in subsequent model requests.
+On attach, recorded concern evidence is deterministically compiled before any
+model-backed top-up audit; a normalizable fixed point can therefore finish
+without spending or resetting an exhausted model budget when its exact
+normalized bodies already have current-HEAD narrative reviews. Changed bodies
+require fresh review with the configured primary model: 90 seconds and at most
+512 KiB of immutable source per concern. One provider request is allowed, plus
+one argument-correction request only after a rejected typed submission, within
+the same deadline and aggregate budget. Two independent read-only bodies may be
+reviewed concurrently; results are applied in portfolio order, and temporary
+aggregate-reservation refusal falls back to serial admission. Reviews submit
+the first decisive finding promptly and inspect at most two unchecked claims
+from that same source file for immediately evident companion findings. Three is
+a ceiling, not a quota. A typed, complete review is
+required; unsupported assertions and incomplete reviews remain repair obligations.
+Before claim-by-claim falsification, review rejects a catalog or framework layer whose flows lack one shared
+failure domain or invariant set; individually sourced claims cannot make an
+incoherent specialist installable.
+An exact current-HEAD nonretryable concern-level finding retires that reviewed
+body during normalization and records the finding as its substantive rejection;
+Agentify does not spend another tracer call merely to restate the same evidence.
+Retryable reviews and findings about individual claims remain unresolved.
+Eligible bodies are reviewed even while unrelated structural gaps remain, so
+repair sees narrative and ownership failures together. Review cannot close those
+gaps; normalization changes invalidate the body digest and require fresh review.
+While a typed source-backed correction is actionable, the write boundary rejects
+unrelated structural deltas. This keeps bounded repair focused on false claims;
+ownership and coverage work resumes after the corrected digest passes review or
+requires an explicit retrace.
+A source-rejected summary can be corrected without regenerating its specialist;
+an exact-review-rejected touchpoint role may likewise be corrected as prose only:
+its tracked path, symbol, line range and core/supporting centrality cannot change.
+A rejected flow description may be corrected independently of its steps;
+description and step selection are mutually exclusive. Scope boundaries,
+ownership, evidence, ordered flow structure and unselected prose remain unchanged
+and unapproved until full review passes again.
+Successful corrections return fresh review findings within the same bounded
+repair session. Concurrent evidence changes abort stale review checkpoints;
+they are never overwritten to obtain closure.
+When every finding names a surplus pitfall or invariant, Agentify removes only
+those rejected assertions and immediately reviews the shorter exact body again;
+the last failure mode or invariant still requires an evidence-backed correction.
+Incomplete reviews may retry once in a later bounded run; an unchanged source-backed
+finding remains cached until the specialist body or repository HEAD changes.
+This quality control does not replace manual release qualification.
+Agentify-managed paths observed during the transaction are normalized out of
+repository topography and process evidence before the map can close.
+The explorer runtime permits only one successful concern scout per repository
+commit; resumed and repair sessions reuse its attested proposal set.
+Up to four independent read-only explorers can overlap when the shared resource
+reservation budget retains capacity for the uncappable parent request; tighter
+output budgets reduce that ceiling to three or two. Duplicate active scouts and concern
+identities are refused.
+All explorer modes request at most 12,000 response tokens where the provider API
+supports a cap. Uncappable APIs retain their full model-limit reservation.
+Each tracer dispatch binds one exact concern identity before model entry;
+renamed typed reports are rejected instead of creating duplicate specialists or
+silently satisfying a different scout proposal.
+Before tracing, candidates with the same sole tracked implementation file and
+no independent implementation owner are grouped into the broader behavioral
+concern. Ordinary shared supporting touchpoints remain overlap rather than a
+merge signal, and tracers prefer concern-specific implementation files as core.
+Semantic closure requires exactly one accepted core owner for each tracked
+file. Adjacent specialists may share it only as a supporting touchpoint until
+the portfolio resolves ownership. Normalization resolves a shared
+implementation file without another model call only when exactly one concern
+would otherwise lose all core ownership and every adjacent concern retains an
+independent core path. It also promotes one supporting implementation path when
+that path is cited by exactly one accepted concern whose prior core evidence is
+test-only; tied implementation candidates remain unresolved. A mirrored implementation/test cluster is assigned only
+when one accepted concern explicitly cites the complete pair and every competing
+concern cites a strict subset. Ambiguous shared files and tied cluster claims
+remain unresolved. An example- or fixture-only candidate is rejected as an
+independent specialist when at least two portfolio-distinct behavioral tokens
+overlap a concern with independent implementation core. The rejection retains
+its exact tracked paths; an unrelated example product and a repository whose
+product is tests remain eligible.
+An observed public type trace can assign a declaration file only when its named
+type resolves to one tracked declaration path and every traced runtime file
+resolves to the same normalized core owner. The declaration becomes that
+specialist's core public surface; competing runtime owners remain unresolved.
+Exclusions block deterministic attachment only when they match at least two
+behavioral tokens, or one token that is not already part of the concern's
+positive evidence. A generic shared word cannot veto an otherwise exact local
+implementation/test mirror.
+When one supporting claimant lacks an independent core implementation and every
+current core owner of the shared orchestration file retains another independent
+implementation core, normalization assigns the shared file to that sole
+dependent claimant. Multiple dependent claimants remain unresolved.
+When core claimants cite concrete symbols in the same shared file, normalization
+may instead choose the sole claimant whose symbol set is a strict superset of
+every competitor. Empty, disjoint, equal, or incomparable symbol claims remain
+unresolved.
+
 ### 2. Run the one-time installer
 
 ```bash
@@ -122,8 +340,9 @@ agentify
 
 The installer:
 
-- verifies the repository root, GitHub identity, maintainer authority, and default-branch policy;
-- discovers validation commands, screens them for obvious production credentials and mutation, and records installer attestation for unsandboxed execution;
+- verifies the repository root, tracked contribution/agent policies, GitHub identity, maintainer authority, and default-branch policy; an explicit ban on AI/LLM-authored repository work stops before any Agentify write;
+- discovers validation commands, screens them for obvious production credentials and mutation, provisions lock-bound dependencies in a disposable checkout (with Node lifecycle scripts disabled), then executes validation against the exact committed HEAD; post-install checks repeat provisioning and overlay only Agentify-managed output, while network and OS execution remain explicitly unsandboxed;
+- when the repository root has only build or syntax checks, considers up to 64 tracked nested manifests within four directories and prefers a real required test suite while retaining root ecosystem precedence on ties; fully pinned pip requirements with SHA-256 hashes count as a lock, and Python projects with tracked tests but no pytest contract use standard-library unittest discovery unless its tracked import graph reaches a network client, in which case a tracked offline module is eligible only when the README documents individual-unittest execution;
 - audits the repository and creates persistent specialists, procedures, and knowledge;
 - refines missing validation from the audited validation surface when discovery did not verify a required command;
 - installs the issue and accepted-merge learning workflows;

@@ -31,7 +31,7 @@ paths, state transitions, and evidence before performing bounded mutations.
 | Assurance | Agentify provides |
 | --- | --- |
 | Enforced | Model tool allowlists, path and branch boundaries, typed state transitions, and GitHub credential separation |
-| Detected and rejected | Repository mutation during validation, validation-policy hash drift, and covered audit claims that lack verifiable repository-path evidence |
+| Detected and rejected | Explicit tracked repository policy prohibiting AI/LLM-authored persistent work (before any Agentify write), repository mutation during validation, validation-policy hash drift, and covered audit claims that lack verifiable repository-path evidence |
 | Mitigated | Common credential variables are removed from validation child environments |
 | Not provided | OS-level sandboxing or network isolation for repository validation |
 
@@ -61,6 +61,9 @@ never automatic.
 
 Repository validation uses fixed argv vectors without a shell at the controller
 boundary, but package managers may invoke their own shell or indirect programs.
+Locked dependencies are provisioned only inside disposable exact-HEAD validation
+checkouts; Node package-manager lifecycle scripts are disabled. Provisioning is
+repeated for post-install validation and never reuses target dependency state.
 The installer scans visible root script text for obvious production credentials
 and deployment, publication, release, cloud, or infrastructure mutation. This
 is a guardrail, not proof that indirect code is safe. Running `agentify` in the
@@ -76,6 +79,25 @@ protected-path enforcement, timeout, output limits, and the approved repository
 roots. Withholding network-capable tools and rejecting known network executables
 reduces model-initiated access; it does not isolate the process or indirect
 repository code from the network.
+
+Explorer completion is attested by trusted runtime code, not by model output.
+The bounded receipt ledger is bound to the current Git commit and preserved
+across repair sessions; model map tools cannot author or replace it. Installation
+fails closed and rolls back if the ledger is missing, stale, records a failed
+tracer, or lacks a successful tracer for any accepted concern.
+
+Operational validation is independent of specialist semantic quality. A complete
+team can be `analysis-ready` with an unconfigured/null task policy, no managed
+execution workflows, publication scripts or runtimes, and explicit disablement
+instructions. Issue intake, autonomous mutation, publication and learning are
+disabled. An operational downgrade removes only recognized managed entry points
+inside the installation transaction; ambiguous ownership refuses the downgrade.
+External harness locks never establish repository-owned validation approval.
+Execution-file ownership reads use the same bounded, no-follow descriptor as
+metadata verification. Windows batch validation uses one shared resolver:
+repository-confined relative paths, quoted literal arguments, disabled AutoRun
+and delayed expansion, and no shell operators or environment expansion. Direct
+executables, including npm's Node entry point, retain ordinary argv dispatch.
 
 ## Credentials
 

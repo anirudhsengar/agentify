@@ -1,4 +1,15 @@
-import type { CodebaseMap } from "./schema/index.ts";
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import type {
+  CodebaseMap,
+  ExplorerReceiptAttestation,
+  ExplorerReceiptRecord,
+} from "./schema/index.ts";
+import { isSubstantiveConcernRejection } from "./concern-rejection.ts";
+import { mergeEvidenceIntoMap } from "./map-draft.ts";
+import { loadCanonicalMapAt, writeCanonicalMap } from "./map-storage.ts";
+import { stableMapValueIdentity } from "./map-delta.ts";
+import { concernEvidencePaths, removeTrustedInferredAttachments } from "./specialist-completion.ts";
 
 type ExplorerMode = "concern_scout" | "concern_tracer";
 
@@ -8,8 +19,12 @@ interface ExplorerReceipt {
   success: boolean;
   targetPath: string;
   focus: string | null;
+  expectedConcern: string | null;
   reportConcern: string | null;
   failureKind: string | null;
+  proposedConcerns: string[];
+  sourceRunId: string | null;
+  observedPaths: string[];
 }
 
 export interface ExplorerReceiptAssessment {
@@ -19,6 +34,7 @@ export interface ExplorerReceiptAssessment {
   successful_tracers: string[];
   unresolved_tracer_failures: string[];
   missing_concern_tracers: string[];
+  unresolved_scout_proposals: string[];
 }
 
 export interface ExplorerReceiptAssessmentOptions {
@@ -84,6 +100,29 @@ function reportConcernFromText(text: string): string | null {
   return match?.[1]?.trim() || null;
 }
 
+const SCOUT_PROPOSAL_MAX_LENGTH = 256;
+const SCOUT_PROPOSAL_SUFFIX = /\s+(?:one[_ -]?line|covers|seed[_ -]?paths?|rationale)\s*:/i;
+
+export function normalizeScoutConcernProposal(value: string): string | null {
+  const structuredBoundary = value.search(SCOUT_PROPOSAL_SUFFIX);
+  const proposal = (structuredBoundary >= 0 ? value.slice(0, structuredBoundary) : value).trim();
+  return proposal.length > 0 && proposal.length <= SCOUT_PROPOSAL_MAX_LENGTH
+    ? proposal
+    : null;
+}
+
+function scoutConcernsFromText(text: string): string[] {
+  const concerns: string[] = [];
+  const pattern = /^\s*-\s*concern:\s*([^\r\n]+)/gim;
+  for (const match of text.matchAll(pattern)) {
+    const concern = match[1] === undefined
+      ? null
+      : normalizeScoutConcernProposal(match[1]);
+    if (concern && !concerns.includes(concern)) concerns.push(concern);
+  }
+  return concerns.slice(0, 128);
+}
+
 function semanticTokens(value: string): Set<string> {
   const tokens = new Set<string>();
   for (const raw of value.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
@@ -124,7 +163,7 @@ function semanticallyRelated(left: string, right: string): boolean {
 }
 
 function receiptIdentity(receipt: ExplorerReceipt): string {
-  return receipt.reportConcern ?? receipt.focus ?? receipt.targetPath;
+  return receipt.expectedConcern ?? receipt.reportConcern ?? receipt.focus ?? receipt.targetPath;
 }
 
 function failureDescription(receipt: ExplorerReceipt): string {
@@ -155,6 +194,7 @@ export class ExplorerReceiptTracker {
       ?? text.match(/\b(?:explored|for)\s+(.+?)\s+(?:in\s+\d+ms|failed:)/i)?.[1]?.trim()
       ?? ".";
     const focus = stringField(details.focus) ?? focusFromText(text);
+    const expectedConcern = stringField(details.expected_concern);
     const reportConcern = stringField(details.report_concern)
       ?? (mode === "concern_tracer" ? reportConcernFromText(text) : null);
     const success = event.isError !== true
@@ -171,9 +211,58 @@ export class ExplorerReceiptTracker {
       success,
       targetPath,
       focus,
+      expectedConcern,
       reportConcern,
       failureKind,
+      proposedConcerns: mode === "concern_scout" && success
+        ? scoutConcernsFromText(text)
+        : [],
+      sourceRunId: null,
+      observedPaths: Array.isArray(details.observed_paths)
+        ? details.observed_paths.filter((candidate): candidate is string => typeof candidate === "string").slice(0, 512)
+        : [],
     });
+  }
+
+  attestation(repositoryCommit: string, runId: string): ExplorerReceiptAttestation {
+    return {
+      repository_commit: repositoryCommit,
+      run_id: runId,
+      receipts: this.#receipts.map((receipt): ExplorerReceiptRecord => ({
+        sequence: receipt.sequence,
+        mode: receipt.mode,
+        success: receipt.success,
+        target_path: receipt.targetPath,
+        focus: receipt.focus,
+        ...(receipt.expectedConcern === null ? {} : { expected_concern: receipt.expectedConcern }),
+        report_concern: receipt.reportConcern,
+        failure_kind: receipt.failureKind,
+        ...(receipt.proposedConcerns.length > 0
+          ? { proposed_concerns: receipt.proposedConcerns }
+          : {}),
+        source_run_id: receipt.sourceRunId ?? runId,
+        ...(receipt.observedPaths.length > 0 ? { observed_paths: receipt.observedPaths } : {}),
+      })),
+    };
+  }
+
+  loadAttestation(attestation: ExplorerReceiptAttestation): void {
+    for (const receipt of [...attestation.receipts].sort((left, right) => left.sequence - right.sequence)) {
+      this.#sequence += 1;
+      this.#receipts.push({
+        sequence: this.#sequence,
+        mode: receipt.mode,
+        success: receipt.success,
+        targetPath: receipt.target_path,
+        focus: receipt.focus,
+        expectedConcern: receipt.expected_concern ?? null,
+        reportConcern: receipt.report_concern,
+        failureKind: receipt.failure_kind,
+        proposedConcerns: [...(receipt.proposed_concerns ?? [])],
+        sourceRunId: receipt.source_run_id ?? attestation.run_id,
+        observedPaths: [...(receipt.observed_paths ?? [])],
+      });
+    }
   }
 
   assess(
@@ -188,7 +277,7 @@ export class ExplorerReceiptTracker {
       receipt.mode === "concern_scout" && receipt.success
     );
     const successfulTracers = this.#receipts.filter((receipt) =>
-      receipt.mode === "concern_tracer" && receipt.success
+      receipt.mode === "concern_tracer" && receipt.success && receipt.observedPaths.length > 0
     );
     const failedTracers = this.#receipts.filter((receipt) =>
       receipt.mode === "concern_tracer" && !receipt.success
@@ -205,8 +294,42 @@ export class ExplorerReceiptTracker {
         && semanticallyRelated(receiptIdentity(failure), receiptIdentity(success))
       )
     );
+    const rejectedCandidates = map?.concern_evidence?.not_concerns
+      .filter((candidate) => isSubstantiveConcernRejection(candidate.why_rejected))
+      .map((candidate) => candidate.candidate) ?? [];
+    const persistedConcerns = map?.concern_evidence?.concerns
+      .map((concern) => concern.concern) ?? [];
+    const persistedSuccessfulTracers = successfulTracers.filter((receipt) =>
+      persistedConcerns.some((concern) =>
+        semanticallyRelated(concern, receiptIdentity(receipt))
+      )
+    );
+    const unpersistedSuccessfulTracers = successfulTracers.filter((receipt) =>
+      !persistedSuccessfulTracers.includes(receipt)
+      && !rejectedCandidates.some((candidate) =>
+        semanticallyRelated(candidate, receiptIdentity(receipt))
+      )
+    );
+    const unresolvedScoutProposals = [...new Set(
+      scouts.flatMap((scout) => scout.proposedConcerns),
+    )].filter((proposal) =>
+      !persistedSuccessfulTracers.some((receipt) =>
+        semanticallyRelated(proposal, receiptIdentity(receipt))
+      )
+      && !rejectedCandidates.some((candidate) => semanticallyRelated(proposal, candidate))
+    );
 
     const reasons: string[] = [];
+    const observedPaths = new Set(successfulTracers.flatMap((receipt) => receipt.observedPaths));
+    // Normalization may attach dependencies proven from immutable source, or
+    // combine already-traced bodies. Neither invents a new model observation.
+    const authored = map === null ? null : removeTrustedInferredAttachments(map);
+    for (const concern of authored?.concern_evidence?.concerns ?? []) {
+      const unobserved = concernEvidencePaths(concern).filter((candidate) => !observedPaths.has(candidate));
+      if (unobserved.length > 0) {
+        reasons.push(`concern "${concern.concern}" cites source without an observed read/grep receipt: ${unobserved.slice(0, 12).join(", ")}; retrace the missing evidence`);
+      }
+    }
     if (requireScout && scouts.length === 0) {
       reasons.push("successful concern_scout receipt is missing");
     }
@@ -218,14 +341,187 @@ export class ExplorerReceiptTracker {
         `concern_tracer for "${failureDescription(failure)}" failed and was not successfully retraced`,
       );
     }
+    for (const receipt of unpersistedSuccessfulTracers) {
+      reasons.push(
+        `successful concern_tracer receipt for "${receiptIdentity(receipt)}" has no matching persisted concern evidence; retrace it narrowly and checkpoint the complete concern body`,
+      );
+    }
+    for (const proposal of unresolvedScoutProposals) {
+      reasons.push(`scout proposal "${proposal}" was neither successfully traced nor substantively rejected`);
+    }
 
     return {
       complete: reasons.length === 0,
       reasons,
       successful_scouts: scouts.length,
-      successful_tracers: successfulTracers.map(receiptIdentity),
+      successful_tracers: persistedSuccessfulTracers.map(receiptIdentity),
       unresolved_tracer_failures: unresolvedFailures.map(failureDescription),
       missing_concern_tracers: missingConcernTracers,
+      unresolved_scout_proposals: unresolvedScoutProposals,
     };
   }
+}
+
+/** Persist one application-validated tracer body before its receipt is attested. */
+export function checkpointExplorerConcernEvidence(
+  cwd: string,
+  stateDir: string,
+  event: unknown,
+): boolean {
+  if (!isRecord(event) || event.type !== "tool_execution_end" || event.isError === true) return false;
+  const toolName = stringField(event.toolName) ?? stringField(event.tool_name);
+  if (toolName !== "spawn_explorer") return false;
+  const nestedResult = isRecord(event.result) ? event.result : null;
+  if (nestedResult?.isError === true) return false;
+  const details = nestedResult && isRecord(nestedResult.details)
+    ? nestedResult.details
+    : isRecord(event.details) ? event.details : null;
+  if (!details || details.mode !== "concern_tracer") return false;
+  const map = loadCanonicalMapAt(cwd, stateDir);
+  if (!map) return false;
+  if (isRecord(details.structured_rejection)) {
+    const candidate = stringField(details.structured_rejection.candidate);
+    const whyRejected = stringField(details.structured_rejection.why_rejected);
+    const existing = map.concern_evidence?.concerns.find((concern) =>
+      concern.concern.trim().toLowerCase() === candidate?.toLowerCase());
+    const digest = existing === undefined ? null
+      : createHash("sha256").update(stableMapValueIdentity(existing)).digest("hex");
+    const reviewedRetirement = existing !== undefined && map.specialist_reviews?.repository_commit === currentRepositoryCommit(cwd)
+      && map.specialist_reviews.records.some((record) => record.concern === existing.concern
+        && record.digest === digest && record.retryable === false && record.finding?.claim === "concern");
+    if (!candidate || !whyRejected || !isSubstantiveConcernRejection(whyRejected)
+      || (existing !== undefined && !reviewedRetirement)) {
+      return false;
+    }
+    const evidence = map.concern_evidence ?? { concerns: [], not_concerns: [] };
+    writeCanonicalMap(cwd, {
+      ...map,
+      concern_evidence: {
+        ...evidence,
+        concerns: evidence.concerns.filter((entry) => entry !== existing),
+        not_concerns: [
+          ...evidence.not_concerns.filter((entry) => entry.candidate.trim().toLowerCase() !== candidate.toLowerCase()),
+          { candidate, why_rejected: whyRejected },
+        ],
+      },
+      ...(existing === undefined ? {} : { specialist_reviews: {
+        ...map.specialist_reviews!,
+        records: map.specialist_reviews!.records.filter((record) => record.concern !== existing.concern),
+      } }),
+    }, { stateDir, mapFilename: "codebase_map.json" });
+    return true;
+  }
+  if (!isRecord(details.structured_concern)) return false;
+  const concern = details.structured_concern;
+  const concernName = stringField(concern.concern);
+  if (!concernName) return false;
+  const identity = concernName.toLowerCase();
+  const replacesConcern = stringField(details.replaces_concern);
+  const replacedBody = replacesConcern === null ? null : map.concern_evidence?.concerns.find(candidate =>
+    candidate.concern === replacesConcern);
+  const replacedDigest = replacedBody === null || replacedBody === undefined ? null
+    : createHash("sha256").update(stableMapValueIdentity(replacedBody)).digest("hex");
+  const replacementFinding = replacesConcern === null ? null : map.specialist_reviews?.records.find(record =>
+    map.specialist_reviews?.repository_commit === currentRepositoryCommit(cwd)
+    && record.concern === replacesConcern && record.digest === replacedDigest
+    && record.retryable === false && record.finding?.claim === "concern");
+  const merged = mergeExplorerConcernEvidence(map, concern,
+    !replacesConcern || replacesConcern.toLowerCase() === identity || !replacementFinding
+      ? undefined
+      : { concern: replacesConcern, reason: replacementFinding.finding!.reason });
+  if (!merged.concern_evidence?.concerns.some((candidate) => candidate.concern.trim().toLowerCase() === identity)) {
+    return false;
+  }
+  writeCanonicalMap(cwd, merged, { stateDir, mapFilename: "codebase_map.json" });
+  return true;
+}
+
+/** Shared prospective merge for compiler feedback and the trusted checkpoint. */
+export interface ConcernIdentityReplacement {
+  concern: string;
+  reason: string;
+}
+
+export function mergeExplorerConcernEvidence(
+  map: CodebaseMap,
+  concern: Record<string, unknown>,
+  replacement?: ConcernIdentityReplacement,
+): CodebaseMap {
+  const identity = stringField(concern.concern)?.toLowerCase();
+  if (!identity) return map;
+  const current = map.concern_evidence ?? { concerns: [], not_concerns: [] };
+  const merged = mergeEvidenceIntoMap({
+    concern_evidence: {
+      concerns: [
+        ...current.concerns.filter((candidate) => candidate.concern.trim().toLowerCase() !== identity),
+        concern,
+      ],
+      not_concerns: current.not_concerns.filter((candidate) => candidate.candidate.trim().toLowerCase() !== identity),
+    },
+  }, map);
+  if (!replacement || replacement.concern.toLowerCase() === identity) return merged;
+  return {
+    ...merged,
+    concern_evidence: {
+      concerns: (merged.concern_evidence?.concerns ?? [])
+        .filter(candidate => candidate.concern !== replacement.concern),
+      not_concerns: [
+        ...(merged.concern_evidence?.not_concerns ?? [])
+          .filter(candidate => candidate.candidate !== replacement.concern),
+        { candidate: replacement.concern, grouped_into: stringField(concern.concern)!,
+          why_rejected: `Corrected to ${stringField(concern.concern)!}: ${replacement.reason}` },
+      ],
+    },
+  };
+}
+
+function trackerFromAttestation(attestation: ExplorerReceiptAttestation): ExplorerReceiptTracker {
+  const tracker = new ExplorerReceiptTracker();
+  tracker.loadAttestation(attestation);
+  return tracker;
+}
+
+export function currentRepositoryCommit(cwd: string): string | null {
+  const result = spawnSync("git", ["-C", cwd, "rev-parse", "--verify", "HEAD^{commit}"], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  const commit = result.status === 0 ? result.stdout.trim().toLowerCase() : "";
+  return /^[0-9a-f]{40,64}$/.test(commit) ? commit : null;
+}
+
+export function assessExplorerReceiptAttestation(
+  map: CodebaseMap | null,
+  cwd: string,
+  options: ExplorerReceiptAssessmentOptions = {},
+): ExplorerReceiptAssessment {
+  const attestation = map?.explorer_receipts;
+  if (attestation === undefined) {
+    return {
+      complete: false,
+      reasons: ["application-attested explorer receipt ledger is missing"],
+      successful_scouts: 0,
+      successful_tracers: [],
+      unresolved_tracer_failures: [],
+      missing_concern_tracers: map?.concern_evidence?.concerns.map((concern) => concern.concern) ?? [],
+      unresolved_scout_proposals: [],
+    };
+  }
+  const currentCommit = currentRepositoryCommit(cwd);
+  if (currentCommit === null || attestation.repository_commit !== currentCommit) {
+    return {
+      complete: false,
+      reasons: [
+        currentCommit === null
+          ? "current repository commit cannot be verified for explorer receipts"
+          : `explorer receipts attest ${attestation.repository_commit}, not current HEAD ${currentCommit}`,
+      ],
+      successful_scouts: 0,
+      successful_tracers: [],
+      unresolved_tracer_failures: [],
+      missing_concern_tracers: map?.concern_evidence?.concerns.map((concern) => concern.concern) ?? [],
+      unresolved_scout_proposals: [],
+    };
+  }
+  return trackerFromAttestation(attestation).assess(map, options);
 }

@@ -6,6 +6,7 @@ import * as path from "node:path";
 import test from "node:test";
 import {
   assessSpecialistEvidence,
+  compileSpecialistEvidence,
   reconcileSpecialistEvidence,
   type CodebaseMap,
 } from "../../src/core/audit/schema.ts";
@@ -163,6 +164,277 @@ test("repository-wide implementation/test mirrors prevent false specialist closu
     const reconciled = reconcileSpecialistEvidence(map, complete);
     assert.notStrictEqual(reconciled, map);
     assert.deepEqual(reconciled.open_questions, []);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("uncovered module clusters prioritize dependency centrality with stable ties", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-cluster-priority-"));
+  for (const repositoryPath of [
+    "README.md",
+    "package.json",
+    "src/a-leaf.test.ts",
+    "src/a-leaf.ts",
+    "src/b-leaf.test.ts",
+    "src/b-leaf.ts",
+    "src/importer-one.test.ts",
+    "src/importer-two.test.ts",
+    "src/owned.test.ts",
+    "src/owned.ts",
+    "src/z-core.test.ts",
+    "src/z-core.ts",
+  ]) write(cwd, repositoryPath);
+  fs.writeFileSync(
+    path.join(cwd, "src/importer-one.ts"),
+    'import { core } from "./z-core.js";\nexport const one = core;\n',
+  );
+  fs.writeFileSync(
+    path.join(cwd, "src/importer-two.ts"),
+    'import { core } from "./z-core.js";\nexport const two = core;\n',
+  );
+  git(cwd, "init", "-q");
+  git(cwd, "config", "user.name", "Agentify Test");
+  git(cwd, "config", "user.email", "agentify@example.invalid");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "priority fixture");
+  try {
+    const map = clickShapedMap();
+    map.meta.project_type = "TypeScript library";
+    map.meta.languages = ["TypeScript"];
+    map.skeleton.entry_points = [{
+      path: "src/owned.ts",
+      role: "owned fixture entry point",
+      language: "TypeScript",
+      run_command: "npm test",
+    }];
+    map.skeleton.first_5_files_for_fresh_agent = [{
+      path: "src/owned.ts",
+      why: "owned fixture behavior",
+    }];
+    map.pitfalls = [];
+    map.operational_surface.build.recipe_file = "package.json";
+    map.concern_evidence = {
+      concerns: [concern("owned behavior", "src/owned.ts", "src/owned.test.ts")],
+      not_concerns: [],
+    };
+
+    const keys = assessSpecialistEvidence(map, { cwd }).uncovered_clusters
+      .map((cluster) => cluster.cluster_key);
+    assert.equal(keys[0], "z-core");
+    assert.ok(keys.indexOf("a-leaf") < keys.indexOf("b-leaf"));
+
+    for (let index = 0; index < 520; index += 1) {
+      write(cwd, `src/extra-${index}.ts`);
+    }
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "large tracked evidence set");
+    const largeKeys = assessSpecialistEvidence(map, { cwd }).uncovered_clusters
+      .map((cluster) => cluster.cluster_key);
+    assert.equal(largeKeys[0], "z-core", "crossing a Git batch boundary must not erase dependency evidence");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("shared Java bases and committed validation wrappers attach deterministically", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-java-dependencies-"));
+  for (const repositoryPath of [
+    "README.md",
+    "pom.xml",
+    "mvnw",
+    "src/main/java/example/Person.java",
+    "src/main/java/example/Owner.java",
+    "src/main/java/example/Vet.java",
+    "src/test/java/example/OwnerTests.java",
+    "src/test/java/example/VetTests.java",
+  ]) write(cwd, repositoryPath);
+  fs.writeFileSync(path.join(cwd, "src/main/java/example/Person.java"),
+    "package example;\npublic abstract class Person { public String name; }\n");
+  fs.writeFileSync(path.join(cwd, "src/main/java/example/Owner.java"),
+    "// class Ignored extends Missing\npackage example;\npublic final class Owner extends Person { public void register() {} }\n");
+  fs.writeFileSync(path.join(cwd, "src/main/java/example/Vet.java"),
+    "package example;\npublic final class Vet extends Person { public void list() {} }\n");
+  fs.chmodSync(path.join(cwd, "mvnw"), 0o755);
+  git(cwd, "init", "-q");
+  git(cwd, "config", "user.name", "Agentify Test");
+  git(cwd, "config", "user.email", "agentify@example.invalid");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "java dependency fixture");
+  try {
+    const map = clickShapedMap();
+    map.meta.project_type = "Java application";
+    map.meta.languages = ["Java"];
+    map.skeleton.entry_points = [{
+      path: "src/main/java/example/Owner.java",
+      role: "owner entry point",
+      language: "Java",
+      run_command: "./mvnw test",
+    }];
+    map.skeleton.first_5_files_for_fresh_agent = [
+      { path: "src/main/java/example/Person.java", why: "shared identity contract" },
+      { path: "mvnw", why: "committed validation wrapper" },
+    ];
+    map.module_graph.edges = [];
+    map.module_graph.parallelizable_subtrees = [];
+    map.module_graph.shared_abstractions = ["src/main/java/example/Person.java"];
+    map.module_graph.shared_state = [];
+    map.pitfalls = [];
+    map.operational_surface.build.recipe_file = "pom.xml";
+    map.concern_evidence = {
+      concerns: [
+        concern("owner registration", "src/main/java/example/Owner.java", "src/test/java/example/OwnerTests.java"),
+        concern("vet directory", "src/main/java/example/Vet.java", "src/test/java/example/VetTests.java"),
+      ],
+      not_concerns: [],
+    };
+    for (const body of map.concern_evidence.concerns) body.validation = ["./mvnw test"];
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.complete, true, compiled.reasons.join("; "));
+    for (const name of ["owner registration", "vet directory"]) {
+      const body = compiled.map.concern_evidence!.concerns.find((entry) => entry.concern === name)!;
+      assert.ok(body.touchpoints.some((entry) => entry.path === "src/main/java/example/Person.java"
+        && entry.centrality === "supporting"));
+      assert.ok(body.touchpoints.some((entry) => entry.path === "mvnw"
+        && entry.centrality === "supporting"));
+    }
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("normalization keeps an explicitly excluded sibling behavior unresolved", () => {
+  const cwd = createRepository();
+  try {
+    const map = clickShapedMap();
+    const command = map.concern_evidence!.concerns[0]!;
+    command.excludes = "Help formatting remains a separate specialist concern.";
+    command.touchpoints[0]!.role += " Formatting is delegated to the adjacent formatter.";
+    const compiled = compileSpecialistEvidence(map, { cwd });
+
+    assert.equal(compiled.complete, false);
+    assert.ok(compiled.reasons.some((reason) => reason.includes("src/click/formatting.py")));
+    assert.ok(compiled.reasons.some((reason) => reason.includes("src/click/shell_completion.py")));
+    const normalizedCommand = compiled.map.concern_evidence!.concerns.find((entry) =>
+      entry.concern === "command invocation"
+    );
+    assert.ok(normalizedCommand);
+    assert.equal(normalizedCommand.touchpoints.some((touchpoint) =>
+      touchpoint.path === "src/click/formatting.py"
+      || touchpoint.path === "src/click/shell_completion.py"
+    ), false);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("normalization assigns a mirrored cluster to its unique complete claimant", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-cluster-owner-"));
+  for (const repositoryPath of [
+    "README.md",
+    "package.json",
+    "src/options.ts",
+    "tests/options-core.test.ts",
+    "src/error.ts",
+    "tests/error.test.ts",
+    "examples/options-required.js",
+    "tests/options-required.test.js",
+  ]) write(cwd, repositoryPath);
+  fs.writeFileSync(path.join(cwd, "examples/options-required.js"), "export function requiredOption(value) { return value; }\n");
+  git(cwd, "init", "-q");
+  git(cwd, "config", "user.name", "Agentify Test");
+  git(cwd, "config", "user.email", "agentify@example.invalid");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "cluster owner fixture");
+  try {
+    const optionContract = concern(
+      "option declaration and required-value contract",
+      "src/options.ts",
+      "tests/options-core.test.ts",
+    );
+    optionContract.covers += " Required options are demonstrated and regression-tested as a mirrored public behavior.";
+    optionContract.touchpoints.push(
+      {
+        path: "examples/options-required.js",
+        symbol: "requiredOption",
+        role: "Public required-option implementation example.",
+        line_range: null,
+        centrality: "supporting",
+      },
+      {
+        path: "tests/options-required.test.js",
+        symbol: "required option cases",
+        role: "Mirrored required-option regression contract.",
+        line_range: null,
+        centrality: "supporting",
+      },
+    );
+    const errorContract = concern(
+      "error and exit behavior",
+      "src/error.ts",
+      "tests/error.test.ts",
+    );
+    errorContract.touchpoints.push({
+      path: "tests/options-required.test.js",
+      symbol: "missing required value error",
+      role: "Downstream error consumer for a required-option failure.",
+      line_range: null,
+      centrality: "supporting",
+    });
+
+    const map = clickShapedMap();
+    map.meta.project_type = "TypeScript CLI library";
+    map.meta.languages = ["TypeScript", "JavaScript"];
+    map.skeleton.entry_points = ["src/options.ts", "src/error.ts"].map((repositoryPath) => ({
+      path: repositoryPath,
+      role: "fixture entry point",
+      language: "TypeScript",
+      run_command: "npm test",
+    }));
+    map.skeleton.first_5_files_for_fresh_agent = map.skeleton.entry_points.map((entry) => ({
+      path: entry.path,
+      why: entry.role,
+    }));
+    map.pitfalls = [];
+    map.concern_evidence = { concerns: [optionContract, errorContract], not_concerns: [] };
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.complete, true, compiled.reasons.join("; "));
+    for (const repositoryPath of [
+      "examples/options-required.js",
+      "tests/options-required.test.js",
+    ]) {
+      const owners = compiled.map.concern_evidence!.concerns.filter((candidate) =>
+        candidate.touchpoints.some((touchpoint) =>
+          touchpoint.path === repositoryPath && touchpoint.centrality === "core"
+        )
+      );
+      assert.deepEqual(owners.map((entry) => entry.concern), [optionContract.concern]);
+    }
+    const repeated = compileSpecialistEvidence(compiled.map, { cwd });
+    assert.equal(repeated.complete, true, repeated.reasons.join("; "));
+    assert.strictEqual(repeated.map, compiled.map);
+
+    const ungrounded = structuredClone(map);
+    ungrounded.concern_evidence!.concerns[0]!.touchpoints.find((entry) =>
+      entry.path === "examples/options-required.js"
+    )!.symbol = "nonexistentRequiredOption";
+    const refused = compileSpecialistEvidence(ungrounded, { cwd });
+    assert.equal(refused.complete, false, "an unsupported claim cannot silently retire a specialist");
+    assert.match(refused.reasons.join("; "), /nonexistentRequiredOption/);
+    assert.equal(refused.map.concern_evidence!.concerns.length, 2);
+
+    errorContract.touchpoints.push({
+      path: "examples/options-required.js",
+      symbol: "requiredOption",
+      role: "Competing complete claim to the public required-option example.",
+      line_range: null,
+      centrality: "supporting",
+    });
+    const ambiguous = compileSpecialistEvidence(map, { cwd });
+    assert.equal(ambiguous.complete, false);
+    assert.ok(ambiguous.reasons.some((reason) => /options-required/i.test(reason)));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

@@ -110,16 +110,16 @@ test("complete overlapping concerns close only after high-signal paths are accou
       }),
       concern({
         name: "Help and output rendering",
-        paths: ["lib/command.js", "lib/help.js", "Readme.md"],
+        paths: ["lib/help.js", "lib/command.js", "Readme.md"],
       }),
     ],
     not_concerns: [
       {
-        candidate: "Type declaration maintenance",
+        candidate: "typings/index.d.ts",
         why_rejected: "typings/index.d.ts mirrors the public runtime API and is validated with the concerns above.",
       },
       {
-        candidate: "Package metadata",
+        candidate: "package.json",
         why_rejected: "package.json is repository plumbing rather than an independent body of knowledge.",
       },
     ],
@@ -142,4 +142,24 @@ test("unknown language metadata cannot silently complete concern discovery", () 
   assert.equal(assessment.complete, false);
   assert.ok(assessment.reasons.some((reason) => /project_type/i.test(reason)));
   assert.ok(assessment.reasons.some((reason) => /languages\/formats/i.test(reason)));
+});
+
+test("accepted candidates cannot masquerade as compiler rejection evidence", () => {
+  const map = commanderLikeMap();
+  map.concern_evidence = {
+    concerns: [concern({
+      name: "CLI argument parsing",
+      paths: ["index.js", "lib/command.js", "lib/option.js", "lib/argument.js", "lib/error.js", "lib/help.js"],
+    })],
+    not_concerns: [{
+      candidate: "Type declaration maintenance",
+      why_rejected: "Not rejected; accepted for tracing because it protects compatibility.",
+    }],
+  };
+  const assessment = assessSpecialistEvidence(map);
+  assert.equal(assessment.complete, false);
+  assert.ok(
+    assessment.reasons.some((reason) => /does not contain a substantive rejection/i.test(reason)),
+    assessment.reasons.join("; "),
+  );
 });

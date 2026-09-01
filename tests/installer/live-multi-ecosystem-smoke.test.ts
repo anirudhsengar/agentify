@@ -12,7 +12,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { discoverRepositoryCommands } from "../../src/core/installer/command-discovery.ts";
 import { DEFAULT_INSTALLER_PROCESS_RUNNER } from "../../src/core/installer/process-runner.ts";
-import { probeProviderReachable } from "../../src/core/runs/provider-probe.ts";
+import { probeProviderReachable } from "../fixtures/provider-probe.ts";
 import { PiSdkRuntime } from "../../src/core/pi-sdk-runtime.ts";
 import { defaultConfigDir, loadAgentifyConfig } from "../../src/core/agentify-config.ts";
 import type { AgentifyConfig } from "../../src/core/types.ts";

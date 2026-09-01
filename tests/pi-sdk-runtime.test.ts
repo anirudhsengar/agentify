@@ -1,6 +1,145 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { capProviderOutputTokens, forceProviderToolChoice } from "../src/core/pi-sdk-runtime.ts";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { createServer } from "node:http";
+import { Type } from "typebox";
+import { capProviderOutputTokens, forceProviderToolChoice, PiSdkRuntime } from "../src/core/pi-sdk-runtime.ts";
+import { createReadOnlyExecutionPolicy } from "../src/core/security/execution-policy.ts";
+import { createAgentSession } from "@earendil-works/pi-coding-agent";
+import { createAgentifyModelRuntime } from "../src/core/pi-credential-store.ts";
+import { createSpawnExplorerTool } from "../src/core/audit/spawn-explorer-tool.ts";
+import { AuditBudgetExceededError, AuditResourceBudget } from "../src/core/audit/resource-budget.ts";
+
+test("SDK admission rejection prevents HTTP dispatch, while admitted requests still dispatch", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-sdk-admission-"));
+  let requests = 0;
+  const server = createServer((_request, response) => {
+    requests += 1;
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    response.end('data: {"id":"fixture","choices":[{"index":0,"delta":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n');
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    fs.writeFileSync(path.join(cwd, "models.json"), JSON.stringify({ providers: {
+      openai: { baseUrl: `http://127.0.0.1:${address.port}/v1`, api: "openai-completions",
+        apiKey: "local-test-placeholder", models: [{ id: "admission-fixture", contextWindow: 32768, maxTokens: 128,
+          cost: { input: 1, output: 100, cacheRead: 0.1, cacheWrite: 1.25 } }] },
+    } }));
+    const runtime = new PiSdkRuntime();
+    for (const reject of [true, false]) {
+      const before = requests;
+      let admissions = 0;
+      const run = runtime.runSession({
+        cwd, configDir: cwd,
+        config: { schemaVersion: 1, thinkingLevel: "off", models: { primary: { provider: "openai", model: "admission-fixture" } } },
+        systemPrompt: "Local transport test.", userPrompt: "ok", tools: [], timeoutMs: 5000,
+        executionPolicy: createReadOnlyExecutionPolicy({ cwd, mode: "audit-readonly", tools: [] }),
+        onProviderRequest: () => { admissions += 1; if (reject) throw new Error("admission denied"); },
+      });
+      if (reject) await assert.rejects(run, /admission denied/,
+        "SDK-swallowed admission errors must reach the caller, not look like a model timeout");
+      else assert.equal((await run).diagnostics?.provider_requests, 1);
+      assert.equal(admissions, 1);
+      assert.equal(requests - before, reject ? 0 : 1, "denied SDK hooks must not dispatch their original payload");
+    }
+    const costBudget = new AuditResourceBudget({ maxTotalCostUsd: 0.01 });
+    const costSession = costBudget.beginSession();
+    const beforeCostRejection = requests;
+    await assert.rejects(runtime.runSession({
+      cwd, configDir: cwd,
+      config: { schemaVersion: 1, thinkingLevel: "off", models: { primary: { provider: "openai", model: "admission-fixture" } } },
+      systemPrompt: "Local cost admission test.", userPrompt: "ok", tools: [], timeoutMs: 5000,
+      executionPolicy: createReadOnlyExecutionPolicy({ cwd, mode: "audit-readonly", tools: [] }),
+      auditResourceBudget: costBudget,
+      onProviderRequest: (reservation) => {
+        assert.ok(reservation, "the real SDK must supply model-bound reservations");
+        assert.ok(reservation.inputTokens < 32768,
+          "a visible exact request must retain its serialized bound, not the full model context");
+        costBudget.recordProviderRequest(costSession, reservation);
+      },
+    }), AuditBudgetExceededError, "preserve typed budget exhaustion across SDK extension dispatch");
+    assert.equal(requests, beforeCostRejection, "cost reservation rejection must prevent HTTP dispatch");
+    assert.equal(costBudget.snapshot().model_calls, 0);
+    const { modelRuntime } = await createAgentifyModelRuntime({
+      authFile: path.join(cwd, "auth.json"), modelsFile: path.join(cwd, "models.json"),
+    });
+    const model = modelRuntime.getModel("openai", "admission-fixture");
+    assert.ok(model);
+    const budget = new AuditResourceBudget({ maxModelCalls: 3 });
+    const before = requests;
+    let explorerCreated = false;
+    const explorer = createSpawnExplorerTool({
+      agentDir: cwd, stateDir: ".audit", explorerModel: model, resourceBudget: budget,
+      createSession: async (options) => {
+        const created = await createAgentSession({ ...options, modelRuntime });
+        explorerCreated = true;
+        // Another session consumes the remaining slots after explorer preflight.
+        const competing = budget.beginSession();
+        created.session.subscribe((event) => {
+          if (event.type === "agent_start") {
+            for (let call = 0; call < 3; call += 1) budget.recordProviderRequest(competing);
+          }
+        });
+        return created;
+      },
+    });
+    const denied = await explorer.execute("sdk-admission", { mode: "topography", target_path: "." } as never,
+      undefined, undefined, { cwd } as never);
+    assert.equal((denied as { isError?: boolean }).isError, true);
+    assert.equal(explorerCreated, true, JSON.stringify(denied));
+    assert.equal(requests, before, "explorer rejection must abort the actual SDK transport");
+    assert.equal(budget.snapshot().model_calls, 3, "a denied dispatch is not a fourth model call");
+    assert.equal((denied.details as { provider_calls: number }).provider_calls, 0);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("MiniMax compatibility keeps reasoning and avoids unsupported named tool choice on the wire", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-sdk-tool-choice-"));
+  const payloads: Array<Record<string, unknown>> = [];
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    payloads.push(JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>);
+    // A deterministic non-retryable response suffices to inspect dispatch.
+    response.writeHead(400, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "wire fixture complete" } }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    fs.writeFileSync(path.join(cwd, "models.json"), JSON.stringify({ providers: {
+      minimax: { baseUrl: `http://127.0.0.1:${address.port}`, api: "anthropic-messages",
+        apiKey: "local-test-placeholder", models: [{ id: "MiniMax-M3", reasoning: true, contextWindow: 32768, maxTokens: 4096 }] },
+    } }));
+    await new PiSdkRuntime().runSession({
+      cwd, configDir: cwd,
+      config: { schemaVersion: 1, thinkingLevel: "high", models: { primary: { provider: "minimax", model: "MiniMax-M3" } } },
+      systemPrompt: "Local wire test.", userPrompt: "Read the fixture.", tools: ["read", "submit_report"], timeoutMs: 5000,
+      executionPolicy: createReadOnlyExecutionPolicy({ cwd, mode: "audit-readonly", tools: ["read"] }),
+      customTools: [{ name: "submit_report", label: "Submit", description: "Submit fixture result.", parameters: Type.Object({}),
+        async execute() { return { content: [{ type: "text", text: "recorded" }], details: {} }; } }],
+      forceRequiredToolChoice: true,
+      recoveryPromptIfToolNotCalled: { requiredToolName: "submit_report", userPrompt: "Submit.", maxAttempts: 0 },
+    });
+    assert.equal(payloads.length, 1);
+    assert.deepEqual(payloads[0]!.tool_choice, { type: "auto" });
+    assert.deepEqual((payloads[0]!.tools as Array<{ name: string }>).map((tool) => tool.name), ["submit_report"]);
+    assert.notDeepEqual(payloads[0]!.thinking, { type: "disabled" }, "unsupported forcing must not disable configured reasoning");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
 
 test("required tool choice uses the Anthropic wire contract", () => {
   const payload = forceProviderToolChoice({ model: "fixture", tools: [{ name: "submit" }] }, "anthropic-messages", "submit");

@@ -6,10 +6,9 @@
 // audited in the same minute. The log is user-global (not project-
 // local) so it survives across projects and is never auto-committed.
 //
-// Lifecycle: open `fs.createWriteStream` on `run_start`; write one
-// JSON line per event with serialize → redact → truncate; flush +
-// close on `run_end` / `user_abort`. The stream is append-only and
-// crash-safe (a crash mid-run preserves everything written so far).
+// Lifecycle: synchronously append each bounded, redacted JSON line so process
+// exit cannot discard buffered evidence. An unfinished started run records one
+// terminal result on exit; close removes that fallback after normal completion.
 //
 // Event types (see AgentifyEventType below):
 //   run_start, session_event, map_written, gap_detected,
@@ -60,6 +59,7 @@ export type AgentifyEventType =
   | "agentify.gap_detected"
   | "agentify.gap_closed"
   | "agentify.subagent_spawned"
+  | "agentify.audit_budget"
   | "agentify.session_end"
   | "agentify.user_abort"
   | "agentify.run_end"
@@ -113,6 +113,12 @@ export type SubagentSpawnedPayload = {
   tool_name: string;
   details: unknown;
   is_error: boolean;
+};
+
+export type AuditBudgetPayload = {
+  status: "within" | "exhausted" | "failed";
+  limits: Record<string, number>;
+  usage: Record<string, number>;
 };
 
 export type SessionEndPayload = {
@@ -188,6 +194,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function summarizeSessionEvent(event: unknown): unknown {
   if (!isRecord(event)) return event;
   const type = typeof event.type === "string" ? event.type : "unknown";
+  if (type === "specialist_review_result") {
+    return { type,
+      concern: typeof event.concern === "string" ? truncate(event.concern, 256) : null,
+      digest: typeof event.digest === "string" ? truncate(event.digest, 64) : null,
+      repository_commit: typeof event.repository_commit === "string" ? truncate(event.repository_commit, 64) : null,
+      failure: typeof event.failure === "string" ? truncate(event.failure, 2_048) : null,
+      retryable: typeof event.retryable === "boolean" ? event.retryable : null,
+    };
+  }
   if (type === "turn_end" || type === "agent_end") return { type };
   if (type === "tool_execution_start") {
     return { type, toolName: event.toolName ?? event.tool_name ?? "unknown", toolCallId: event.toolCallId ?? null };
@@ -229,7 +244,17 @@ function serializeEvent(event: AgentifyEvent): string {
 }
 
 export class AgentifyLog {
-  private readonly stream: fs.WriteStream;
+  private readonly filePath: string;
+  private started = false;
+  private terminalWritten = false;
+  private readonly onExit = (exitCode: number): void => {
+    if (!this.started || this.terminalWritten) return;
+    this.runEnd({
+      exit_code: exitCode,
+      status: exitCode === 130 || exitCode === 143 ? "aborted" : "error",
+      error_message: "Process exited before the audit completed; semantic closure was not established.",
+    });
+  };
   private readonly runIdLocal: string;
   private filesWritten = 0;
   private turns = 0;
@@ -243,13 +268,16 @@ export class AgentifyLog {
   private totalCacheReadTokens = 0;
   private totalCacheWriteTokens = 0;
   private totalCostUsd = 0;
+  private aggregateUsage: Record<string, number> | undefined;
   private currentTurnStart: number | null = null;
   private turnLatencies: number[] = [];
 
   constructor(opts: { cwd: string; configDir: string }) {
     this.runIdLocal = `agentify-${safeFilename(nowIso())}-${hashCwd(opts.cwd)}`;
-    this.stream = fs.createWriteStream(makeLogPath(opts.cwd, opts.configDir), { flags: "a" });
+    this.filePath = makeLogPath(opts.cwd, opts.configDir);
+    fs.appendFileSync(this.filePath, "");
     this.startTime = Date.now();
+    process.once("exit", this.onExit);
   }
 
   get runId(): string {
@@ -257,7 +285,7 @@ export class AgentifyLog {
   }
 
   get logPath(): string {
-    return this.stream.path.toString();
+    return this.filePath;
   }
 
   get costUsd(): number {
@@ -287,11 +315,12 @@ export class AgentifyLog {
       event,
       payload,
     });
-    this.stream.write(`${line}\n`);
+    fs.appendFileSync(this.filePath, `${line}\n`);
   }
 
   runStart(payload: RunStartPayload): void {
     this.write("agentify.run_start", payload);
+    this.started = true;
   }
 
   sessionEvent(payload: SessionEventPayload): void {
@@ -342,6 +371,21 @@ export class AgentifyLog {
 
   incrementTurns(): void {
     this.turns += 1;
+  }
+
+  recordMessageEnd(
+    role: string | undefined,
+    usage?: {
+      input?: number;
+      output?: number;
+      cacheRead?: number;
+      cacheWrite?: number;
+      cost?: { total?: number };
+    },
+  ): void {
+    if (role !== "assistant") return;
+    this.incrementTurns();
+    this.recordTurnEnd(usage);
   }
 
   /**
@@ -399,6 +443,11 @@ export class AgentifyLog {
     this.write(event, payload);
   }
 
+  auditBudget(payload: AuditBudgetPayload): void {
+    this.aggregateUsage = { ...payload.usage };
+    this.write("agentify.audit_budget", payload);
+  }
+
   runEnd(
     payload: Omit<
       RunEndPayload,
@@ -413,6 +462,7 @@ export class AgentifyLog {
       | "mean_turn_latency_ms"
     >,
   ): void {
+    if (this.terminalWritten) return;
     // Close any still-open turn so its latency counts.
     if (this.currentTurnStart !== null) {
       this.turnLatencies.push(Date.now() - this.currentTurnStart);
@@ -432,13 +482,29 @@ export class AgentifyLog {
       total_cache_read_tokens: this.totalCacheReadTokens,
       total_cache_write_tokens: this.totalCacheWriteTokens,
       total_cost_usd: this.totalCostUsd,
+      total_usage_scope: "parent_sessions_this_invocation",
+      ...(this.aggregateUsage === undefined ? {} : {
+        aggregate_usage: this.aggregateUsage,
+        aggregate_usage_scope: "repository_commit_lineage",
+        unanswered_model_calls: this.aggregateUsage.unreported_calls
+          ?? Math.max(0, this.aggregateUsage.model_calls! - this.aggregateUsage.turns!),
+        aggregate_cost_status: (this.aggregateUsage.unreported_calls
+          ?? Math.max(0, this.aggregateUsage.model_calls! - this.aggregateUsage.turns!)) > 0
+          ? "incomplete_provider_usage" : "provider_reported",
+        ...(this.aggregateUsage.unreserved_calls === 0 ? {
+          aggregate_cost_upper_bound_usd: this.aggregateUsage.cost_usd! + (this.aggregateUsage.reserved_cost_usd ?? 0),
+          aggregate_input_upper_bound: this.aggregateUsage.input_tokens! + (this.aggregateUsage.reserved_input_tokens ?? 0),
+          aggregate_output_upper_bound: this.aggregateUsage.output_tokens! + (this.aggregateUsage.reserved_output_tokens ?? 0),
+          reservation_basis: "serialized_request_input_model_output_limits_and_price_metadata",
+        } : {}),
+      }),
       mean_turn_latency_ms: meanLatency === null ? null : Math.round(meanLatency),
     });
+    this.terminalWritten = true;
   }
 
   close(): Promise<void> {
-    return new Promise((resolve) => {
-      this.stream.end(() => resolve());
-    });
+    process.removeListener("exit", this.onExit);
+    return Promise.resolve();
   }
 }

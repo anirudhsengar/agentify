@@ -117,7 +117,7 @@ async function testToolDefinitionContract(): Promise<void> {
   assert.equal(writeMapDeltaTool.label, "Write Codebase Map Delta");
   assert.equal(
     writeMapDeltaTool.description,
-    "Merge a partial delta into the canonical codebase map. Each call should close one dimension by including both the dimension data AND the matching coverage entry. Merging does not silently strip or invent arrays: the arrays and objects you provide overwrite the matching fields in the map. If a field is still empty after the merge, your delta did not include it. Use `shallow_overwrite` (default) for a clean top-level replacement, `deep_merge` to merge nested objects recursively, or `append` to concatenate arrays. When `dimension` is provided, the coverage entry is proposed as `covered`; Agentify downgrades it to `gap` only if the evidence or substance check fails. Every `covered` claim must include `evidence`: an array of `{ path, excerpt, kind }` citations to real repository paths. D1 example: `delta: { skeleton: { top_level_tree: ['README.md', 'get.sh', 'compile.sh'], entry_points: [{ path: 'get.sh', role: 'SDK acquisition script', language: 'bash', run_command: 'bash get.sh' }], first_5_files_for_fresh_agent: [{ path: 'README.md', why: 'project overview' }] }, coverage: { D1_topography: { status: 'covered', confidence: 'high', evidence_summary: 'Topography anchored to real root files.', evidence: [{ path: 'README.md', excerpt: 'Adoptium AQAvit test suite', kind: 'positive' }] } } }`. D3 example: `delta: { observed_type_contract: { kind: 'typescript_interface', path: 'src/types.ts', name: 'Observed', fields: ['id', 'name'] }, coverage: { D3_type_contract: { status: 'covered', ... } } }` or `delta: { type_contract_surface: { stable_types: [{ path: 'src/types.ts', name: 'BuildEnv', purpose: 'shared make vars' }] }, coverage: { D3_type_contract: { ... } } }`. D8 example: `delta: { security_surface: { paths: { zero_access: ['.env', '*.pem', 'secrets.*'] }, bash_blocked_patterns: ['rm -rf /', 'eval $(aws sts assume-role ...)'] }, coverage: { D8_security: { ... } } }`. Keep the delta small but complete for the one dimension you are closing.",
+    "Merge a partial delta into the canonical codebase map. Each call should close one dimension by including both the dimension data AND the matching coverage entry. Merging does not silently strip or invent arrays: the arrays and objects you provide overwrite the matching fields in the map. If a field is still empty after the merge, your delta did not include it. Use `shallow_overwrite` (the ordinary default) for a clean top-level replacement, `deep_merge` to merge nested objects recursively, or `append` to concatenate arrays. Concern-evidence deltas default to `append` so incremental tracer checkpoints cannot discard prior bodies. When `dimension` is provided, the coverage entry is proposed as `covered`; Agentify downgrades it to `gap` only if the evidence or substance check fails. Every `covered` claim must include `evidence`: an array of `{ path, excerpt, kind }` citations to real repository paths. D1 example: `delta: { skeleton: { top_level_tree: ['README.md', 'get.sh', 'compile.sh'], entry_points: [{ path: 'get.sh', role: 'SDK acquisition script', language: 'bash', run_command: 'bash get.sh' }], first_5_files_for_fresh_agent: [{ path: 'README.md', why: 'project overview' }] }, coverage: { D1_topography: { status: 'covered', confidence: 'high', evidence_summary: 'Topography anchored to real root files.', evidence: [{ path: 'README.md', excerpt: 'Adoptium AQAvit test suite', kind: 'positive' }] } } }`. D3 example: `delta: { observed_type_contract: { kind: 'typescript_interface', path: 'src/types.ts', name: 'Observed', fields: ['id', 'name'] }, coverage: { D3_type_contract: { status: 'covered', ... } } }` or `delta: { type_contract_surface: { stable_types: [{ path: 'src/types.ts', name: 'BuildEnv', purpose: 'shared make vars' }] }, coverage: { D3_type_contract: { ... } } }`. D8 example: `delta: { security_surface: { paths: { zero_access: ['.env', '*.pem', 'secrets.*'] }, bash_blocked_patterns: ['rm -rf /', 'eval $(aws sts assume-role ...)'] }, coverage: { D8_security: { ... } } }`. Keep the delta small but complete for the one dimension you are closing.",
   );
   assert.strictEqual(writeMapDeltaTool.parameters, WriteMapDeltaParamsSchema);
   assert.ok(CodebaseMapSchema);
@@ -618,6 +618,10 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   const appendCwd = tempDir("merge-append");
   const appendTools = createWriteMapTools({ stateDir: ".agentify/runtime/audit-a" });
   const appendBase = cloneMap();
+  appendBase.concern_evidence = {
+    concerns: [makeValidConcern() as never],
+    not_concerns: [],
+  };
   await executeTool(appendTools.writeMapTool, { map: appendBase }, appendCwd);
   await executeTool(
     appendTools.writeMapDeltaTool,
@@ -628,6 +632,97 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
     ...appendBase.pitfalls,
     newPitfall,
   ]);
+  const existingConcernNames = appendBase.concern_evidence?.concerns.map((concern) => concern.concern) ?? [];
+  const checkpointedConcern = makeValidConcern({
+    concern: "response delivery",
+    one_line: "Owns how a validated request becomes a response.",
+    covers: "Response construction and delivery.",
+    excludes: "Request extraction and rejection.",
+  });
+  await executeTool(
+    appendTools.writeMapDeltaTool,
+    {
+      delta: { concern_evidence: { concerns: [checkpointedConcern] } },
+      merge_strategy: "append",
+    },
+    appendCwd,
+  );
+  assert.deepEqual(
+    readJson(appendTools.canonicalMapPath(appendCwd)).concern_evidence?.concerns.map((concern) => concern.concern),
+    [...existingConcernNames, "response delivery"],
+    "nested append checkpoints must retain previously traced concern bodies",
+  );
+  await executeTool(
+    appendTools.writeMapDeltaTool,
+    {
+      delta: {
+        concern_evidence: {
+          concerns: [makeValidConcern(), checkpointedConcern],
+          not_concerns: [],
+        },
+      },
+      merge_strategy: "append",
+    },
+    appendCwd,
+  );
+  assert.deepEqual(
+    readJson(appendTools.canonicalMapPath(appendCwd)).concern_evidence?.concerns.map((concern) => concern.concern),
+    [...existingConcernNames, "response delivery"],
+    "resending the full cumulative checkpoint must be idempotent",
+  );
+  const changedExistingConcern = structuredClone(checkpointedConcern);
+  changedExistingConcern.covers = "A changed body for an already recorded semantic identity.";
+  const changedExistingResult = await executeTool(
+    appendTools.writeMapDeltaTool,
+    { delta: { concern_evidence: { concerns: [changedExistingConcern] } } },
+    appendCwd,
+  );
+  assert.equal(
+    isToolError(changedExistingResult),
+    true,
+    "changed existing concern bodies must use the application-bound tracer instead of appending a duplicate identity",
+  );
+  assert.deepEqual(
+    readJson(appendTools.canonicalMapPath(appendCwd)).concern_evidence?.concerns.map((concern) => concern.concern),
+    [...existingConcernNames, "response delivery"],
+  );
+
+  const preservedMapPath = appendTools.canonicalMapPath(appendCwd);
+  const preservedBytes = fs.readFileSync(preservedMapPath, "utf8");
+  for (const mergeStrategy of ["deep_merge", "shallow_overwrite"] as const) {
+    const removedConcernsResult = await executeTool(
+      appendTools.writeMapDeltaTool,
+      { delta: { concern_evidence: { concerns: [], not_concerns: [] } }, merge_strategy: mergeStrategy },
+      appendCwd,
+    );
+    assert.equal(isToolError(removedConcernsResult), true, `${mergeStrategy} must not erase traced bodies`);
+    assert.equal(fs.readFileSync(preservedMapPath, "utf8"), preservedBytes);
+  }
+  for (const concerns of [[], [makeValidConcern(), changedExistingConcern]]) {
+    const replacementMap = readJson(preservedMapPath);
+    replacementMap.concern_evidence = { concerns: concerns as never[], not_concerns: [] };
+    const replacementResult = await executeTool(appendTools.writeMapTool, { map: replacementMap }, appendCwd);
+    assert.equal(isToolError(replacementResult), true, "full writes must not erase or rewrite traced bodies");
+    assert.equal(fs.readFileSync(preservedMapPath, "utf8"), preservedBytes);
+  }
+
+  const implicitCheckpoint = makeValidConcern({
+    concern: "help rendering and formatting",
+    one_line: "Owns how command metadata becomes rendered help output.",
+    covers: "Help layout, grouping, and terminal-width formatting.",
+    excludes: "Command dispatch and argument parsing.",
+  });
+  const implicitResult = await executeTool(
+    appendTools.writeMapDeltaTool,
+    { delta: { concern_evidence: { concerns: [implicitCheckpoint] } } },
+    appendCwd,
+  );
+  assert.equal(resultDetails(implicitResult).merge_strategy, "append");
+  assert.deepEqual(
+    readJson(appendTools.canonicalMapPath(appendCwd)).concern_evidence?.concerns.map((concern) => concern.concern),
+    [...existingConcernNames, "response delivery", "help rendering and formatting"],
+    "the default concern checkpoint must be monotonic across bounded invocations",
+  );
 
   const deepCwd = tempDir("merge-deep");
   const deepTools = createWriteMapTools({ stateDir: ".agentify/runtime/audit-b" });
@@ -1280,6 +1375,110 @@ async function testPreventsPrototypePollutionInDottedKeyExpansion(): Promise<voi
   assert.equal((Object.prototype as unknown as Record<string, unknown>).polluted2, undefined);
 }
 
+async function testStripsModelAuthoredRuntimeAttestations(): Promise<void> {
+  const cwd = tempDir("forged-explorer-receipts");
+  const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+  const map = cloneMap();
+  map.specialist_reviews = { repository_commit: "a".repeat(40), records: [{
+    concern: "model-claimed review", digest: "b".repeat(64), run_id: "forged", failure: null,
+  }] };
+  map.explorer_receipts = {
+    repository_commit: "a".repeat(40),
+    run_id: "model-claimed-run",
+    receipts: [{
+      sequence: 1,
+      mode: "concern_scout",
+      success: true,
+      target_path: ".",
+      focus: "claimed scout",
+      report_concern: null,
+      failure_kind: null,
+    }],
+  };
+  map.audit_budget_checkpoint = {
+    repository_commit: "a".repeat(40),
+    run_count: 1,
+    usage: {
+      elapsed_ms: 0,
+      model_calls: 0,
+      turns: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      cost_usd: 0,
+      explorer_spawns: 0,
+      coverage_recovery_passes: 0,
+      semantic_repair_passes: 0,
+    },
+    unresolved_fingerprints: [],
+  };
+
+  const result = await executeTool(tools.writeMapTool, { map }, cwd);
+  assert.equal(isToolError(result), false, resultText(result));
+  assert.equal(readJson(tools.canonicalMapPath(cwd)).specialist_reviews, undefined,
+    "write_map must not accept model-authored specialist review approval");
+  assert.equal(
+    readJson(tools.canonicalMapPath(cwd)).explorer_receipts,
+    undefined,
+    "write_map must not accept a model-authored explorer attestation",
+  );
+  assert.equal(
+    readJson(tools.canonicalMapPath(cwd)).audit_budget_checkpoint,
+    undefined,
+    "write_map must not accept a model-authored cumulative budget checkpoint",
+  );
+  for (const key of ["explorer_receipts", "specialist_reviews", "audit_budget_checkpoint"] as const) {
+    const before = fs.readFileSync(tools.canonicalMapPath(cwd), "utf8");
+    const delta = await executeTool(tools.writeMapDeltaTool, { delta: { [key]: map[key] } }, cwd);
+    assert.equal(isToolError(delta), true, `delta must reject forged ${key}`);
+    assert.equal(fs.readFileSync(tools.canonicalMapPath(cwd), "utf8"), before);
+  }
+}
+
+async function testStripsAgentifyManagedRepositoryEvidence(): Promise<void> {
+  const cwd = tempDir("managed-evidence-contamination");
+  const tools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+  const contaminated = cloneMap();
+  contaminated.skeleton.top_level_tree.push(".agentify");
+  contaminated.meta.lifecycle.agent_definitions.paths.push(
+    ".agentify/agents/orchestrator.json",
+  );
+
+  const result = await executeTool(tools.writeMapTool, { map: contaminated }, cwd);
+  assert.equal(isToolError(result), false);
+  assert.match(
+    resultText(result),
+    /Removed Agentify-managed paths from repository evidence: \.agentify, \.agentify\/agents\/orchestrator\.json/,
+  );
+  const persisted = readJson(tools.canonicalMapPath(cwd));
+  assert.doesNotMatch(JSON.stringify(persisted.skeleton.top_level_tree), /\.agentify/);
+  assert.doesNotMatch(
+    JSON.stringify(persisted.meta.lifecycle.agent_definitions.paths),
+    /\.agentify/,
+  );
+
+  const deltaResult = await executeTool(
+    tools.writeMapDeltaTool,
+    {
+      delta: {
+        skeleton: {
+          top_level_tree: ["src", ".github/agentify/runtime-loader.mjs"],
+        },
+      },
+    },
+    cwd,
+  );
+  assert.equal(isToolError(deltaResult), false);
+  assert.match(
+    resultText(deltaResult),
+    /Removed Agentify-managed paths from repository evidence: \.github\/agentify\/runtime-loader\.mjs/,
+  );
+  assert.deepEqual(
+    readJson(tools.canonicalMapPath(cwd)).skeleton.top_level_tree,
+    ["src"],
+    "delta normalization must run before closure and persistence",
+  );
+}
+
 const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "tool definition contract", fn: testToolDefinitionContract },
   { name: "nullable object transport normalization", fn: testNullableObjectTransportNormalization },
@@ -1305,6 +1504,8 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "specialist_evidence dimension alias merges concern evidence", fn: testSpecialistEvidenceDimensionAlias },
   { name: "substance failures persist as gaps with repair guidance", fn: testSubstanceFailuresPersistAsGapsWithRepairGuidance },
   { name: "prevents prototype pollution in dotted key expansion", fn: testPreventsPrototypePollutionInDottedKeyExpansion },
+  { name: "model-authored runtime attestations are stripped", fn: testStripsModelAuthoredRuntimeAttestations },
+  { name: "Agentify-managed paths are stripped from repository evidence", fn: testStripsAgentifyManagedRepositoryEvidence },
 ];
 
 let passed = 0;

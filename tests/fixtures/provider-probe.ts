@@ -1,6 +1,6 @@
-import type { AgentifyConfig, AgentRuntime, AgentRuntimeResult } from "../types.ts";
-import { NoAuthForProviderError, SlotModelMissingError } from "../models/resolver.ts";
-import { createReadOnlyExecutionPolicy } from "../security/execution-policy.ts";
+import type { AgentifyConfig, AgentRuntime, AgentRuntimeResult } from "../../src/core/types.ts";
+import { NoAuthForProviderError, SlotModelMissingError } from "../../src/core/models/resolver.ts";
+import { createReadOnlyExecutionPolicy } from "../../src/core/security/execution-policy.ts";
 
 export interface ProviderProbeResult {
   ok: boolean;
@@ -20,11 +20,9 @@ function probeFailureProvider(diagnostics: AgentRuntimeResult["diagnostics"]): s
 }
 
 /**
- * Cheap, tool-free reachability check for the currently configured model.
- * Sends a single trivial prompt with no tool access and a tight inactivity
- * timeout, so a missing/invalid/expired credential is caught before the
- * real audit's banner, spinner, gap-map bootstrap, and log files start —
- * instead of discovering it after a full (if fast-failing) audit attempt.
+ * Explicit live-test connectivity probe, never part of production installation.
+ * Normal installation establishes reachability with its first accounted audit
+ * request. Test campaigns invoking this helper must account for it separately.
  */
 export async function probeProviderReachable(
   runtime: AgentRuntime,

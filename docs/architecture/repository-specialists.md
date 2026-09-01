@@ -27,6 +27,30 @@ The audit cannot complete before it records that result in
 too small to have distinct specialties, and must be justified in
 `open_questions` and `not_concerns`.
 
+Explorer completion is not inferred from the map. Trusted runtime code records
+an application-authored receipt for the repository-wide scout and every
+successful or failed concern tracer, then binds the ledger to the exact audited
+Git commit. Model-authored full-map and delta writes cannot create or replace
+this attestation. A missing ledger, a failed tracer, an untraced accepted
+concern, or a ledger from another commit keeps semantic closure unresolved.
+Receiptless legacy maps are re-audited rather than attached as trusted output.
+
+Discovery and repair share one aggregate resource budget. The controller bounds
+total elapsed time, parent and explorer model calls, turns, input/output tokens,
+provider-reported cost, explorer dispatches, coverage recovery, and semantic
+repair. Scout and tracer prompts also receive explicit per-session deadlines.
+Every unresolved state has a canonical SHA-256 obligation fingerprint; repeated
+fingerprints terminate repair rather than consuming more broad model turns.
+Overrides for unusually large repositories are explicit, strictly parsed, and
+finite. Canonical map writes enforce the one-megabyte output cap before creating
+or archiving repository state. Before a new parent or explorer session is
+created, its selected model's full context window must fit in the remaining
+input budget; subsequent provider requests are admitted against a conservative
+upper bound derived from their exact serialized payload. This closes the
+cross-invocation interval in which provider-reported usage is not yet available
+and prevents a nearly exhausted same-HEAD checkpoint from overshooting its
+aggregate input-token limit.
+
 Specialist discovery does not re-decide any of this. The model reads the
 repository and names its concerns; trusted code verifies that what it named
 resolves to real bytes tracked at the supporting commit. Touchpoints that are
@@ -59,10 +83,10 @@ concern or repository validation surface. Free-form skill candidates and
 per-area template hints remain audit observations, not executable portfolio
 inputs.
 
-The canonical map is committed with the installation while audit history stays
-ignored. This preserves one routing source across the local installer, issue
-workflows, and accepted-merge learning without making transient model sessions
-authoritative state.
+The canonical map and its commit-bound explorer receipt ledger are committed
+with the installation while audit history stays ignored. This preserves one
+routing source across the local installer, issue workflows, and accepted-merge
+learning without making transient model sessions authoritative state.
 
 ## Persistence
 
@@ -70,6 +94,14 @@ Trusted code materializes specialists under `.agentify/agents/specialists` and
 procedures under `.agentify/knowledge/procedures`. The memory manifest hashes each
 record. Synchronization is deterministic and reports created, updated, unchanged,
 and retired IDs.
+
+The synchronizer accepts only a complete canonical map that recompiles to the
+same object at the compiler's idempotent fixed point. It refuses incomplete or
+normalization-pending evidence before changing specialist identities, memory,
+or procedures. Installer transaction capture precedes recognized runtime repair
+and normalized-map persistence, so materialization always consumes the exact
+compiled map and a later mismatch, readiness failure, or canary failure restores
+the pre-installation bytes.
 
 The canonical roles—builder, reviewer, and knowledge maintainer—are separate from
 repository specialists. Specialists never receive application-source write

@@ -2,6 +2,7 @@
 // the validated codebase map, not on unrelated generated-file existence.
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -13,13 +14,15 @@ import {
 } from "../../src/core/audit/schema.ts";
 import { createWriteMapTools, loadCanonicalMapAt } from "../../src/core/audit/write-map-tool.ts";
 import { runAgentifyApp } from "../../src/core/agentify-app.ts";
+import { AgentifyLog } from "../../src/core/audit/log.ts";
 import type {
   AgentRuntime,
   AgentRuntimeResult,
   AgentRuntimeSessionOptions,
   AgentifyUi,
 } from "../../src/core/types.ts";
-import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import { concernEvidencePaths } from "../../src/core/audit/specialist-completion.ts";
 
 function tempDir(name: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `agentify-${name}-`));
@@ -39,13 +42,34 @@ class SilentUi implements AgentifyUi {
 }
 
 /**
- * `runAgentifyApp` now issues a cheap tool-free reachability probe before
- * the real audit session. Test doubles below only model the real audit
- * call's contract (spawnExplorerStateDir, recoveryPromptIfToolNotCalled,
- * etc.), so they short-circuit the probe with a trivial success.
+ * Legacy doubles tolerate explicit tool-free probes, but normal installation
+ * must enter through the accounted audit session (asserted separately below).
  */
 function isProbeCall(options: AgentRuntimeSessionOptions): boolean {
   return options.tools.length === 0;
+}
+
+async function testEveryModelRequestBelongsToTheAuditBudget(): Promise<void> {
+  const cwd = tempDir("gate-accounted-model-entry");
+  let calls = 0;
+  try {
+    const runtime: AgentRuntime = {
+      async runSession(options) {
+        calls += 1;
+        assert.ok(options.auditResourceBudget, "normal installation must not make an unaccounted connectivity request");
+        assert.ok(options.onProviderRequest);
+        options.onProviderRequest();
+        options.onEvent?.({ type: "message_end", message: {
+          role: "assistant", stopReason: "stop", usage: { input: 8, output: 2, cost: { total: 0.01 } },
+        } } as never);
+        return new CoverageClosureRuntime().runSession(options);
+      },
+    };
+    await runWithRuntime(cwd, runtime);
+    assert.equal(calls, 1, "the first real audit request also establishes provider reachability");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
 }
 
 function writeMap(cwd: string, stateDir: string, map: unknown): void {
@@ -83,6 +107,7 @@ function emitExplorerReceipts(
         target_path: ".",
         focus: concern.concern,
         report_concern: concern.concern,
+        observed_paths: concernEvidencePaths(concern),
       },
     } as never);
   }
@@ -115,6 +140,22 @@ class CoverageClosureRuntime implements AgentRuntime {
   }
 }
 
+class SynchronousClosureRuntime implements AgentRuntime {
+  constructor(private readonly complete = true, private readonly withReceipts = true) {}
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
+    const map = makeValidCodebaseMap();
+    if (!this.complete) map.coverage.D6_validation.status = "gap";
+    if (this.withReceipts) emitExplorerReceipts(options, map);
+    const tool = options.customTools?.find((candidate) => candidate.name === "write_map");
+    assert.ok(tool?.execute);
+    await tool.execute("close-map", { map } as never, options.signal, undefined, { cwd: options.cwd } as never);
+    assert.equal(options.signal?.aborted, this.complete,
+      "only a validated complete map may cancel before its tool returns");
+    throw new Error("synchronous closure boundary observed");
+  }
+}
+
 async function run(
   cwd: string,
   write: (cwd: string, stateDir: string) => void,
@@ -122,7 +163,34 @@ async function run(
   return runWithRuntime(cwd, new ScriptedRuntime(write));
 }
 
-async function runWithRuntime(cwd: string, runtime: AgentRuntime): Promise<SilentUi> {
+function ensureGitRepository(cwd: string): string {
+  if (!fs.existsSync(path.join(cwd, ".git"))) {
+    fs.mkdirSync(cwd, { recursive: true });
+    if (!fs.existsSync(path.join(cwd, "README.md"))) {
+      fs.writeFileSync(path.join(cwd, "README.md"), "Test fixture evidence citation.\n");
+    }
+    for (const args of [
+      ["init", "-q"],
+      ["config", "user.name", "Agentify Test"],
+      ["config", "user.email", "agentify@example.invalid"],
+      ["add", "."],
+      ["commit", "-qm", "coverage gate fixture"],
+    ]) {
+      const execution = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
+      assert.equal(execution.status, 0, execution.stderr);
+    }
+  }
+  const head = spawnSync("git", ["-C", cwd, "rev-parse", "HEAD"], { encoding: "utf8" });
+  assert.equal(head.status, 0, head.stderr);
+  return head.stdout.trim();
+}
+
+async function runWithRuntime(
+  cwd: string,
+  runtime: AgentRuntime,
+  auditBudgets?: { maxSessionDurationMs: number },
+): Promise<SilentUi> {
+  ensureGitRepository(cwd);
   const previousHome = process.env["HOME"];
   const tempHome = tempDir("gate-run-home");
   process.env["HOME"] = tempHome;
@@ -133,7 +201,13 @@ async function runWithRuntime(cwd: string, runtime: AgentRuntime): Promise<Silen
       cwd,
       ui,
       runtime,
-      configOverride: { schemaVersion: 1, provider: "openai", thinkingLevel: "high", models: {} },
+      configOverride: {
+        schemaVersion: 1,
+        provider: "openai",
+        thinkingLevel: "high",
+        models: {},
+        ...(auditBudgets ? { auditBudgets } : {}),
+      },
     });
     return ui;
   } finally {
@@ -241,6 +315,39 @@ function testClosureRejectsExistingAbsenceEvidence(): void {
     const result = assessCoverageClosure(map, { cwd });
     assert.ok(result.unresolved.includes("D9_process"));
     assert.match(result.reasons.D9_process ?? "", /absence evidence path exists/);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+function testClosureUsesImmutableTrackedEvidence(): void {
+  const cwd = tempDir("evidence-tracked-head");
+  try {
+    ensureGitRepository(cwd);
+    fs.mkdirSync(path.join(cwd, ".agentify", "agents"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, ".agentify", "manifest.json"), "{}\n");
+    fs.writeFileSync(path.join(cwd, ".env"), "dirty working-tree secret\n");
+    const map = makeValidCodebaseMap();
+    map.coverage.D9_process = {
+      status: "covered",
+      confidence: "high",
+      evidence_summary: "Generated Agentify state describes the process.",
+      evidence: [{
+        path: ".agentify/manifest.json",
+        excerpt: "agentify_team_memory",
+        kind: "positive",
+      }],
+    };
+    map.coverage.D8_security = {
+      status: "covered",
+      confidence: "high",
+      evidence_summary: "No environment file is tracked at HEAD.",
+      evidence: [{ path: ".env", excerpt: "No tracked .env file.", kind: "absence" }],
+    };
+    const result = assessCoverageClosure(map, { cwd });
+    assert.ok(result.unresolved.includes("D9_process"));
+    assert.match(result.reasons.D9_process ?? "", /Agentify-generated evidence path/i);
+    assert.ok(!result.unresolved.includes("D8_security"), result.reasons.D8_security);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -475,6 +582,36 @@ async function testIntentionalCoverageClosureIsNotReportedAsAbort(): Promise<voi
   assert.ok(ui.infos.some((m) => m.includes("validated codebase map")));
 }
 
+async function testCompleteMapCancelsBeforeToolReturn(): Promise<void> {
+  const cwd = tempDir("gate-synchronous-closure");
+  try {
+    await assert.rejects(runWithRuntime(cwd, new SynchronousClosureRuntime()),
+      /synchronous closure boundary observed/);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testIncompleteMapRemainsRepairableAfterToolReturn(): Promise<void> {
+  const cwd = tempDir("gate-synchronous-gap");
+  try {
+    await assert.rejects(runWithRuntime(cwd, new SynchronousClosureRuntime(false)),
+      /synchronous closure boundary observed/);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testCompleteMapWithReceiptGapsHandsOffBeforeToolReturn(): Promise<void> {
+  const cwd = tempDir("gate-synchronous-receipt-repair");
+  try {
+    await assert.rejects(runWithRuntime(cwd, new SynchronousClosureRuntime(true, false)),
+      /synchronous closure boundary observed/);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 // --- specialist evidence completion gate ------------------------------------
 
 function testSpecialistEvidenceRequiredForCompletion(): void {
@@ -571,10 +708,106 @@ class NoSpecialistEvidenceRuntime implements AgentRuntime {
   }
 }
 
+class ReceiptCheckpointRuntime implements AgentRuntime {
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
+    options.onEvent?.({
+      type: "tool_execution_end",
+      toolName: "spawn_explorer",
+      resultText: "Sub-agent (mode=concern_scout) explored . in 1ms.\n\n## Report\nconcerns:\n - concern: Request extraction\n",
+      details: {
+        mode: "concern_scout",
+        target_path: ".",
+        focus: null,
+        report_concern: null,
+      },
+    } as never);
+    return { turns: 1, costUsd: null, aborted: true };
+  }
+}
+
+class DeadlineRuntime implements AgentRuntime {
+  abortedBySignal = false;
+  calls = 0;
+  constructor(private readonly recover = false) {}
+
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
+    this.calls += 1;
+    if (this.recover && this.calls === 2) return new CoverageClosureRuntime().runSession(options);
+    const partial = makeValidCodebaseMap();
+    partial.coverage.D1_topography.status = "gap";
+    writeMap(options.cwd, options.spawnExplorerStateDir ?? ".agentify/runtime/audit", partial);
+    return new Promise((resolve) => {
+      const fallback = setTimeout(
+        () => resolve({ turns: 0, costUsd: null, aborted: false }),
+        250,
+      );
+      options.signal?.addEventListener("abort", () => {
+        this.abortedBySignal = true;
+        clearTimeout(fallback);
+        resolve({ turns: 0, costUsd: null, aborted: true });
+      }, { once: true });
+    });
+  }
+}
+
+async function testParentAuditSessionHasApplicationOwnedDeadline(): Promise<void> {
+  const cwd = tempDir("gate-parent-deadline");
+  try {
+    const runtime = new DeadlineRuntime();
+    await assert.rejects(
+      runWithRuntime(cwd, runtime, { maxSessionDurationMs: 25 }),
+      /session elapsed time.*25ms|structured closure/i,
+    );
+    assert.equal(runtime.abortedBySignal, true, "application deadline must abort the hung runtime");
+    assert.equal(runtime.calls, 2, "one bounded recovery may use remaining aggregate time, then stop");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testDeadlineRecoveryCanCloseAudit(): Promise<void> {
+  const cwd = tempDir("gate-deadline-recovery");
+  try {
+    const runtime = new DeadlineRuntime(true);
+    await runWithRuntime(cwd, runtime, { maxSessionDurationMs: 100 });
+    assert.equal(runtime.calls, 2);
+    assert.equal(runtime.abortedBySignal, true);
+    const map = loadCanonicalMapAt(cwd, ".agentify/runtime/audit");
+    assert.ok(map);
+    assert.equal(assessCoverageClosure(map).unresolved.length, 0,
+      "bounded recovery must pass the ordinary closure gate");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testFailedAuditRetainsApplicationAttestedExplorerCheckpoint(): Promise<void> {
+  const cwd = tempDir("gate-receipt-checkpoint");
+  try {
+    await assert.rejects(runWithRuntime(cwd, new ReceiptCheckpointRuntime()), /structured closure/i);
+    const map = loadCanonicalMapAt(cwd, ".agentify/runtime/audit");
+    assert.ok(map?.explorer_receipts, "failed audit must retain its diagnostic receipt checkpoint");
+    assert.ok(map.explorer_receipts.receipts.some((receipt) =>
+      receipt.mode === "concern_scout"
+      && receipt.proposed_concerns?.includes("Request extraction")
+      && typeof receipt.source_run_id === "string"
+    ));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function testAttachSkipsAuditOnlyWhenSpecialistEvidenceRecorded(): Promise<void> {
   const attachedCwd = tempDir("gate-attach-complete");
   try {
-    writeMap(attachedCwd, ".agentify/runtime/audit", makeValidCodebaseMap());
+    const head = ensureGitRepository(attachedCwd);
+    writeMap(
+      attachedCwd,
+      ".agentify/runtime/audit",
+      attestCodebaseMap(makeValidCodebaseMap(), head),
+    );
     const attachedUi = await runWithRuntime(attachedCwd, new FailIfAuditRuntime());
     assert.ok(attachedUi.infos.some((m) => m.includes("no model audit was rerun")));
   } finally {
@@ -596,6 +829,63 @@ async function testAttachSkipsAuditOnlyWhenSpecialistEvidenceRecorded(): Promise
   }
 }
 
+async function testAttachNormalizesRecordedSpecialistEvidenceBeforeAudit(): Promise<void> {
+  const cwd = tempDir("gate-attach-normalizable");
+  try {
+    fs.mkdirSync(path.join(cwd, "src"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "src/index.ts"), "export { run } from './lib.js';\n");
+    fs.writeFileSync(path.join(cwd, "src/lib.ts"), "export const run = () => true;\n");
+    const head = ensureGitRepository(cwd);
+    const map = makeValidCodebaseMap();
+    delete map.expert_evidence;
+    map.concern_evidence = {
+      concerns: [{
+        concern: "Request execution",
+        one_line: "Owns request dispatch into the repository runtime.",
+        covers: "Request dispatch and execution through the tracked runtime entry point.",
+        excludes: "Documentation and release procedure.",
+        flows: [{
+          name: "Dispatch request",
+          description: "A request enters the public dispatcher and reaches runtime execution.",
+          steps: [
+            { path: "src/index.ts", what_happens: "Accepts and forwards the request." },
+            { path: "src/lib.ts", what_happens: "Executes the requested operation." },
+          ],
+        }],
+        touchpoints: [
+          { path: "src/index.ts", symbol: "run", role: "Public dispatch entry.", line_range: null, centrality: "core" },
+          { path: "src/lib.ts", symbol: "run", role: "Runtime implementation.", line_range: null, centrality: "core" },
+        ],
+        invariants: [{ rule: "Dispatch reaches runtime execution.", why: "Requests must not be dropped.", reference: "src/index.ts" }],
+        pitfalls: [],
+        entry_questions: ["Does this change alter request execution?"],
+        validation: [],
+        spans_subtrees: ["src"],
+        stability: "high",
+        recurrence: "high",
+        confidence: "high",
+        last_updated: "2026-08-30T00:00:00.000Z",
+      }],
+      not_concerns: [{
+        candidate: "Request execution as a generic runtime helper",
+        why_rejected: "Not rejected: retained because request dispatch is an accepted repository behavior.",
+      }],
+    };
+    writeMap(
+      cwd,
+      ".agentify/runtime/audit",
+      attestCodebaseMap(map, head),
+    );
+
+    const ui = await runWithRuntime(cwd, new FailIfAuditRuntime());
+    assert.ok(ui.infos.some((message) => message.includes("no model audit was rerun")));
+    const normalized = loadCanonicalMapAt(cwd, ".agentify/runtime/audit");
+    assert.deepEqual(normalized?.concern_evidence?.not_concerns, []);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function testAuditFailsWhenSpecialistEvidenceNeverRecorded(): Promise<void> {
   const cwd = tempDir("gate-specialist-missing");
   try {
@@ -608,12 +898,41 @@ async function testAuditFailsWhenSpecialistEvidenceNeverRecorded(): Promise<void
   }
 }
 
+async function testInstallerOwnsFinalAuditResult(): Promise<void> {
+  const cwd = tempDir("gate-installer-terminal");
+  const configDir = tempDir("gate-installer-log");
+  const log = new AgentifyLog({ cwd, configDir });
+  try {
+    ensureGitRepository(cwd);
+    const options = {
+      args: [], cwd, ui: new SilentUi(), runtime: new CoverageClosureRuntime(), auditLog: log,
+      configOverride: { schemaVersion: 1 as const, provider: "openai" as const, thinkingLevel: "high" as const, models: {} },
+    };
+    await runAgentifyApp(options);
+    const events = (): Array<{ event: string; payload: string }> => fs.readFileSync(log.logPath, "utf8")
+      .trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    assert.ok(events().some((entry) => entry.event === "agentify.audit_budget"), "installer log must contain the real audit accounting");
+    assert.equal(events().filter((entry) => entry.event === "agentify.run_end").length, 0,
+      "successful semantic closure must not preempt a later installation failure");
+    log.runEnd({ exit_code: 1, status: "error", error_message: "installation canary rolled back" });
+    const terminals = events().filter((entry) => entry.event === "agentify.run_end");
+    assert.equal(terminals.length, 1);
+    assert.equal(JSON.parse(terminals[0]!.payload).status, "error");
+  } finally {
+    await log.close();
+    fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(configDir, { recursive: true, force: true });
+  }
+}
+
 const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
+  { name: "installerOwnsFinalAuditResult", fn: testInstallerOwnsFinalAuditResult },
   { name: "closureAllCovered", fn: testClosureAllCovered },
   { name: "closureRejectsEmptyEvidence", fn: testClosureRejectsEmptyEvidence },
   { name: "closureRejectsMissingEvidenceCitations", fn: testClosureRejectsMissingEvidenceCitations },
   { name: "closureRejectsNonExistentPositiveEvidence", fn: testClosureRejectsNonExistentPositiveEvidence },
   { name: "closureRejectsExistingAbsenceEvidence", fn: testClosureRejectsExistingAbsenceEvidence },
+  { name: "closureUsesImmutableTrackedEvidence", fn: testClosureUsesImmutableTrackedEvidence },
   { name: "closureRejectsEscapingEvidenceCitation", fn: testClosureRejectsEscapingEvidenceCitation },
   { name: "closureRejectsPitfallsWithoutSubstance", fn: testClosureRejectsPitfallsWithoutSubstance },
   { name: "closureRejectsGapStatus", fn: testClosureRejectsGapStatus },
@@ -626,10 +945,18 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "gapMapMeansPartialNoExport", fn: testGapMapMeansPartialNoExport },
   { name: "fullyCoveredMeansSuccessAndPersistsMap", fn: testFullyCoveredMeansSuccessAndPersistsMap },
   { name: "intentionalCoverageClosureIsNotReportedAsAbort", fn: testIntentionalCoverageClosureIsNotReportedAsAbort },
+  { name: "completeMapCancelsBeforeToolReturn", fn: testCompleteMapCancelsBeforeToolReturn },
+  { name: "incompleteMapRemainsRepairableAfterToolReturn", fn: testIncompleteMapRemainsRepairableAfterToolReturn },
+  { name: "completeMapWithReceiptGapsHandsOffBeforeToolReturn", fn: testCompleteMapWithReceiptGapsHandsOffBeforeToolReturn },
   { name: "specialistEvidenceRequiredForCompletion", fn: testSpecialistEvidenceRequiredForCompletion },
   { name: "writeMapGuidesSpecialistEvidence", fn: testWriteMapGuidesSpecialistEvidence },
   { name: "attachSkipsAuditOnlyWhenSpecialistEvidenceRecorded", fn: testAttachSkipsAuditOnlyWhenSpecialistEvidenceRecorded },
+  { name: "attachNormalizesRecordedSpecialistEvidenceBeforeAudit", fn: testAttachNormalizesRecordedSpecialistEvidenceBeforeAudit },
   { name: "auditFailsWhenSpecialistEvidenceNeverRecorded", fn: testAuditFailsWhenSpecialistEvidenceNeverRecorded },
+  { name: "failedAuditRetainsApplicationAttestedExplorerCheckpoint", fn: testFailedAuditRetainsApplicationAttestedExplorerCheckpoint },
+  { name: "parentAuditSessionHasApplicationOwnedDeadline", fn: testParentAuditSessionHasApplicationOwnedDeadline },
+  { name: "deadlineRecoveryCanCloseAudit", fn: testDeadlineRecoveryCanCloseAudit },
+  { name: "everyModelRequestBelongsToTheAuditBudget", fn: testEveryModelRequestBelongsToTheAuditBudget },
 ];
 
 let passed = 0;

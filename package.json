@@ -48,6 +48,8 @@
     "docs/architecture/issue-lifecycle.md",
     "docs/build-and-package.md",
     "docs/release-process.md",
+    "docs/releases/2026-08-stabilization-evaluation.json",
+    "docs/releases/2026-08-stabilization-release-report.md",
     "docs/state-lifecycle.md",
     "docs/validation/live-multi-language-report.md",
     "docs/validation/edge-case-campaign-report.md",

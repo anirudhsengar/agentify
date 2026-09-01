@@ -60,7 +60,7 @@ try {
   const { tarballPath } = resolvedArtifact;
   run(nodeCommand, [npmCliPath, "init", "--yes"], { cwd: installRoot });
   run(nodeCommand, [npmCliPath, "install", "--ignore-scripts", "--no-audit", "--no-fund", tarballPath], { cwd: installRoot });
-  const profiles = ["small", "moderate", "monorepo", "attached", "readiness-fail"];
+  const profiles = ["small", "moderate", "monorepo", "attached", "readiness-fail", "lockless"];
   for (const profile of profiles) {
     const fixture = path.join(fixturesRoot, profile);
     const repository = `qualification/${profile}`;
@@ -74,11 +74,14 @@ try {
   const ghScript = `#!/usr/bin/env node
 const args = process.argv.slice(2);
 const key = args.join(" ");
+if (["label", "secret"].includes(args[0]) || (args[0] === "variable" && args[1] !== "list") || (args[0] === "api" && args.includes("--method"))) {
+  require("node:fs").appendFileSync(process.env.GH_MUTATION_LOG, JSON.stringify(args) + "\\n");
+}
 if (key === "--version" || key === "auth status") process.exit(0);
 const repoPrefix = "api repos/qualification/";
 const profile = key.startsWith(repoPrefix) ? key.slice(repoPrefix.length) : "";
-if (["small", "moderate", "monorepo", "attached", "readiness-fail"].includes(profile)) {
-  const id = { small: 987651, moderate: 987652, monorepo: 987653, attached: 987654, "readiness-fail": 987655 }[profile];
+if (["small", "moderate", "monorepo", "attached", "readiness-fail", "lockless"].includes(profile)) {
+  const id = { small: 987651, moderate: 987652, monorepo: 987653, attached: 987654, "readiness-fail": 987655, lockless: 987656 }[profile];
   process.stdout.write(JSON.stringify({ id, full_name: "qualification/" + profile, default_branch: "main", permissions: { admin: true, push: true, pull: true } }));
   process.exit(0);
 }
@@ -94,6 +97,9 @@ process.exit(1);
   const ghPath = path.join(fakeBin, "gh.js");
   fs.writeFileSync(ghPath, ghScript, { mode: 0o755 });
   fs.chmodSync(ghPath, 0o755);
+  const ghExecutablePath = path.join(fakeBin, "gh");
+  fs.writeFileSync(ghExecutablePath, ghScript, { mode: 0o755 });
+  fs.chmodSync(ghExecutablePath, 0o755);
   fs.writeFileSync(path.join(fakeBin, "gh.cmd"), `@"${nodeCommand}" "%~dp0gh.js" %*\r\n`);
 
   const bin = path.join(installRoot, "node_modules", packageJson.name, "bin", "agentify.js");
@@ -104,28 +110,55 @@ process.exit(1);
     CI: "1",
     NO_COLOR: "1",
     PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
-    AGENTIFY_GH_CLI: ghPath,
     ANTHROPIC_API_KEY: "installed-smoke-placeholder-not-a-real-key",
+    GH_MUTATION_LOG: path.join(root, "github-mutations.jsonl"),
   };
   for (const [index, profile] of profiles.entries()) {
     const fixture = path.join(fixturesRoot, profile);
-    const isScaffolded = profile === "readiness-fail";
+    const isAnalysis = profile === "readiness-fail" || profile === "lockless";
+    const mutationsBefore = fs.existsSync(env.GH_MUTATION_LOG) ? fs.readFileSync(env.GH_MUTATION_LOG, "utf8") : "";
     const first = run(nodeCommand, [bin], {
       cwd: fixture,
       env,
       timeout: 900_000,
-      expectFailure: isScaffolded,
     });
-    if (isScaffolded) {
+    if (isAnalysis) {
       // Agentify may install its own bounded smoke diagnostic, but repository
       // automation remains fail-closed until an application-owned test passes.
       const output = `${first.stdout}\n${first.stderr}`;
-      assert.match(output, /Agentify readiness: analyzable-only/);
-      assert.match(output, /Blocker \[missing_deterministic_validation\]/);
+      assert.match(output, /Agentify readiness: analysis-ready/);
+      assert.match(output, profile === "lockless" ? /Blocker \[missing_dependency_lock\]/ : /Blocker \[missing_deterministic_validation\]/);
       assert.match(output, /GitHub issue intake disabled/);
       assert.match(output, /Draft PR publication disabled/);
     }
     assert.match(first.stdout, /Automatic application merge disabled/);
+    if (isAnalysis) {
+      assert.equal(fs.existsSync(env.GH_MUTATION_LOG) ? fs.readFileSync(env.GH_MUTATION_LOG, "utf8") : "", mutationsBefore);
+      assert.ok(fs.existsSync(path.join(fixture, ".agentify/manifest.json")));
+      const policy = JSON.parse(fs.readFileSync(path.join(fixture, ".github/agentify-task-policy.json"), "utf8"));
+      assert.equal(policy.configured, false);
+      assert.equal(policy.policy, null);
+      assert.match(fs.readFileSync(path.join(fixture, "AGENTS.md"), "utf8"), /analysis-ready/);
+      assert.match(fs.readFileSync(path.join(fixture, "SETUP.md"), "utf8"), /learning are disabled/);
+      assert.equal(fs.readdirSync(path.join(fixture, ".agentify/agents/specialists")).length, 2);
+      if (profile === "lockless") assert.equal(fs.existsSync(path.join(fixture, "package-lock.json")), false);
+      for (const relative of [
+        ".github/workflows/agentify-issue.yml",
+        ".github/workflows/agentify-learn.yml",
+        ".github/scripts/complete-accepted-task-merge.mjs",
+        ".github/scripts/publish-task-draft.mjs",
+        ".github/scripts/run-task-lifecycle.mjs",
+        ".github/scripts/task-state-github.mjs",
+        ".github/agentify/task-runtime.mjs",
+        ".github/agentify/learning-runtime.mjs",
+        ".github/agentify/validation-smoke.mjs",
+      ]) assert.equal(
+        fs.existsSync(path.join(fixture, relative)),
+        false,
+        `${profile}: analysis-only readiness must not retain ${relative}`,
+      );
+      continue;
+    }
     for (const relative of [
       ".agentify/manifest.json",
       ".agentify/agents/orchestrator.json",
@@ -145,20 +178,15 @@ process.exit(1);
     ]) assert.ok(fs.existsSync(path.join(fixture, relative)), `${profile}: ${relative}`);
     const policy = JSON.parse(fs.readFileSync(path.join(fixture, ".github/agentify-task-policy.json"), "utf-8"));
     assert.equal(policy.schema_version, "2");
-    assert.equal(policy.configured, !isScaffolded);
+    assert.equal(policy.configured, true);
     assert.equal(policy.repository.repository_id, String(987651 + index));
     assert.equal(policy.validation_execution.mode, "maintainer-approved-unsandboxed");
     assert.equal(policy.application_merge, "disabled");
-    if (isScaffolded) {
-      assert.equal(policy.validation_approval, null);
-      assert.equal(policy.policy, null);
-    } else {
-      assert.notEqual(policy.validation_approval, null);
-      assert.ok(policy.policy.validation_commands.some((command) => (
-        command.command_id.startsWith("test-")
-        && command.command_id !== "test-agentify-validation-smoke"
-      )), `${profile}: configured policy requires a verified repository test`);
-    }
+    assert.notEqual(policy.validation_approval, null);
+    assert.ok(policy.policy.validation_commands.some((command) => (
+      command.command_id.startsWith("test-")
+      && command.command_id !== "test-agentify-validation-smoke"
+    )), `${profile}: configured policy requires a verified repository test`);
   }
 
   const fixture = path.join(fixturesRoot, "attached");
@@ -191,12 +219,14 @@ process.exit(1);
     "installer.schema-v2-fail-closed-policy-written",
     "installer.managed-runtime-installed",
     "installer.validation-smoke-fails-closed-without-repository-test",
+    "installer.analysis-ready-retains-complete-team-without-execution",
+    "installer.lockless-analysis-never-mutates-github-or-creates-lock",
     "installer.canonical-audit-map-versioned",
     "installer.transient-audit-history-ignored",
     "installer.repeated-decline-preserves-memory",
     "installer.checkout-round-trip-preserves-map",
   ]);
-  console.log(`installed one-time installer qualification passed for ready fixtures and the fail-closed missing-test fixture (${packageJson.name}@${packageJson.version}).`);
+  console.log(`installed one-time installer qualification passed for operational, missing-test and lockless analysis-ready fixtures (${packageJson.name}@${packageJson.version}).`);
 } finally {
   removeOwnedArtifact(resolvedArtifact);
   fs.rmSync(root, { recursive: true, force: true });

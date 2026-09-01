@@ -1,0 +1,143 @@
+{
+  "schema_version": "2",
+  "captured_at": "2026-08-28T00:00:00.000Z",
+  "cases": [
+    {
+      "repository": "commander.js",
+      "target_commit": "ba6d13ddb4243e5913367734f8c159089ffe7834",
+      "fixture_kind": "reduced-deterministic",
+      "portfolio_fixture": "commander.js",
+      "audit_events": ["thin-portfolio-rejected", "evidence-backed-portfolio-compiled"],
+      "expected_core_ownership": ["Option and argument semantics", "Help formatting and output contracts"],
+      "expected_rejected_candidates": ["lib directory"],
+      "expected_unresolved_obligations": [],
+      "expected_readiness": "ready",
+      "expected_installation_disposition": "install",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "aqa-tests",
+      "target_commit": "19b1fd94ec2b2c8b17adb20d28c75f4d17891eb8",
+      "fixture_kind": "reduced-deterministic",
+      "portfolio_fixture": "aqa-tests",
+      "audit_events": ["generated-evidence-rejected", "tracked-extensionless-orchestration-accepted"],
+      "expected_core_ownership": ["Jenkins test-job routing and templating", "Test SDK and dependency provisioning"],
+      "expected_rejected_candidates": ["generated Make output"],
+      "expected_unresolved_obligations": [],
+      "expected_readiness": "ready",
+      "expected_installation_disposition": "install",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "click",
+      "target_commit": "36baa15ff831b939a22bc527cd76ce653ef6f66d",
+      "fixture_kind": "captured-policy-and-audit-replay",
+      "audit_events": ["delegated-Pallets-policy-reviewed", "installation-excluded-by-policy"],
+      "policy_fixture": {
+        "path": "docs/contributing.md",
+        "source_url": "https://palletsprojects.com/contributing/llm-ai",
+        "text": "If you are a new contributor, do not use LLM or AI tools to contribute at all.\n"
+      },
+      "expected_core_ownership": [],
+      "expected_rejected_candidates": ["all specialist proposals because repository policy prohibits LLM-authored persistent output"],
+      "expected_unresolved_obligations": ["repository policy prohibits installation"],
+      "expected_readiness": "blocked-before-mutation",
+      "expected_installation_disposition": "no-installation",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 0 }
+    },
+    {
+      "repository": "sqlalchemy",
+      "target_commit": "274adcbd2d3f82ea12f143256aaa7ea434f3a8ce",
+      "fixture_kind": "reduced-deterministic",
+      "portfolio_fixture": "sqlalchemy",
+      "audit_events": ["pinned-policy-reviewed", "dependency-ordered-flush-traced", "bounded-pool-checkout-traced", "parameter-compilation-traced"],
+      "expected_core_ownership": ["ORM flush and unit-of-work ordering", "Connection checkout and overflow lifecycle", "SQL bind-parameter compilation"],
+      "expected_rejected_candidates": ["ORM package"],
+      "expected_unresolved_obligations": [],
+      "expected_readiness": "ready",
+      "expected_installation_disposition": "install",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "cobra",
+      "target_commit": "adbc8813901bba65827259daa8e22ff94ec1f30e",
+      "fixture_kind": "reduced-deterministic",
+      "portfolio_fixture": "cobra",
+      "audit_events": ["negative-evidence-applied", "shared-core-owner-resolved"],
+      "expected_core_ownership": ["Command tree traversal and dispatch", "Shell completion and ActiveHelp protocol"],
+      "expected_rejected_candidates": ["flag package"],
+      "expected_unresolved_obligations": [],
+      "expected_readiness": "ready",
+      "expected_installation_disposition": "install",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "hono",
+      "target_commit": "e2740d5a1bd0b4254e517e3af8b60789284bc7bd",
+      "fixture_kind": "reduced-deterministic",
+      "portfolio_fixture": "hono",
+      "audit_events": ["same-stem-locality-separated", "failed-tracer-remains-unresolved", "local-public-contracts-retained", "unrelated-middleware-catalog-rejected"],
+      "expected_core_ownership": ["Routing and route matching", "Middleware composition and execution", "Request context and response lifecycle"],
+      "expected_rejected_candidates": ["utils", "Built-in middleware library (auth, security, transport)"],
+      "expected_unresolved_obligations": [],
+      "expected_readiness": "ready",
+      "expected_installation_disposition": "install",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "gin",
+      "target_commit": "dcaa4296d111981ffb31ac3eba90bb63e1eb5ab9",
+      "fixture_kind": "reduced-deterministic",
+      "portfolio_fixture": "gin",
+      "audit_events": ["portfolio-derived-from-evidence", "verified-flows-preserved"],
+      "expected_core_ownership": ["Radix-tree HTTP route matching", "Request binding and struct-tag validation", "Response rendering and content negotiation"],
+      "expected_rejected_candidates": ["render directory"],
+      "expected_unresolved_obligations": [],
+      "expected_readiness": "ready",
+      "expected_installation_disposition": "install",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "axum",
+      "target_commit": "3d78036dcac289d6c1d54934708acb6a5bd73686",
+      "fixture_kind": "reduced-deterministic",
+      "portfolio_fixture": "axum",
+      "audit_events": ["workspace-public-surface-obligation", "tracer-timeout-unresolved", "flow-materialized"],
+      "expected_core_ownership": ["Request routing and route composition", "Request extraction and rejection contracts", "Procedural macro derives and diagnostics"],
+      "expected_rejected_candidates": ["workspace crate"],
+      "expected_unresolved_obligations": [],
+      "expected_readiness": "ready",
+      "expected_installation_disposition": "install",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "spring-petclinic",
+      "target_commit": "818c4136ea971c21674525f9053de0d9c7ad8cfe",
+      "fixture_kind": "reduced-deterministic",
+      "portfolio_fixture": "spring-petclinic",
+      "audit_events": ["normalization-created-obligation", "post-normalization-validated", "fixed-point-installed"],
+      "expected_core_ownership": ["Owner, pet, and visit lifecycle", "Profile-switched database operation"],
+      "expected_rejected_candidates": ["controller layer"],
+      "expected_unresolved_obligations": [],
+      "expected_readiness": "ready",
+      "expected_installation_disposition": "install",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 262144 }
+    },
+    {
+      "repository": "lobsters",
+      "target_commit": "2f385d149e67f5ff78643dcf6d3cab0b24c0117c",
+      "fixture_kind": "captured-policy-and-audit-replay",
+      "audit_events": ["43 map mutations over 10250 seconds", "policy prohibition observed", "no scout or tracer receipts", "diagnostic map persisted"],
+      "policy_fixture": {
+        "path": "AGENTS.md",
+        "text": "LLM-generated contributions are prohibited. Do not use AI for code, documentation, tests, or patches.\n"
+      },
+      "expected_core_ownership": [],
+      "expected_rejected_candidates": ["all specialist proposals because repository policy prohibits LLM-authored persistent output"],
+      "expected_unresolved_obligations": ["repository policy prohibits installation"],
+      "expected_readiness": "blocked-before-mutation",
+      "expected_installation_disposition": "no-installation",
+      "budgets": { "runtime_ms": 30000, "model_calls": 0, "turns": 0, "tokens": 0, "cost_usd": 0, "output_bytes": 0 }
+    }
+  ]
+}

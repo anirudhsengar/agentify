@@ -25,6 +25,7 @@ import { assessTaskReadiness } from "../task-lifecycle/readiness.ts";
 import { validateTaskLifecyclePolicy } from "../task-lifecycle/schema.ts";
 import { packageRoot } from "../pi-sdk-runtime.ts";
 import { installScaffoldRuntime } from "../scaffold-installer.ts";
+import { AGENTIFY_ANALYSIS_CONTROL_PATHS, AGENTIFY_INSTALLED_CONTROL_PATHS } from "../artifacts/managed-installation-paths.ts";
 import type {
   GitHubConfigurationInput,
   InstallationCanaryResult,
@@ -36,6 +37,7 @@ import type {
 } from "./contracts.ts";
 import { configureGitHubInstallation } from "./github-configuration.ts";
 import { DEFAULT_INSTALLER_PROCESS_RUNNER } from "./process-runner.ts";
+import { MANAGED_INSTALLATION_PATHS } from "./installation-transaction.ts";
 import {
   buildRepositoryTaskPolicyConfiguration,
   readRepositoryTaskPolicyConfiguration,
@@ -46,6 +48,8 @@ import {
   isVerifiedValidationCommand,
   trustedValidationArgv,
 } from "./validation-contract.ts";
+import { runInDisposableValidationCheckout } from "./validation-isolation.ts";
+import { runValidationCommandSet } from "./build-systems/shared.ts";
 
 export interface FinalizeOneTimeInstallationInput {
   cwd: string;
@@ -264,24 +268,15 @@ function runInstallationCanaries(
       ? "canonical audit map is excluded by repository ignore rules"
       : "canonical audit map is available to commit for installed workflow routing",
   );
-  add(
-    "canonical-issue-workflow",
-    managedFile(cwd, ".github/workflows/agentify-issue.yml", "agentify:managed"),
-    "canonical issue intake workflow is Agentify-owned",
-  );
-  add(
-    "canonical-learning-workflow",
-    managedFile(cwd, ".github/workflows/agentify-learn.yml", "agentify:managed"),
-    "canonical accepted-merge learning workflow is Agentify-owned",
-  );
-  for (const file of [
-    ".github/agentify/task-runtime.mjs",
-    ".github/agentify/learning-runtime.mjs",
-    ".github/agentify/validation-smoke.mjs",
-  ]) add(`runtime:${file}`, fs.existsSync(path.join(cwd, file)), `${file} is installed`);
-
   const configuration = readRepositoryTaskPolicyConfiguration(cwd);
   const expectsReadyPolicy = preflight.disposition === "ready";
+  for (const file of AGENTIFY_INSTALLED_CONTROL_PATHS) {
+    if (AGENTIFY_ANALYSIS_CONTROL_PATHS.has(file)) continue;
+    add(`execution:${file}`, expectsReadyPolicy
+      ? managedFile(cwd, file, "agentify:managed")
+      : !fs.existsSync(path.join(cwd, file)),
+    expectsReadyPolicy ? `${file} is Agentify-owned` : `${file} is absent; execution disabled`);
+  }
   let policyValid = false;
   if (expectsReadyPolicy && configuration?.configured === true && configuration.policy) {
     try {
@@ -440,18 +435,36 @@ export function finalizeOneTimeInstallation(
 
   if (effectivePreflight.disposition === "ready") {
     const verified = effectivePreflight.commands.filter(isVerifiedValidationCommand);
-    for (const cmd of verified) {
-      const res = (input.runner ?? DEFAULT_INSTALLER_PROCESS_RUNNER).run({
-        program: cmd.argv[0]!,
-        args: cmd.argv.slice(1),
-        cwd: path.resolve(input.cwd, cmd.cwd),
-        timeoutMs: cmd.timeout_ms,
-      });
-      if (res.status !== 0 || res.timedOut) {
+    const install = effectivePreflight.commands.find((command) => (
+      command.kind === "install" && command.assessment === "verified"
+    ));
+    const validationCommands = [
+      ...(install === undefined ? [] : [{ ...install, assessment: "characterized" as const }]),
+      ...verified.map((command) => ({ ...command, assessment: "characterized" as const })),
+    ];
+    const runner = input.runner ?? DEFAULT_INSTALLER_PROCESS_RUNNER;
+    const isolated = runInDisposableValidationCheckout({
+      cwd: input.cwd,
+      overlayPaths: MANAGED_INSTALLATION_PATHS,
+      operation: (checkoutCwd) => runValidationCommandSet(
+        checkoutCwd,
+        runner,
+        validationCommands,
+      ),
+    });
+    if (!isolated.ok) {
+      withBlocker(
+        blockers,
+        "validation_failed",
+        `Post-install repository validation could not run in a disposable checkout: ${isolated.error}`,
+        "Ensure local Git can clone and materialize the committed HEAD in the system temporary directory, then rerun installation.",
+      );
+    } else for (const command of isolated.value) {
+      if (command.assessment !== "verified") {
         withBlocker(
           blockers,
           "validation_failed",
-          `Validation command failed after Agentify installed its managed files: ${cmd.argv.join(" ")}`,
+          `${command.kind === "install" ? "Dependency provisioning" : "Validation command"} failed after Agentify installed its managed files: ${command.argv.join(" ")}`,
           "Configure repository validation to accept or explicitly exclude Agentify-owned generated assets, then rerun the installer.",
         );
       }
@@ -531,15 +544,24 @@ export function finalizeOneTimeInstallation(
       specialistSync = synchronizeRepositorySpecialists(input.cwd, {
         trustedValidationArgv: [],
       });
-    } catch {
-      // The original specialist/canary blocker already records the actionable
-      // state failure; this best-effort projection only removes stale authority.
+    } catch (error) {
+      withBlocker(blockers, "installation_canary_failed",
+        `Cannot materialize disabled specialist authority: ${error instanceof Error ? error.message : String(error)}`,
+        "Repair the reported persistent-state problem and rerun Agentify.");
     }
   }
 
+  // Only operational-validation blockers may preserve a team. Structural,
+  // identity, ownership and policy failures still roll the whole transaction back.
+  const analysisReady = !ready && effectivePreflight.analysis_allowed
+    && blockers.every((blocker) => [
+      "unsupported_build_system", "missing_dependency_lock", "missing_deterministic_validation",
+      "validation_consent_required", "validation_policy_stale", "validation_failed",
+    ].includes(blocker.code))
+    && runInstallationCanaries(input.cwd, policyPreflight, specialistSync).passed;
   const synchronized = specialistSync.status === "synchronized" ? specialistSync : null;
   return {
-    disposition: ready ? "ready" : effectivePreflight.analysis_allowed ? "analyzable-only" : "blocked",
+    disposition: ready ? "ready" : analysisReady ? "analysis-ready" : effectivePreflight.analysis_allowed ? "analyzable-only" : "blocked",
     repository: effectivePreflight.identity,
     specialists_installed: synchronized?.portfolio.specialists.length ?? 0,
     specialist_warnings: synchronized?.portfolio.warnings ?? [],
@@ -579,6 +601,8 @@ export function formatOneTimeInstallationReport(report: OneTimeInstallationRepor
   }
   if (report.disposition === "ready") {
     lines.push("Agentify is installed. Queue an authorized GitHub issue with the agentify:queue label.");
+  } else if (report.disposition === "analysis-ready") {
+    lines.push("Specialist team installed for read-only analysis. Execution workflows and runtimes are absent; resolve the operational blockers and rerun Agentify to enable execution.");
   }
   return lines;
 }

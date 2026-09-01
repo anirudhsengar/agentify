@@ -13,9 +13,9 @@ would recognize as their own body of knowledge. Authentication.
 Checkout. Rate limiting. Schema migration. Wire protocol framing. Test
 selection. Whatever this repository actually has.
 
-A concern is **not a directory**. It is a thread of meaning that runs
-through the codebase, and it usually runs through many directories at
-once. Authentication is not `src/auth/` — it is the login route, the
+A concern is **not a directory**. It is a body of behavioral knowledge,
+whether implemented locally or across the codebase.
+Authentication is not `src/auth/` — it is the login route, the
 credential check, the session store, the token refresh, the middleware
 that guards every other route, the user model's password column, and
 the six tests that cover all of it. A specialist in authentication
@@ -46,8 +46,11 @@ FOCUS: $2 # dynamic: optional focus hint (may be empty)
 - `MUST NOT` cite any path listed as untracked below. Untracked
  directories are fetched, generated, or vendored: they are not part of
  this repository and a specialist cannot be grounded in them.
-- 12–20 file reads is the sweet spot. This is the widest sweep in the
- audit; use the budget.
+- Use at most 10 repository-read tool calls. Prefer manifests, public entry
+ points, test indexes, and targeted grep results that expose multiple behaviors.
+ Do not read every candidate file during the scout; tracers verify candidates.
+- Keep the complete report below 14 KB. Make `why` concise and cite 2-5 seed
+ paths rather than copying implementation detail.
 - `STOP` after emitting the structured `## Report`.
 
 <untrackedPathsNote>
@@ -65,10 +68,9 @@ FOCUS: $2 # dynamic: optional focus hint (may be empty)
 3. Read the primary entry points. Follow what happens on the main
  path — the request, the invocation, the build, the run. You are
  looking for the *verbs* of this system, not its folders.
-4. Grep for the recurring nouns and verbs you saw. A concern almost
- always announces itself as a name that appears in many files that
- do not otherwise belong together. Names that appear in exactly one
- directory are usually modules, not concerns.
+4. Grep for the behavioral nouns and verbs you saw. Find their invariants,
+ callers, and tests. File count and directory spread do not determine whether
+ the behavior deserves a specialist.
 5. Read the test names. Tests are the most honest statement of what a
  repository believes it must not break, and test *names* are written
  in concern language even when directories are not.
@@ -107,29 +109,45 @@ focus_acknowledged: <echo of FOCUS>
 
 ## Expertise
 
-- **The directory test.** If a concern's name is also a directory name,
- you have probably named a folder. Ask what the folder is *for* and
- name that instead. `src/payments/` is a directory; "taking money
- from a customer without ever double-charging them" is a concern.
- Sometimes a directory genuinely is a concern — but only say so after
- confirming the concern does not also live somewhere else.
+- **The directory test.** A folder name alone is not a specialty. Name the
+ behavior and its invariants; neither sharing a directory nor crossing many
+ directories proves coherence. Follow the behavior wherever it lives.
+
+- **The catalog test.** Catalogs and framework layers are not concerns. Reject
+ a catalog or framework layer that combines unrelated failure domains merely
+ because they use one shared API or subtree. Split only behaviors with their
+ own coherent invariant set and implementation owner; otherwise reject the
+ individual modules rather than inventing a generic specialist.
+ Read, create, update, and delete flows for one repository-owned aggregate may
+ form a coherent lifecycle when they share data-integrity invariants and a
+ behavior-specific core owner; a package, noun, or model relationship alone is
+ not that proof.
+ Substitutable implementations form one coherent strategy family when source
+ proves one public behavioral contract plus selection or fallback invariants.
+ Components may likewise form one concern when they jointly establish
+ one repository-owned operational outcome and a joint invariant. A shared theme,
+ directory, or API alone remains insufficient.
 
 - **The overlap test.** Two concerns that both touch the same file are
  normal and expected. Auth and checkout both touch the request
  middleware; auth cares about who the caller is, checkout cares about
- whether the cart is still valid. **Never merge two concerns because
- they share files.** Shared files are evidence you found real
- concerns rather than folder names. Merge only when two candidates
- turn out to be the same body of knowledge under two names.
+ whether the cart is still valid. Do not merge two concerns merely because
+ they share files. Shared supporting files are evidence you found real
+ concerns rather than folder names. But when multiple candidates have the
+ same sole tracked implementation file and none has an independent tracked
+ implementation owner, group them into the broader behavioral concern
+ implemented by that file; separate symbols do not create separate file-level
+ core owners. Otherwise merge only when two candidates are the same body of
+ knowledge under two names.
 
-- **The scatter test.** A strong concern has touchpoints in at least
- two unrelated top-level areas. A candidate whose every path sits
- under one subtree is more likely a module. It can still be a real
- concern — a self-contained protocol parser is one — but say so
- explicitly in `why`.
+- **The locality test.** A single file or subtree can implement an independent
+ body of knowledge with meaningful invariants, failure modes, and tests.
+ Do not reject it for size, locality, or use by many callers. In a library,
+ public lifecycle, continuation, extraction, and response contracts are product behavior,
+ not generic mechanics merely because other modules depend on them.
 
-- **The specialist test.** Could someone spend a year becoming the
- person everyone asks about this, and would that be useful? "The
+- **The specialist test.** Would a maintainer route a class of issues to
+ someone who knows this behavior's invariants and failure modes? "The
  person who knows how test playlists get selected and excluded per
  platform" is a specialist. "The person who knows `utils/`" is not.
 
@@ -144,10 +162,10 @@ focus_acknowledged: <echo of FOCUS>
  repository's logic lives in build recipes, XML playlists, or
  generated configuration, those are the touchpoints.
 
-- **Infrastructure is not automatically a concern.** Logging, config
- loading, and error formatting are usually cross-cutting *mechanics*
- that every concern uses. They earn a specialist only when the
- repository has real invariants about them. Say which it is.
+- **Cross-cutting does not mean generic.** Inspect the repository-owned
+ behavior before deciding. Reject mechanics only with evidence that they have
+ no independent behavioral contract, or name the coherent accepted owner.
+ Sharing one handler interface does not join unrelated policies into a concern.
 
 - **Do not target a numeric range.** Report every distinct,
  evidence-backed specialty a maintainer would recognize, and reject

@@ -27,6 +27,19 @@ function deepMerge(
     return result;
 }
 
+export function stableMapValueIdentity(value: unknown): string {
+    const canonicalize = (candidate: unknown): unknown => {
+        if (Array.isArray(candidate)) return candidate.map(canonicalize);
+        if (!isPlainObject(candidate)) return candidate;
+        return Object.fromEntries(
+            Object.entries(candidate)
+                .sort(([left], [right]) => left.localeCompare(right))
+                .map(([key, nested]) => [key, canonicalize(nested)]),
+        );
+    };
+    return JSON.stringify(canonicalize(value));
+}
+
 function appendArrays(
     target: Record<string, unknown>,
     delta: Record<string, unknown>,
@@ -35,9 +48,17 @@ function appendArrays(
     for (const [key, value] of Object.entries(delta)) {
         const existing = result[key];
         if (Array.isArray(value) && Array.isArray(existing)) {
-            result[key] = [...existing, ...value];
+            const appended = [...existing];
+            const seen = new Set(existing.map(stableMapValueIdentity));
+            for (const entry of value) {
+                const identity = stableMapValueIdentity(entry);
+                if (seen.has(identity)) continue;
+                seen.add(identity);
+                appended.push(entry);
+            }
+            result[key] = appended;
         } else if (isPlainObject(existing) && isPlainObject(value)) {
-            result[key] = deepMerge(existing, value);
+            result[key] = appendArrays(existing, value);
         } else {
             result[key] = value;
         }

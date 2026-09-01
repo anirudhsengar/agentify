@@ -13,7 +13,11 @@ import {
     formatCoverageClosure,
     type FormattedCoverageClosure,
 } from "./map-coverage.ts";
-import { applyMapDelta, type MapMergeStrategy } from "./map-delta.ts";
+import {
+    applyMapDelta,
+    stableMapValueIdentity,
+    type MapMergeStrategy,
+} from "./map-delta.ts";
 import {
   mergeEvidenceIntoGapDraft,
   mergeEvidenceIntoMap,
@@ -37,6 +41,9 @@ import {
     type MapToolExecutionContext,
 } from "./map-storage.ts";
 import { validateMap } from "./map-validation.ts";
+import { currentRepositoryCommit } from "./explorer-receipts.ts";
+import { resolveConcernCoreOwner } from "./specialist-completion.ts";
+import { correctSpecialistClaim } from "./specialist-review.ts";
 
 export interface MapTools {
     writeMapTool: ToolDefinition;
@@ -54,6 +61,26 @@ export interface MapTools {
 }
 
 type UnknownRecord = Record<string, unknown>;
+
+function concernOverwriteError(existing: CodebaseMap | null, proposed: CodebaseMap) {
+    const proposedBodies = new Map(
+        (proposed.concern_evidence?.concerns ?? []).map((concern) => [
+            concern.concern.trim().toLowerCase(), stableMapValueIdentity(concern),
+        ]),
+    );
+    const lost = existing?.concern_evidence?.concerns.find((concern) =>
+        proposedBodies.get(concern.concern.trim().toLowerCase()) !== stableMapValueIdentity(concern));
+    if (!lost) return undefined;
+    return {
+        content: [{ type: "text" as const, text:
+            `Error: map write would discard or change recorded concern ${JSON.stringify(lost.concern)}. `
+            + "Use write_map_delta with append to preserve traced bodies. Use concern_tracer with the exact "
+            + "identity for a validated replacement, or a substantive grouped_into rejection for compiler reconciliation.",
+        }],
+        isError: true,
+        details: undefined as unknown as Record<string, unknown>,
+    };
+}
 
 function isTopographyEntryPoint(value: unknown): boolean {
     if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -87,6 +114,42 @@ const MAP_TOP_LEVEL_KEYS = new Set([
 ]);
 
 type CoverageDimensionName = (typeof COVERAGE_DIMENSIONS)[number];
+const AGENTIFY_MANAGED_EVIDENCE_PATH = /^(?:\.agentify(?:\/|$)|\.github\/agentify(?:\/|$))/;
+
+function stripAgentifyManagedRepositoryEvidence(map: CodebaseMap): string[] {
+    const removed = new Set<string>();
+    const keepPath = (value: string): boolean => {
+        const normalized = value.trim().replaceAll("\\", "/").replace(/^\.\//, "");
+        if (!AGENTIFY_MANAGED_EVIDENCE_PATH.test(normalized)) return true;
+        removed.add(normalized);
+        return false;
+    };
+
+    map.skeleton.top_level_tree = map.skeleton.top_level_tree.filter(keepPath);
+    map.skeleton.entry_points = map.skeleton.entry_points.filter((entry) => keepPath(entry.path));
+    map.skeleton.first_5_files_for_fresh_agent =
+        map.skeleton.first_5_files_for_fresh_agent.filter((entry) => keepPath(entry.path));
+    map.skeleton.app_vs_agentic_layer.bleed_risk_paths =
+        map.skeleton.app_vs_agentic_layer.bleed_risk_paths.filter(keepPath);
+    if (
+        map.skeleton.app_vs_agentic_layer.agentic_layer !== null
+        && !keepPath(map.skeleton.app_vs_agentic_layer.agentic_layer)
+    ) {
+        map.skeleton.app_vs_agentic_layer.agentic_layer = null;
+    }
+    map.meta.lifecycle.agent_definitions.paths =
+        map.meta.lifecycle.agent_definitions.paths.filter(keepPath);
+    map.meta.lifecycle.agent_definitions.count =
+        map.meta.lifecycle.agent_definitions.paths.length;
+
+    return [...removed].sort((left, right) => left.localeCompare(right));
+}
+
+function formatManagedEvidenceNormalization(removed: ReadonlyArray<string>): string {
+    return removed.length === 0
+        ? ""
+        : ` Removed Agentify-managed paths from repository evidence: ${removed.join(", ")}.`;
+}
 
 export const COVERAGE_REPAIR_HINTS: Record<CoverageDimensionName, string> = {
     D1_topography:
@@ -1129,6 +1192,9 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
 
             const validMap = validation.value;
             const existingMap = readCanonicalMap(ctx.cwd, context);
+            const removedManagedPaths = stripAgentifyManagedRepositoryEvidence(validMap);
+            const overwriteError = concernOverwriteError(existingMap, validMap);
+            if (overwriteError) return overwriteError;
             const closure = formatCoverageClosure(validMap, ctx.cwd);
             if (existingMap !== null && isBootstrapDraft(existingMap)) {
                 const existingClosure = formatCoverageClosure(existingMap, ctx.cwd);
@@ -1156,6 +1222,22 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                 const bootstrapEntry = existingMap.exploration_log.find((entry) => entry.action === "draft_bootstrap");
                 if (bootstrapEntry) validMap.exploration_log.unshift(bootstrapEntry);
             }
+            // Explorer receipts and cumulative budget usage are
+            // application-authored runtime evidence. A model may submit the
+            // complete persisted-map shape, so strip claimed state before
+            // restoring only the trusted existing values.
+            delete validMap.audit_budget_checkpoint;
+            if (existingMap?.audit_budget_checkpoint !== undefined) {
+                validMap.audit_budget_checkpoint = structuredClone(existingMap.audit_budget_checkpoint);
+            }
+            delete validMap.explorer_receipts;
+            if (existingMap?.explorer_receipts !== undefined) {
+                validMap.explorer_receipts = structuredClone(existingMap.explorer_receipts);
+            }
+            delete validMap.specialist_reviews;
+            if (existingMap?.specialist_reviews !== undefined) {
+                validMap.specialist_reviews = structuredClone(existingMap.specialist_reviews);
+            }
             const downgradedDimensions = downgradeUnsupportedCoverage(validMap, closure);
             let writeResult: { path: string; size_bytes: number };
             try {
@@ -1180,6 +1262,7 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                 (downgradedDimensions.length > 0
                     ? ` Unsupported covered claims persisted as gap: ${downgradedDimensions.join(", ")}.`
                     : "") +
+                formatManagedEvidenceNormalization(removedManagedPaths) +
                 formatCoverageRepairGuidance(closure) +
                 formatSpecialistEvidenceGuidance(closure, validMap);
 
@@ -1203,6 +1286,7 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
                         reasons: closure.reasons,
                     },
                     downgraded_dimensions: downgradedDimensions,
+                    removed_managed_evidence_paths: removedManagedPaths,
                     gap_warning: closure.warnings,
                     specialist_evidence_recorded: specialistEvidenceRecorded(validMap),
                 },
@@ -1221,8 +1305,9 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             "Merging does not silently strip or invent arrays: the arrays and objects you provide " +
             "overwrite the matching fields in the map. If a field is still empty after the merge, " +
             "your delta did not include it. " +
-            "Use `shallow_overwrite` (default) for a clean top-level replacement, `deep_merge` to " +
-            "merge nested objects recursively, or `append` to concatenate arrays. " +
+            "Use `shallow_overwrite` (the ordinary default) for a clean top-level replacement, `deep_merge` to " +
+            "merge nested objects recursively, or `append` to concatenate arrays. Concern-evidence " +
+            "deltas default to `append` so incremental tracer checkpoints cannot discard prior bodies. " +
             "When `dimension` is provided, the coverage entry is proposed as `covered`; " +
             "Agentify downgrades it to `gap` only if the evidence or substance check fails. " +
             "Every `covered` claim must include `evidence`: an array of `{ path, excerpt, kind }` " +
@@ -1291,16 +1376,63 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             const delta = params.observed_type_contract
                 ? injectObservedTypeContract(
                     prepared.delta as UnknownRecord,
-                    params.observed_type_contract,
+                    params.observed_type_contract as {
+                        kind: "typescript_interface" | "pydantic_model";
+                        path: string;
+                        name: string;
+                        fields: string[];
+                    },
                 )
                 : prepared.delta as UnknownRecord;
+
+            const forgedAttestations = ["explorer_receipts", "specialist_reviews", "audit_budget_checkpoint"]
+                .filter((key) => key in delta);
+            if (forgedAttestations.length > 0) {
+                return {
+                    content: [{ type: "text", text: `Error: application-owned attestations cannot be changed by write_map_delta: ${forgedAttestations.join(", ")}` }],
+                    isError: true,
+                    details: undefined as unknown as Record<string, unknown>,
+                };
+            }
+
+            const submittedConcerns = (delta.concern_evidence as UnknownRecord | undefined)?.concerns;
+            if (Array.isArray(submittedConcerns)) {
+                const recorded = new Map<string, string>();
+                for (const concern of existing.concern_evidence?.concerns ?? []) {
+                    recorded.set(concern.concern.trim().toLowerCase(), stableMapValueIdentity(concern));
+                }
+                for (const concern of submittedConcerns) {
+                    if (concern === null || typeof concern !== "object" || Array.isArray(concern)) continue;
+                    const name = (concern as UnknownRecord).concern;
+                    if (typeof name !== "string" || name.trim() === "") continue;
+                    const identity = name.trim().toLowerCase();
+                    const body = stableMapValueIdentity(concern);
+                    const existingBody = recorded.get(identity);
+                    if (existingBody !== undefined && existingBody !== body) {
+                        return {
+                            content: [{
+                                type: "text",
+                                text:
+                                    `Error: concern ${JSON.stringify(name)} already exists with a different body. `
+                                    + "Use concern_tracer with that exact application-bound identity so Agentify can validate and checkpoint the replacement.",
+                            }],
+                            isError: true,
+                            details: undefined as unknown as Record<string, unknown>,
+                        };
+                    }
+                    recorded.set(identity, body);
+                }
+            }
 
             let reserveWarning: string | undefined;
             if (dimension) {
                 reserveWarning = consumeReserve(dimension).reason;
             }
 
-            const strategy = (params.merge_strategy ?? "shallow_overwrite") as MapMergeStrategy;
+            const strategy = (
+                params.merge_strategy
+                ?? (delta.concern_evidence === undefined ? "shallow_overwrite" : "append")
+            ) as MapMergeStrategy;
             const mergeAndAnnotate = (mergeStrategy: MapMergeStrategy): Record<string, unknown> => {
                 const merged = applyMapDelta(
                     existing as unknown as Record<string, unknown>,
@@ -1414,7 +1546,32 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 };
             }
 
-            const validMap = mergedValidation.value;
+            let validMap = mergedValidation.value;
+            const removedManagedPaths = stripAgentifyManagedRepositoryEvidence(validMap);
+            const overwriteError = concernOverwriteError(existing, validMap);
+            if (overwriteError) return overwriteError;
+            if (params.claim_correction) {
+                try {
+                    validMap = correctSpecialistClaim(validMap, params.claim_correction, ctx.cwd);
+                } catch (error) {
+                    return {
+                        content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+                        isError: true,
+                        details: undefined as unknown as Record<string, unknown>,
+                    };
+                }
+            }
+            if (params.core_owner) {
+                try {
+                    validMap = resolveConcernCoreOwner(validMap, params.core_owner, ctx.cwd, currentRepositoryCommit(ctx.cwd));
+                } catch (error) {
+                    return {
+                        content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+                        isError: true,
+                        details: undefined as unknown as Record<string, unknown>,
+                    };
+                }
+            }
             const needsTopographyEvidence =
                 dimension === "D1_topography"
                 && (
@@ -1454,6 +1611,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                 (downgradedDimensions.length > 0
                     ? ` Unsupported covered claims persisted as gap: ${downgradedDimensions.join(", ")}.`
                     : "") +
+                formatManagedEvidenceNormalization(removedManagedPaths) +
                 formatCoverageRepairGuidance(closure, dimension) +
                 formatSpecialistEvidenceGuidance(closure, validMap) +
                 (needsTopographyEvidence
@@ -1481,6 +1639,7 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                         reasons: closure.reasons,
                     },
                     downgraded_dimensions: downgradedDimensions,
+                    removed_managed_evidence_paths: removedManagedPaths,
                     gap_warning: closure.warnings,
                     specialist_evidence_recorded: specialistEvidenceRecorded(validMap),
                 },

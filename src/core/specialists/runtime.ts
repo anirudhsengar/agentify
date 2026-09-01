@@ -1,5 +1,6 @@
 import { loadCanonicalMapAt } from "../audit/write-map-tool.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
+import { compileSpecialistEvidence } from "../audit/schema.ts";
 import {
   hasRecognizedManifestMarker,
   readTeamMemoryManifest,
@@ -38,12 +39,23 @@ export function synchronizeRepositorySpecialists(
   readTeamMemoryManifest(cwd);
   const map = loadCanonicalMapAt(cwd, AUDIT_STATE_RELATIVE_DIR);
   if (map === null) return { status: "map_absent", state_dir: null };
+  const compilation = compileSpecialistEvidence(map, { cwd });
+  if (!compilation.complete) {
+    throw new Error(
+      `specialist compilation is incomplete; materialization refused: ${compilation.reasons.join("; ")}`,
+    );
+  }
+  if (compilation.map !== map) {
+    throw new Error(
+      "specialist compilation is not at an idempotent fixed point; persist the compiled canonical map before materialization",
+    );
+  }
 
   const supportingCommit = readGitHeadCommit(cwd);
   const trustedValidationArgv = options.trustedValidationArgv
     ?? readInstalledTrustedValidationArgv(cwd);
   const portfolio = discoverSpecialistPortfolio(
-    map,
+    compilation.map,
     supportingCommit,
     listTrackedFilesAtCommit(cwd, supportingCommit),
     { trustedValidationArgv },

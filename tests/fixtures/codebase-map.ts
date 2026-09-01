@@ -4,6 +4,8 @@
 // builder run produces. The module self-checks at import.
 
 import { Value } from "typebox/value";
+import { concernEvidencePaths } from "../../src/core/audit/specialist-completion.ts";
+import { specialistReviewDigest } from "../../src/core/audit/specialist-review.ts";
 import {
   CodebaseMapSchema,
   COVERAGE_DIMENSIONS,
@@ -201,6 +203,50 @@ export function makeValidCodebaseMap(
     ...overrides,
   };
   return map;
+}
+
+export function attestCodebaseMap(
+  map: CodebaseMap,
+  repositoryCommit: string,
+  runId = "deterministic-test-replay",
+): CodebaseMap {
+  const concernNames = map.concern_evidence?.concerns.map((concern) => concern.concern) ?? [];
+  return {
+    ...map,
+    // Synthetic review replay, never live/model qualification evidence. Changing
+    // a fixture after attestation must invalidate these exact body digests.
+    specialist_reviews: {
+      repository_commit: repositoryCommit,
+      records: (map.concern_evidence?.concerns ?? []).map(concern => ({
+        concern: concern.concern, digest: specialistReviewDigest(concern), run_id: runId, failure: null,
+      })),
+    },
+    explorer_receipts: {
+      repository_commit: repositoryCommit,
+      run_id: runId,
+      receipts: [
+        {
+          sequence: 1,
+          mode: "concern_scout",
+          success: true,
+          target_path: ".",
+          focus: null,
+          report_concern: null,
+          failure_kind: null,
+        },
+        ...concernNames.map((concern, index) => ({
+          sequence: index + 2,
+          mode: "concern_tracer" as const,
+          success: true,
+          target_path: ".",
+          focus: concern,
+          report_concern: concern,
+          failure_kind: null,
+          observed_paths: concernEvidencePaths(map.concern_evidence!.concerns[index]!),
+        })),
+      ],
+    },
+  };
 }
 
 // Self-check at import so a schema change that invalidates the fixture

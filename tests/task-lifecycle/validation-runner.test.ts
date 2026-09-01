@@ -82,9 +82,8 @@ test("validation resolves Windows .bat wrappers through cmd.exe without shell:tr
     fs.writeFileSync(path.join(cwd, "gradlew.bat"), "@echo off\r\n");
     const invocation = resolveValidationInvocation(["gradlew.bat", "test"], cwd);
     assert.match(invocation.command.toLowerCase(), /cmd\.exe$/);
-    assert.deepEqual(invocation.args.slice(0, 3), ["/d", "/s", "/c"]);
-    assert.equal(invocation.args[3], path.join(cwd, "gradlew.bat"));
-    assert.deepEqual(invocation.args.slice(4), ["test"]);
+    assert.deepEqual(invocation.args, ["/d", "/v:off", "/s", "/c", '"".\\gradlew.bat" "test""']);
+    assert.equal(invocation.windowsVerbatimArguments, true);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

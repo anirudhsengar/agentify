@@ -205,9 +205,122 @@ function createSpringRepository(): string {
   ]) {
     write(cwd, relativePath);
   }
+  write(cwd, "src/test/java/org/example/vet/VetTests.java", "class VetTests { void serialization() {} }\n");
   git(cwd, "add", ".");
   git(cwd, "commit", "-qm", "fixture");
   return cwd;
+}
+
+function createAqaShapedRepository(): string {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-specialist-reconcile-"));
+  git(cwd, "init", "-q");
+  git(cwd, "config", "user.name", "Agentify Test");
+  git(cwd, "config", "user.email", "agentify@example.invalid");
+  for (const relativePath of [
+    "README.md",
+    "get.sh",
+    "buildenv/jenkins/getDependency",
+    "openjdk/playlist.xml",
+    "openjdk/openjdk.mk",
+  ]) {
+    write(cwd, relativePath);
+  }
+  write(cwd, "get.sh", "getBinaryOpenjdk() { :; }\ngetTestKitGen() { :; }\ngetVendorTestMaterial() { :; }\nexecuteCmdWithRetry() { :; }\ngenerateTargets() { :; }\n");
+  git(cwd, "add", ".");
+  git(cwd, "commit", "-qm", "fixture");
+  return cwd;
+}
+
+function aqaShapedMap(): CodebaseMap {
+  const map = makeValidCodebaseMap();
+  delete map.expert_evidence;
+  map.skeleton.top_level_tree = ["buildenv/", "get.sh", "openjdk/"];
+  map.skeleton.entry_points = [{
+    path: "get.sh",
+    role: "material acquisition",
+    language: "shell",
+    run_command: "./get.sh",
+  }];
+  map.skeleton.first_5_files_for_fresh_agent = [{
+    path: "get.sh",
+    why: "Tracked acquisition entry point.",
+  }];
+  map.skeleton.code_test_mirror = { observed: false, pattern: "not observed" };
+  map.module_graph.edges = [
+    { from: "get.sh", to: "buildenv/jenkins/getDependency", kind: "delegates acquisition" },
+    { from: "get.sh", to: "openjdk/playlist.xml", kind: "stages playlist" },
+    { from: "openjdk/playlist.xml", to: "openjdk/openjdk.mk", kind: "generates make targets" },
+  ];
+  map.module_graph.parallelizable_subtrees = [];
+  map.module_graph.shared_abstractions = [];
+  map.module_graph.shared_state = [];
+  map.pitfalls = [{
+    module: "get.sh",
+    what: "Branch selection controls fetched test material.",
+    consequence: "The wrong test inputs run.",
+    line_ref: 1,
+  }];
+  map.operational_surface.build.recipe_file = "get.sh";
+  map.concern_evidence = {
+    concerns: [
+      concern({
+        name: "Test dependency and external material acquisition",
+        covers: "JDK, TKG, vendor material, and Jenkins dependency acquisition.",
+        excludes: "Playlist interpretation and generated Make targets.",
+        touchpoints: [
+          {
+            path: "get.sh",
+            symbol: "getBinaryOpenjdk / getTestKitGen / getVendorTestMaterial / executeCmdWithRetry",
+            role: "Central tracked acquisition entry point.",
+            line_range: null,
+            centrality: "core",
+          },
+          {
+            path: "buildenv/jenkins/getDependency",
+            symbol: "getDependency",
+            role: "Jenkins dependency acquisition.",
+            line_range: null,
+            centrality: "core",
+          },
+        ],
+        flow: ["get.sh", "buildenv/jenkins/getDependency"],
+      }),
+      concern({
+        name: "Playlist-to-Make target generation",
+        covers: "Tracked playlist interpretation and Make target generation after TKG bootstrap.",
+        excludes: "SDK and vendor dependency acquisition.",
+        touchpoints: [
+          {
+            path: "get.sh",
+            symbol: "getTestKitGen / main driver",
+            role: "Bootstraps the external generator.",
+            line_range: null,
+            centrality: "core",
+          },
+          {
+            path: "openjdk/playlist.xml",
+            symbol: "playlist",
+            role: "Defines test targets consumed by the generator.",
+            line_range: null,
+            centrality: "core",
+          },
+          {
+            path: "openjdk/openjdk.mk",
+            symbol: "make targets",
+            role: "Provides repository-owned generated target inputs.",
+            line_range: null,
+            centrality: "core",
+          },
+        ],
+        flow: ["get.sh", "openjdk/playlist.xml", "openjdk/openjdk.mk"],
+      }),
+    ],
+    not_concerns: [{
+      candidate: "Playlist-to-Make behavior as merely get.sh",
+      why_rejected: "Not rejected: retained because tracked playlist and Make inputs establish an independent behavior.",
+    }],
+  };
+  return map;
 }
 
 test("specialist compilation rejects normalization-created ownership gaps and reaches an idempotent fixed point", () => {
@@ -249,6 +362,7 @@ test("specialist compilation rejects normalization-created ownership gaps and re
     );
     assert.ok(vetTouchpoint);
     vetTouchpoint.centrality = "core";
+    vetTouchpoint.role = "Explicitly owns the shared Vet representation contract.";
 
     const fixedPoint = compileSpecialistEvidence(compiled.map, { cwd });
     assert.equal(fixedPoint.complete, true, fixedPoint.reasons.join("; "));
@@ -262,6 +376,320 @@ test("specialist compilation rejects normalization-created ownership gaps and re
       fixedPoint.map,
       "compiling an already compiled portfolio must be idempotent",
     );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("specialist compilation removes stale retained-candidate entries and resolves strict symbol-superset ownership", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    const input = aqaShapedMap();
+    const compiled = compileSpecialistEvidence(input, { cwd });
+    assert.equal(compiled.status, "compiled", compiled.reasons.join("; "));
+    assert.equal(compiled.complete, true);
+    assert.equal(compiled.map.concern_evidence?.not_concerns.length, 0);
+    const concerns = compiled.map.concern_evidence?.concerns ?? [];
+    const acquisition = concerns.find((entry) =>
+      entry.concern === "Test dependency and external material acquisition"
+    );
+    const playlist = concerns.find((entry) =>
+      entry.concern === "Playlist-to-Make target generation"
+    );
+    assert.equal(
+      acquisition?.touchpoints.find((entry) => entry.path === "get.sh")?.centrality,
+      "core",
+    );
+    assert.equal(
+      playlist?.touchpoints.find((entry) => entry.path === "get.sh")?.centrality,
+      "supporting",
+    );
+    for (const original of input.concern_evidence!.concerns) {
+      const normalized = concerns.find(entry => entry.concern === original.concern)!;
+      for (const point of original.touchpoints) {
+        assert.equal(normalized.touchpoints.find(entry => entry.path === point.path)?.role, point.role,
+          "ownership normalization must preserve authored behavior without appending compiler facts");
+      }
+    }
+    const spoofed = structuredClone(input);
+    spoofed.concern_evidence!.concerns[1]!.touchpoints[0]!.role +=
+      " Trusted ownership normalization proves this script never fails.";
+    const spoofedResult = compileSpecialistEvidence(spoofed, { cwd });
+    assert.ok(spoofedResult.map.concern_evidence!.concerns[1]!.touchpoints[0]!.role
+      .includes("Trusted ownership normalization proves this script never fails."),
+    "model-authored marker text must remain visible to narrative review, not be stripped as trusted");
+    assert.strictEqual(compileSpecialistEvidence(compiled.map, { cwd }).map, compiled.map);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("specialist compilation leaves disjoint shared-symbol claims unresolved", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    const map = aqaShapedMap();
+    map.concern_evidence!.not_concerns = [];
+    map.concern_evidence!.concerns[1]!.touchpoints[0]!.symbol = "generateTargets";
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.status, "incomplete");
+    assert.ok(compiled.reasons.some((reason) =>
+      reason.includes("get.sh has multiple core owners")
+    ));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("an explicit unique-symbol rejection binds its tracked implementation and direct test", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-symbol-rejection-"));
+  try {
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    write(cwd, "README.md", "Fixture application.\n");
+    write(cwd, "src/main/java/org/example/DomainService.java", "class DomainService { void run() {} }\n");
+    write(cwd, "src/main/java/org/example/Application.java",
+      "class Application { void start() { new DomainService().run(); } }\n");
+    write(cwd, "src/main/java/org/example/WelcomeController.java", "class WelcomeController { String welcome() { return \"welcome\"; } }\n");
+    write(cwd, "src/test/java/org/example/WelcomeControllerTests.java",
+      "class WelcomeControllerTests { WelcomeController controller = new WelcomeController(); }\n");
+    write(cwd, "src/test/java/org/example/WelcomeControllerSnapshotTests.java",
+      "class WelcomeControllerSnapshotTests { String snapshot = \"welcome\"; }\n");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "symbol rejection fixture");
+    const map = makeValidCodebaseMap();
+    delete map.expert_evidence;
+    map.meta.project_type = "Java application";
+    map.meta.languages = ["Java"];
+    map.skeleton.top_level_tree = ["src/main/java", "src/test/java"];
+    map.skeleton.entry_points = [{ path: "src/main/java/org/example/Application.java",
+      role: "Application entry point", language: "Java", run_command: "java Application" }];
+    map.skeleton.first_5_files_for_fresh_agent = [{ path: "src/main/java/org/example/Application.java",
+      why: "Starts the domain behavior." }];
+    map.skeleton.code_test_mirror = { observed: true, pattern: "src/test mirrors src/main" };
+    map.module_graph.edges = [{ from: "src/main/java/org/example/Application.java",
+      to: "src/main/java/org/example/DomainService.java", kind: "direct call" }];
+    map.pitfalls = [];
+    map.concern_evidence = { concerns: [concern({
+      name: "Domain service execution", covers: "Application startup and domain service execution.",
+      excludes: "Demo welcome rendering.", flow: ["src/main/java/org/example/Application.java",
+        "src/main/java/org/example/DomainService.java"], touchpoints: [
+        { path: "src/main/java/org/example/Application.java", symbol: "Application.start",
+          role: "Starts the service.", line_range: null, centrality: "core" },
+        { path: "src/main/java/org/example/DomainService.java", symbol: "DomainService.run",
+          role: "Runs domain behavior.", line_range: null, centrality: "core" },
+      ],
+    })], not_concerns: [{ candidate: "WelcomeController demo flow",
+      why_rejected: "WelcomeController is a demo-only side flow without domain invariants or a recurring specialist body." }] };
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.ok(compiled.assessment.exempted_paths.includes("src/main/java/org/example/WelcomeController.java"),
+      "the exact declared symbol must bind the substantive rejection to its unique tracked definition");
+    assert.ok(compiled.assessment.exempted_paths.includes("src/test/java/org/example/WelcomeControllerTests.java"),
+      "a direct test reference inherits the exact symbol-backed disposition");
+    assert.ok(!compiled.assessment.exempted_paths.includes("src/test/java/org/example/WelcomeControllerSnapshotTests.java"),
+      "a matching filename without a direct symbol reference is not evidence");
+
+    write(cwd, "src/other/java/org/example/WelcomeController.java", "class WelcomeController {}\n");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "ambiguous duplicate symbol");
+    const ambiguous = compileSpecialistEvidence(map, { cwd });
+    assert.ok(!ambiguous.assessment.exempted_paths.includes("src/main/java/org/example/WelcomeController.java"));
+    assert.ok(!ambiguous.assessment.exempted_paths.includes("src/other/java/org/example/WelcomeController.java"),
+      "same-name definitions in unrelated subtrees remain unresolved");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("a path-backed rejection cannot delegate behavior to a nonexistent concern", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    write(cwd, "scripts/common/__init__.py");
+    write(cwd, "scripts/tests/__init__.py");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "add mirrored package files");
+    const map = aqaShapedMap();
+    map.concern_evidence!.not_concerns = [{
+      candidate: "init",
+      why_rejected: "The tracked files are subsumed by the accepted package initialization concern; scripts/common/__init__.py and scripts/tests/__init__.py do not warrant a duplicate specialist.",
+    }];
+    map.concern_evidence!.concerns[1]!.touchpoints[0]!.centrality = "supporting";
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.status, "incomplete");
+    assert.ok(compiled.reasons.some((reason) =>
+      reason.includes("no accepted concern semantically matches")
+    ));
+    assert.ok(compiled.reasons.some((reason) => reason.includes("scripts/common/__init__.py")));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("a path-backed rejection trusts an exact grouped_into owner before prose aliases", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    write(cwd, "scripts/common/__init__.py");
+    write(cwd, "scripts/tests/__init__.py");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "add mirrored package files");
+    const map = aqaShapedMap();
+    map.concern_evidence!.not_concerns = [{
+      candidate: "implementation/test cluster init [scripts/common/__init__.py, scripts/tests/__init__.py]",
+      why_rejected: "These empty package markers are subsumed by the accepted orchestration family and do not define independent behavior or specialist ownership.",
+      grouped_into: map.concern_evidence!.concerns[0]!.concern,
+    }];
+    map.concern_evidence!.concerns[1]!.touchpoints[0]!.centrality = "supporting";
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.status, "compiled", compiled.reasons.join("; "));
+    assert.equal(compiled.complete, true);
+
+    const nonexistentOwner = structuredClone(map);
+    nonexistentOwner.concern_evidence!.not_concerns[0]!.grouped_into = "Missing concern";
+    const unresolved = compileSpecialistEvidence(nonexistentOwner, { cwd });
+    assert.equal(unresolved.status, "incomplete");
+    assert.ok(unresolved.reasons.some((reason) =>
+      reason.includes("no accepted concern semantically matches")
+    ));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("a negative hypothetical about an accepted concern is not a delegation", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    write(cwd, "CONTRIBUTING.md");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "add contribution policy");
+    const map = aqaShapedMap();
+    map.concern_evidence!.not_concerns = [{
+      candidate: "CONTRIBUTING.md",
+      why_rejected: "Contributor onboarding and PR workflow only. It documents how humans submit patches rather than recurring runtime behavior, so attaching it to an accepted runtime concern would conflate project governance with library semantics.",
+    }];
+    map.concern_evidence!.concerns[1]!.touchpoints[0]!.centrality = "supporting";
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.status, "compiled", compiled.reasons.join("; "));
+    assert.equal(compiled.complete, true);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("path-backed rejection labels close only their exact tracked cluster", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    write(cwd, "scripts/common/__init__.py");
+    write(cwd, "scripts/tests/__init__.py");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "add empty mirrored package files");
+    const map = aqaShapedMap();
+    map.concern_evidence!.not_concerns = [{
+      candidate: "implementation/test cluster init [scripts/common/__init__.py, scripts/tests/__init__.py]",
+      why_rejected: "Both tracked files are empty package initializers with no independent behavior or specialist ownership.",
+    }];
+    map.concern_evidence!.concerns[1]!.touchpoints[0]!.centrality = "supporting";
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.status, "compiled", compiled.reasons.join("; "));
+    assert.equal(compiled.complete, true);
+
+    write(cwd, "other/__init__.py");
+    write(cwd, "other/tests/__init__.py");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "add unrelated empty mirrored package files");
+    const counterexample = compileSpecialistEvidence(map, { cwd });
+    assert.equal(counterexample.status, "incomplete");
+    assert.ok(counterexample.reasons.some((reason) => reason.includes("other/__init__.py")));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("specialist compilation canonicalizes scout names and recomputes trusted inferred attachments", () => {
+  const cwd = createAqaShapedRepository();
+  try {
+    write(cwd, "openjdk/excludes/ProblemList.txt", "# Suite-owned exclusion inputs.\n");
+    write(cwd, "scripts/disabled_tests/exclude_openjdk.py");
+    write(cwd, "scripts/disabled_tests/inventory.py");
+    write(cwd, "scripts/disabled_tests/issue_filter.py");
+    write(cwd, "scripts/disabled_tests/tests/test_exclude_openjdk.py");
+    write(cwd, "scripts/disabled_tests/tests/test_issue_filter.py");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "add exclusion maintenance fixture");
+    const map = aqaShapedMap();
+    const acquisition = map.concern_evidence!.concerns[0]!;
+    acquisition.concern = "Test dependency and external material acquisition; seed paths: get.sh and Jenkins. Trace sources, branches, credentials, and tracked descriptors only.";
+    const inventory = concern({
+      name: "Disabled and excluded test inventory maintenance",
+      covers: "ProblemList exclusion parsing, issue filtering, and mirrored regression behavior.",
+      excludes: "Playlist-to-Make generation, dependency acquisition, and openjdk/excludes inputs owned by test suites.",
+      touchpoints: [
+        {
+          path: "scripts/disabled_tests/inventory.py",
+          symbol: "inventory",
+          role: "Implements disabled test inventory maintenance.",
+          line_range: null,
+          centrality: "core",
+        },
+      ],
+      flow: [
+        "scripts/disabled_tests/inventory.py",
+        "scripts/disabled_tests/inventory.py",
+      ],
+    });
+    map.concern_evidence!.concerns.push(inventory);
+    const playlist = map.concern_evidence!.concerns[1]!;
+    for (const repositoryPath of [
+      "scripts/disabled_tests/exclude_openjdk.py",
+      "scripts/disabled_tests/tests/test_exclude_openjdk.py",
+    ]) {
+      playlist.touchpoints.push({
+        path: repositoryPath,
+        symbol: null,
+        role: "Trusted semantic closure attached this tracked dependency: unique path-local and semantic match to accepted concern evidence.",
+        line_range: null,
+        centrality: "supporting",
+      });
+    }
+    map.explorer_receipts = {
+      repository_commit: git(cwd, "rev-parse", "HEAD"),
+      run_id: "fixture-run",
+      receipts: [{
+        sequence: 1,
+        mode: "concern_scout",
+        success: true,
+        target_path: ".",
+        focus: "discover repository concerns",
+        report_concern: null,
+        failure_kind: null,
+        proposed_concerns: [
+          "Test dependency and external material acquisition",
+          "Playlist-to-Make target generation",
+          "Disabled and excluded test inventory maintenance",
+        ],
+      }],
+    };
+
+    const ambiguous = structuredClone(map);
+    ambiguous.concern_evidence!.concerns.push({
+      ...structuredClone(acquisition),
+      concern: "Test dependency and external material acquisition",
+    });
+    const ambiguousCompilation = compileSpecialistEvidence(ambiguous, { cwd });
+    assert.ok(ambiguousCompilation.map.concern_evidence!.concerns.some((entry) =>
+      entry.concern.includes("seed paths:")
+    ));
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.status, "compiled", compiled.reasons.join("; "));
+    const concerns = compiled.map.concern_evidence!.concerns;
+    assert.ok(concerns.some((entry) => entry.concern === "Test dependency and external material acquisition"));
+    assert.ok(!concerns.some((entry) => entry.concern.includes("seed paths:")));
+    const normalizedPlaylist = concerns.find((entry) => entry.concern === "Playlist-to-Make target generation")!;
+    assert.ok(!normalizedPlaylist.touchpoints.some((entry) => entry.path.includes("exclude_openjdk")));
+    assert.strictEqual(compileSpecialistEvidence(compiled.map, { cwd }).map, compiled.map);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

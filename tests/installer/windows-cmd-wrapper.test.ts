@@ -1,10 +1,80 @@
 import assert from "node:assert/strict";
+import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import { DEFAULT_INSTALLER_PROCESS_RUNNER } from "../../src/core/installer/process-runner.ts";
 import { resolveValidationInvocation } from "../../src/core/task-lifecycle/validation-runner.ts";
+
+test("Windows npm stays a direct Node invocation, separate from batch wrappers", (t) => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-command & boundary-"));
+  const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+  const execPath = Object.getOwnPropertyDescriptor(process, "execPath")!;
+  const node = path.join(cwd, "node.exe");
+  const npmCli = path.join(cwd, "node_modules", "npm", "bin", "npm-cli.js");
+  const calls: unknown[][] = [];
+  const spawn = t.mock.method(childProcess, "spawnSync", (...args: unknown[]) => {
+    calls.push(args);
+    return { status: 0, stdout: "ok", stderr: "" };
+  });
+  try {
+    fs.mkdirSync(path.dirname(npmCli), { recursive: true });
+    fs.writeFileSync(npmCli, "");
+    fs.writeFileSync(path.join(cwd, "probe.bat"), "@echo off\r\n");
+    Object.defineProperty(process, "platform", { value: "win32" });
+    Object.defineProperty(process, "execPath", { value: node });
+    syncBuiltinESMExports();
+    for (const program of ["npm", "probe.bat", "git"]) {
+      assert.equal(DEFAULT_INSTALLER_PROCESS_RUNNER.run({
+        program, args: ["test"], cwd, timeoutMs: 10_000,
+      }).status, 0);
+    }
+    assert.deepEqual(calls.map((call) => call.slice(0, 2)), [
+      [node, [npmCli, "test"]],
+      ["cmd.exe", ["/d", "/v:off", "/s", "/c", '"".\\probe.bat" "test""']],
+      ["git", ["test"]],
+    ]);
+    for (const call of calls) {
+      assert.equal((call[2] as { shell: boolean }).shell, false);
+    }
+    assert.equal((calls[1]![2] as { windowsVerbatimArguments: boolean }).windowsVerbatimArguments, true);
+    const spaced = resolveValidationInvocation(["probe.bat", "test path"], cwd);
+    assert.deepEqual(spaced.args, ["/d", "/v:off", "/s", "/c", '"".\\probe.bat" "test path""']);
+  } finally {
+    Object.defineProperty(process, "platform", platform);
+    Object.defineProperty(process, "execPath", execPath);
+    spawn.mock.restore();
+    syncBuiltinESMExports();
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("both Windows batch boundaries reject shell expansion and command operators", (t) => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-batch-input-"));
+  const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+  const calls: unknown[][] = [];
+  const spawn = t.mock.method(childProcess, "spawnSync", (...args: unknown[]) => {
+    calls.push(args);
+    return { status: 0, stdout: "", stderr: "" };
+  });
+  try {
+    fs.writeFileSync(path.join(cwd, "probe.bat"), "@echo off\r\n");
+    Object.defineProperty(process, "platform", { value: "win32" });
+    syncBuiltinESMExports();
+    for (const argument of ["test&echo injected", "%PATH%", "!PATH!", 'a"b', "x|y", "x>y", "x^y", "x\ny"]) {
+      assert.throws(() => DEFAULT_INSTALLER_PROCESS_RUNNER.run({ program: "probe.bat", args: [argument], cwd, timeoutMs: 1000 }), /unsafe.*batch/i);
+      assert.throws(() => resolveValidationInvocation(["probe.bat", argument], cwd), /unsafe.*batch/i);
+    }
+    assert.equal(calls.length, 0, "unsafe batch input must fail before spawning");
+  } finally {
+    Object.defineProperty(process, "platform", platform);
+    spawn.mock.restore();
+    syncBuiltinESMExports();
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
 
 test("installer process runner executes Windows .bat wrappers via cmd.exe", () => {
   if (process.platform !== "win32") return;
@@ -53,9 +123,8 @@ test("validation invocation resolves Windows .bat wrappers through cmd.exe", () 
     fs.writeFileSync(path.join(cwd, "gradlew.bat"), "@echo off\r\necho gradle-ok\r\n");
     const invocation = resolveValidationInvocation(["gradlew.bat", "test"], cwd);
     assert.match(invocation.command.toLowerCase(), /cmd\.exe$/);
-    assert.deepEqual(invocation.args.slice(0, 3), ["/d", "/s", "/c"]);
-    assert.equal(invocation.args[3], path.join(cwd, "gradlew.bat"));
-    assert.deepEqual(invocation.args.slice(4), ["test"]);
+    assert.deepEqual(invocation.args, ["/d", "/v:off", "/s", "/c", '"".\\gradlew.bat" "test""']);
+    assert.equal(invocation.windowsVerbatimArguments, true);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

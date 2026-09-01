@@ -1,7 +1,7 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type, type Static } from "typebox";
 import { COVERAGE_DIMENSIONS } from "../coverage.ts";
-import { EvidenceCitationSchema } from "./primitives.ts";
+import { EvidenceCitationSchema, SafeRelativePathSchema } from "./primitives.ts";
 
 const SerializedMapTransportSchema = Type.String({
   description:
@@ -69,7 +69,36 @@ export type WriteMapParams = Static<typeof WriteMapParamsSchema>;
  */
 export const NON_CLOSING_DELTA_DIMENSIONS = ["specialist_evidence", "concern_evidence"] as const;
 
+const CLAIM_CORRECTION_FIELDS = {
+  claim: Type.String({ pattern: "^(one_line|(pitfalls|invariants|flows|touchpoints)\\[[0-9]+\\])$" }),
+  flow_step: Type.Optional(Type.Integer({ minimum: 0, maximum: 511,
+    description: "Zero-based step index for a flows[i] finding. Its path must match the finding's source path. Mutually exclusive with flow_description." })),
+  flow_description: Type.Optional(Type.Literal(true, {
+    description: "For a flows[i] finding, replace only its description instead of a step. Omit flow_step; all steps and their order remain unchanged.",
+  })),
+  statement: Type.String({ minLength: 1, maxLength: 2_048 }),
+  rationale: Type.String({ minLength: 1, maxLength: 2_048 }),
+};
+
 export const WriteMapDeltaParamsSchema = Type.Object({
+  claim_correction: Type.Optional(Type.Object({
+    concern: Type.String({ minLength: 1, maxLength: 256 }),
+    digest: Type.String({ pattern: "^[0-9a-f]{64}$" }),
+    ...CLAIM_CORRECTION_FIELDS,
+    additional_corrections: Type.Optional(Type.Array(Type.Object(CLAIM_CORRECTION_FIELDS, { additionalProperties: false }), {
+      maxItems: 2, description: "Correct up to two other findings in the same exact-body review atomically. Each distinct claim must have its own source-backed finding. No unreviewed edits.",
+    })),
+  }, {
+    additionalProperties: false,
+    description: "Correct only an assertion rejected by a current-HEAD, exact-body narrative review. Use its exact concern, digest and claim ID. For one_line, statement replaces only that summary. For touchpoints, statement replaces only role prose, never path, symbol, line_range or centrality. For pitfalls/invariants, statement replaces risk/rule and rationale replaces consequence/why. For flows, choose flow_step to replace only that step's what_happens, or flow_description: true to replace only the description with statement. Never use both; rationale only explains the correction. Use delta: {}. Preserve paths, references, ownership, covers, excludes, flow names, order and all unselected prose. Fresh full review is mandatory; this proposal grants no approval.",
+  })),
+  core_owner: Type.Optional(Type.Object({
+    path: SafeRelativePathSchema,
+    concern: Type.String({ minLength: 1, maxLength: 256 }),
+  }, {
+    additionalProperties: false,
+    description: "Ownership-only proposal for one shared tracked file. Select an exact existing core claimant whose verified flow owns it; competing concerns must retain independent core implementation. Agentify only demotes competing core touchpoints, preserves every attested claim and flow, and requires fresh normalized review. Use delta: {} without retranscribing bodies. Never select an arbitrary owner for ambiguous behavior.",
+  })),
   dimension: Type.Optional(
     StringEnum([...COVERAGE_DIMENSIONS, ...NON_CLOSING_DELTA_DIMENSIONS], {
       description:
@@ -99,9 +128,8 @@ export const WriteMapDeltaParamsSchema = Type.Object({
   delta: Type.Union([DeltaTransportSchema, SerializedMapTransportSchema]),
   merge_strategy: Type.Optional(
     StringEnum(["shallow_overwrite", "deep_merge", "append"] as const, {
-      default: "shallow_overwrite",
       description:
-        "How to merge the delta into the canonical map. `shallow_overwrite` (default) replaces matching top-level keys. `deep_merge` recursively merges objects. `append` pushes onto existing arrays.",
+        "How to merge the delta into the canonical map. When omitted, ordinary deltas use `shallow_overwrite` while deltas containing concern_evidence use `append` so bounded checkpoints are monotonic. `deep_merge` recursively merges objects; explicit `shallow_overwrite` replaces matching top-level keys; `append` pushes onto existing arrays.",
     }),
   ),
 });

@@ -67,6 +67,16 @@ interface ProcessOutcome {
 interface ResolvedValidationInvocation {
   command: string;
   args: string[];
+  windowsVerbatimArguments?: boolean;
+}
+
+function quoteBatchLiteral(value: string): string {
+  // cmd.exe parses /c even with shell:false. Restrict literals rather than
+  // interpreting percent expansion, delayed expansion, quotes or operators.
+  if (!/^[a-zA-Z0-9_./\\ :+=,-]*$/.test(value)) {
+    throw new TaskLifecycleError("invalid_input", "unsafe Windows batch argument; use literal paths and arguments without shell expansion or operators");
+  }
+  return `"${value}"`;
 }
 
 export function resolveValidationInvocation(
@@ -102,8 +112,15 @@ export function resolveValidationInvocation(
         "Windows .bat/.cmd validation scripts must identify a regular local file",
       );
     }
-    const comspec = process.env.ComSpec?.trim() || "cmd.exe";
-    return { command: comspec, args: ["/d", "/s", "/c", resolved, ...argv.slice(1)] };
+    // cwd is an OS process option, never part of the command text. This also
+    // handles checkout roots containing shell metacharacters without expansion.
+    const command = [`.\\${relative.replaceAll("/", "\\")}`, ...argv.slice(1)]
+      .map(quoteBatchLiteral).join(" ");
+    return {
+      command: "cmd.exe",
+      args: ["/d", "/v:off", "/s", "/c", `"${command}"`],
+      windowsVerbatimArguments: true,
+    };
   }
   return { command: argv[0], args: [...argv.slice(1)] };
 }
@@ -258,6 +275,7 @@ async function runCommand(input: {
       cwd: input.cwd,
       env: input.environment,
       detached: process.platform !== "win32",
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       stdio: ["ignore", "pipe", "pipe"],
     });
     child.stdout?.on("data", (chunk: Buffer) => boundedAppend(chunks, chunk, bytes, input.max_output_bytes));

@@ -76,43 +76,66 @@ After the four direct scout reads,
 The runtime has already created an honest gap-marked map. Your first delta must
 add real evidence; do not replace the map with an empty or placeholder object.
 
-### Cross-cutting evidence
-
-Before broad feature exploration, gather focused evidence for the dimensions that
-cannot be justified by a generic feature summary:
-
-1. Run `module_graph` against the primary source root, never `.`. Record at least
-   one real import, state, RPC, or process boundary.
-2. Run `type_tracer` against the directory that owns one high-leverage observed
-   interface, model, or schema. Supply the exact type name as the focus.
-3. Use focused `conventions`, `pitfalls`, `validation`, `operational`, and
-   `security` exploration where direct evidence is not already sufficient.
-4. Use repository documentation and process files to close D9 and D10 honestly.
-
-Persist supported findings incrementally through `write_map_delta`. A custom
-feature report supplements cross-cutting evidence; it is not a substitute for it.
-
 ### Concern discovery
 
 This is the part of the audit the whole installation exists for. Everything
 above establishes how the repository is built; this establishes what a person
 would specialize in to work on it well.
 
-1. Run `concern_scout` against the repository root exactly once. It returns
+1. Run `concern_scout` against the repository root exactly once with no
+   `focus`, unless the
+   application reports a successful current-HEAD scout receipt to resume. It returns
    candidate concerns with seed paths, plus the candidates it rejected.
-2. For each candidate worth keeping, run `concern_tracer` with the concern name
-   and its seed paths as the focus. One tracer per concern. Read and merge each
-   report before dispatching the next.
-3. Record the traced concerns through `write_map_delta` as
-   `concern_evidence.concerns`, and the scout's rejections as
-   `concern_evidence.not_concerns`. Concern evidence closes no coverage
-   dimension: omit the `dimension` parameter on this write.
+   After compilation, the application may permit one focused supplemental scout
+   only when its focus names an exact uncovered implementation/test cluster that
+   the original scout omitted. Never rerun a broad scout or use this exception to
+   rename an existing concern.
+2. Before tracing, screen the candidate set as a portfolio. Reject a candidate
+   that is subsumed by a broader behavioral concern, is only a public type surface,
+   or is only a release or contribution process. Record each exact candidate and
+   a repository-specific reason in `not_concerns`; generic labels are insufficient.
+   Reject a catalog or framework layer that combines unrelated failure domains
+   through a shared integration API or subtree. Split only evidence-backed
+   behaviors with coherent invariants and independent implementation ownership.
+   Review the scout's rejections as well as its proposals: size, locality, and
+   cross-cutting use are not reasons for rejection. Public lifecycle and
+   continuation contracts may be the library's primary product behavior.
+   Substitutable implementations form one coherent strategy family when source
+   proves one public behavioral contract plus selection or fallback invariants.
+   Components may likewise form one concern when they jointly establish
+   one repository-owned operational outcome and a joint invariant. A shared theme,
+   directory, or API alone remains insufficient.
+   Check the cited invariant before copying a rejection of such behavior;
+   do not absorb it into a catalog merely because both use one interface.
+   Merge overlapping behavioral candidates by rejecting the narrower names as
+   subsumed, then trace the coherent concern that owns their shared flow.
+   In particular, when multiple candidates have the same sole tracked
+   implementation file and none has an independent implementation owner, group
+   them into the broader behavioral concern implemented by that file. Distinct
+   symbols inside one file do not create independent file-level core owners.
+3. After the scout, immediately call `write_map_delta` to checkpoint the scout's
+   rejections and every screening decision in `concern_evidence.not_concerns`.
+   Keep `concern_evidence.concerns` empty until a tracer has verified a concern.
+4. For each candidate worth keeping, run `concern_tracer` with the proposal's
+   exact name in `concern` and the name plus seed paths in `focus`. One tracer per
+   concern. Agentify rejects renamed reports unless a current source review rejects
+   that identity and requests one scope-preserving corrective name. It validates each complete report and
+   checkpoints it directly; do not retranscribe it. The tracer may instead submit
+   one application-validated, source-backed rejection when the proposed identity
+   itself is an incoherent catalog or has no end-to-end behavioral flow. That
+   terminal rejection is checkpointed directly; do not trace the rejected identity
+   again or invent a concern body to satisfy the scout ledger.
+5. Use `write_map_delta` only for scout rejections or later evidence changes that
+   are not already in a checkpointed tracer report. Concern evidence closes no
+   coverage dimension: omit the `dimension` parameter.
 
 A concern is a body of knowledge, not a folder. Authentication is not
 `src/auth/` — it is the login route, the credential check, the session store,
 the middleware guarding every other route, and the tests that cover them. Two
-concerns touching the same file is the normal case and never a reason to merge
-them: record the file under both, with the role it plays in each.
+concerns touching the same file is normal and is not by itself a reason to merge
+them: record the file under both, with the role it plays in each. The exception
+is the same sole tracked implementation file case above, where separate
+proposals could never satisfy file-level core ownership.
 
 Do not name a concern after a directory, do not emit one concern per directory,
 and do not reduce a repository to a single concern covering everything. If the
@@ -122,6 +145,22 @@ Every touchpoint path must be a file tracked in git. Code that is fetched,
 generated, or vendored at build time is not part of this repository: describe
 how the tracked code invokes it and cite the tracked files instead.
 
+### Cross-cutting evidence
+
+After concern discovery, gather only the focused evidence still needed for
+dimensions that the direct scout and concern traces did not support:
+
+1. Run `module_graph` against the primary source root, never `.`. Record at least
+   one real import, state, RPC, or process boundary.
+2. Run `type_tracer` against the directory that owns one high-leverage observed
+   interface, model, or schema. Supply the exact type name as the focus.
+3. Use focused `conventions`, `pitfalls`, `validation`, `operational`, and
+   `security` exploration only where direct or concern evidence is insufficient.
+4. Use repository documentation and process files to close D9 and D10 honestly.
+
+Persist supported findings incrementally through `write_map_delta`. A custom
+feature report supplements cross-cutting evidence; it is not a substitute for it.
+
 ### Bounded feature exploration
 
 If concern tracing left a gap that another angle would close, dispatch one
@@ -130,8 +169,13 @@ next one. Continue only while another exploration would materially improve
 concern or procedure evidence.
 
 Every explorer uses the configured explorer model slot. The trusted runtime
-permits at most 16 explorers per
-audit, two active at once, and three minutes per explorer. Treat tool-reported
+permits at most 24 explorers per
+audit, up to four independent explorers active at once when the shared output
+budget preserves the parent continuation reserve, with tighter envelopes reducing that ceiling, and three minutes per explorer.
+After the scout returns, batch independent named concern traces in groups of up to
+four tool calls. Never dispatch duplicate scouts or the same concern concurrently.
+Reconcile completed receipts before dispatching dependent repairs. Each explorer also has
+a hard provider-call cap reported in its result. Treat tool-reported
 budget exhaustion as final: preserve gathered evidence, narrow only when a real
 budget remains, and leave unsupported claims as gaps.
 

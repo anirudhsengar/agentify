@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
-import * as fs from "node:fs";
-import * as path from "node:path";
+import { resolveValidationInvocation } from "../task-lifecycle/validation-runner.ts";
 import { PROVIDER_ENV_KEYS } from "../provider-auth.ts";
 import type {
   InstallerProcessRequest,
@@ -10,63 +9,6 @@ import type {
 
 const MAX_PROCESS_OUTPUT_BYTES = 1024 * 1024;
 const PROVIDER_ENV_KEY_SET = new Set<string>(PROVIDER_ENV_KEYS);
-
-function resolveWindowsCmdScript(
-  program: string,
-  args: readonly string[],
-  cwd: string,
-): { program: string; args: string[] } | null {
-  if (process.platform !== "win32") return null;
-  if (!/\.(?:bat|cmd)$/i.test(path.basename(program))) return null;
-  const resolved = path.isAbsolute(program) ? path.normalize(program) : path.resolve(cwd, program);
-  const root = path.resolve(cwd);
-  const relative = path.relative(root, resolved);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("Windows .bat/.cmd validation scripts must resolve inside the repository cwd");
-  }
-  const stat = fs.lstatSync(resolved);
-  if (stat.isSymbolicLink() || !stat.isFile()) {
-    throw new Error("Windows .bat/.cmd validation scripts must identify a regular local file");
-  }
-  // Node cannot spawn .bat/.cmd directly (EINVAL). Route through cmd.exe without shell:true
-  // so argv stays discrete and is not concatenated into an injectable shell string.
-  const comspec = process.env.ComSpec?.trim() || "cmd.exe";
-  return {
-    program: comspec,
-    args: ["/d", "/s", "/c", resolved, ...args],
-  };
-}
-
-function resolveInvocation(request: InstallerProcessRequest): {
-  program: string;
-  args: string[];
-} {
-  if (request.program === "gh") {
-    const override = process.env.AGENTIFY_GH_CLI?.trim();
-    if (override) {
-      const resolved = path.resolve(override);
-      const stat = fs.lstatSync(resolved);
-      if (stat.isSymbolicLink() || !stat.isFile()) {
-        throw new Error("AGENTIFY_GH_CLI must identify a regular local executable or JavaScript file");
-      }
-      if (/\.(?:cjs|mjs|js)$/i.test(resolved)) {
-        return { program: process.execPath, args: [resolved, ...request.args] };
-      }
-      return { program: resolved, args: [...request.args] };
-    }
-  }
-  if (request.program === "npm" && process.platform === "win32") {
-    const candidates = [
-      process.env.npm_execpath,
-      path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
-    ].filter((candidate): candidate is string => typeof candidate === "string" && candidate.length > 0);
-    const npmCli = candidates.find((candidate) => fs.existsSync(candidate));
-    if (npmCli) return { program: process.execPath, args: [npmCli, ...request.args] };
-  }
-  const windowsScript = resolveWindowsCmdScript(request.program, request.args, request.cwd);
-  if (windowsScript) return windowsScript;
-  return { program: request.program, args: [...request.args] };
-}
 
 function sanitizedEnvironment(
   input: NodeJS.ProcessEnv | undefined,
@@ -88,7 +30,9 @@ function sanitizedEnvironment(
     output[name] = value;
   }
   output.CI = "1";
-  output.NO_COLOR = "1";
+  delete output.NO_COLOR;
+  delete output.FORCE_COLOR;
+  delete output.CLICOLOR_FORCE;
   if (!preserveGitHubAuthentication) {
     delete output.GITHUB_TOKEN;
     delete output.GH_TOKEN;
@@ -98,17 +42,19 @@ function sanitizedEnvironment(
 
 export const DEFAULT_INSTALLER_PROCESS_RUNNER: InstallerProcessRunner = {
   run(request: InstallerProcessRequest): InstallerProcessResult {
-    const invocation = resolveInvocation(request);
-    const result = spawnSync(invocation.program, invocation.args, {
+    const invocation = resolveValidationInvocation([request.program, ...request.args], request.cwd);
+    const options = {
       cwd: request.cwd,
-      encoding: "utf-8",
+      encoding: "utf-8" as const,
       env: sanitizedEnvironment(request.env, request.program === "gh"),
       input: request.input,
       timeout: request.timeoutMs,
       maxBuffer: MAX_PROCESS_OUTPUT_BYTES,
       windowsHide: true,
       shell: false,
-    });
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+    };
+    const result = spawnSync(invocation.command, invocation.args, options);
     const code = (result.error as NodeJS.ErrnoException | undefined)?.code;
     return {
       status: result.status,
