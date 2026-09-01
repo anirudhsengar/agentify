@@ -140,6 +140,20 @@ class CoverageClosureRuntime implements AgentRuntime {
   }
 }
 
+class SynchronousClosureRuntime implements AgentRuntime {
+  async runSession(options: AgentRuntimeSessionOptions): Promise<AgentRuntimeResult> {
+    if (isProbeCall(options)) return { turns: 1, costUsd: null, aborted: false };
+    const map = makeValidCodebaseMap();
+    emitExplorerReceipts(options, map);
+    const tool = options.customTools?.find((candidate) => candidate.name === "write_map");
+    assert.ok(tool?.execute);
+    await tool.execute("close-map", { map } as never, options.signal, undefined, { cwd: options.cwd } as never);
+    assert.equal(options.signal?.aborted, true,
+      "a validated complete map must cancel before its tool returns and a continuation can dispatch");
+    throw new Error("synchronous closure boundary observed");
+  }
+}
+
 async function run(
   cwd: string,
   write: (cwd: string, stateDir: string) => void,
@@ -566,6 +580,16 @@ async function testIntentionalCoverageClosureIsNotReportedAsAbort(): Promise<voi
   assert.ok(ui.infos.some((m) => m.includes("validated codebase map")));
 }
 
+async function testCompleteMapCancelsBeforeToolReturn(): Promise<void> {
+  const cwd = tempDir("gate-synchronous-closure");
+  try {
+    await assert.rejects(runWithRuntime(cwd, new SynchronousClosureRuntime()),
+      /synchronous closure boundary observed/);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 // --- specialist evidence completion gate ------------------------------------
 
 function testSpecialistEvidenceRequiredForCompletion(): void {
@@ -899,6 +923,7 @@ const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [
   { name: "gapMapMeansPartialNoExport", fn: testGapMapMeansPartialNoExport },
   { name: "fullyCoveredMeansSuccessAndPersistsMap", fn: testFullyCoveredMeansSuccessAndPersistsMap },
   { name: "intentionalCoverageClosureIsNotReportedAsAbort", fn: testIntentionalCoverageClosureIsNotReportedAsAbort },
+  { name: "completeMapCancelsBeforeToolReturn", fn: testCompleteMapCancelsBeforeToolReturn },
   { name: "specialistEvidenceRequiredForCompletion", fn: testSpecialistEvidenceRequiredForCompletion },
   { name: "writeMapGuidesSpecialistEvidence", fn: testWriteMapGuidesSpecialistEvidence },
   { name: "attachSkipsAuditOnlyWhenSpecialistEvidenceRecorded", fn: testAttachSkipsAuditOnlyWhenSpecialistEvidenceRecorded },
