@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Permit a third independent evidence reader only when the aggregate output envelope still preserves one full parent continuation; tighter budgets retain the two-reader ceiling and every request remains subject to shared admission.
+
 - Keep source-proven strategy families and jointly required operational mechanisms coherent during specialist discovery and review, while continuing to reject catalogs joined only by a theme, directory, or API.
 - Permit one source-reviewed, scope-preserving concern identity correction while retaining the rejected former name as an attested disposition.
 

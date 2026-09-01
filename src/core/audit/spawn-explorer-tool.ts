@@ -93,6 +93,7 @@ const DEFAULT_MAX_TOTAL_COST_USD = 5;
 const MAX_EXPLORER_READS = 32;
 const MAX_EXPLORER_PROVIDER_CALLS = 40;
 const MAX_EXPLORER_RESPONSE_TOKENS = 12_000;
+const PARENT_RESPONSE_RESERVE_TOKENS = 128_000;
 
 // The 9 dimension-shaped modes, the two concern modes that find and trace what
 // this repository's specialties actually are, plus a custom mode that takes an
@@ -986,8 +987,15 @@ function extractSessionCostUsd(messages: ReadonlyArray<unknown>): number | null 
 
 export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): ToolDefinition {
     const maxTotalSpawns = toolOptions.maxTotalSpawns ?? DEFAULT_MAX_TOTAL_SPAWNS;
+    const outputCapProbe = {};
+    const explorerResponseReserve = capProviderOutputTokens(
+        outputCapProbe, toolOptions.explorerModel.api, MAX_EXPLORER_RESPONSE_TOKENS,
+    ) === outputCapProbe ? toolOptions.explorerModel.maxTokens : MAX_EXPLORER_RESPONSE_TOKENS;
     const maxConcurrentSpawns = toolOptions.maxConcurrentSpawns
-        ?? (toolOptions.resourceBudget ? 2 : DEFAULT_MAX_CONCURRENT_SPAWNS);
+        ?? (toolOptions.resourceBudget
+            ? toolOptions.resourceBudget.limits.maxOutputTokens
+                >= PARENT_RESPONSE_RESERVE_TOKENS + 3 * explorerResponseReserve ? 3 : 2
+            : DEFAULT_MAX_CONCURRENT_SPAWNS);
     const maxSubagentDurationMs = toolOptions.maxSubagentDurationMs ?? DEFAULT_SUBAGENT_TIMEOUT_MS;
     const maxTotalCostUsd = toolOptions.maxTotalCostUsd ?? DEFAULT_MAX_TOTAL_COST_USD;
     const { stateDir } = toolOptions;

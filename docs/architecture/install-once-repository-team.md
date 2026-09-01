@@ -391,8 +391,9 @@ also reject later exact serialized requests before network dispatch when their
 conservative byte upper bound exceeds that reserve. Post-response accounting
 remains authoritative for actual usage, while both admission boundaries prevent
 an exhausted continuation from crossing the configured aggregate cap.
-With the shared reservation budget, up to two independent read-only explorer
-sessions may overlap, preserving capacity for the uncappable parent request.
+With the shared reservation budget, up to three independent read-only explorer
+sessions may overlap when the configured output envelope preserves capacity for
+the uncappable parent request; tighter envelopes reduce that ceiling to two.
 Requests reserve aggregate tokens and cost before dispatch;
 concurrent duplicates of the same concern or scout are refused. Standalone tools
 without that budget retain the serial default. Completed bodies checkpoint against
