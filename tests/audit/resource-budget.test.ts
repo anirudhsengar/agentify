@@ -20,6 +20,20 @@ test("reservation uses full context, bounded output, and the highest input/cache
   assert.throws(() => providerRequestReservation({ ...model, cost: { ...model.cost, input: NaN } }), /metadata/);
 });
 
+test("an exact serialized request bound limits retained input and cost", () => {
+  const reserveExactRequest = providerRequestReservation as unknown as (
+    model: Parameters<typeof providerRequestReservation>[0],
+    maxOutputTokens: number,
+    maxInputTokens: number,
+  ) => ReturnType<typeof providerRequestReservation>;
+  assert.deepEqual(reserveExactRequest({ contextWindow: 1_000_000, maxTokens: 128_000,
+    cost: { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0 } }, 12_000, 342_288), {
+    inputTokens: 342_288,
+    outputTokens: 12_000,
+    costUsd: 0.0828576,
+  });
+});
+
 test("tiered model pricing reserves applicable rates without rejecting metadata arrays", () => {
   const model = { contextWindow: 100_000, maxTokens: 10_000,
     cost: { input: 1, output: 4, cacheRead: 0.1, cacheWrite: 2,
