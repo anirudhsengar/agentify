@@ -51,6 +51,7 @@
     "docs/releases/2026-08-stabilization-evaluation.json",
     "docs/releases/2026-08-stabilization-release-report.md",
     "docs/state-lifecycle.md",
+    "docs/validation/live-installation-actions.md",
     "docs/validation/live-multi-language-report.md",
     "docs/validation/edge-case-campaign-report.md",
     "docs/validation/toolchain-verified-campaign.md",

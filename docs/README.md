@@ -15,6 +15,7 @@ Agentify documentation has one authority for each subject.
 | Release procedure | [Release process](release-process.md) |
 | Specialist compiler stabilization qualification | [Release report](releases/2026-08-stabilization-release-report.md), [machine-readable evaluation](releases/2026-08-stabilization-evaluation.json) |
 | Security boundary | [Security](../SECURITY.md) |
+| Live installation in Actions | [MiniMax M3 installation workflow](validation/live-installation-actions.md) |
 | Validation reports | [Live multi-language](validation/live-multi-language-report.md), [Edge-case campaign](validation/edge-case-campaign-report.md), [Toolchain-verified campaign](validation/toolchain-verified-campaign.md) |
 
 `README.md` is the public overview, `AGENTS.md` contains coding-agent rules, and
