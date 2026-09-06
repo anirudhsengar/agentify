@@ -240,7 +240,7 @@ const SPECIALIST_EVIDENCE_GUIDANCE =
     "per-directory pieces. Every touchpoint path must be a file tracked in git. " +
     "An honest empty `concerns` list is valid only for a repository too small to have " +
     "distinct specialties; record that justification in open_questions and in `not_concerns` " +
-    "in the same delta. Do not re-close coverage dimensions; they are already covered.";
+    "in the same delta.";
 
 /**
  * Render sanitize diagnostics for the tool result. A write that "succeeds"
@@ -257,7 +257,7 @@ function formatSanitizeDiagnostics(diagnostics: SanitizeDiagnostics): string {
 }
 
 function formatSpecialistEvidenceGuidance(
-    _closure: FormattedCoverageClosure,
+    closure: FormattedCoverageClosure,
     map: CodebaseMap,
 ): string {
     // Specialist evidence must be recorded before the audit closes, regardless
@@ -268,7 +268,10 @@ function formatSpecialistEvidenceGuidance(
     // every time the field is absent so the model addresses concerns alongside
     // dimension repairs, not as an afterthought after every dimension is green.
     if (specialistEvidenceRecorded(map)) return "";
-    return SPECIALIST_EVIDENCE_GUIDANCE;
+    const coverageGuidance = closure.unresolved.length > 0
+        ? ` Coverage remains unresolved for ${closure.unresolved.join(", ")}. Continue recording source-backed evidence for these dimensions alongside specialist discovery; preserve dimensions already closed.`
+        : " All coverage dimensions are closed; preserve that evidence while completing specialist discovery.";
+    return SPECIALIST_EVIDENCE_GUIDANCE + coverageGuidance;
 }
 
 function injectObservedTypeContract(
