@@ -304,7 +304,13 @@ export class PiSdkRuntime implements AgentRuntime {
       appendSystemPrompt: [],
       extensionFactories: [
         (pi) => {
-          pi.on("tool_call", makeDefenseHook({ executionPolicy: options.executionPolicy }));
+          const defenseHook = makeDefenseHook({ executionPolicy: options.executionPolicy });
+          pi.on("tool_call", async event => {
+            const denied = await defenseHook(event);
+            if (denied) return denied;
+            const reason = checkpointCadence?.inspectionBlockReason(event.toolName);
+            return reason === undefined ? undefined : { block: true, reason };
+          });
           const admitProviderRequest = (payload: unknown): unknown => {
             let requestPayload = payload;
             try {

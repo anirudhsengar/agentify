@@ -181,6 +181,13 @@ require retracing. Up to three distinct findings at the same body digest may be
 corrected atomically; a bad or unchanged member rejects the entire proposal.
 Every corrected body still needs fresh complete review. Existing single-finding
 records and proposals remain valid; missing findings never authorize edits.
+A parent audit that owes its periodic map checkpoint cannot execute further
+read, grep, find, or ls calls until a validated map write resets that checkpoint.
+Provider tool filtering is advisory; the trusted tool-call boundary enforces
+this pause even when a model emits a no-longer-advertised inspection. Failed
+writes and prose do not reset the checkpoint. Explicit terminal-tool protocols
+retain their existing behavior, and SDK-level execution failures remain errors
+in retained logs. This changes neither evidence approval nor aggregate limits.
 The CLI owns the external audit log through finalization. Semantic closure
 does not emit the terminal result before installation validation; exactly one
 terminal event records the committed installation or its failure and rollback.

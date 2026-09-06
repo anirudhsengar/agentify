@@ -132,4 +132,22 @@ try {
   fs.rmSync(aggregateDir, { recursive: true, force: true });
 }
 }
-console.log("audit log tests passed (4/4).");
+const toolOutcomeDir = tempDir("agentify-log-tool-outcome-");
+try {
+  const log = new AgentifyLog({ cwd: toolOutcomeDir, configDir: toolOutcomeDir });
+  for (const [isError, resultError] of [[true, undefined], [false, true], [false, undefined]] as const) {
+    log.sessionEvent({ pi_event_type: "tool_execution_end", event: {
+      type: "tool_execution_end", toolName: "read", toolCallId: "fixture", isError,
+      result: { content: [{ type: "text", text: "Bounded tool result." }],
+        ...(resultError === undefined ? {} : { isError: resultError }) },
+    } });
+  }
+  await log.close();
+  const outcomes = fs.readFileSync(log.logPath, "utf8").trim().split("\n")
+    .map(line => JSON.parse(JSON.parse(line).payload).event.isError as boolean);
+  assert.deepEqual(outcomes, [true, true, false],
+    "SDK-level execution failures must not be logged as successful source reads");
+} finally {
+  fs.rmSync(toolOutcomeDir, { recursive: true, force: true });
+}
+console.log("audit log tests passed (5/5).");

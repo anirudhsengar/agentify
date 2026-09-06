@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Enforce pending map checkpoints at tool execution, not only in provider tool-choice hints. Block further inspections until a validated write, and retain SDK-level tool failures correctly in audit logs.
+
 - Dispatch the mandatory initial scout after a validated topography checkpoint instead of depending on the parent model to choose discovery. Preserve the selected model, shared budgets, actual source receipts, and all installation gates.
 
 - Resolve SDK tool paths from the trusted session repository root, not the host working directory or untrusted event metadata; retain traversal, symlink, writable-root and protected-path checks.

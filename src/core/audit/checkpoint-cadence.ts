@@ -14,6 +14,13 @@ export class AuditCheckpointCadence {
     return this.#inspections >= INSPECTIONS_PER_CHECKPOINT;
   }
 
+  inspectionBlockReason(toolName: string): string | undefined {
+    if (!this.due || !INSPECTION_TOOLS.has(toolName)) return undefined;
+    return "A validated map checkpoint is required before further repository inspection. "
+      + "Call write_map_delta now with evidence already observed; leave unsupported dimensions as gaps. "
+      + "A rejected write or prose response does not complete the checkpoint.";
+  }
+
   observe(event: unknown): void {
     if (!record(event) || event.type !== "tool_execution_end" || event.isError !== false) return;
     if (typeof event.toolName !== "string") return;

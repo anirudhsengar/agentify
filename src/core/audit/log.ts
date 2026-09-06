@@ -215,7 +215,7 @@ function summarizeSessionEvent(event: unknown): unknown {
       type,
       toolName: event.toolName ?? event.tool_name ?? "unknown",
       toolCallId: event.toolCallId ?? null,
-      isError: result.isError === true,
+      isError: event.isError === true || result.isError === true,
       resultText: text,
     };
   }

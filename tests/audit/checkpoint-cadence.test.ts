@@ -57,3 +57,22 @@ test("the captured long read-only tail requests checkpoints instead of silently 
   cadence.observe({ ...checkpoint(), toolName: "write_map" });
   assert.equal(cadence.due, false);
 });
+
+
+test("pending checkpoints block inspections until a validated write, never other protocols", () => {
+  const cadence = new AuditCheckpointCadence();
+  for (const tool of ["read", "grep", "find", "ls"]) {
+    assert.equal(cadence.inspectionBlockReason(tool), undefined);
+  }
+  for (let index = 0; index < 4; index += 1) cadence.observe(inspect());
+  for (const tool of ["read", "grep", "find", "ls"]) {
+    assert.match(cadence.inspectionBlockReason(tool) ?? "", /validated map checkpoint.*write_map_delta/);
+  }
+  for (const tool of ["write_map", "write_map_delta", "spawn_explorer", "submit_report"]) {
+    assert.equal(cadence.inspectionBlockReason(tool), undefined);
+  }
+  cadence.observe({ ...checkpoint(), isError: true });
+  assert.ok(cadence.inspectionBlockReason("read"));
+  cadence.observe(checkpoint());
+  assert.equal(cadence.inspectionBlockReason("read"), undefined);
+});
