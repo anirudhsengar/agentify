@@ -200,6 +200,7 @@ function formatCoverageRepairGuidance(
 ): string {
     if (closure.unresolved.length === 0) return "";
     const ordered = focusDimension !== undefined && focusDimension !== null
+        && closure.unresolved.includes(focusDimension)
         ? [focusDimension, ...closure.unresolved.filter((d) => d !== focusDimension)]
         : closure.unresolved;
     const repairs = ordered.map((dimension) => {
@@ -527,7 +528,6 @@ function normalizeNumericEvidence(map: UnknownRecord): void {
         record.test_count = Number(record.test_count);
     }
 }
-
 function normalizePitfallLineReferences(map: UnknownRecord): void {
     if (!Array.isArray(map.pitfalls)) return;
     for (const pitfall of map.pitfalls) {
