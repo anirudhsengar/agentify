@@ -8,7 +8,7 @@ import type {
 } from "./contracts.ts";
 
 const MAX_PROCESS_OUTPUT_BYTES = 1024 * 1024;
-const PROVIDER_ENV_KEY_SET = new Set<string>(PROVIDER_ENV_KEYS);
+const PROVIDER_ENV_KEY_SET = new Set<string>(PROVIDER_ENV_KEYS.map((name) => name.toUpperCase()));
 
 function sanitizedEnvironment(
   input: NodeJS.ProcessEnv | undefined,
@@ -25,8 +25,8 @@ function sanitizedEnvironment(
       output[name] = value;
       continue;
     }
-    if (!preserveGitHubAuthentication && PROVIDER_ENV_KEY_SET.has(name)) continue;
-    if (/^(?:GITHUB_TOKEN|GH_TOKEN|.*(?:SECRET|TOKEN|PASSWORD|API_KEY|ACCESS_KEY|PRIVATE_KEY))$/i.test(name)) continue;
+    if (PROVIDER_ENV_KEY_SET.has(name.toUpperCase())) continue;
+    if (/^(?:GITHUB_TOKEN|GH_TOKEN|AGENT_PAT|PI_AUTH_JSON|.*(?:SECRET|TOKEN|PASSWORD|API_KEY|ACCESS_KEY|PRIVATE_KEY))$/i.test(name)) continue;
     output[name] = value;
   }
   output.CI = "1";
