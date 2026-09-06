@@ -1,0 +1,37 @@
+name: Temporary PR13 current source recovery
+on:
+  pull_request:
+    types: [labeled]
+permissions:
+  contents: read
+jobs:
+  recover:
+    if: >-
+      github.actor == github.repository_owner &&
+      github.event.label.name == 'agentify-recover-current' &&
+      github.event.pull_request.number == 13 &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: c46c5783253db5516dd91c503a69db926579425e
+          persist-credentials: false
+      - name: Export only immutable tracked source
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/pr13-current"
+          mkdir -p "$out"
+          git rev-parse HEAD > "$out/candidate-sha.txt"
+          git rev-parse 'HEAD^{tree}' > "$out/tree-sha.txt"
+          git ls-tree -r HEAD > "$out/source-tree.txt"
+          git archive --format=tar HEAD | gzip -n > "$out/source.tar.gz"
+          cd "$out"
+          sha256sum candidate-sha.txt tree-sha.txt source-tree.txt source.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr13-current-source-${{ github.run_id }}
+          path: ${{ runner.temp }}/pr13-current
+          if-no-files-found: error
+          retention-days: 1
