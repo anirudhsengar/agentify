@@ -54,12 +54,19 @@ for (const toolName of ["write_map", "write_map_delta"] as const) {
         assert.deepEqual(details.coverage_summary.covered, covered ? [...COVERAGE_DIMENSIONS] : []);
         assert.match(text, /Concern evidence is not recorded yet/);
         assert.doesNotMatch(text, /they are already covered/);
+        assert.match(text, /successful concern_scout receipt/);
+        assert.match(text, /concern_tracer with each coherent proposal's exact concern name/);
+        assert.match(text, /Do not retranscribe tracer bodies/);
+        assert.match(text, /NO `dimension` parameter/);
+        assert.match(text, /A timeout or failed tracer is not a substantive rejection/);
+        assert.doesNotMatch(text, /src\/auth\/verify\.ts|verifyCredential/,
+          "generic invented concern bodies must not displace source tracing");
         if (covered) {
-          assert.match(text, /All coverage dimensions are closed; preserve that evidence/);
-          assert.doesNotMatch(text, /Coverage remains unresolved for/);
+          assert.match(text, /All coverage dimensions are closed; preserve them/);
+          assert.doesNotMatch(text, /Continue repairing unresolved coverage dimensions/);
         } else {
-          assert.match(text, /Coverage remains unresolved for/);
-          assert.match(text, /Continue recording source-backed evidence for these dimensions/);
+          assert.match(text, /Continue repairing unresolved coverage dimensions:/);
+          assert.match(text, /Preserve dimensions already closed/);
           assert.doesNotMatch(text, /All coverage dimensions are closed/);
           for (const dimension of COVERAGE_DIMENSIONS) assert.ok(text.includes(dimension));
         }

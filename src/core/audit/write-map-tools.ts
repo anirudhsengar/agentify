@@ -211,36 +211,19 @@ function formatCoverageRepairGuidance(
 }
 
 const SPECIALIST_EVIDENCE_GUIDANCE =
-    " Concern evidence is not recorded yet. The audit cannot complete until you call " +
-    "write_map_delta with concern_evidence in the delta and NO `dimension` parameter " +
-    "(concern evidence closes no coverage dimension). A concern is a specialty a maintainer would " +
-    "recognize as its own body of knowledge \u2014 not a directory. Concerns are expected to " +
-    "span many directories and to share files with one another. Replace every value below " +
-    "with evidence you actually observed in this repository: " +
-    "`delta: { concern_evidence: { concerns: [{ concern: 'authentication', one_line: " +
-    "'Owns how a caller proves identity and how that proof is checked on every request.', " +
-    "covers: 'Login, session issue and renewal, credential storage, and every enforcement " +
-    "point.', excludes: 'Authorization rules, which decide what an identified caller may do.', " +
-    "flows: [{ name: 'user login', description: 'Credential submission through session " +
-    "establishment.', steps: [{ path: 'src/routes/login.ts', what_happens: 'Accepts the " +
-    "credential payload.' }, { path: 'src/auth/verify.ts', what_happens: 'Compares the hash " +
-    "and issues a session.' }] }], touchpoints: [{ path: 'src/auth/verify.ts', symbol: " +
-    "'verifyCredential', role: 'The single credential comparison in the codebase.', " +
-    "line_range: [12, 61], centrality: 'core' }], invariants: [{ rule: 'Credentials are " +
-    "never logged.', why: 'Log shipping would export secrets.', reference: " +
-    "'src/auth/verify.ts' }], pitfalls: [{ risk: 'Session renewal skips re-validation.', " +
-    "consequence: 'A revoked account keeps access until expiry.', reference: " +
-    "'src/auth/session.ts' }], entry_questions: ['Does this change alter who is considered " +
-    "authenticated?'], validation: ['npm test -- tests/auth'], spans_subtrees: ['src'], " +
-    "stability: 'high', recurrence: 'high', confidence: 'high', last_updated: " +
-    "'2026-01-01T00:00:00.000Z' }], not_concerns: [{ candidate: 'utils', why_rejected: " +
-    "'A directory, not a specialty; its files belong to the concerns that use them.' }] } }`. " +
-    "Name concerns in this repository's own words; there is no fixed list of valid concerns. " +
-    "Do not merge two concerns because they share files, and do not split one concern into " +
-    "per-directory pieces. Every touchpoint path must be a file tracked in git. " +
-    "An honest empty `concerns` list is valid only for a repository too small to have " +
-    "distinct specialties; record that justification in open_questions and in `not_concerns` " +
-    "in the same delta.";
+    " Concern evidence is not recorded yet. Obtain one successful concern_scout receipt, " +
+    "then use concern_tracer with each coherent proposal's exact concern name. " +
+    "Agentify validates and checkpoints complete typed tracer bodies directly. " +
+    "Do not retranscribe tracer bodies or invent a concern body in write_map_delta. " +
+    "Record substantive scout rejections using `delta: { concern_evidence: { concerns: [], " +
+    "not_concerns: [{ candidate: 'exact scout proposal', why_rejected: 'source-grounded reason' }] } }` " +
+    "with merge_strategy: 'append' and NO `dimension` parameter; appending preserves existing bodies " +
+    "and closes no coverage dimension. A timeout or failed tracer is not a substantive rejection. " +
+    "A concern is a repository-specific body of knowledge, not a directory; shared files do not " +
+    "alone justify merging concerns or splitting one into directory-sized pieces. " +
+    "An honest empty concerns list requires a successful scout and a source-grounded explanation " +
+    "in open_questions and not_concerns that the repository has no distinct specialties. " +
+    "Empty arrays or a successful map write do not replace the required source-reading receipts.";
 
 /**
  * Render sanitize diagnostics for the tool result. A write that "succeeds"
@@ -269,8 +252,8 @@ function formatSpecialistEvidenceGuidance(
     // dimension repairs, not as an afterthought after every dimension is green.
     if (specialistEvidenceRecorded(map)) return "";
     const coverageGuidance = closure.unresolved.length > 0
-        ? ` Coverage remains unresolved for ${closure.unresolved.join(", ")}. Continue recording source-backed evidence for these dimensions alongside specialist discovery; preserve dimensions already closed.`
-        : " All coverage dimensions are closed; preserve that evidence while completing specialist discovery.";
+        ? ` Continue repairing unresolved coverage dimensions: ${closure.unresolved.join(", ")}. Preserve dimensions already closed.`
+        : " All coverage dimensions are closed; preserve them while completing specialist evidence and receipts.";
     return SPECIALIST_EVIDENCE_GUIDANCE + coverageGuidance;
 }
 
@@ -462,7 +445,7 @@ const TRANSPORT_WRAPPER_KEYS = new Set(["map", "codebase_map", "delta"]);
 /**
  * Some providers nest the payload one extra level (`map.map`, `map.delta`,
  * `delta.delta`, `delta.map`). Unwrap only single-key wrappers, at most twice,
- * so legitimately small partial maps are never reinterpreted.
+ * so legitimately small partial maps are never reinterpretedted.
  */
 function unwrapNestedTransport(value: unknown): unknown {
     let current = value;
