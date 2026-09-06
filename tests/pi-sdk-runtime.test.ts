@@ -120,7 +120,7 @@ test("MiniMax compatibility keeps reasoning and avoids unsupported named tool ch
       minimax: { baseUrl: `http://127.0.0.1:${address.port}`, api: "anthropic-messages",
         apiKey: "local-test-placeholder", models: [{ id: "MiniMax-M3", reasoning: true, contextWindow: 32768, maxTokens: 4096 }] },
     } }));
-    await new PiSdkRuntime().runSession({
+    await assert.rejects(new PiSdkRuntime().runSession({
       cwd, configDir: cwd,
       config: { schemaVersion: 1, thinkingLevel: "high", models: { primary: { provider: "minimax", model: "MiniMax-M3" } } },
       systemPrompt: "Local wire test.", userPrompt: "Read the fixture.", tools: ["read", "submit_report"], timeoutMs: 5000,
@@ -129,7 +129,8 @@ test("MiniMax compatibility keeps reasoning and avoids unsupported named tool ch
         async execute() { return { content: [{ type: "text", text: "recorded" }], details: {} }; } }],
       forceRequiredToolChoice: true,
       recoveryPromptIfToolNotCalled: { requiredToolName: "submit_report", userPrompt: "Submit.", maxAttempts: 0 },
-    });
+    }), /provider session failed \(minimax\): 400 .*wire fixture complete/,
+    "the intentional HTTP 400 must surface without changing the dispatched wire contract");
     assert.equal(payloads.length, 1);
     assert.deepEqual(payloads[0]!.tool_choice, { type: "auto" });
     assert.deepEqual((payloads[0]!.tools as Array<{ name: string }>).map((tool) => tool.name), ["submit_report"]);
