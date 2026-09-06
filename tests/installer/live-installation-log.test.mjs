@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { summarizeInstallationEvents } from "../../scripts/live-installation-log.mjs";
+import { summarizeInstallationEvents } from "../../scripts/live-installation.mjs";
 
 const captured = [
   { event: "agentify.run_start", payload: { model: "MiniMax-M3" } },
@@ -29,7 +29,7 @@ test("object payloads produce the same report without modifying the source envel
 });
 
 test("malformed relevant payloads fail closed while unrelated summaries are not reparsed", () => {
-  for (const payload of [null, [], "[]", "null", '"nested string"', "{incomplete"]) {
+  for (const payload of [null, [], "[]", "null", '\"nested string\"', "{incomplete"]) {
     assert.throws(() => summarizeInstallationEvents([{ event: "agentify.run_end", payload }]));
   }
   assert.deepEqual(summarizeInstallationEvents([{ event: "agentify.session_event", payload: "truncated summary" }]),
