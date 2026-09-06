@@ -36,11 +36,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      LIVE_WORK_DIR: ${{ runner.temp }}/agentify-live-${{ github.run_id }}-${{ github.run_attempt }}
-      LIVE_PACK_RESULT: ${{ runner.temp }}/agentify-live-pack.json
       LIVE_REPOSITORY: ${{ inputs.target_repository || 'anirudhsengar/hono' }}
       LIVE_TARGET_SHA: ${{ inputs.target_sha || 'e2740d5a1bd0b4254e517e3af8b60789284bc7bd' }}
     steps:
+      - name: Initialize disposable runner paths
+        run: |
+          printf 'LIVE_WORK_DIR=%s/agentify-live-%s-%s\n' "$RUNNER_TEMP" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+          printf 'LIVE_PACK_RESULT=%s/agentify-live-pack.json\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}

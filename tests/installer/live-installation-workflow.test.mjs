@@ -54,3 +54,9 @@ test("workflow requires deliberate owner authorization and exposes secrets only 
   assert.equal((workflow.match(/secrets\.PI_API_KEY/g) ?? []).length, 1);
   assert.match(workflow, /if: always\(\)/);
 });
+
+test("runner paths are initialized at step time, not in job-level expressions", () => {
+  const workflow = fs.readFileSync(new URL("../../.github/workflows/live-installation.yml", import.meta.url), "utf8");
+  assert.doesNotMatch(workflow.split("    steps:")[0], /\$\{\{\s*runner\./);
+  assert.match(workflow, /\$RUNNER_TEMP/);
+});
