@@ -1,0 +1,47 @@
+name: Temporary PR13 offline debugging snapshot
+on:
+  pull_request:
+    types: [labeled]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    if: >-
+      github.actor == github.repository_owner &&
+      github.event.label.name == 'agentify-debug-snapshot' &&
+      github.event.pull_request.number == 13 &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: 23a04fcc1d619fb075e7407d113ea4a340f454ff
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22.19.0"
+      - name: Install locked development dependencies without provider secrets
+        run: |
+          npm install --global npm@11.19.0
+          npm ci
+      - name: Export only public source and toolchain files
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/pr13-offline"
+          mkdir -p "$out"
+          git rev-parse HEAD > "$out/candidate-sha.txt"
+          git ls-tree -r HEAD > "$out/source-git-tree.txt"
+          git archive --format=tar HEAD | gzip -n > "$out/source.tar.gz"
+          tar --exclude='*.ttf' --exclude='*.otf' --exclude='*.woff' --exclude='*.woff2' --exclude='*.eot' -czf "$out/dependencies.tar.gz" node_modules
+          cp -- "$(command -v node)" "$out/node"
+          tar -czf "$out/npm.tar.gz" -C "$(npm root --global)" npm
+          cd "$out"
+          sha256sum source.tar.gz dependencies.tar.gz node npm.tar.gz source-git-tree.txt > SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr13-offline-23a04fc-${{ github.run_id }}
+          path: ${{ runner.temp }}/pr13-offline
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
