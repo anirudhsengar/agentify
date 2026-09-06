@@ -109,7 +109,9 @@
     "build": "node scripts/build.mjs",
     "prepack": "npm run build",
     "test:memory": "tsx tests/memory/memory-schema.test.ts && tsx tests/memory/memory-provenance.test.ts && tsx tests/memory/memory-store.test.ts && tsx tests/memory/memory-queries-compaction.test.ts",
-    "verify:repository-clean": "node scripts/verify-implementation-diff.mjs"
+    "verify:repository-clean": "node scripts/verify-implementation-diff.mjs",
+    "live:prepare": "node scripts/live-installation.mjs prepare",
+    "live:install": "node scripts/live-installation.mjs run"
   },
   "exports": {
     "./package.json": "./package.json"

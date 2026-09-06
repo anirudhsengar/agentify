@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
-import * as fs from "node:fs";
+import fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { syncBuiltinESMExports } from "node:module";
 import test from "node:test";
-import { assessInstallation, MODEL_CONFIG, redactSecrets, validateTarget } from "../../scripts/live-installation.mjs";
+import { assessInstallation, MODEL_CONFIG, redactSecrets, validateTarget, readEvidenceFile } from "../../scripts/live-installation.mjs";
 
 function completed(overrides = {}) {
   return { exitCode: 0, signal: null, terminalEvents: [{ status: "success", exit_code: 0 }],
@@ -59,4 +62,72 @@ test("runner paths are initialized at step time, not in job-level expressions", 
   const workflow = fs.readFileSync(new URL("../../.github/workflows/live-installation.yml", import.meta.url), "utf8");
   assert.doesNotMatch(workflow.split("    steps:")[0], /\$\{\{\s*runner\./);
   assert.match(workflow, /\$RUNNER_TEMP/);
+});
+
+test("evidence reads reject symlinks and oversize files", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-evidence-read-"));
+  try {
+    const file = path.join(root, "evidence.json");
+    const link = path.join(root, "link.json");
+    fs.writeFileSync(file, "original evidence");
+    fs.symlinkSync(file, link);
+    assert.throws(() => readEvidenceFile(link));
+    assert.throws(() => readEvidenceFile(file, 4), /size limit/);
+    assert.equal(readEvidenceFile(file).bytes.toString("utf8"), "original evidence");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("metadata-to-read replacement cannot redirect evidence to an outside file", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-evidence-race-"));
+  const victim = path.join(root, "evidence.json");
+  const outside = path.join(root, "private.json");
+  fs.writeFileSync(victim, "original evidence");
+  fs.writeFileSync(outside, "synthetic private content");
+  const original = fs.lstatSync;
+  const stat = t.mock.method(fs, "lstatSync", (candidate, ...args) => {
+    const result = original(candidate, ...args);
+    if (candidate === victim) {
+      fs.unlinkSync(victim);
+      fs.symlinkSync(outside, victim);
+    }
+    return result;
+  });
+  try {
+    syncBuiltinESMExports();
+    assert.equal(readEvidenceFile(victim).bytes.toString("utf8"), "original evidence");
+  } finally {
+    stat.mock.restore();
+    syncBuiltinESMExports();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("descriptor metadata and bytes stay bound when the pathname is replaced", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-open-evidence-"));
+  const victim = path.join(root, "evidence.json");
+  const outside = path.join(root, "private.json");
+  fs.writeFileSync(victim, "original evidence");
+  fs.writeFileSync(outside, "synthetic private content");
+  const original = fs.fstatSync;
+  let replaced = false;
+  const stat = t.mock.method(fs, "fstatSync", (...args) => {
+    const result = original(...args);
+    if (!replaced) {
+      replaced = true;
+      fs.unlinkSync(victim);
+      fs.symlinkSync(outside, victim);
+    }
+    return result;
+  });
+  try {
+    syncBuiltinESMExports();
+    assert.equal(readEvidenceFile(victim).bytes.toString("utf8"), "original evidence");
+    assert.equal(replaced, true);
+  } finally {
+    stat.mock.restore();
+    syncBuiltinESMExports();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

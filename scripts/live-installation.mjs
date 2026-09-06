@@ -49,12 +49,43 @@ function command(program, args, cwd, env = process.env) {
   return result.stdout.trim();
 }
 
+export function readEvidenceFile(file, maximum = MAX_OUTPUT_BYTES) {
+  assert.ok(Number.isSafeInteger(maximum) && maximum >= 0, "invalid evidence size limit");
+  const descriptor = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const stat = fs.fstatSync(descriptor);
+    assert.ok(stat.isFile(), "evidence must be a regular file");
+    assert.ok(stat.size <= maximum, "evidence size limit exceeded");
+    const chunks = [];
+    let size = 0;
+    while (size <= maximum) {
+      const chunk = Buffer.alloc(Math.min(64 * 1024, maximum + 1 - size));
+      const length = fs.readSync(descriptor, chunk, 0, chunk.length, null);
+      if (length === 0) break;
+      size += length;
+      assert.ok(size <= maximum, "evidence size limit exceeded");
+      chunks.push(chunk.subarray(0, length));
+    }
+    const after = fs.fstatSync(descriptor);
+    assert.ok(after.size === size && after.size === stat.size && after.mtimeMs === stat.mtimeMs,
+      "evidence changed during descriptor read");
+    return { bytes: Buffer.concat(chunks), mode: stat.mode & 0o777 };
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
 function snapshot(target) {
   return Object.fromEntries(command("git", ["ls-files", "-z"], target).split("\0").filter(Boolean).map((file) => {
     const absolute = path.join(target, file);
-    const stat = fs.lstatSync(absolute);
-    assert.ok(stat.isFile() || stat.isSymbolicLink(), `unsupported tracked object: ${file}`);
-    return [file, { mode: stat.mode & 0o777, digest: sha256(stat.isSymbolicLink() ? fs.readlinkSync(absolute) : fs.readFileSync(absolute)) }];
+    try {
+      const record = readEvidenceFile(absolute);
+      return [file, { kind: "file", mode: record.mode, digest: sha256(record.bytes) }];
+    } catch (error) {
+      if (error.code === "ENOENT") return [file, { kind: "missing" }];
+      if (error.code !== "ELOOP") throw error;
+      return [file, { kind: "symlink", digest: sha256(fs.readlinkSync(absolute)) }];
+    }
   }));
 }
 
@@ -172,12 +203,11 @@ async function live(root) {
   fs.writeFileSync(path.join(evidence, "stderr.txt"), clean(result.stderr));
   let total = 0;
   const copyText = (source, destination) => {
-    const stat = fs.lstatSync(source);
-    assert.ok(stat.isFile() && !stat.isSymbolicLink(), "evidence must be a regular file");
-    total += stat.size;
-    assert.ok(stat.size <= MAX_OUTPUT_BYTES && total <= MAX_EVIDENCE_BYTES, "evidence size limit exceeded");
+    const record = readEvidenceFile(source);
+    total += record.bytes.length;
+    assert.ok(total <= MAX_EVIDENCE_BYTES, "evidence size limit exceeded");
     fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.writeFileSync(destination, clean(fs.readFileSync(source, "utf8")));
+    fs.writeFileSync(destination, clean(record.bytes.toString("utf8")));
   };
   for (const [directory, prefix] of [[path.join(home, ".agentify/logs"), "logs"], [path.join(target, ".agentify"), "installed-team"]]) {
     for (const file of filesUnder(directory)) {
