@@ -1,0 +1,78 @@
+name: Live specialist installation
+run-name: Live MiniMax M3 installation (${{ github.event.pull_request.head.sha || github.sha }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repository:
+        description: Maintainer-owned evaluation fork
+        type: string
+        default: anirudhsengar/hono
+        required: true
+      target_sha:
+        description: Immutable target commit (40 lowercase hex characters)
+        type: string
+        default: e2740d5a1bd0b4254e517e3af8b60789284bc7bd
+        required: true
+  # Allows an explicit maintainer trigger before this workflow reaches main.
+  # Ordinary pushes/PR updates never spend model credits.
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agentify-live-installation
+  cancel-in-progress: false
+
+jobs:
+  install:
+    if: >-
+      github.actor == github.repository_owner &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.label.name == 'agentify-live-install' &&
+        github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      LIVE_WORK_DIR: ${{ runner.temp }}/agentify-live-${{ github.run_id }}-${{ github.run_attempt }}
+      LIVE_PACK_RESULT: ${{ runner.temp }}/agentify-live-pack.json
+      LIVE_REPOSITORY: ${{ inputs.target_repository || 'anirudhsengar/hono' }}
+      LIVE_TARGET_SHA: ${{ inputs.target_sha || 'e2740d5a1bd0b4254e517e3af8b60789284bc7bd' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Install pinned build toolchain without model credentials
+        run: |
+          npm install --global npm@11.19.0
+          npm ci
+      - name: Verify candidate before paid evaluation
+        run: npm run verify:release
+      - name: Pack the candidate
+        run: npm run --silent pack:release > "$LIVE_PACK_RESULT"
+      - name: Prepare a fresh target and install the actual npm package
+        run: node scripts/live-installation.mjs prepare
+      - name: Run the real installer with MiniMax M3
+        env:
+          PI_API_KEY: ${{ secrets.PI_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/live-installation.mjs run
+      - name: Retain redacted installation evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: live-installation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.LIVE_WORK_DIR }}/evidence
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 14
+      - name: Remove disposable credentials and target
+        if: always()
+        run: rm -rf -- "$LIVE_WORK_DIR"
