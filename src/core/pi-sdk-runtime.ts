@@ -41,18 +41,23 @@ function record(value: unknown): value is Record<string, unknown> {
  * Unknown APIs retain their existing prompt/recovery behavior instead of
  * receiving a guessed wire shape.
  */
-export function forceProviderToolChoice(payload: unknown, api: string, toolName: string, provider?: string): unknown {
+export function forceProviderToolChoice(payload: unknown, api: string, toolName: string | readonly string[], provider?: string): unknown {
   if (!record(payload)) return payload;
   if (api === "anthropic-messages" && (provider === "minimax" || provider === "minimax-cn")) {
     // MiniMax's Messages contract supports only auto/none, not named forcing:
     // https://platform.minimax.io/docs/api-reference/text-chat-anthropic
     // Restrict available tools without disabling the configured reasoning.
+    const allowedNames = typeof toolName === "string" ? [toolName] : toolName;
+    if (allowedNames.length === 0) return payload;
     return {
       ...payload,
-      ...(Array.isArray(payload.tools) ? { tools: payload.tools.filter((tool) => record(tool) && tool.name === toolName) } : {}),
+      ...(Array.isArray(payload.tools) ? { tools: payload.tools.filter((tool) => record(tool) && typeof tool.name === "string" && allowedNames.includes(tool.name)) } : {}),
       tool_choice: { type: "auto" },
     };
   }
+  // Alternative terminal sets are currently supported only by the verified
+  // MiniMax auto-choice contract. Never guess forcing shapes for other APIs.
+  if (typeof toolName !== "string") return payload;
   if (api === "anthropic-messages") {
     const next = { ...payload };
     delete next.output_config;

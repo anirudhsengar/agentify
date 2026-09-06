@@ -4,6 +4,10 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Resolve SDK tool paths from the trusted session repository root, not the host working directory or untrusted event metadata; retain traversal, symlink, writable-root and protected-path checks.
+
+- Reserve the existing final MiniMax tracer calls for either a typed concern report or an evidence-backed rejection, including after an invalid submission. Preserve reasoning, source validation and all call, read, time and cost limits.
+
 - Derive explorer overlap from the shared output envelope, admitting four bounded readers under the default budget while preserving one full parent continuation; tighter envelopes retain three- or two-reader ceilings.
 
 - Bind a substantive rejection's exact source-symbol name to one unique tracked declaration and only its direct symbol-referencing tests. Filename similarity, missing declarations, duplicate same-name definitions, and unrelated files remain unresolved.

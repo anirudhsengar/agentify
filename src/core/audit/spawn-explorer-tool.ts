@@ -1411,7 +1411,6 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                     mode === "concern_tracer"
                                     && submission.concern === null
                                     && submission.rejection === null
-                                    && !canRejectConcern
                                     && shouldForceConcernSubmission(
                                         providerCalls,
                                         maxProviderCalls,
@@ -1422,7 +1421,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                     payload = forceProviderToolChoice(
                                         payload,
                                         subAgentModel.api,
-                                        "submit_concern_report",
+                                        canRejectConcern
+                                            ? ["submit_concern_report", "submit_concern_rejection"]
+                                            : "submit_concern_report",
                                         subAgentModel.provider,
                                     );
                                 }

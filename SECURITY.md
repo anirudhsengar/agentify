@@ -38,7 +38,9 @@ paths, state transitions, and evidence before performing bounded mutations.
 ## Repository and filesystem safety
 
 All repository paths are normalized and must remain inside the physical
-repository root. Writable operations reject absolute paths, traversal, protected
+repository root. SDK-relative tool paths resolve against the trusted session
+repository root, never the host working directory or model-supplied event
+metadata. Writable operations reject absolute paths, traversal, protected
 paths, unsafe symlinks, and roots that cannot be verified. Managed files require
 recognized ownership markers and expected bytes. User-owned files are preserved.
 
