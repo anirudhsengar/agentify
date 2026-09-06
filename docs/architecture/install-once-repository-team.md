@@ -226,6 +226,12 @@ flows, touchpoints, invariants, pitfalls, questions, validation, and scope, and
 derives exclusions from the remaining accepted portfolio. Conflicting same-name
 flows or unrelated bodies remain unresolved; no model retranscribes evidence.
 
+A tracer's optional focus defaults to its required concern identity; missing
+seed paths do not cancel a valid dispatch. Once a request reaches the existing
+submission reserve, further repository inspections are blocked at execution,
+not only removed from advertised tools. Rejected submissions retain bounded,
+redacted diagnostics on failure. No new calls or source-reading credit are granted.
+
 Tracer receipts retain the exact application-bound concern identity separately
 from their free-form focus. A failed or timed-out tracer remains unresolved
 until a later successful tracer for that same identity is attested; verbose

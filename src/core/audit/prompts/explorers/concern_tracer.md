@@ -33,13 +33,15 @@ auth is reused.
 TARGET_PATH: $1 # dynamic: codebase root (usually ".")
 FOCUS: $2 # dynamic: the concern to trace, plus its seed paths
 
-`FOCUS` is not optional for this mode. It names the concern and gives
-you the scout's seed paths. If `FOCUS` is empty, stop without submitting;
-Agentify will retain the tracer as unresolved.
+The required concern identity is supplied separately by the runtime.
+`FOCUS` provides optional seed paths or guidance and defaults to that identity
+when the parent omits it. Missing seed paths do not cancel the trace: inspect
+source beneath `TARGET_PATH` for the required concern, without inventing evidence.
 
 ## Instructions
 
-- `MUST` trace the concern named in `FOCUS` and no other. Preserve its identity
+- `MUST` trace the required concern identity and no other; `FOCUS` is only
+ additional guidance. Preserve its identity
  unless Agentify explicitly says a current source review rejected that identity;
  in that case submit one precise, scope-preserving maintainer name. If you find
  a second concern along the way, note it in `adjacent_concerns` and
@@ -85,8 +87,8 @@ Agentify will retain the tracer as unresolved.
 
 ## Workflow
 
-1. Start at the seed paths in `FOCUS`. Read them properly — not the
- first twenty lines. You need the actual mechanism.
+1. Start at the seed paths in `FOCUS`, or search within `TARGET_PATH` when
+ no seed paths were supplied. Read the actual mechanism, not only file headers.
 2. **Trace forward.** From the concern's entry point, follow what
  happens next: the call, the dispatch, the include, the make target,
  the message. Keep going until you reach the effect — the write, the

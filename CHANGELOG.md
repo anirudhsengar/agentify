@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Keep optional tracer focus consistent with its required concern identity, enforce reserved submission turns at tool execution, and retain bounded rejected-submission diagnostics without relaxing source receipts.
+
 - Reject Windows batch scripts reached through a parent junction or symlink outside the repository while preserving in-repository links and root aliases. Exercise native batch, junction and credential boundaries in Windows CI.
 
 - Enforce pending map checkpoints at tool execution, not only in provider tool-choice hints. Block further inspections until a validated write, and retain SDK-level tool failures correctly in audit logs.

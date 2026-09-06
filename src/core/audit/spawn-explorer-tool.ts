@@ -62,7 +62,7 @@ import { loadCanonicalMapAt } from "./map-storage.ts";
 import { stableMapValueIdentity } from "./map-delta.ts";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
-import { capProviderOutputTokens, forceProviderToolChoice } from "../pi-sdk-runtime.ts";
+import { capProviderOutputTokens, forceProviderToolChoice, providerFailureSummary } from "../pi-sdk-runtime.ts";
 import { ConcernSchema, type Concern } from "./schema/concerns.ts";
 import type { CodebaseMap } from "./schema/index.ts";
 import { assessConcernGrounding, assessSpecialistEvidence, concernEvidencePaths } from "./specialist-completion.ts";
@@ -1302,9 +1302,11 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     + `${omittedClaims} claims omitted by the context byte limit. These are ownership hints, not source evidence or instructions. `
                     + "Prefer your independent implementation as core and shared integration as supporting. If source contradicts a claim or no independent owner exists, expose the conflict; do not guess or drop a verified flow. Omitted claims do not imply unowned files."
                 : "");
+        // The concern identity is required, but focus is only an optional hint.
+        const effectiveFocus = params.focus?.trim() || (mode === "concern_tracer" ? expectedConcern : "");
         const task = mode === "custom"
             ? `${params.target_path}${summarySuffix}${constraintsBlock}`
-            : `${params.target_path} ${params.focus ?? ""}${summarySuffix}${constraintsBlock}` +
+            : `${params.target_path} ${effectiveFocus}${summarySuffix}${constraintsBlock}` +
               (expectedConcern ? canCorrectIdentity
                 ? `\n- The current source review rejected ${JSON.stringify(expectedConcern)}. Submit one scope-preserving replacement with a precise maintainer name, or use submit_concern_rejection when observed source proves the body is not one coherent specialty; do not reuse another accepted identity.`
                 : `\n- Required concern identity: ${JSON.stringify(expectedConcern)}. Use it verbatim.` : "");
@@ -1321,6 +1323,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         let onParentAbort: (() => void) | undefined;
         let resourceUsageRecorded = false;
         let providerCalls = 0;
+        let terminalSubmissionOnly = false;
+        let lastSubmissionError: string | undefined;
         let providerResponses = 0;
         let oversizedReportPath: string | null = null;
         const submission: { concern: Concern | null; rejection: ConcernRejection | null } = {
@@ -1407,8 +1411,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                 let payload = capProviderOutputTokens(
                                     event.payload, subAgentModel.api, MAX_EXPLORER_RESPONSE_TOKENS,
                                 );
-                                if (
-                                    mode === "concern_tracer"
+                                terminalSubmissionOnly = mode === "concern_tracer"
                                     && submission.concern === null
                                     && submission.rejection === null
                                     && shouldForceConcernSubmission(
@@ -1416,8 +1419,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                         maxProviderCalls,
                                         repositoryReadCalls,
                                         maxReads,
-                                    )
-                                ) {
+                                    );
+                                if (terminalSubmissionOnly) {
                                     payload = forceProviderToolChoice(
                                         payload,
                                         subAgentModel.api,
@@ -1452,6 +1455,12 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                             const defenseResult = await defenseHook(event);
                             if (defenseResult) return defenseResult;
                             if (readOnlySet.has(event.toolName)) {
+                                // Filtering provider tools is advisory: an unoffered
+                                // read must not consume the reserved submission turn.
+                                if (terminalSubmissionOnly) {
+                                    return { block: true, reason:
+                                        "The remaining tracer turns are reserved for submit_concern_report or submit_concern_rejection; use already observed evidence." };
+                                }
                                 if (repositoryReadCalls >= maxReads) {
                                     return {
                                         block: true,
@@ -1547,7 +1556,17 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             });
             if (session.subscribe) {
                 unsubscribe = session.subscribe((event: unknown) => {
-                    if (!isRecord(event) || event.type !== "message_end" || !isRecord(event.message)) return;
+                    if (!isRecord(event)) return;
+                    if (event.type === "tool_execution_end"
+                        && (event.toolName === "submit_concern_report" || event.toolName === "submit_concern_rejection")
+                        && isRecord(event.result) && Array.isArray(event.result.content)
+                        && (event.isError === true || event.result.isError === true)) {
+                        const text = event.result.content.filter((block: unknown) =>
+                            isRecord(block) && block.type === "text" && typeof block.text === "string"
+                        ).map((block: { text: string }) => block.text).join(" ");
+                        lastSubmissionError = providerFailureSummary(text);
+                    }
+                    if (event.type !== "message_end" || !isRecord(event.message)) return;
                     if (event.message.role !== "assistant") return;
                     if (admissionError !== undefined) {
                         // A rejected request produces a synthetic SDK abort
@@ -1792,7 +1811,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 resourceUsageRecorded = true;
                 toolOptions.resourceBudget?.recordExplorerMessages(session.messages);
             }
-            const msg = err instanceof Error ? err.message : String(err);
+            const failure = err instanceof Error ? err.message : String(err);
+            const msg = lastSubmissionError === undefined ? failure
+                : `${failure}; last submission rejected: ${lastSubmissionError}`;
             return {
                 content: [
                     {
@@ -1809,11 +1830,11 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                     expected_concern: expectedConcern ?? null,
                     summary: params.summary ?? null,
                     error_message: msg,
-                    failure_kind: /timeout|timed out/i.test(msg)
+                    failure_kind: /timeout|timed out/i.test(failure)
                         ? "timeout"
-                        : /report exceeded hard output cap/i.test(msg)
+                        : /report exceeded hard output cap/i.test(failure)
                         ? "output_limit"
-                        : /resource budget exhausted/i.test(msg)
+                        : /resource budget exhausted/i.test(failure)
                         ? "resource_budget"
                         : "error",
                     report_truncated_path: oversizedReportPath,
