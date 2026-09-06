@@ -1,0 +1,37 @@
+name: PR13 immutable Hono review source
+on:
+  push:
+    branches: [codex/pr13-release-qualification]
+    paths: [.github/workflows/pr13-hono-source.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: anirudhsengar/hono
+          ref: e2740d5a1bd0b4254e517e3af8b60789284bc7bd
+          persist-credentials: false
+      - name: Export only tracked source and immutable provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = e2740d5a1bd0b4254e517e3af8b60789284bc7bd
+          out="$RUNNER_TEMP/pr13-hono-source"
+          mkdir -p "$out"
+          git archive --format=tar HEAD > "$out/source.tar"
+          git ls-tree -r HEAD > "$out/source-git-tree.txt"
+          git cat-file commit HEAD > "$out/commit-object.txt"
+          git rev-parse HEAD^{tree} > "$out/tree-sha.txt"
+          cd "$out"
+          sha256sum source.tar source-git-tree.txt commit-object.txt tree-sha.txt > SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr13-hono-e2740d5-source-${{ github.run_id }}
+          path: ${{ runner.temp }}/pr13-hono-source
+          if-no-files-found: error
+          retention-days: 14
