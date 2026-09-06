@@ -126,6 +126,17 @@ resolve different files. Repository text can reduce Agentify's authority but
 cannot expand it. A permissive policy or an unrelated warning that merely
 mentions AI does not trigger the blocker.
 
+The parent runtime dispatches the mandatory initial scout after its first
+successful map checkpoint with validated D1 topography, unless the current
+repository commit already has a successful scout receipt. This uses the same
+read-only explorer tool, selected explorer model, signal, and shared budget as
+model-directed discovery. At most one automatic attempt occurs per parent
+session, including concurrent checkpoint writes; failures and cancellation
+receive no success credit. The application reports actual dispatch start/end
+events through the existing receipt observer and returns the actual scout
+report with the map result. The parent still screens and traces proposals;
+scouting alone neither installs a team nor attests a specialist body.
+
 Finalization independently requires a current explorer receipt attestation.
 After deterministic compilation reaches its fixed point, each changed concern
 receives a separate read-only review using the configured primary model and the

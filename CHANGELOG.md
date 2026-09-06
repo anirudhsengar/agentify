@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Dispatch the mandatory initial scout after a validated topography checkpoint instead of depending on the parent model to choose discovery. Preserve the selected model, shared budgets, actual source receipts, and all installation gates.
+
 - Resolve SDK tool paths from the trusted session repository root, not the host working directory or untrusted event metadata; retain traversal, symlink, writable-root and protected-path checks.
 
 - Reserve the existing final MiniMax tracer calls for either a typed concern report or an evidence-backed rejection, including after an invalid submission. Preserve reasoning, source validation and all call, read, time and cost limits.

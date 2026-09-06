@@ -22,6 +22,7 @@ import {
 import { createAgentifyModelRuntime } from "./pi-credential-store.ts";
 import { providerRequestReservation } from "./audit/resource-budget.ts";
 import { AuditCheckpointCadence } from "./audit/checkpoint-cadence.ts";
+import { withInitialScoutCheckpoint } from "./audit/initial-scout-checkpoint.ts";
 
 type UsageLike = {
   cost?: { total?: number };
@@ -278,6 +279,16 @@ export class PiSdkRuntime implements AgentRuntime {
         ...tool,
         description: `${tool.description} After four successful direct file-inspection calls since the last validated map write, the runtime may restrict the next request to this tool until a checkpoint succeeds. Persist only facts already observed; leave unsupported coverage as gaps and never invent evidence to satisfy the checkpoint.`,
       };
+    }
+
+    const initialScout = customTools.find(tool => tool.name === "spawn_explorer");
+    if (checkpointCadence && options.spawnExplorerStateDir && options.spawnExplorerAgentDir
+      && options.onEvent && initialScout) {
+      customTools.splice(0, customTools.length, ...withInitialScoutCheckpoint(customTools, {
+        stateDir: options.spawnExplorerStateDir,
+        scout: initialScout,
+        onEvent: options.onEvent,
+      }));
     }
 
     const resourceLoader = new DefaultResourceLoader({

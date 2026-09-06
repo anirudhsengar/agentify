@@ -82,6 +82,12 @@ This is the part of the audit the whole installation exists for. Everything
 above establishes how the repository is built; this establishes what a person
 would specialize in to work on it well.
 
+After a successful topography checkpoint, the runtime launches the initial
+scout automatically if no successful current-HEAD scout exists. Its actual
+report is appended to the map tool result. Use those proposals and do not
+repeat a successful scout. A failed automatic attempt grants no receipt;
+any explicit retry remains within the existing shared audit budget.
+
 1. Run `concern_scout` against the repository root exactly once with no
    `focus`, unless the
    application reports a successful current-HEAD scout receipt to resume. It returns
