@@ -5,6 +5,7 @@ import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
+import { summarizeInstallationEvents } from "./live-installation-log.mjs";
 
 export const MODEL_CONFIG = Object.freeze({
   schemaVersion: 1,
@@ -219,9 +220,7 @@ async function live(root) {
   }
   const logFiles = filesUnder(path.join(evidence, "logs/agentify")).filter((file) => file.endsWith(".jsonl"));
   const events = logFiles.flatMap((file) => fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)));
-  const terminals = events.filter((event) => event.event === "agentify.run_end").map((event) => event.payload);
-  const budget = events.filter((event) => event.event === "agentify.audit_budget").at(-1)?.payload ?? null;
-  const model = events.find((event) => event.event === "agentify.run_start")?.payload?.model ?? null;
+  const { terminals, budget, model } = summarizeInstallationEvents(events);
   const before = readJson(path.join(root, "before.json"));
   const after = snapshot(target);
   const changed = Object.keys(before).filter((file) => JSON.stringify(before[file]) !== JSON.stringify(after[file]));

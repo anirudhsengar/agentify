@@ -21,6 +21,7 @@ import {
 } from "./security/execution-policy.ts";
 import { createAgentifyModelRuntime } from "./pi-credential-store.ts";
 import { providerRequestReservation } from "./audit/resource-budget.ts";
+import { AuditCheckpointCadence } from "./audit/checkpoint-cadence.ts";
 
 type UsageLike = {
   cost?: { total?: number };
@@ -236,6 +237,25 @@ export class PiSdkRuntime implements AgentRuntime {
       customTools.map((tool) => tool.name),
     );
 
+    // Only the parent map audit schedules periodic checkpoints. Explicit
+    // terminal-tool protocols and other roles retain their existing behavior.
+    const checkpointCadence = options.auditResourceBudget
+      && options.executionPolicy.mode === "audit-readonly"
+      && options.tools.includes("spawn_explorer")
+      && options.tools.includes("write_map_delta")
+      && options.forceRequiredToolChoice !== true
+      && options.forceRequiredToolChoiceAfterTurns === undefined
+      ? new AuditCheckpointCadence()
+      : undefined;
+    if (checkpointCadence) {
+      const index = customTools.findIndex((tool) => tool.name === "write_map_delta");
+      const tool = customTools[index];
+      if (tool) customTools[index] = {
+        ...tool,
+        description: `${tool.description} After four successful direct file-inspection calls since the last validated map write, the runtime may restrict the next request to this tool until a checkpoint succeeds. Persist only facts already observed; leave unsupported coverage as gaps and never invent evidence to satisfy the checkpoint.`,
+      };
+    }
+
     const resourceLoader = new DefaultResourceLoader({
       cwd: options.cwd,
       agentDir: options.configDir,
@@ -251,13 +271,18 @@ export class PiSdkRuntime implements AgentRuntime {
         (pi) => {
           pi.on("tool_call", makeDefenseHook({ executionPolicy: options.executionPolicy }));
           const admitProviderRequest = (payload: unknown): unknown => {
+            let requestPayload = payload;
             try {
               if (aborted || options.signal?.aborted) throw new Error("provider request cancelled");
-              const inputTokenBound = options.auditResourceBudget?.assertProviderInputCapacity(payload);
+              if (checkpointCadence?.due) {
+                requestPayload = forceProviderToolChoice(payload, selectedModel?.api ?? "", "write_map_delta", selectedModel?.provider);
+                if (requestPayload !== payload) forcedToolChoiceRequests += 1;
+              }
+              const inputTokenBound = options.auditResourceBudget?.assertProviderInputCapacity(requestPayload);
               options.onProviderRequest?.(selectedModel
                 ? providerRequestReservation(selectedModel,
                   options.maxOutputTokens !== undefined
-                    && capProviderOutputTokens(payload, selectedModel.api, options.maxOutputTokens) !== payload
+                    && capProviderOutputTokens(requestPayload, selectedModel.api, options.maxOutputTokens) !== requestPayload
                     ? options.maxOutputTokens : undefined,
                   inputTokenBound)
                 : undefined);
@@ -269,7 +294,7 @@ export class PiSdkRuntime implements AgentRuntime {
               throw error;
             }
             providerRequests += 1;
-            return payload;
+            return requestPayload;
           };
           if (recovery && options.forceRequiredToolChoice === true) {
             pi.on("before_provider_request", (event) => {
@@ -382,6 +407,7 @@ export class PiSdkRuntime implements AgentRuntime {
     };
     const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
       resetInactivityTimer();
+      checkpointCadence?.observe(event);
       options.onEvent?.(event);
       const structuralEvent = event as { type?: unknown; message?: { stopReason?: unknown } };
       if (typeof structuralEvent.type === "string" && /^[a-z0-9_-]{1,64}$/u.test(structuralEvent.type)) {
