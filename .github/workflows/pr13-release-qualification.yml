@@ -1,0 +1,52 @@
+name: PR13 immutable package reproducibility
+on:
+  push:
+    branches: [codex/pr13-release-qualification]
+    paths: [.github/workflows/pr13-release-qualification.yml]
+permissions:
+  contents: read
+concurrency:
+  group: pr13-package-reproducibility
+  cancel-in-progress: false
+jobs:
+  qualify:
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: c46c5783253db5516dd91c503a69db926579425e
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Install the pinned packaging toolchain
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+          npm ci
+      - name: Check immutable source and run documented reproducibility gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = c46c5783253db5516dd91c503a69db926579425e
+          test "$(git rev-parse HEAD^{tree})" = 0c9b57b1f53b93e4949ef5d5fd52e8dede225101
+          test -z "$(git status --porcelain)"
+          set +e
+          npm run verify:pack-reproducibility > "$RUNNER_TEMP/pr13-pack-reproducibility.log" 2>&1
+          status=$?
+          printf '%s\n' "$status" > "$RUNNER_TEMP/pr13-pack-reproducibility.exit"
+          cat "$RUNNER_TEMP/pr13-pack-reproducibility.log"
+          exit "$status"
+      - name: Retain the actual verification result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr13-c46c578-package-reproducibility-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/pr13-pack-reproducibility.log
+            ${{ runner.temp }}/pr13-pack-reproducibility.exit
+          if-no-files-found: warn
+          retention-days: 14
