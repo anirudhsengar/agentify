@@ -1,47 +1,167 @@
-name: Temporary PR13 offline debugging snapshot
+name: Temporary PR13 verified repair transfer
 on:
   pull_request:
     types: [labeled]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  snapshot:
+  transfer:
     if: >-
       github.actor == github.repository_owner &&
-      github.event.label.name == 'agentify-debug-snapshot' &&
+      github.event.label.name == 'agentify-transfer-tested' &&
       github.event.pull_request.number == 13 &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: 23a04fcc1d619fb075e7407d113ea4a340f454ff
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: "22.19.0"
-      - name: Install locked development dependencies without provider secrets
-        run: |
-          npm install --global npm@11.19.0
-          npm ci
-      - name: Export only public source and toolchain files
+      - name: Apply the reviewed patch to its immutable source
         run: |
           set -euo pipefail
-          out="$RUNNER_TEMP/pr13-offline"
-          mkdir -p "$out"
-          git rev-parse HEAD > "$out/candidate-sha.txt"
-          git ls-tree -r HEAD > "$out/source-git-tree.txt"
-          git archive --format=tar HEAD | gzip -n > "$out/source.tar.gz"
-          tar --exclude='*.ttf' --exclude='*.otf' --exclude='*.woff' --exclude='*.woff2' --exclude='*.eot' -czf "$out/dependencies.tar.gz" node_modules
-          cp -- "$(command -v node)" "$out/node"
-          tar -czf "$out/npm.tar.gz" -C "$(npm root --global)" npm
-          cd "$out"
-          sha256sum source.tar.gz dependencies.tar.gz node npm.tar.gz source-git-tree.txt > SHA256SUMS
+          test "$(git rev-parse HEAD)" = 23a04fcc1d619fb075e7407d113ea4a340f454ff
+          cat > "$RUNNER_TEMP/pr13-tested.patch" <<'PATCH'
+          diff --git a/CHANGELOG.md b/CHANGELOG.md
+          index 9c1957a..9b47682 100644
+          --- a/CHANGELOG.md
+          +++ b/CHANGELOG.md
+          @@ -4,6 +4,10 @@ All notable changes to Agentify are documented here.
+           
+           ## [Unreleased]
+           
+          +- Resolve SDK tool paths from the trusted session repository root, not the host working directory or untrusted event metadata; retain traversal, symlink, writable-root and protected-path checks.
+          +
+          +- Reserve the existing final MiniMax tracer calls for either a typed concern report or an evidence-backed rejection, including after an invalid submission. Preserve reasoning, source validation and all call, read, time and cost limits.
+          +
+           - Derive explorer overlap from the shared output envelope, admitting four bounded readers under the default budget while preserving one full parent continuation; tighter envelopes retain three- or two-reader ceilings.
+           
+           - Bind a substantive rejection's exact source-symbol name to one unique tracked declaration and only its direct symbol-referencing tests. Filename similarity, missing declarations, duplicate same-name definitions, and unrelated files remain unresolved.
+          diff --git a/SECURITY.md b/SECURITY.md
+          index f33c7e4..b6e5285 100644
+          --- a/SECURITY.md
+          +++ b/SECURITY.md
+          @@ -38,7 +38,9 @@ paths, state transitions, and evidence before performing bounded mutations.
+           ## Repository and filesystem safety
+           
+           All repository paths are normalized and must remain inside the physical
+          -repository root. Writable operations reject absolute paths, traversal, protected
+          +repository root. SDK-relative tool paths resolve against the trusted session
+          +repository root, never the host working directory or model-supplied event
+          +metadata. Writable operations reject absolute paths, traversal, protected
+           paths, unsafe symlinks, and roots that cannot be verified. Managed files require
+           recognized ownership markers and expected bytes. User-owned files are preserved.
+           
+          diff --git a/src/core/audit/defense-hook.ts b/src/core/audit/defense-hook.ts
+          index bb5b019..c2f65d5 100644
+          --- a/src/core/audit/defense-hook.ts
+          +++ b/src/core/audit/defense-hook.ts
+          @@ -124,7 +124,9 @@ export function makeDefenseHook(
+             );
+           
+             return async (event) => {
+          -    const cwd = path.resolve((event as { cwd?: string }).cwd ?? process.cwd());
+          +    // SDK tool events have no cwd. Resolve exactly as the session tools do,
+          +    // from the trusted repository policy rather than process or event state.
+          +    const cwd = policy.repositoryRoot;
+           
+               if (event.toolName === "bash") {
+                 const command = (event.input as { command?: string } | undefined)?.command ?? "";
+          diff --git a/src/core/audit/spawn-explorer-tool.ts b/src/core/audit/spawn-explorer-tool.ts
+          index 4147085..8631035 100644
+          --- a/src/core/audit/spawn-explorer-tool.ts
+          +++ b/src/core/audit/spawn-explorer-tool.ts
+          @@ -1411,7 +1411,6 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions):
+                                               mode === "concern_tracer"
+                                               && submission.concern === null
+                                               && submission.rejection === null
+          -                                    && !canRejectConcern
+                                               && shouldForceConcernSubmission(
+                                                   providerCalls,
+                                                   maxProviderCalls,
+          @@ -1422,7 +1421,9 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions):
+                                               payload = forceProviderToolChoice(
+                                                   payload,
+                                                   subAgentModel.api,
+          -                                        "submit_concern_report",
+          +                                        canRejectConcern
+          +                                            ? ["submit_concern_report", "submit_concern_rejection"]
+          +                                            : "submit_concern_report",
+                                                   subAgentModel.provider,
+                                               );
+                                           }
+          diff --git a/src/core/pi-sdk-runtime.ts b/src/core/pi-sdk-runtime.ts
+          index a193733..24b8e77 100644
+          --- a/src/core/pi-sdk-runtime.ts
+          +++ b/src/core/pi-sdk-runtime.ts
+          @@ -41,18 +41,23 @@ function record(value: unknown): value is Record<string, unknown> {
+            * Unknown APIs retain their existing prompt/recovery behavior instead of
+            * receiving a guessed wire shape.
+            */
+          -export function forceProviderToolChoice(payload: unknown, api: string, toolName: string, provider?: string): unknown {
+          +export function forceProviderToolChoice(payload: unknown, api: string, toolName: string | readonly string[], provider?: string): unknown {
+             if (!record(payload)) return payload;
+             if (api === "anthropic-messages" && (provider === "minimax" || provider === "minimax-cn")) {
+               // MiniMax's Messages contract supports only auto/none, not named forcing:
+               // https://platform.minimax.io/docs/api-reference/text-chat-anthropic
+               // Restrict available tools without disabling the configured reasoning.
+          +    const allowedNames = typeof toolName === "string" ? [toolName] : toolName;
+          +    if (allowedNames.length === 0) return payload;
+               return {
+                 ...payload,
+          -      ...(Array.isArray(payload.tools) ? { tools: payload.tools.filter((tool) => record(tool) && tool.name === toolName) } : {}),
+          +      ...(Array.isArray(payload.tools) ? { tools: payload.tools.filter((tool) => record(tool) && typeof tool.name === "string" && allowedNames.includes(tool.name)) } : {}),
+                 tool_choice: { type: "auto" },
+               };
+             }
+          +  // Alternative terminal sets are currently supported only by the verified
+          +  // MiniMax auto-choice contract. Never guess forcing shapes for other APIs.
+          +  if (typeof toolName !== "string") return payload;
+             if (api === "anthropic-messages") {
+               const next = { ...payload };
+               delete next.output_config;
+          PATCH
+          git apply --check "$RUNNER_TEMP/pr13-tested.patch"
+          git apply "$RUNNER_TEMP/pr13-tested.patch"
+          git diff --check
+      - name: Upload only locally verified bytes as unreferenced Git blobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, os, pathlib, urllib.request
+          expected = {
+              'src/core/audit/defense-hook.ts': 'fd126ec2da3a336cd822b5d65459e7a1d49b7550b23384ccf0ee9d372e80baf4',
+              'src/core/audit/spawn-explorer-tool.ts': '3c914007da4289644c60214ad3652ac280d5041ddf540d9b77324b1b28f47477',
+              'src/core/pi-sdk-runtime.ts': '7000edc76bcc8121ef0775a64b370416a7335d052418263916956b236cf57533',
+              'CHANGELOG.md': '8899f9ee349c91ca42b8d418fc097d254d157a3424632ab5fae6ec75c6c50334',
+              'SECURITY.md': 'a737be945cdd814fa9657b5f0c210cb60da0df808af9791eda702bf183bcc073',
+          }
+          prepared = []
+          for name, digest in expected.items():
+              data = pathlib.Path(name).read_bytes()
+              assert hashlib.sha256(data).hexdigest() == digest, name
+              sha = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+              prepared.append((name, data, sha, digest))
+          manifest = []
+          for name, data, sha, digest in prepared:
+              body = json.dumps({'content': base64.b64encode(data).decode(), 'encoding': 'base64'}).encode()
+              request = urllib.request.Request('https://api.github.com/repos/anirudhsengar/agentify/git/blobs', data=body,
+                  headers={'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json',
+                      'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'X-GitHub-Api-Version': '2026-03-10'}, method='POST')
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  assert response.status == 201
+                  returned = json.load(response)
+              assert returned['sha'] == sha, name
+              manifest.append({'path': name, 'sha': sha, 'sha256': digest, 'size': len(data)})
+          output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verified-blobs.json'
+          output.write_text(json.dumps(manifest, indent=2) + '\n')
+          print(output.read_text())
+          PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: pr13-offline-23a04fc-${{ github.run_id }}
-          path: ${{ runner.temp }}/pr13-offline
+          name: pr13-verified-blobs-${{ github.run_id }}
+          path: ${{ runner.temp }}/verified-blobs.json
           if-no-files-found: error
-          compression-level: 0
           retention-days: 1
