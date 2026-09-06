@@ -112,6 +112,16 @@ export function resolveValidationInvocation(
         "Windows .bat/.cmd validation scripts must identify a regular local file",
       );
     }
+    // A regular final file can still be reached through an ancestor junction
+    // or symlink. Compare physical paths against the physical repository root;
+    // aliases of the root and links that remain inside it are still valid.
+    const physicalRelative = path.relative(fs.realpathSync(root), fs.realpathSync(resolved));
+    if (physicalRelative.startsWith("..") || path.isAbsolute(physicalRelative)) {
+      throw new TaskLifecycleError(
+        "invalid_input",
+        "Windows .bat/.cmd validation scripts must resolve inside the repository cwd",
+      );
+    }
     // cwd is an OS process option, never part of the command text. This also
     // handles checkout roots containing shell metacharacters without expansion.
     const command = [`.\\${relative.replaceAll("/", "\\")}`, ...argv.slice(1)]

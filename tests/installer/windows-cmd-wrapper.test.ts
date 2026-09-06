@@ -129,3 +129,37 @@ test("validation invocation resolves Windows .bat wrappers through cmd.exe", () 
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+for (const scenario of ["outside-parent", "inside-parent", "root-alias"] as const) {
+  test(`Windows batch invocation confines physical paths: ${scenario}`, () => {
+    const container = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-batch-realpath-"));
+    const root = path.join(container, "repository");
+    const outside = path.join(container, "outside");
+    const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+    try {
+      fs.mkdirSync(root);
+      fs.mkdirSync(outside);
+      fs.mkdirSync(path.join(root, "scripts"));
+      fs.writeFileSync(path.join(root, "scripts", "probe.cmd"), "@echo off\r\n");
+      fs.writeFileSync(path.join(outside, "probe.cmd"), "@echo off\r\n");
+      const target = scenario === "outside-parent" ? outside : path.join(root, "scripts");
+      fs.symlinkSync(target, path.join(root, "linked"), "junction");
+      const alias = path.join(container, "repository-alias");
+      fs.symlinkSync(root, alias, "junction");
+      Object.defineProperty(process, "platform", { value: "win32" });
+      const cwd = scenario === "root-alias" ? alias : root;
+      if (scenario === "outside-parent") {
+        assert.throws(() => resolveValidationInvocation(["linked/probe.cmd"], cwd),
+          /inside the repository cwd/,
+          "a regular batch file reached through an escaping parent link must be rejected");
+      } else {
+        const invocation = resolveValidationInvocation(["linked/probe.cmd", "test path"], cwd);
+        assert.equal(invocation.command, "cmd.exe");
+        assert.deepEqual(invocation.args, ["/d", "/v:off", "/s", "/c", '"".\\linked\\probe.cmd" "test path""']);
+      }
+    } finally {
+      Object.defineProperty(process, "platform", platform);
+      fs.rmSync(container, { recursive: true, force: true });
+    }
+  });
+}

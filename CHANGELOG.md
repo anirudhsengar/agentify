@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Reject Windows batch scripts reached through a parent junction or symlink outside the repository while preserving in-repository links and root aliases. Exercise native batch, junction and credential boundaries in Windows CI.
+
 - Enforce pending map checkpoints at tool execution, not only in provider tool-choice hints. Block further inspections until a validated write, and retain SDK-level tool failures correctly in audit logs.
 
 - Dispatch the mandatory initial scout after a validated topography checkpoint instead of depending on the parent model to choose discovery. Preserve the selected model, shared budgets, actual source receipts, and all installation gates.
