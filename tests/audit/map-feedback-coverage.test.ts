@@ -25,6 +25,10 @@ for (const toolName of ["write_map", "write_map_delta"] as const) {
           ["add", "."], ["commit", "-qm", "map feedback fixture"],
         ]) execFileSync("git", args, { cwd, stdio: "pipe" });
         const map = makeValidCodebaseMap();
+        // The shared fixture includes legacy specialist evidence. This test
+        // deliberately exercises feedback before either evidence form exists.
+        delete map.expert_evidence;
+        delete map.concern_evidence;
         map.type_contract_surface.typescript_interfaces = [
           { path: "src/types.ts", name: "Config", fields: ["enabled"] },
         ];
