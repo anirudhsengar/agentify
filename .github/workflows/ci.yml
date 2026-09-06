@@ -39,6 +39,13 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+      - name: Provision SDK search tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y ripgrep fd-find
+          if ! command -v fd >/dev/null; then sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd; fi
+          rg --version
+          fd --version
       - run: npm ci
       - name: Run complete test suite
         id: test_all
@@ -91,6 +98,13 @@ jobs:
         with:
           node-version: "22.19.0"
           cache: npm
+      - name: Provision SDK search tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y ripgrep fd-find
+          if ! command -v fd >/dev/null; then sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd; fi
+          rg --version
+          fd --version
       - run: npm ci
       - run: npm run test:parity
       - run: npm run test:package
