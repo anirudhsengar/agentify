@@ -8,7 +8,7 @@ jobs:
   stage:
     if: >-
       github.actor == github.repository_owner &&
-      github.event.label.name == 'agentify-stage-windows' &&
+      github.event.label.name == 'agentify-stage-windows-source' &&
       github.event.pull_request.number == 13 &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
@@ -20,32 +20,34 @@ jobs:
         with:
           ref: 199f4e3a834a0e693d514e8b3ca864795529ed57
           persist-credentials: false
-      - name: Stage only verified source objects
+      - name: Stage only verified ordinary source objects
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
-          import base64, gzip, hashlib, json, os, pathlib, subprocess, urllib.request
-          encoded = 'H4sIAAAAAAAC/61Ya2/bRhb9rl9xly1QCRKph2VJVuDdZFNvt9iiKZJ2i0UcbEfkUJqY4rAzpG0hzX/fc2dIifILcbH5IEvkzJ37OOfcO0lUmlIYrlVJYhjhz6ZaDW+0uUozfWOHsYp224xWj77qqDyRtzRbyLM4GUfRaiLFYhzTeDSaTaedMAyfsNvp9/tP2X75ksL5dDCjPj4nE8Lvj3pllx06/FNpmOswVZm0YaqrPFmSNEab9hojS5mXSudhInZ2SfMOdfpEN/Adp4Uqt6XIMmmW/JQoF1u5pF/9W9q/pRWbF2bnV5kqt6HOl3szmSilLf3LUm2lrspwq/IKT5fIh39hS1nY+hyikCrLb0XM3iHujYyvsO9lMjmZTsdiupCn49lqFp9MhRTTVEzHp6djcTKSJyORLkYn9BVdzxprHFG5WR5+EhXSWGXLMDYy4RSIDCel+JSPuWBlWRVIaSJfLiaj+WwyX8xGk9l8Oorns/RkNlqcrkYyjadzcTJO5eloMmIn5k84wcbCa/aE0xVMJtH4LBoF7SWxQOhLyovtwS8k2D2hWB0e+tpc3EoTKyvxs1TXklaijDcD+ljlLgoSeUKHkJvCKWkPZ3rr8AzoV9tCm5JKe4sfXETiDzvcl37Y1DjeJuGNEQXyGvGaqLT31hZGx9LaECfk0oQyv1ZG51v4cmdLKexVmKlUxrs4k8NrkalEOJj6rc3yTp/BnMhCgmt5vAtFlaiyZoFPyE9GJ5WP/bCO3LoOHaG1WlV5WTVgZYadjQZz6o9HM/w5MIy3FSK+EmsZ2q2+ksfn4Y1MmgUu3zYWaaozfOHVndAtljIBtt6Xu0I6bA986IN70XyoqffohntkfcjGU6FSi370f6Vf0tbQ1/989eN3Fz+8+S7aJtC29s9aKyfTEzlPJlF0Es+ni3hxrJVHG7w+Hj3iijlJnA4WXK5XWQYYl2KVSYo3Il9LwEvTqzVjPwUGjKRExxXjDxXbSCMjru5XX9H7X3IjMymsTD6wIob0Vn6UcbmXPkcrFNaoAqA1kkmaULkxulpvSKD8BlYPtNOGLHRb5VeELFoFcpUbiY2FtqrUZkc3Gwg1FUZaaa5Vvoa6hq3XvNU6NBmtkc1MwTkb/Xm+w/4+mtffR8ykkC7yVJsYbgA97MNWFORKX2iVI1AB/mudkbyVccX2B5xh0nm2Y3vg9zVCM25RGG+0gq0N74zo75mOryitDOI23DoAY4ctAhRVhpzVLEceb4wq5cBHK0sBy+++/VeYyWuZ+fNTobIKqaJYGwM7/ngHdcr02ro6hvStsoUrFOd6C3PC5VLlyiXDxqgFibSEQ+3jS13oNaRss2sF77qdFAnptKYXJwgZZtt1ubcQTfYQ27RGTRKFIyDvuwgy5Arry26BrZhPchsGZDfYD05UyVoyo8G6iv3TFRcDAUqGmU8IGN40XqeItGYSR8dUe3fx+pe33//8H8+01q+aaKuZPJ0sTqMIBF6cLubHRGuv9zxrP3HCOAfF+vgcj5lp8KdB9JFrpRG59RLygsR2pdaVrizpG0i43agCoaWsM24nkJgj6wmT8OIWNcmRAiQmR8cgBo+FBiKZBMkCp5XdtOgTss2EDo2C0ImARpE5azVa3TB0dLxILCudrwr02xNEJoxrDE0ZZi5U2/McHBa2Q1sgEmcAMNKoVMXuuOiOMrQccQHqXDZVBhB0ds0jVYvfYazzVOXudeaZDORuUPPfK81IycAIg4QIs3aCxY1CWda2hF5VpX5b5Z2Q8QFAiR0eytsCyXcU5ce5xvkS2NFo0EwDy5rU6sCHDRF4w6Tq9J/0z7PTxYJ2t9lZpCJ72OtO/wm36bled/qPuP3qKdmNRc5S5akHuvs6MSA6/bYk7yNpiS9L7osvEmTs2kKvOn1bFTw5ySSinzegvlcSC5Q7xSwrk7dPaOEFWqNhl968AyLzZKVv9wWpdZfTh0SqPM4qp0IYBb+x9COPbAgf5pxiDRrx1AarMJ0zeK45/04Um173+jAAH4uINfEQ+iq/YBoD7J+1vJahs1kcz89mUXSWzmQC749k6FkGvU49awsL2Xg84YmB/4xnLGWAEw+8aYOgGuH/3hv4Pr/WnvPdw0UqaNgfAVbDCLNwu6LNmLCtMD+rpBk/YHtdZcKwuAFvDMVg0NjsvfDfPvvpbzgEupv1IGK9nlGNyU2BISt5fwxhbmHgZuVqKLE3d6BGRK/1lplzh8Uk1oLl/Gla7A02DEB/dKONY0We1EQpN5gdPDmadsEgw6HefZeuyBuD1uDU5sS3jeCcO7eiRoC6qcV3kfHDd7s87vKJvQHde1xrVK9X+6pS6t41HqGnmNL+igtaN4iioEd//OGPU/bVCgZwV723qdejT821iXN+gwZ1Qz8Dej80yLvgC3f3cLcKVO4i/a/Ki6pEuft/AkJ1RO2226pKfJMc7DYxf/ZoQpnwmpStBaa+kEFe62HONVhgoWzKGOstD064a9yWLGW8NbN6bw5zdZLxIFZfEFzdeS7LWXpYnLyAc9fEEG4wDaD5upswrz6ot7foS98cek7vf4suL7/+1NQclS0yEUuM9t1gGAwouLwMep9/G1AURaxukc0wc3bHvQ/HWvacW+vqOatrJRvJ8Sw5XUTR6CyOT8Znx0r2HHteyJ6zw+nY5GxwAh3jP+6uyi+7wVFbaXSrwY+lNuSoNmv38oGzIjQcZLnb89Vham0dqYCiAX3i0bQyFoVZYtarMLK764P/QZ+9hgF6/K3f6eMldX2FbSzRkZRmmL0P6v4b+vbNZfXQbj1gWIVOYoIPGMM8UGr+uVh/Ox7AWuHWo4u9I29L+vpT4wYjqNuj8782hG5w6FAMSpxz7NurpJTbwiXAacNHtNmutlG5LRJluhCfQNS3y9C5ETZKFAZ7+fGmnTzWiubM7M/iYPdsDo53NYPKYxvr93d2gTIlcr/FtjcrvsZGuGa8ucl/MjxWlbtv9wNutxYEmGo2Bb2/1MZ4sNjrnU+HMgflffHgq9qjR94eomATOLXWuUO23AZ3H/wH+t3Tm9hro1eSxTPgYryUuIgBYumlucyDLzJZ+/vFpnyG0TyQUuR3j+vz83O6i2v6276AS3o89LabdYt2TvpDBvd38grp3Wza/D0PHXW+AHA1xx51wh/pFj18XI2wRDLnGoQ9hCvWD+hTBbkIIG8nk8DrRNtrblZ3k9pSAiTUx7VszyK+wz9ZiVbjJqgJbuZQUu7gtutl4Kmx732d8OEBIR8G7Gpv0P6P2+Gj7Xl4tC44DIKHO8lDsxxYKgruqPUtx11r3EDgZr+P7r8UWpX4TDLDxaMVqU9qSxrPnxsoCuj+F5hh1ET94l4q5e+VyLqHc6K6oWN301Qe2JVIWVzc3QnMAzXvg6E7e3i9BAXdN0f3YYzPb4IAQ4J39fLy4Gvb1eCbD63E1DORH6Szlqo9A7zN1yOmNN3xQK0v6JH9vU/u1+fO/wDiHEEFehoAAA=='
-          encoded = encoded.replace('4RSIDCel+', '4RSIDKel+')
+          import base64, gzip, hashlib, json, os, pathlib, re, subprocess, urllib.request, urllib.error
+          url = 'https://raw.githubusercontent.com/anirudhsengar/agentify/07f2c979ee3cc1f73085e1d0ba31327b7267eaf4/.github/workflows/pr13-debug-snapshot.yml'
+          with urllib.request.urlopen(url, timeout=30) as response:
+              original = response.read()
+          assert hashlib.sha1(b'blob ' + str(len(original)).encode() + b'\0' + original).hexdigest() == '9cb47532cca2eb0bd27ce3cdfd6534fce4e8fa93'
+          encoded = re.search(r"encoded = '([^']+)'", original.decode()).group(1).replace('4RSIDCel+', '4RSIDKel+')
           patch = gzip.decompress(base64.b64decode(encoded, validate=True))
           assert hashlib.sha256(patch).hexdigest() == 'e5b6d76e8409c7203ad66a86d0a1ef8d142dce8096d403571e03b4377955acc0'
           subprocess.run(['git', 'apply', '--index', '-'], input=patch, check=True)
-          expected = {'.github/workflows/ci.yml': 'b2ea81c6864b54e9a10be182c7903d8335021ad1', 'CHANGELOG.md': '3c748c85b08c2258edf70ab031eab4cdc7a6f7c3', 'SECURITY.md': '6c38587c480d8de42a03aa3a8c2a057441bb143d', 'src/core/task-lifecycle/validation-runner.ts': '9f6edded810effc38c27fb688901aa59263b231b', 'tests/installer/windows-cmd-wrapper.test.ts': '09cc3199042c81c2ecaf4a416d147e2e6dbfb54f'}
-          tree_sha = subprocess.check_output(['git', 'write-tree'], text=True).strip()
-          assert tree_sha == '03be124288948c59442656a2022b32991657e9f8', tree_sha
-          def post(endpoint, payload):
-              req = urllib.request.Request('https://api.github.com/repos/anirudhsengar/agentify/git/' + endpoint, data=json.dumps(payload).encode(), headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'}, method='POST')
-              with urllib.request.urlopen(req, timeout=30) as response:
-                  return json.load(response)
-          entries = []
+          assert subprocess.check_output(['git', 'write-tree'], text=True).strip() == '03be124288948c59442656a2022b32991657e9f8'
+          expected = {'CHANGELOG.md': '3c748c85b08c2258edf70ab031eab4cdc7a6f7c3', 'SECURITY.md': '6c38587c480d8de42a03aa3a8c2a057441bb143d', 'src/core/task-lifecycle/validation-runner.ts': '9f6edded810effc38c27fb688901aa59263b231b', 'tests/installer/windows-cmd-wrapper.test.ts': '09cc3199042c81c2ecaf4a416d147e2e6dbfb54f'}
           for name, sha in expected.items():
+              assert not name.startswith('.github/')
               data = pathlib.Path(name).read_bytes()
               assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == sha
-              blob = post('blobs', {'content': base64.b64encode(data).decode(), 'encoding': 'base64'})
-              assert blob['sha'] == sha
-              entries.append({'path': name, 'mode': '100644', 'type': 'blob', 'sha': sha})
-          result = post('trees', {'base_tree': 'a2e7d1f554f5a58bca8dddd7023fc4612398f947', 'tree': entries})
-          assert result['sha'] == tree_sha
-          print('Verified source tree:', tree_sha)
+              req = urllib.request.Request('https://api.github.com/repos/anirudhsengar/agentify/git/blobs', data=json.dumps({'content': base64.b64encode(data).decode(), 'encoding': 'base64'}).encode(), headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'}, method='POST')
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      result = json.load(response)
+              except urllib.error.HTTPError as error:
+                  print('GitHub rejected source staging:', error.code, error.read(2000).decode())
+                  raise
+              assert result['sha'] == sha
+              print(name, sha)
+          print('Ordinary source blobs verified; no workflow, commit or ref was written.')
           PY
