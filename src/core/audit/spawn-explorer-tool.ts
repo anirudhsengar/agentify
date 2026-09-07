@@ -94,6 +94,7 @@ const MAX_EXPLORER_READS = 32;
 const MAX_EXPLORER_PROVIDER_CALLS = 40;
 const MAX_EXPLORER_RESPONSE_TOKENS = 12_000;
 const PARENT_RESPONSE_RESERVE_TOKENS = 128_000;
+const SPECIALIST_REPAIR_MODES = ["concern_scout", "concern_tracer"] as const;
 
 // The 9 dimension-shaped modes, the two concern modes that find and trace what
 // this repository's specialties actually are, plus a custom mode that takes an
@@ -903,6 +904,8 @@ export type CreateExplorerSession = (
 
 export interface SpawnExplorerToolOptions {
     agentDir: string;
+    /** Application-owned phase restriction; never supplied by the model. */
+    purpose?: "specialist-repair";
     /**
      * Audit state dir relative to the repo root, without a trailing slash. Used as the
      * destination for sub-agent logs and as the source of truth for
@@ -1019,6 +1022,11 @@ function extractSessionCostUsd(messages: ReadonlyArray<unknown>): number | null 
 }
 
 export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): ToolDefinition {
+    const specialistRepair = toolOptions.purpose === "specialist-repair";
+    const parameters = specialistRepair ? Type.Object({
+        ...SpawnExplorerParams.properties,
+        mode: StringEnum(SPECIALIST_REPAIR_MODES),
+    }, { additionalProperties: false }) : SpawnExplorerParams;
     const maxTotalSpawns = toolOptions.maxTotalSpawns ?? DEFAULT_MAX_TOTAL_SPAWNS;
     const outputCapProbe = {};
     const explorerResponseReserve = capProviderOutputTokens(
@@ -1044,7 +1052,12 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
     return defineTool({
     name: "spawn_explorer",
     label: "Spawn Explorer",
-    description:
+    description: (specialistRepair
+        ? "Repair only the supplied specialist obligations with an explicit concern_scout or concern_tracer mode. "
+            + "Generic coverage is already closed; do not inspect audit maps or history, rerun coverage playbooks, or dispatch custom explorers. "
+            + "A scout is permitted only when its current-HEAD receipt is missing or an exact compiler-uncovered cluster authorizes focused supplementation. "
+            + "A tracer must use the exact concern identity and observed source; recorded bodies may use digest-bound amendments. "
+        :
         "Spawn a fresh, stateless in-process sub-agent to perform a single bounded exploration. " +
         "The sub-agent does not inherit your context. Returns a structured ## Report tailored to the mode. " +
         "There are 12 modes. The first 9 are dimension-shaped fixed modes: " +
@@ -1057,22 +1070,30 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         "A successful application-attested concern_scout on current HEAD blocks duplicate broad scouting; " +
         "one focused supplemental scout is allowed only for a named compiler-uncovered cluster. " +
         "The final mode is `custom`: the parent supplies self-contained read-only " +
-        "instructions based on gathered repository evidence through `system_prompt`. " +
+        "instructions based on gathered repository evidence through `system_prompt`. ") +
         `Hard dispatch budgets: max ${maxTotalSpawns} total sub-agents per audit, ` +
         `max ${maxConcurrentSpawns} concurrent sub-agents, and max ${maxSubagentDurationMs}ms ` +
         "wall-clock time per sub-agent" +
         (maxTotalCostUsd === null ? "" : `, plus max $${maxTotalCostUsd.toFixed(2)} provider-reported sub-agent cost`) +
         ". Dispatch as many as the topic decomposition needs within those bounds. " +
-        "Default mode: topography. Reports exceeding 16 KB fail closed and cannot establish " +
+        (specialistRepair ? "An explicit concern mode is required. " : "Default mode: topography. ") +
+        "Reports exceeding 16 KB fail closed and cannot establish " +
         "an explorer receipt. target_path is permanently domain-locked to ctx.cwd. " +
         "Use `summary` for a one-line focus hint passed as " +
         "additional context.",
-    parameters: SpawnExplorerParams,
+    parameters,
 
     async execute(_id, params, signal, _onUpdate, ctx) {
         const mode = params.mode ?? "topography";
         if (signal?.aborted) {
             return makeBudgetError("Error: explorer cancelled by parent audit", {}, stateDir);
+        }
+        if (specialistRepair && !SPECIALIST_REPAIR_MODES.some(allowed => allowed === mode)) {
+            return {
+                content: [{ type: "text", text: "Error: semantic repair permits only concern_scout and concern_tracer. Use the supplied compiler and receipt obligations; generic coverage is already closed. No explorer was dispatched." }],
+                isError: true,
+                details: { purpose_refused: true },
+            };
         }
 
         // Validate the target-path domain lock.

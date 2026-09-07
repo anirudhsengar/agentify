@@ -428,6 +428,11 @@ class ProgressiveRepairRuntime implements AgentRuntime {
       this.repairCalls += 1;
       this.repairToolSets.push([...options.tools]);
       this.repairPrompts.push(options.userPrompt);
+      assert.doesNotMatch(options.systemPrompt, /Use four bounded direct reads|### Direct scout/,
+        "coverage-complete repair must not inherit the initial-audit scouting instructions");
+      assert.match(options.systemPrompt, /coverage is already closed/i);
+      assert.equal("spawnExplorerPurpose" in options ? options.spawnExplorerPurpose : undefined, "specialist-repair",
+        "repair must restrict the actual explorer dispatcher, not rely only on its prompt");
       const budget = options.auditResourceBudget;
       assert.ok(budget, "semantic repair must share the audit budget");
       assert.ok(options.onProviderRequest);

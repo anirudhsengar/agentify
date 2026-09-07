@@ -29,6 +29,7 @@ import { compileSpecialistEvidence } from "../../src/core/audit/specialist-compi
 import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 import { createWriteMapTools } from "../../src/core/audit/write-map-tools.ts";
 import { assessSpecialistReviews, specialistReviewDigest } from "../../src/core/audit/specialist-review.ts";
+import { AuditResourceBudget } from "../../src/core/audit/resource-budget.ts";
 
 const REPORT = `## Report
 \`\`\`json
@@ -61,6 +62,34 @@ const REPORT = `## Report
   "blocker_reason": null
 }
 \`\`\``;
+
+test("semantic-repair mode restrictions are enforced even when tool schema validation is bypassed", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-repair-mode-"));
+  try {
+    let sessions = 0;
+    const budget = new AuditResourceBudget();
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd, stateDir: ".agentify/runtime/audit", purpose: "specialist-repair",
+      explorerModel: { id: "fixture", provider: "fixture", api: "openai-completions", maxTokens: 12_000 } as Model<Api>,
+      resourceBudget: budget,
+      createSession: async () => { sessions += 1; throw new Error("forbidden child session"); },
+    });
+    for (const mode of [undefined, "topography", "module_graph", "type_tracer", "conventions",
+      "operational", "security", "pitfalls", "validation", "gap_filler", "custom"]) {
+      const result = await tool.execute("unoffered-mode", { target_path: ".", ...(mode ? { mode } : {}) } as never,
+        undefined, undefined, { cwd } as never) as { isError?: boolean; details?: { purpose_refused?: boolean } };
+      assert.equal(result.isError, true, mode);
+      assert.equal(result.details?.purpose_refused, true, mode);
+    }
+    assert.equal(sessions, 0, "a forbidden mode must be refused before child session creation");
+    assert.equal(budget.snapshot().explorer_spawns, 0);
+    assert.equal(budget.snapshot().model_calls, 0);
+    assert.equal(budget.snapshot().unreported_calls, 0);
+    assert.deepEqual(fs.readdirSync(cwd), [], "refusal must not create audit state");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
 
 test("the simple tracer envelope retains the complete nested concern contract", () => {
   const prompt = fs.readFileSync(

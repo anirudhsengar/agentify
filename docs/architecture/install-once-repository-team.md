@@ -337,6 +337,15 @@ event; model work cannot consume the cleanup interval itself.
 Semantic-repair parents receive the current unresolved obligations directly and
 may only dispatch bounded explorers or apply a concern delta; repository reads
 remain confined to those explorers, preventing broad map and tree rereads.
+They use a dedicated repair system prompt rather than the initial auditor's
+scouting and coverage-checkpoint instructions. The application restricts their
+explorer schema and execution boundary to explicit `concern_scout` and
+`concern_tracer` modes; dimension playbooks and custom explorers are refused
+before child-session creation or shared-budget admission. A missing current-HEAD
+scout and compiler-authorized focused supplementation remain available through
+the existing receipt guards. Initial-audit exploration and automatic scouting
+are unchanged. No refused dispatch earns a receipt or spends child-call credit,
+and all grounding, review, ownership, cancellation and finalization gates remain.
 Uncovered JavaScript and TypeScript clusters are ordered by the number of
 distinct tracked modules connected through current-HEAD relative dependency
 edges, with cluster identity as the stable tie-break. Repair handles central

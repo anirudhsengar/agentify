@@ -237,6 +237,7 @@ export class PiSdkRuntime implements AgentRuntime {
         createSpawnExplorerTool({
           agentDir: options.spawnExplorerAgentDir,
           stateDir: options.spawnExplorerStateDir,
+          purpose: options.spawnExplorerPurpose,
           explorerModel: explorerModelForSpawn,
           resourceBudget: options.auditResourceBudget,
           maxTotalSpawns: options.auditResourceBudget?.limits.maxExplorerSpawns,
@@ -265,6 +266,7 @@ export class PiSdkRuntime implements AgentRuntime {
     // Only the parent map audit schedules periodic checkpoints. Explicit
     // terminal-tool protocols and other roles retain their existing behavior.
     const checkpointCadence = options.auditResourceBudget
+      && options.spawnExplorerPurpose !== "specialist-repair"
       && options.executionPolicy.mode === "audit-readonly"
       && options.tools.includes("spawn_explorer")
       && options.tools.includes("write_map_delta")

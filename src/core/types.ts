@@ -119,6 +119,8 @@ export interface AgentRuntimeSessionOptions {
    * Vendor-neutral audit state dir for the `spawn_explorer` tool.
    */
   spawnExplorerStateDir?: string;
+  /** Restrict semantic repair to concern work after generic coverage closes. */
+  spawnExplorerPurpose?: "specialist-repair";
   /** Internal aggregate budget shared across audit and explorer sessions. */
   auditResourceBudget?: AuditResourceBudget;
 }

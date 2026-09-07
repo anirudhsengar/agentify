@@ -14,6 +14,101 @@ import { assessAuditCompletion, COVERAGE_DIMENSIONS } from "../../src/core/audit
 import { createReadOnlyExecutionPolicy } from "../../src/core/security/execution-policy.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
+test("actual SDK semantic repair refuses coverage explorers before child admission while permitting a missing scout", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-repair-scope-sdk-"));
+  const stateDir = ".agentify/runtime/audit";
+  const payloads: Array<Record<string, unknown>> = [];
+  const outcomes: Array<{ isError: boolean; result: unknown }> = [];
+  let parentCalls = 0;
+  let scoutCalls = 0;
+  const modes = ["topography", "gap_filler", "custom", "concern_scout"];
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    const payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+    payloads.push(payload);
+    const scout = payload.model === "scout-fixture";
+    const index = scout ? ++scoutCalls : ++parentCalls;
+    const mode = modes[index - 1];
+    const tool = scout ? index % 2 === 1 : index <= modes.length;
+    const delta = tool ? { role: "assistant", tool_calls: [{
+      index: 0, id: `${scout ? "scout" : "parent"}_${index}`, type: "function", function: {
+        name: scout ? "read" : "spawn_explorer",
+        arguments: JSON.stringify(scout ? { path: "README.md" } : {
+          mode, target_path: mode === "concern_scout" ? "." : `${stateDir}/codebase_map.json`,
+          ...(mode === "gap_filler" ? { focus: "D1_topography" } : {}),
+          ...(mode === "custom" ? { system_prompt: "Read the map and repeat the topography audit." } : {}),
+        }),
+      },
+    }] } : { role: "assistant", content: scout
+      ? "## Report\ntarget_path: .\nconcerns:\n - concern: Request validation\n   seed_paths:\n    - README.md\nrejected: []"
+      : "fixture complete" };
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    response.end(`data: ${JSON.stringify({ id: `response_${payloads.length}`, choices: [{
+      index: 0, delta, finish_reason: tool ? "tool_calls" : "stop",
+    }], usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 } })}\n\ndata: [DONE]\n\n`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  try {
+    fs.writeFileSync(path.join(cwd, "README.md"), "Immutable request validation fixture.\n");
+    for (const args of [["init", "-q"], ["config", "user.name", "Agentify Test"],
+      ["config", "user.email", "test@example.invalid"], ["add", "."], ["commit", "-qm", "repair fixture"]]) {
+      execFileSync("git", args, { cwd, stdio: "pipe" });
+    }
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    fs.writeFileSync(path.join(cwd, "models.json"), JSON.stringify({ providers: {
+      openai: { baseUrl: `http://127.0.0.1:${address.port}/v1`, api: "openai-completions",
+        apiKey: "local-test-placeholder", models: ["parent-fixture", "scout-fixture"].map(id => ({
+          id, contextWindow: 32768, maxTokens: 128,
+          cost: { input: 0.1, output: 0.1, cacheRead: 0.1, cacheWrite: 0.1 },
+        })) },
+    } }));
+    const map = makeValidCodebaseMap({ expert_evidence: undefined });
+    writeCanonicalMap(cwd, map, { stateDir, mapFilename: "codebase_map.json" });
+    const before = fs.readFileSync(path.join(cwd, stateDir, "codebase_map.json"), "utf8");
+    const budget = new AuditResourceBudget();
+    const parent = budget.beginSession();
+    const repairOptions = { spawnExplorerPurpose: "specialist-repair" as const };
+    const result = await new PiSdkRuntime().runSession({
+      cwd, configDir: cwd,
+      config: { schemaVersion: 1, thinkingLevel: "off", models: {
+        primary: { provider: "openai", model: "parent-fixture" },
+        explorer: { provider: "openai", model: "scout-fixture" },
+      } },
+      systemPrompt: "Local deterministic repair transport fixture.", userPrompt: "Resolve a missing scout receipt.",
+      tools: ["write_map_delta", "spawn_explorer"], customTools: [createWriteMapTools({ stateDir }).writeMapDeltaTool],
+      spawnExplorerAgentDir: cwd, spawnExplorerStateDir: stateDir, ...repairOptions,
+      auditResourceBudget: budget, timeoutMs: 10_000,
+      onProviderRequest: reservation => budget.recordProviderRequest(parent, reservation),
+      onEvent(event) {
+        budget.observeParentEvent(event, parent);
+        if (event.type === "tool_execution_end" && event.toolName === "spawn_explorer") outcomes.push(event);
+      },
+      executionPolicy: createReadOnlyExecutionPolicy({ cwd, mode: "audit-readonly", tools: [] }),
+    });
+    assert.equal(result.aborted, false);
+    assert.equal(parentCalls, 5);
+    assert.equal(scoutCalls, 2, "only the explicitly permitted scout can dispatch child model requests");
+    assert.equal(budget.snapshot().explorer_spawns, 1);
+    assert.equal(budget.snapshot().model_calls, 7, "refused child dispatches spend no shared request budget");
+    assert.equal(budget.snapshot().unreported_calls, 0);
+    assert.deepEqual(outcomes.map(outcome => outcome.isError), [true, true, true, false]);
+    const parentPayload = payloads.find(payload => payload.model === "parent-fixture")!;
+    const tools = parentPayload.tools as Array<{ function: { name: string; parameters: {
+      properties: { mode: { enum: string[] } };
+    } } }>;
+    assert.deepEqual(tools.find(tool => tool.function.name === "spawn_explorer")?.function.parameters.properties.mode.enum,
+      ["concern_scout", "concern_tracer"], "the model sees the same restricted modes the executor enforces");
+    assert.equal(fs.readFileSync(path.join(cwd, stateDir, "codebase_map.json"), "utf8"), before,
+      "refused exploration and a scout report grant neither map changes nor installation credit");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("actual SDK launches an accounted scout after topography even when the parent never chooses spawn_explorer", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-initial-scout-sdk-"));
   const stateDir = ".agentify/runtime/audit";
