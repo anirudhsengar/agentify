@@ -11,6 +11,33 @@ import { createAgentSession } from "@earendil-works/pi-coding-agent";
 import { createAgentifyModelRuntime } from "../src/core/pi-credential-store.ts";
 import { createSpawnExplorerTool } from "../src/core/audit/spawn-explorer-tool.ts";
 import { AuditBudgetExceededError, AuditResourceBudget } from "../src/core/audit/resource-budget.ts";
+import { bindStructuredToolErrors } from "../src/core/structured-tool-errors.ts";
+
+test("structured tool errors retain hook diagnostics and cannot become success", async () => {
+  type Agent = Parameters<typeof bindStructuredToolErrors>[0];
+  type Context = Parameters<NonNullable<Agent["afterToolCall"]>>[0];
+  const content = [{ type: "text" as const, text: "Rejected tracked-source claim." }];
+  const details = { recorded: false, expected_concern: "Request validation" };
+  for (const failure of ["returned", "thrown", "none"] as const) {
+    let seen: Context | undefined;
+    const agent: Agent = { afterToolCall: async context => {
+      seen = context;
+      return { content, details, isError: false };
+    } };
+    bindStructuredToolErrors(agent);
+    const context = { result: { content, details, isError: failure === "returned" },
+      isError: failure === "thrown" } as unknown as Context;
+    const outcome = await agent.afterToolCall!(context, undefined);
+    assert.equal(seen?.isError, failure !== "none");
+    assert.deepEqual(outcome, { content, details, isError: failure !== "none" });
+    assert.equal(context.isError, failure === "thrown", "the original context must not be mutated");
+    assert.deepEqual(context.result.details, details);
+  }
+  const agent: Agent = { afterToolCall: async () => { throw new Error("existing hook failure"); } };
+  bindStructuredToolErrors(agent);
+  await assert.rejects(agent.afterToolCall!({ result: { content, details }, isError: false } as unknown as Context,
+    undefined), /existing hook failure/);
+});
 
 test("SDK admission rejection prevents HTTP dispatch, while admitted requests still dispatch", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-sdk-admission-"));

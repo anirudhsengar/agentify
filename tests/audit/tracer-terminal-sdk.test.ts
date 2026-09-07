@@ -164,6 +164,12 @@ test("actual tracer SDK retains the last rejected submission without granting su
   assert.equal(outcome.payloads.length, 8);
   assert.equal(outcome.usage.model_calls, 8);
   assert.equal(outcome.usage.unreserved_calls, 0);
+  const rejected = outcome.tools.filter(event => event.toolName === "submit_concern_report");
+  assert.ok(rejected.length > 0);
+  assert.ok(rejected.every(event => event.isError),
+    "a structured validator rejection must reach SDK events as an error, not a successful tool call");
+  assert.ok(JSON.stringify(outcome.payloads.at(-1)!.messages).includes('"is_error":true'),
+    "the actual MiniMax Messages payload must identify rejected submissions as errors");
   assert.ok(outcome.assessment.reasons.some(reason => reason.includes("failed")), "failed tracer must stay unresolved");
 });
 

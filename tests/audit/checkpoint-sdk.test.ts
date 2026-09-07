@@ -38,14 +38,18 @@ test("actual SDK checkpoints recur, survive tool errors, then restore inspection
       openai: { baseUrl: `http://127.0.0.1:${address.port}/v1`, api: "openai-completions",
         apiKey: "local-test-placeholder", models: [{ id: "checkpoint-fixture", contextWindow: 32768, maxTokens: 128 }] },
     } }));
-    for (const terminalProtocol of [false, true]) {
+    for (const structuredFailure of [false, true]) for (const terminalProtocol of [false, true]) {
       payloads.length = 0;
       let writes = 0;
       const observed: Array<{ tool: unknown; isError: unknown; details: unknown }> = [];
       const customTools = [{ name: "write_map_delta", label: "Checkpoint", description: "Fixture checkpoint.", parameters: Type.Object({}),
         async execute() {
           writes += 1;
-          if (writes === 1) throw new Error("Fixture schema rejection: no state was saved.");
+          if (writes === 1) {
+            if (!structuredFailure) throw new Error("Fixture schema rejection: no state was saved.");
+            return { content: [{ type: "text" as const, text: "Fixture schema rejection: no state was saved." }],
+              isError: true, details: { recorded: false, reason: "schema" } };
+          }
           return { content: [{ type: "text" as const, text: "checkpoint recorded" }], details: { path: "map.json" } };
         } },
       { name: "spawn_explorer", label: "Explorer", description: "Unused fixture explorer.", parameters: Type.Object({}),
@@ -72,6 +76,10 @@ test("actual SDK checkpoints recur, survive tool errors, then restore inspection
       assert.equal(result.aborted, false);
       assert.equal(payloads.length, 12, JSON.stringify(result.diagnostics));
       assert.equal(writes, 3);
+      const rejected = observed.find(event => event.tool === "write_map_delta");
+      assert.equal(rejected?.isError, true, "returned validator errors must not satisfy the required checkpoint");
+      if (structuredFailure) assert.deepEqual(rejected?.details, { recorded: false, reason: "schema" },
+        "error classification must preserve application-owned rejection details");
       assert.equal(observed.filter((event) => event.tool === "read").length, 8);
       assert.ok(observed.filter((event) => event.tool === "read").every((event) => event.isError === false),
         `fixture inspections must succeed: ${JSON.stringify(observed)}`);

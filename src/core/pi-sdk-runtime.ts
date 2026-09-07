@@ -23,6 +23,7 @@ import { createAgentifyModelRuntime } from "./pi-credential-store.ts";
 import { providerRequestReservation } from "./audit/resource-budget.ts";
 import { AuditCheckpointCadence } from "./audit/checkpoint-cadence.ts";
 import { withInitialScoutCheckpoint } from "./audit/initial-scout-checkpoint.ts";
+import { bindStructuredToolErrors } from "./structured-tool-errors.ts";
 
 type UsageLike = {
   cost?: { total?: number };
@@ -407,6 +408,7 @@ export class PiSdkRuntime implements AgentRuntime {
       sessionManager: SessionManager.inMemory(options.cwd),
     });
     const session = created.session;
+    bindStructuredToolErrors(session.agent);
     let turns = 0;
     let costUsd = 0;
     let sawCost = false;

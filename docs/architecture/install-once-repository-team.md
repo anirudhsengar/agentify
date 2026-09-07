@@ -199,6 +199,13 @@ this pause even when a model emits a no-longer-advertised inspection. Failed
 writes and prose do not reset the checkpoint. Explicit terminal-tool protocols
 retain their existing behavior, and SDK-level execution failures remain errors
 in retained logs. This changes neither evidence approval nor aggregate limits.
+Parent and explorer sessions also bridge application-returned `isError: true`
+through the SDK's public post-tool hook. The pinned SDK otherwise treats a
+normally resolved tool execution as successful regardless of that result field.
+The bridge preserves existing hook content, details, and usage, informs tool-result
+extensions of the rejection, and cannot downgrade either a thrown or structured
+failure to success. Rejected checkpoints and tracer proposals therefore reach
+provider tool results as errors without discarding their application-owned records.
 The CLI owns the external audit log through finalization. Semantic closure
 does not emit the terminal result before installation validation; exactly one
 terminal event records the committed installation or its failure and rollback.

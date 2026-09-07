@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Preserve structured validator rejections as SDK and provider tool errors without losing diagnostic details. Failed map checkpoints and tracer reports no longer appear to the model as successful calls; source, receipt, retry, and budget gates remain unchanged.
+
 - Keep enabled Anthropic-compatible thinking inside the final output ceiling with the SDK's answer reserve, instead of sending a larger thinking allowance than the complete response limit. Refuse impossible envelopes before HTTP dispatch/accounting; preserve the configured model, thinking mode, smaller bounds, and aggregate budgets.
 
 - Give semantic repair its own obligation-focused controller prompt and restrict its explorer dispatcher to concern scouting/tracing before child admission. Do not restart closed coverage work, spend child requests on rejected modes, or change the shared budgets and final evidence gates.

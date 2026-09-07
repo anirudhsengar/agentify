@@ -49,6 +49,7 @@ import {
     createAgentSession,
     DefaultResourceLoader,
     defineTool,
+    type AgentSession,
     type AgentSessionEvent,
     type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
@@ -69,6 +70,7 @@ import { assessConcernGrounding, assessSpecialistEvidence, concernEvidencePaths 
 import { compileSpecialistEvidence } from "./specialist-compiler.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
+import { bindStructuredToolErrors } from "../structured-tool-errors.ts";
 import {
     createReadOnlyExecutionPolicy,
     READ_ONLY_TOOLS,
@@ -890,6 +892,8 @@ function buildRunId(): string {
 }
 
 export interface ExplorerSubSession {
+    /** Present on actual SDK sessions; scripted test sessions may omit it. */
+    agent?: Pick<AgentSession["agent"], "afterToolCall">;
     dispose: () => void;
     prompt: (text: string) => Promise<void>;
     messages: unknown[];
@@ -1587,6 +1591,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                 resourceLoader,
             });
             session = createdSession;
+            if (session.agent) bindStructuredToolErrors(session.agent);
             if (signal?.aborted) {
                 abortSession();
                 signal.throwIfAborted();
