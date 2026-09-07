@@ -1,4 +1,4 @@
-name: Temporary PR13 receipt-handoff source staging
+name: Temporary PR13 verified receipt-repair transfer
 on:
   pull_request:
     types: [labeled]
@@ -8,7 +8,7 @@ jobs:
   stage:
     if: >-
       github.actor == github.repository_owner &&
-      github.event.label.name == 'agentify-stage-receipt-handoff' &&
+      github.event.label.name == 'agentify-stage-verified-handoff' &&
       github.event.pull_request.number == 13 &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
@@ -20,36 +20,42 @@ jobs:
         with:
           ref: c46c5783253db5516dd91c503a69db926579425e
           persist-credentials: false
-      - name: Stage only verified ordinary source blobs
+      - name: Stage exact hash-verified source objects without executing repository code
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
-          import base64, gzip, hashlib, json, os, pathlib, subprocess, urllib.request
+          import base64, hashlib, json, os, pathlib, subprocess, urllib.request
           api = 'https://api.github.com/repos/anirudhsengar/agentify/git/blobs'
           headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'}
-          compressed_sha = '5f525ac484cfec9ae50591a5d5d6c5788f733b0e'
-          with urllib.request.urlopen(urllib.request.Request(api + '/' + compressed_sha, headers=headers), timeout=30) as response:
-              stored = json.load(response)
-          compressed = base64.b64decode(stored['content'])
-          assert stored['sha'] == compressed_sha and stored['encoding'] == 'base64'
-          assert hashlib.sha1(b'blob ' + str(len(compressed)).encode() + b'\0' + compressed).hexdigest() == compressed_sha
-          patch = gzip.decompress(compressed)
-          assert hashlib.sha256(patch).hexdigest() == 'cbf3d0a9c033834417903d9b5d8d426dd52639c088a71bc4cb5a96334a06d57f'
-          subprocess.run(['git', 'apply', '--index', '-'], input=patch, check=True)
-          tree = subprocess.check_output(['git', 'write-tree'], text=True).strip()
-          assert tree == '59d8280a20a26b9dfb402daf4c1855a9f1478586', tree
-          expected = {'CHANGELOG.md': '16ecbb064d6818e595f4e9221cfc36a48e4b4269', 'docs/architecture/install-once-repository-team.md': '8c286c201197e164286b914c32a96a17de5c0d78', 'src/core/runs/repository-audit-run-core.ts': 'bc32aad42b6a364ec85821640d4e7161c0023a591', 'src/core/runs/repository-audit-run.ts': '0f6d320dbab36646cb4195788b5b457c6fa4c0f7', 'tests/audit/tracked-specialist-closure.test.ts': '79063370fb48169c2eed508cd6a0b6994b2f031b'}
-          changed = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines()
-          assert sorted(changed) == sorted(expected)
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          def blob_sha(data):
+              return hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+          assert git('rev-parse', 'HEAD') == 'c46c5783253db5516dd91c503a69db926579425e'
+          patches = [('481733a3d264e185f26df1e2d849595a318adbd6', 'f24c3adc2b3fac7ccf0f05400799f94b996359de980cde94b9e89dffb3715e66'), ('b556ff82be1f4e54d695e48b523be7d6d9a125a2', '7f738c1b169d75b1d3a793d7774d462d1fc9921f47663d3aebb9d43c25ed650b')]
+          for sha, digest in patches:
+              with urllib.request.urlopen(urllib.request.Request(api + '/' + sha, headers=headers), timeout=30) as response:
+                  stored = json.load(response)
+              assert stored['sha'] == sha and stored['encoding'] == 'base64'
+              patch = base64.b64decode(stored['content'])
+              assert blob_sha(patch) == sha and hashlib.sha256(patch).hexdigest() == digest
+              subprocess.run(['git', 'apply', '--index', '-'], input=patch, check=True)
+          expected = {'CHANGELOG.md': '53589a7414ad362c9223164bb1721b414febdd68', 'docs/architecture/install-once-repository-team.md': '28abc6ccca30e4ad0e8ad6b7e2d57ab913bea6ce', 'src/core/runs/repository-audit-run-core.ts': 'af4eb438dc098f5d21fadb4195ac4bea0662fc20', 'src/core/runs/repository-audit-run.ts': '40b1c13a18db157547869106444a6035b18f1664', 'tests/audit/tracked-specialist-closure.test.ts': '1a510901f86d40ac6ae3e93b1a50aca945647006'}
+          assert sorted(git('diff', '--cached', '--name-only').splitlines()) == sorted(expected)
+          tree = git('write-tree')
+          assert tree == 'ef09c036c80e15b34237aba590fc68887df95571', tree
           for name, sha in expected.items():
               assert not name.startswith('.github/')
-              data = pathlib.Path(name).read_bytes()
-              assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == sha
+              file = pathlib.Path(name)
+              assert file.is_file() and not file.is_symlink()
+              data = file.read_bytes()
+              assert blob_sha(data) == sha, name
               body = json.dumps({'content': base64.b64encode(data).decode(), 'encoding': 'base64'}).encode()
               with urllib.request.urlopen(urllib.request.Request(api, data=body, headers=headers, method='POST'), timeout=30) as response:
                   result = json.load(response)
-              assert result['sha'] == sha
+              assert result['sha'] == sha, name
               print(name, sha)
-          print('Verified tree:', tree, '; no commit or ref was written.')
+          print('Verified source tree:', tree)
+          print('No model request, repository script, commit or ref update was executed.')
           PY
