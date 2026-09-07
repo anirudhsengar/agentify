@@ -3,8 +3,9 @@ import fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { syncBuiltinESMExports } from "node:module";
+import { execFileSync } from "node:child_process";
 import test from "node:test";
-import { assessInstallation, MODEL_CONFIG, redactSecrets, validateTarget, readEvidenceFile } from "../../scripts/live-installation.mjs";
+import { assessInstallation, MODEL_CONFIG, redactSecrets, validateTarget, readEvidenceFile, snapshot } from "../../scripts/live-installation.mjs";
 
 function completed(overrides = {}) {
   return { exitCode: 0, signal: null, terminalEvents: [{ status: "success", exit_code: 0 }],
@@ -74,6 +75,49 @@ test("evidence reads reject symlinks and oversize files", () => {
     assert.throws(() => readEvidenceFile(link));
     assert.throws(() => readEvidenceFile(file, 4), /size limit/);
     assert.equal(readEvidenceFile(file).bytes.toString("utf8"), "original evidence");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("source snapshots retain Gitlinks without reading submodule directories as files", () => {
+  // Mustache's immutable ext/spec Gitlink blocked preparation before any M3 call.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-gitlink-snapshot-"));
+  const target = path.join(root, "target");
+  const submodule = path.join(root, "submodule");
+  const git = (cwd, ...args) => execFileSync("git", args, {
+    cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  try {
+    for (const directory of [target, submodule]) {
+      fs.mkdirSync(directory);
+      git(directory, "init", "-q");
+      git(directory, "config", "user.name", "Fixture");
+      git(directory, "config", "user.email", "fixture@example.invalid");
+      fs.writeFileSync(path.join(directory, "README.md"), "Original tracked source.\n");
+      git(directory, "add", ".");
+      git(directory, "commit", "-qm", "fixture");
+    }
+    const commit = git(submodule, "rev-parse", "HEAD");
+    git(target, "update-index", "--add", "--cacheinfo", `160000,${commit},ext/spec`);
+    git(target, "commit", "-qm", "tracked Gitlink");
+    fs.mkdirSync(path.join(target, "ext/spec"), { recursive: true });
+    const before = snapshot(target);
+    assert.deepEqual(before["ext/spec"], { kind: "gitlink", commit, worktree_status: "" });
+    assert.equal(before["README.md"].kind, "file");
+    assert.deepEqual(snapshot(target), before);
+
+    git(target, "update-index", "--cacheinfo", `160000,${"1".repeat(40)},ext/spec`);
+    assert.notDeepEqual(snapshot(target)["ext/spec"], before["ext/spec"], "index changes must remain visible");
+    git(target, "update-index", "--cacheinfo", `160000,${commit},ext/spec`);
+    git(root, "clone", "--no-hardlinks", submodule, path.join(target, "ext/spec"));
+    assert.deepEqual(snapshot(target), before, "clean materialization does not change the Gitlink");
+    fs.writeFileSync(path.join(target, "ext/spec/README.md"), "Changed nested tracked source.\n");
+    assert.notDeepEqual(snapshot(target)["ext/spec"], before["ext/spec"], "dirty nested source must remain visible");
+    git(path.join(target, "ext/spec"), "checkout", "--", "README.md");
+    assert.deepEqual(snapshot(target), before);
+    fs.writeFileSync(path.join(target, "README.md"), "Changed parent source.\n");
+    assert.notDeepEqual(snapshot(target)["README.md"], before["README.md"]);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

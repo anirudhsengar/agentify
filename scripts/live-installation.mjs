@@ -92,8 +92,18 @@ export function readEvidenceFile(file, maximum = MAX_OUTPUT_BYTES) {
   }
 }
 
-function snapshot(target) {
-  return Object.fromEntries(command("git", ["ls-files", "-z"], target).split("\0").filter(Boolean).map((file) => {
+export function snapshot(target) {
+  return Object.fromEntries(command("git", ["ls-files", "--stage", "-z"], target).split("\0").filter(Boolean).map((entry) => {
+    const separator = entry.indexOf("\t");
+    const [mode, commit, stage] = entry.slice(0, separator).split(" ");
+    assert.ok(separator > 0 && stage === "0", "source snapshot requires unconflicted tracked entries");
+    const file = entry.slice(separator + 1);
+    if (mode === "160000") {
+      // A Gitlink records a commit, not parent-repository file bytes. Never
+      // open its directory as evidence; still detect index and nested drift.
+      return [file, { kind: "gitlink", commit,
+        worktree_status: command("git", ["status", "--porcelain=v1", "--ignore-submodules=none", "--", file], target) }];
+    }
     const absolute = path.join(target, file);
     try {
       const record = readEvidenceFile(absolute);
