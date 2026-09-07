@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { cancellationObservations } from './cancellation-events.mjs';
 
 const source = process.cwd();
 const { main, readEvidenceFile } = await import(pathToFileURL(path.join(source, 'scripts/live-installation.mjs')).href);
@@ -34,18 +35,9 @@ const interval = setInterval(() => {
   for (const name of fs.readdirSync(logDirectory)) {
     if (!name.endsWith('.jsonl')) continue;
     const text = readEvidenceFile(path.join(logDirectory, name), 8 * 1024 * 1024).bytes.toString('utf8');
-    const lines = text.split('\n');
-    lines.pop(); // A concurrently written partial record is not evidence.
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const row = JSON.parse(line);
-      const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
-      const event = payload?.event;
-      if (event?.type === 'message_end' && event.message?.role === 'assistant'
-        && event.message.stopReason !== 'error' && event.message.usage?.output > 0) responseObserved = true;
-      if (event?.type === 'tool_execution_end' && event.toolName === 'write_map_delta'
-        && event.isError === false && event.result?.isError !== true) checkpointObserved = true;
-    }
+    const observed = cancellationObservations(text);
+    responseObserved ||= observed.response;
+    checkpointObserved ||= observed.checkpoint;
   }
   } catch (error) {
     if (error.code !== 'ENOENT' && !String(error.message).includes('evidence changed during descriptor read')) throw error;
