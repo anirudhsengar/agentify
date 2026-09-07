@@ -1,5 +1,5 @@
 name: PR13 explicit review verdict component qualification
-run-name: PR13 M3 explicit verdict serial timing on two failed bodies
+run-name: PR13 M3 provider-error diagnosis and false-claim rejection canary
 'on':
   push:
     branches:
@@ -25,18 +25,19 @@ jobs:
       max-parallel: 1
       matrix:
         case:
-        - name: pyjwt-jws
-          artifact: pr13-cd24-heldout-round-1-pyjwt-34101652351
-          map_sha256: 2bbed000f4b8fb433f2bc74d1cedcfc4cb81e84739ed2317c9d5642b18f11c89
-          concern: JWS compact serialization encode/decode
-          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
-          repository: anirudhsengar/pyjwt
         - name: commander-help
           artifact: pr13-cd24-historical-commander-34101652351
           map_sha256: 68e0447d855d436c9dfad9aadaa20a132c7e06f1aa9bdf6dfde76ad3888dd5f4
           concern: Help rendering
           target_sha: ba6d13ddb4243e5913367734f8c159089ffe7834
           repository: anirudhsengar/commander.js
+        - name: pyjwt-numeric-exp-canary
+          artifact: pr13-cd24-heldout-round-1-pyjwt-34101652351
+          map_sha256: 2bbed000f4b8fb433f2bc74d1cedcfc4cb81e84739ed2317c9d5642b18f11c89
+          concern: JWT registered claim validation
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          false_claim_canary: true
     steps:
     - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
       with:
