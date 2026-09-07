@@ -11,6 +11,7 @@ import { createSpawnExplorerTool } from "../../src/core/audit/spawn-explorer-too
 import { AuditResourceBudget } from "../../src/core/audit/resource-budget.ts";
 import { ExplorerReceiptTracker } from "../../src/core/audit/explorer-receipts.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import { getThinkingLevel, setThinkingLevel } from "../../src/core/audit/state.ts";
 
 const CONCERN = "Request validation";
 const ENTRY = 'import { validate } from "./validate.ts";\nexport function request(value: unknown) { return validate(value); }\n';
@@ -33,7 +34,8 @@ const BODY = {
 };
 
 type Call = { name: string; input: Record<string, unknown> };
-type Payload = { tools: Array<{ name: string }>; messages: unknown[]; system: unknown; tool_choice?: unknown };
+type Payload = { tools: Array<{ name: string }>; messages: unknown[]; system: unknown; tool_choice?: unknown;
+  max_tokens?: number; thinking?: unknown };
 function respond(response: ServerResponse, index: number, call?: Call): void {
   const events = [
     { type: "message_start", message: { id: `message_${index}`, type: "message", role: "assistant",
@@ -51,8 +53,9 @@ function respond(response: ServerResponse, index: number, call?: Call): void {
   response.end(events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(""));
 }
 
-async function trace(next: (index: number) => Call | undefined, focus?: string, signal?: AbortSignal) {
+async function trace(next: (index: number) => Call | undefined, focus?: string, signal?: AbortSignal, reasoning = false) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-tracer-terminal-"));
+  const previousThinking = getThinkingLevel();
   const payloads: Payload[] = [];
   const tools: Array<{ toolCallId: string; toolName: string; isError: boolean; result: unknown }> = [];
   const server = createServer(async (request, response) => {
@@ -63,6 +66,7 @@ async function trace(next: (index: number) => Call | undefined, focus?: string, 
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   try {
+    if (reasoning) setThinkingLevel("high");
     fs.mkdirSync(path.join(cwd, "src"));
     fs.writeFileSync(path.join(cwd, "src/entry.ts"), ENTRY);
     fs.writeFileSync(path.join(cwd, "src/validate.ts"), SOURCE);
@@ -75,7 +79,7 @@ async function trace(next: (index: number) => Call | undefined, focus?: string, 
     assert.ok(address && typeof address === "object");
     fs.writeFileSync(path.join(cwd, "models.json"), JSON.stringify({ providers: {
       minimax: { baseUrl: `http://127.0.0.1:${address.port}`, api: "anthropic-messages", apiKey: "fixture-placeholder",
-        models: [{ id: "MiniMax-M3", contextWindow: 131072, maxTokens: 12000,
+        models: [{ id: "MiniMax-M3", contextWindow: 131072, maxTokens: reasoning ? 128000 : 12000, reasoning,
           cost: { input: 0.1, output: 0.1, cacheRead: 0.1, cacheWrite: 0.1 } }] },
     } }));
     const { modelRuntime } = await createAgentifyModelRuntime({ authFile: path.join(cwd, "auth.json"), modelsFile: path.join(cwd, "models.json") });
@@ -98,6 +102,7 @@ async function trace(next: (index: number) => Call | undefined, focus?: string, 
     const assessment = tracker.assess(makeValidCodebaseMap({ expert_evidence: undefined }));
     return { result, payloads, tools, usage: budget.snapshot(), assessment };
   } finally {
+    setThinkingLevel(previousThinking);
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     fs.rmSync(cwd, { recursive: true, force: true });
@@ -105,6 +110,20 @@ async function trace(next: (index: number) => Call | undefined, focus?: string, 
 }
 const read = (file: string): Call => ({ name: "read", input: { path: file } });
 const submit = (body: unknown): Call => ({ name: "submit_concern_report", input: { report_json: JSON.stringify(body) } });
+
+test("actual tracer SDK fits high thinking inside every bounded source and submission request", async () => {
+  const outcome = await trace(index => index === 1 ? read("src/entry.ts")
+    : index === 2 ? read("src/validate.ts") : submit(BODY), undefined, undefined, true);
+  assert.notEqual((outcome.result as { isError?: boolean }).isError, true, JSON.stringify(outcome.result));
+  assert.equal(outcome.payloads.length, 3);
+  for (const payload of outcome.payloads) {
+    assert.equal(payload.max_tokens, 12_000);
+    assert.deepEqual(payload.thinking, { type: "enabled", budget_tokens: 10_976, display: "summarized" });
+  }
+  assert.equal(outcome.usage.model_calls, 3);
+  assert.equal(outcome.usage.unreported_calls, 0);
+  assert.deepEqual((outcome.result.details as { observed_paths: string[] }).observed_paths, ["src/entry.ts", "src/validate.ts"]);
+});
 
 for (const focus of [undefined, "  ", "src/entry.ts and src/validate.ts"]) {
   test(`actual tracer SDK receives required identity with optional focus ${JSON.stringify(focus)}`, async () => {

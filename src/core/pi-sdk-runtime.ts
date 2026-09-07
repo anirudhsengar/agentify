@@ -115,11 +115,28 @@ function boundedTokenValue(current: unknown, maximum: number): number {
     : maximum;
 }
 
+const THINKING_ANSWER_RESERVE_TOKENS = 1_024;
+const MIN_ENABLED_THINKING_TOKENS = 1_024;
+
 /** Apply an application-owned per-request output ceiling to known wire shapes. */
 export function capProviderOutputTokens(payload: unknown, api: string, maximum: number): unknown {
   if (!record(payload) || !Number.isInteger(maximum) || maximum < 1) return payload;
   if (api === "anthropic-messages") {
-    return { ...payload, max_tokens: boundedTokenValue(payload.max_tokens, maximum) };
+    const maxTokens = boundedTokenValue(payload.max_tokens, maximum);
+    const thinking = payload.thinking;
+    if (record(thinking) && thinking.type === "enabled"
+      && typeof thinking.budget_tokens === "number" && Number.isFinite(thinking.budget_tokens)
+      && thinking.budget_tokens > 0) {
+      // The SDK fits thinking before our final output cap is applied. Reapply
+      // its answer reserve inside the stricter envelope, never above it.
+      const available = maxTokens - THINKING_ANSWER_RESERVE_TOKENS;
+      if (available < MIN_ENABLED_THINKING_TOKENS) {
+        throw new Error("output ceiling cannot fit enabled thinking and the 1024-token answer reserve");
+      }
+      return { ...payload, max_tokens: maxTokens,
+        thinking: { ...thinking, budget_tokens: Math.min(thinking.budget_tokens, available) } };
+    }
+    return { ...payload, max_tokens: maxTokens };
   }
   if (api === "openai-completions") {
     if ("max_completion_tokens" in payload) {
@@ -317,9 +334,14 @@ export class PiSdkRuntime implements AgentRuntime {
             let requestPayload = payload;
             try {
               if (aborted || options.signal?.aborted) throw new Error("provider request cancelled");
+              if (options.maxOutputTokens !== undefined) {
+                requestPayload = capProviderOutputTokens(requestPayload, selectedModel?.api ?? "", options.maxOutputTokens);
+                cappedOutputRequests += 1;
+              }
               if (checkpointCadence?.due) {
-                requestPayload = forceProviderToolChoice(payload, selectedModel?.api ?? "", "write_map_delta", selectedModel?.provider);
-                if (requestPayload !== payload) forcedToolChoiceRequests += 1;
+                const before = requestPayload;
+                requestPayload = forceProviderToolChoice(requestPayload, selectedModel?.api ?? "", "write_map_delta", selectedModel?.provider);
+                if (requestPayload !== before) forcedToolChoiceRequests += 1;
               }
               const inputTokenBound = options.auditResourceBudget?.assertProviderInputCapacity(requestPayload);
               options.onProviderRequest?.(selectedModel
@@ -342,44 +364,25 @@ export class PiSdkRuntime implements AgentRuntime {
           if (recovery && options.forceRequiredToolChoice === true) {
             pi.on("before_provider_request", (event) => {
               const api = selectedModel?.api ?? "";
-              const boundedPayload = options.maxOutputTokens === undefined
-                ? event.payload
-                : capProviderOutputTokens(event.payload, api, options.maxOutputTokens);
-              if (options.maxOutputTokens !== undefined) cappedOutputRequests += 1;
               if (sawRequiredRecoveryTool || recovery.shouldRecover?.() === false) {
-                return admitProviderRequest(boundedPayload);
+                return admitProviderRequest(event.payload);
               }
               forcedToolChoiceRequests += 1;
               return admitProviderRequest(
-                forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName, selectedModel?.provider),
+                forceProviderToolChoice(event.payload, api, recovery.requiredToolName, selectedModel?.provider),
               );
             });
           } else if (recovery && options.forceRequiredToolChoiceAfterTurns !== undefined) {
             const turnBudget = options.forceRequiredToolChoiceAfterTurns;
             pi.on("before_provider_request", (event) => {
               const api = selectedModel?.api ?? "";
-              const boundedPayload = options.maxOutputTokens === undefined
-                ? event.payload
-                : capProviderOutputTokens(event.payload, api, options.maxOutputTokens);
-              if (options.maxOutputTokens !== undefined) cappedOutputRequests += 1;
               if (sawRequiredRecoveryTool || recovery.shouldRecover?.() === false) {
-                return admitProviderRequest(boundedPayload);
+                return admitProviderRequest(event.payload);
               }
-              if (providerRequests + 1 < turnBudget) return admitProviderRequest(boundedPayload);
+              if (providerRequests + 1 < turnBudget) return admitProviderRequest(event.payload);
               forcedToolChoiceRequests += 1;
               return admitProviderRequest(
-                forceProviderToolChoice(boundedPayload, api, recovery.requiredToolName, selectedModel?.provider),
-              );
-            });
-          } else if (options.maxOutputTokens !== undefined) {
-            pi.on("before_provider_request", (event) => {
-              cappedOutputRequests += 1;
-              return admitProviderRequest(
-                capProviderOutputTokens(
-                  event.payload,
-                  selectedModel?.api ?? "",
-                  options.maxOutputTokens ?? 1,
-                ),
+                forceProviderToolChoice(event.payload, api, recovery.requiredToolName, selectedModel?.provider),
               );
             });
           } else {

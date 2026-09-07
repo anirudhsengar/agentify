@@ -208,6 +208,94 @@ test("provider output caps narrow Anthropic and preserve smaller limits", () => 
   );
 });
 
+test("Anthropic output caps retain enabled thinking inside the answer-reserved envelope", () => {
+  const payload = { max_tokens: 128_000, thinking: {
+    type: "enabled", budget_tokens: 16_384, display: "summarized",
+  }, tools: [] };
+  assert.deepEqual(capProviderOutputTokens(payload, "anthropic-messages", 12_000), {
+    ...payload, max_tokens: 12_000, thinking: { ...payload.thinking, budget_tokens: 10_976 },
+  });
+  assert.equal(payload.thinking.budget_tokens, 16_384, "do not mutate the SDK's original request");
+  assert.deepEqual(capProviderOutputTokens({ ...payload, max_tokens: 4_096 }, "anthropic-messages", 12_000), {
+    ...payload, max_tokens: 4_096, thinking: { ...payload.thinking, budget_tokens: 3_072 },
+  });
+  assert.deepEqual(capProviderOutputTokens({ ...payload, thinking: { type: "enabled", budget_tokens: 2_048 } },
+    "anthropic-messages", 12_000), { ...payload, max_tokens: 12_000, thinking: { type: "enabled", budget_tokens: 2_048 } },
+    "an already smaller reasoning allowance is never raised");
+  for (const thinking of [{ type: "adaptive" }, { type: "disabled" }]) {
+    assert.deepEqual(capProviderOutputTokens({ ...payload, thinking }, "anthropic-messages", 12_000),
+      { ...payload, max_tokens: 12_000, thinking });
+  }
+  for (const cap of [1, 1_024, 2_047]) {
+    assert.throws(() => capProviderOutputTokens(payload, "anthropic-messages", cap), /cannot fit enabled thinking/,
+      "an impossible ceiling must not disable reasoning or expand the configured output budget");
+  }
+  assert.deepEqual(capProviderOutputTokens(payload, "anthropic-messages", 2_048), {
+    ...payload, max_tokens: 2_048, thinking: { ...payload.thinking, budget_tokens: 1_024 },
+  });
+});
+
+test("actual M3 SDK request caps fit thinking and refuse impossible caps before HTTP or accounting", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-sdk-thinking-cap-"));
+  const payloads: Array<Record<string, unknown>> = [];
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    payloads.push(JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>);
+    response.writeHead(400, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "thinking-cap wire fixture complete" } }));
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    fs.writeFileSync(path.join(cwd, "models.json"), JSON.stringify({ providers: {
+      minimax: { baseUrl: `http://127.0.0.1:${address.port}`, api: "anthropic-messages", apiKey: "local-test-placeholder",
+        models: [{ id: "MiniMax-M3", reasoning: true, contextWindow: 1_000_000, maxTokens: 128_000 }] },
+    } }));
+    for (const posture of ["ordinary", "required", "after-turns"] as const) {
+      for (const cap of [12_000, 1_024]) {
+        const before = payloads.length;
+        const budget = new AuditResourceBudget();
+        const session = budget.beginSession();
+        const run = new PiSdkRuntime().runSession({
+          cwd, configDir: cwd,
+          config: { schemaVersion: 1, thinkingLevel: "high", models: { primary: { provider: "minimax", model: "MiniMax-M3" } } },
+          systemPrompt: "Local request envelope fixture.", userPrompt: "Submit the typed report.",
+          tools: ["submit_report"], timeoutMs: 5_000, maxOutputTokens: cap,
+          executionPolicy: createReadOnlyExecutionPolicy({ cwd, mode: "audit-readonly", tools: [] }),
+          customTools: [{ name: "submit_report", label: "Submit", description: "Submit fixture result.", parameters: Type.Object({}),
+            async execute() { return { content: [{ type: "text", text: "recorded" }], details: {} }; } }],
+          ...(posture === "ordinary" ? {} : {
+            recoveryPromptIfToolNotCalled: { requiredToolName: "submit_report", userPrompt: "Submit.", maxAttempts: 0 },
+            ...(posture === "required" ? { forceRequiredToolChoice: true } : { forceRequiredToolChoiceAfterTurns: 1 }),
+          }),
+          auditResourceBudget: budget,
+          onProviderRequest: reservation => budget.recordProviderRequest(session, reservation),
+        });
+        if (cap === 1_024) {
+          await assert.rejects(run, /cannot fit enabled thinking/);
+          assert.equal(payloads.length, before, `${posture}: SDK-swallowed hook failures cannot send the uncapped original`);
+          assert.equal(budget.snapshot().model_calls, 0);
+          assert.equal(budget.snapshot().reserved_output_tokens, 0);
+        } else {
+          await assert.rejects(run, /thinking-cap wire fixture complete/);
+          assert.equal(payloads.length, before + 1);
+          assert.equal(payloads.at(-1)!.max_tokens, cap);
+          assert.deepEqual(payloads.at(-1)!.thinking, { type: "enabled", budget_tokens: 10_976, display: "summarized" });
+          assert.equal(budget.snapshot().model_calls, 1);
+          assert.equal(budget.snapshot().reserved_output_tokens, cap,
+            "a bounded thinking allocation remains inside the existing full output reservation");
+        }
+      }
+    }
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("provider output caps use nested Google and Bedrock wire contracts", () => {
   assert.deepEqual(
     capProviderOutputTokens({ config: { temperature: 0 } }, "google-generative-ai", 4_096),

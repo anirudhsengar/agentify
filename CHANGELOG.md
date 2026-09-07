@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Keep enabled Anthropic-compatible thinking inside the final output ceiling with the SDK's answer reserve, instead of sending a larger thinking allowance than the complete response limit. Refuse impossible envelopes before HTTP dispatch/accounting; preserve the configured model, thinking mode, smaller bounds, and aggregate budgets.
+
 - Give semantic repair its own obligation-focused controller prompt and restrict its explorer dispatcher to concern scouting/tracing before child admission. Do not restart closed coverage work, spend child requests on rejected modes, or change the shared budgets and final evidence gates.
 
 - Let repair tracers submit digest-bound field amendments instead of retranscribing whole attested concern bodies. Reload the baseline at submission, retain unchanged evidence and its original receipts, and preserve all expanded-body size, source, scope, ownership, and narrative gates.

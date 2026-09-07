@@ -462,6 +462,14 @@ candidate in a real portfolio. All explorer modes use a 12,000-token response
 ceiling on APIs that support it; unsupported APIs retain their model-limit
 reservation. The ceiling accommodates
 configured reasoning; the 16 KB parsed report limit remains authoritative.
+When an Anthropic-compatible request carries an explicit enabled-thinking
+allowance, the final output cap also fits that allowance inside the same
+response ceiling, retaining the pinned SDK's 1,024-token answer reserve. It
+never raises an existing smaller allowance or changes the configured model or
+thinking mode. A ceiling too small for enabled thinking plus that reserve is
+refused inside the guarded pre-dispatch boundary, not sent uncapped after an SDK
+extension error. Adaptive and disabled thinking remain unchanged; output and
+cost reservations still cover the same complete response bound.
 The application parses scout proposal identities into the receipt ledger. Every
 proposal remains an obligation until a related tracer succeeds or normalized
 concern evidence records a substantive rejection. Receipt state is checkpointed
