@@ -357,6 +357,18 @@ requests or exempt them from a configured lower hard ceiling.
 Provider and explorer deadlines retain one second of the total wall-time budget
 for abort propagation, checkpointing, rollback, and the single terminal audit
 event; model work cannot consume the cleanup interval itself.
+When coverage remains incomplete but specialist bodies have already been
+recorded, the installer's delegated coverage recovery uses a metadata-only
+controller. It can call fixed coverage explorers and write small metadata deltas,
+but cannot scout or retrace concerns, invoke custom explorers, replace the map,
+or change specialist bodies, reviews, receipts or ownership. Automatic scouting
+does not run inside that phase. Up to two in-session checkpoint follow-ups use
+the same session deadline and aggregate call/token/cost budgets; completed
+coverage stops those follow-ups even when specialist receipts remain pending.
+The coverage-pass limit and standalone audit behavior are unchanged. Deferred
+specialist evidence is neither approved nor discarded and must still pass the
+separate receipt, narrative, ownership and installation gates.
+
 Semantic-repair parents receive the current unresolved obligations directly and
 may only dispatch bounded explorers or apply a concern delta; repository reads
 remain confined to those explorers, preventing broad map and tree rereads.

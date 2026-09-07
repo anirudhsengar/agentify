@@ -97,6 +97,10 @@ const MAX_EXPLORER_PROVIDER_CALLS = 40;
 const MAX_EXPLORER_RESPONSE_TOKENS = 12_000;
 const PARENT_RESPONSE_RESERVE_TOKENS = 128_000;
 const SPECIALIST_REPAIR_MODES = ["concern_scout", "concern_tracer"] as const;
+const COVERAGE_RECOVERY_MODES = [
+    "topography", "module_graph", "type_tracer", "conventions", "operational",
+    "security", "pitfalls", "validation", "gap_filler",
+] as const;
 
 // The 9 dimension-shaped modes, the two concern modes that find and trace what
 // this repository's specialties actually are, plus a custom mode that takes an
@@ -909,7 +913,7 @@ export type CreateExplorerSession = (
 export interface SpawnExplorerToolOptions {
     agentDir: string;
     /** Application-owned phase restriction; never supplied by the model. */
-    purpose?: "specialist-repair";
+    purpose?: "specialist-repair" | "coverage-recovery";
     /**
      * Audit state dir relative to the repo root, without a trailing slash. Used as the
      * destination for sub-agent logs and as the source of truth for
@@ -1027,9 +1031,12 @@ function extractSessionCostUsd(messages: ReadonlyArray<unknown>): number | null 
 
 export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): ToolDefinition {
     const specialistRepair = toolOptions.purpose === "specialist-repair";
-    const parameters = specialistRepair ? Type.Object({
+    const coverageRecovery = toolOptions.purpose === "coverage-recovery";
+    const restrictedModes = specialistRepair ? SPECIALIST_REPAIR_MODES
+        : coverageRecovery ? COVERAGE_RECOVERY_MODES : undefined;
+    const parameters = restrictedModes ? Type.Object({
         ...SpawnExplorerParams.properties,
-        mode: StringEnum(SPECIALIST_REPAIR_MODES),
+        mode: StringEnum(restrictedModes),
     }, { additionalProperties: false }) : SpawnExplorerParams;
     const maxTotalSpawns = toolOptions.maxTotalSpawns ?? DEFAULT_MAX_TOTAL_SPAWNS;
     const outputCapProbe = {};
@@ -1061,6 +1068,11 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
             + "Generic coverage is already closed; do not inspect audit maps or history, rerun coverage playbooks, or dispatch custom explorers. "
             + "A scout is permitted only when its current-HEAD receipt is missing or an exact compiler-uncovered cluster authorizes focused supplementation. "
             + "A tracer must use the exact concern identity and observed source; recorded bodies may use digest-bound amendments. "
+        : coverageRecovery
+        ? "Recover only the supplied missing coverage dimensions with a fixed coverage explorer. "
+            + "Use an explicit mode and exact source focus; gap_filler requires the named D1-D10 dimension. "
+            + "Specialist tracing, concern scouting and custom explorers are deferred to specialist repair. "
+            + "Preserve existing concerns and receipts; do not reconstruct already supplied state. "
         :
         "Spawn a fresh, stateless in-process sub-agent to perform a single bounded exploration. " +
         "The sub-agent does not inherit your context. Returns a structured ## Report tailored to the mode. " +
@@ -1080,7 +1092,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         "wall-clock time per sub-agent" +
         (maxTotalCostUsd === null ? "" : `, plus max $${maxTotalCostUsd.toFixed(2)} provider-reported sub-agent cost`) +
         ". Dispatch as many as the topic decomposition needs within those bounds. " +
-        (specialistRepair ? "An explicit concern mode is required. " : "Default mode: topography. ") +
+        (restrictedModes ? "An explicit permitted mode is required. " : "Default mode: topography. ") +
         "Reports exceeding 16 KB fail closed and cannot establish " +
         "an explorer receipt. target_path is permanently domain-locked to ctx.cwd. " +
         "Use `summary` for a one-line focus hint passed as " +
@@ -1095,6 +1107,13 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         if (specialistRepair && !SPECIALIST_REPAIR_MODES.some(allowed => allowed === mode)) {
             return {
                 content: [{ type: "text", text: "Error: semantic repair permits only concern_scout and concern_tracer. Use the supplied compiler and receipt obligations; generic coverage is already closed. No explorer was dispatched." }],
+                isError: true,
+                details: { purpose_refused: true },
+            };
+        }
+        if (coverageRecovery && (!params.mode || !COVERAGE_RECOVERY_MODES.some(allowed => allowed === mode))) {
+            return {
+                content: [{ type: "text", text: "Error: coverage recovery requires an explicit fixed coverage mode. Specialist tracing, scouting and custom exploration belong to the later specialist phase. No explorer was dispatched." }],
                 isError: true,
                 details: { purpose_refused: true },
             };

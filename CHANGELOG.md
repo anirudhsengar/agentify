@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Recover missing coverage metadata before retracing already-recorded specialists. The bounded recovery controller rejects specialist mutations and child dispatches outside its phase, preserves pending receipt obligations, and uses the existing shared limits and final installation gates.
+
 - Expose canonical incremental shapes for topography, module boundaries, conventions, and pitfalls in the map tool schema. Reject malformed updates before persistence with bounded field-level feedback, while preserving partial-object updates, serialized transport normalization, and every complete-map/evidence gate.
 
 - Retain the preceding bounded, redacted provider failure when an SDK retry is refused by admission, so quota errors remain actionable without permitting another request or losing the original typed budget error.

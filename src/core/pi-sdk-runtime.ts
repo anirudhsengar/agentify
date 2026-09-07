@@ -302,7 +302,8 @@ export class PiSdkRuntime implements AgentRuntime {
     }
 
     const initialScout = customTools.find(tool => tool.name === "spawn_explorer");
-    if (checkpointCadence && options.spawnExplorerStateDir && options.spawnExplorerAgentDir
+    if (checkpointCadence && options.spawnExplorerPurpose !== "coverage-recovery"
+      && options.spawnExplorerStateDir && options.spawnExplorerAgentDir
       && options.onEvent && initialScout) {
       customTools.splice(0, customTools.length, ...withInitialScoutCheckpoint(customTools, {
         stateDir: options.spawnExplorerStateDir,
