@@ -38,6 +38,7 @@ jobs:
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
           false_claim_canary: false
+          expected_rejected_text: Standard JWT libraries usually ignore iat
         - name: commander-help
           artifact: pr13-cd24-historical-commander-34101652351
           map_sha256: 68e0447d855d436c9dfad9aadaa20a132c7e06f1aa9bdf6dfde76ad3888dd5f4
@@ -123,3 +124,4 @@ jobs:
     - name: Remove disposable inputs and authentication
       if: always()
       run: rm -rf -- "$RUNNER_TEMP/probe-home" "$RUNNER_TEMP/probe-target" "$RUNNER_TEMP/previous"
+run-name: PR13 source-only review quality controls, same fixed budgets
