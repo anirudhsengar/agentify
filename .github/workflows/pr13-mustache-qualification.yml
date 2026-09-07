@@ -1,0 +1,130 @@
+name: PR13 frozen Mustache qualification after Gitlink correction
+run-name: PR13 Mustache gitlink-corrected harness, unchanged qualified installer
+'on':
+  push:
+    branches:
+    - validation/pr13-mustache-gitlink-20260907
+    paths:
+    - .github/workflows/pr13-mustache-qualification.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: pr13-mustache-gitlink-qualification
+  cancel-in-progress: false
+jobs:
+  install:
+    if: github.actor == github.repository_owner
+    name: ${{ matrix.case.cohort }} / ${{ matrix.case.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        case:
+        - name: mustache
+          repository: anirudhsengar/mustache
+          sha: b015f866942a6eb45ce4d34009f2ba6ff16ce4c1
+          cohort: heldout-round-1
+    env:
+      LIVE_REPOSITORY: ${{ matrix.case.repository }}
+      LIVE_TARGET_SHA: ${{ matrix.case.sha }}
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: 04ebc3b9273aa203fc00407c646338f4c5ef2236
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Provision pinned candidate toolchain without model credentials
+      run: 'set -euo pipefail
+
+        sudo apt-get update -qq
+
+        sudo apt-get install --no-install-recommends -y ripgrep fd-find
+
+        if ! command -v fd >/dev/null; then sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd; fi
+
+        npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts
+
+        test "$(npm --version)" = 11.19.0
+
+        '
+    - name: Bind source to existing successful qualification, not a repeated gate
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: 'set -euo pipefail
+
+        umask 022
+
+        test "$(git rev-parse HEAD)" = 04ebc3b9273aa203fc00407c646338f4c5ef2236
+
+        test "$(git rev-parse HEAD^{tree})" = 12d16f03ed54195d870e1c325f674061c48d197f
+
+        test -z "$(git status --porcelain)"
+
+        test "$(node --version)" = v22.19.0
+
+        gh api repos/anirudhsengar/agentify/actions/runs/34095601877 > "$RUNNER_TEMP/existing-qualification.json"
+
+        jq -e ''.status == "completed" and .conclusion == "success" and .head_sha == "78ccd453595d46f47235ad29d97df22d5ae316c8"''
+        "$RUNNER_TEMP/existing-qualification.json" >/dev/null
+
+        printf ''LIVE_WORK_DIR=%s/pr13-cd24-%s-%s
+
+        '' "$RUNNER_TEMP" "$GITHUB_RUN_ID" "${{ matrix.case.name }}" >> "$GITHUB_ENV"
+
+        printf ''LIVE_PACK_RESULT=%s/pr13-cd24-pack.json
+
+        '' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+
+        git fetch --no-tags --depth=1 origin cd24d0fa2da079a1c0ab8d659cff508d5fc988c1
+
+        test "$(git diff --name-only cd24d0fa2da079a1c0ab8d659cff508d5fc988c1 HEAD)" = "$(printf ''%s\n'' scripts/live-installation.mjs
+        tests/installer/live-installation-workflow.test.mjs)"
+
+        git show -s --format=''candidate=%H%ntree=%T'' > "$RUNNER_TEMP/harness-candidate.txt"
+
+        printf ''qualified_binary_source=cd24d0fa2da079a1c0ab8d659cff508d5fc988c1\n'' >> "$RUNNER_TEMP/harness-candidate.txt"
+
+        '
+    - name: Pack exact qualified bytes
+      run: 'set -euo pipefail
+
+        umask 022
+
+        npm run --silent pack:release > "$LIVE_PACK_RESULT"
+
+        node --input-type=module -e ''import fs from "node:fs"; import assert from "node:assert/strict"; const p=JSON.parse(fs.readFileSync(process.env.LIVE_PACK_RESULT,"utf8"));
+        assert.equal(p.sha256,"b485ab5c238bb849c506c30b9dc1cf855d8e2830938dd422c19b1ac1b4abf6e4"); console.log(JSON.stringify(p));''
+
+        '
+    - name: Prepare fresh frozen target and install actual npm artifact
+      run: npm run --silent live:prepare
+    - name: Install with production M3 roles, boundaries, and budgets
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        GH_TOKEN: ${{ github.token }}
+      run: npm run --silent live:install
+    - name: Retain redacted per-target evidence
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: pr13-mustache-gitlink-${{ github.run_id }}
+        path: '${{ env.LIVE_WORK_DIR }}/evidence
+
+          ${{ runner.temp }}/existing-qualification.json
+
+          ${{ runner.temp }}/harness-candidate.txt'
+        if-no-files-found: warn
+        include-hidden-files: true
+        retention-days: 14
+    - name: Remove disposable target and credentials
+      if: always()
+      run: if test -n "${LIVE_WORK_DIR:-}"; then rm -rf -- "$LIVE_WORK_DIR"; fi
