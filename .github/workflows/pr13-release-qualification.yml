@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
-          ref: c46c5783253db5516dd91c503a69db926579425e
+          ref: 7da55f6c0e125532a3ed4baad5417129632a70c8
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -31,8 +31,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = c46c5783253db5516dd91c503a69db926579425e
-          test "$(git rev-parse HEAD^{tree})" = 0c9b57b1f53b93e4949ef5d5fd52e8dede225101
+          test "$(git rev-parse HEAD)" = 7da55f6c0e125532a3ed4baad5417129632a70c8
+          test "$(git rev-parse HEAD^{tree})" = ef09c036c80e15b34237aba590fc68887df95571
           test -z "$(git status --porcelain)"
           set +e
           npm run verify:pack-reproducibility > "$RUNNER_TEMP/pr13-pack-reproducibility.log" 2>&1
@@ -44,7 +44,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: pr13-c46c578-package-reproducibility-${{ github.run_id }}
+          name: pr13-7da55f6-package-reproducibility-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/pr13-pack-reproducibility.log
             ${{ runner.temp }}/pr13-pack-reproducibility.exit
