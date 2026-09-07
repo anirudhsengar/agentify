@@ -1,0 +1,79 @@
+name: PR13 exact-candidate release qualification
+run-name: PR13 cd24d0f keyless release qualification
+on:
+  push:
+    branches: [validation/pr13-cd24-20260907]
+    paths: [.github/workflows/pr13-exact-release-qualification.yml]
+permissions:
+  contents: read
+concurrency:
+  group: pr13-cd24-exact-release-qualification
+  cancel-in-progress: false
+jobs:
+  qualify:
+    if: github.actor == github.repository_owner
+    name: Exact cd24d0f qualification (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22.19.0", "24.19.0"]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: cd24d0fa2da079a1c0ab8d659cff508d5fc988c1
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Provision SDK search tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y ripgrep fd-find
+          if ! command -v fd >/dev/null; then sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd; fi
+      - name: Install the pinned toolchain without model credentials
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+          npm ci
+      - name: Verify immutable source and qualify the exact candidate
+        shell: bash
+        env:
+          EXPECTED_NODE: ${{ matrix.node }}
+        run: |
+          set -euo pipefail
+          umask 022
+          test "$(git rev-parse HEAD)" = cd24d0fa2da079a1c0ab8d659cff508d5fc988c1
+          test "$(git rev-parse HEAD^{tree})" = 69ca127e8920e13a5e981696f104ca64c64a302c
+          test "$(node --version)" = "v$EXPECTED_NODE"
+          test "$(npm --version)" = "11.19.0"
+          test -z "$(git status --porcelain)"
+          {
+            git show -s --format='candidate=%H%ntree=%T'
+            node --version
+            npm --version
+            printf 'umask='; umask
+          } > "$RUNNER_TEMP/pr13-cd24-environment.txt"
+          set +e
+          if test "$EXPECTED_NODE" = "22.19.0"; then
+            npm run verify:pack-reproducibility > "$RUNNER_TEMP/pr13-cd24-qualification.log" 2>&1
+          else
+            npm run verify:release > "$RUNNER_TEMP/pr13-cd24-qualification.log" 2>&1
+          fi
+          status=$?
+          printf '%s\n' "$status" > "$RUNNER_TEMP/pr13-cd24-qualification.exit"
+          cat "$RUNNER_TEMP/pr13-cd24-qualification.log"
+          exit "$status"
+      - name: Retain exact-candidate evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pr13-cd24-node-${{ matrix.node }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/pr13-cd24-environment.txt
+            ${{ runner.temp }}/pr13-cd24-qualification.log
+            ${{ runner.temp }}/pr13-cd24-qualification.exit
+          if-no-files-found: warn
+          retention-days: 14
