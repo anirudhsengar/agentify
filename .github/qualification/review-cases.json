@@ -1,0 +1,26 @@
+[
+  {
+    "name": "pyjwt-jws",
+    "artifact": "pr13-cd24-heldout-round-1-pyjwt-34101652351",
+    "map_sha256": "2bbed000f4b8fb433f2bc74d1cedcfc4cb81e84739ed2317c9d5642b18f11c89",
+    "concern": "JWS compact serialization encode/decode",
+    "target_sha": "7144e4534c34810f4525dc4578a32addd8212cff",
+    "repository": "anirudhsengar/pyjwt"
+  },
+  {
+    "name": "pyjwt-jwk",
+    "artifact": "pr13-cd24-heldout-round-1-pyjwt-34101652351",
+    "map_sha256": "2bbed000f4b8fb433f2bc74d1cedcfc4cb81e84739ed2317c9d5642b18f11c89",
+    "concern": "JWK parsing and key-to-algorithm resolution",
+    "target_sha": "7144e4534c34810f4525dc4578a32addd8212cff",
+    "repository": "anirudhsengar/pyjwt"
+  },
+  {
+    "name": "commander-help",
+    "artifact": "pr13-cd24-historical-commander-34101652351",
+    "map_sha256": "68e0447d855d436c9dfad9aadaa20a132c7e06f1aa9bdf6dfde76ad3888dd5f4",
+    "concern": "Help rendering",
+    "target_sha": "ba6d13ddb4243e5913367734f8c159089ffe7834",
+    "repository": "anirudhsengar/commander.js"
+  }
+]
