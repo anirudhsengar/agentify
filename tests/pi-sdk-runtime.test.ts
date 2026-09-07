@@ -169,6 +169,56 @@ test("MiniMax compatibility keeps reasoning and avoids unsupported named tool ch
   }
 });
 
+test("a refused SDK retry retains the preceding provider quota error and typed admission failure", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-provider-quota-"));
+  let requests = 0;
+  const server = createServer((_request, response) => {
+    requests += 1;
+    response.writeHead(429, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ type: "error", error: { type: "rate_limit_error",
+      message: "The Token Plan usage limit has been reached. (2067)" } }));
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    fs.writeFileSync(path.join(cwd, "models.json"), JSON.stringify({ providers: {
+      minimax: { baseUrl: `http://127.0.0.1:${address.port}`, api: "anthropic-messages",
+        apiKey: "fixture-placeholder", models: [{ id: "MiniMax-M3", contextWindow: 32768,
+          maxTokens: 4096, cost: { input: 0.1, output: 0.1, cacheRead: 0.1, cacheWrite: 0.1 } }] },
+    } }));
+    const budget = new AuditResourceBudget();
+    const session = budget.beginSession();
+    const denied = new AuditBudgetExceededError("fixture provider-call limit reached");
+    let admissions = 0;
+    await assert.rejects(new PiSdkRuntime().runSession({
+      cwd, configDir: cwd,
+      config: { schemaVersion: 1, thinkingLevel: "off", models: {
+        primary: { provider: "minimax", model: "MiniMax-M3" },
+      } },
+      systemPrompt: "Local quota transport fixture.", userPrompt: "Return a result.", tools: [], timeoutMs: 10_000,
+      executionPolicy: createReadOnlyExecutionPolicy({ cwd, tools: [] }), auditResourceBudget: budget,
+      onProviderRequest(reservation) {
+        if (admissions++ > 0) throw denied;
+        budget.recordProviderRequest(session, reservation);
+      },
+      onEvent(event) { budget.observeParentEvent(event, session); },
+    }), error => {
+      assert.equal(error, denied, "keep the original typed budget error and its identity");
+      assert.match((error as Error).message, /provider-call limit reached.*429.*Token Plan.*2067/);
+      return true;
+    });
+    assert.equal(requests, 1, "refused retry must not dispatch another HTTP request");
+    assert.equal(budget.snapshot().model_calls, 1);
+    assert.equal(budget.snapshot().unreserved_calls, 0);
+    assert.equal(budget.snapshot().unreported_calls, 1, "a failed response does not prove zero provider usage");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("required tool choice uses the Anthropic wire contract", () => {
   const payload = forceProviderToolChoice({ model: "fixture", tools: [{ name: "submit" }] }, "anthropic-messages", "submit");
   assert.deepEqual(payload, {

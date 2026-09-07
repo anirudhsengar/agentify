@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Retain the preceding bounded, redacted provider failure when an SDK retry is refused by admission, so quota errors remain actionable without permitting another request or losing the original typed budget error.
+
 - Require an explicit supported/unsupported verdict on specialist-review submissions, avoiding ambiguous null-or-object provider output. Approval still requires every known claim checked, no finding, immutable-source binding, and all independent final gates; persisted review attestations are unchanged.
 
 - Preserve structured validator rejections as SDK and provider tool errors without losing diagnostic details. Failed map checkpoints and tracer reports no longer appear to the model as successful calls; source, receipt, retry, and budget gates remain unchanged.

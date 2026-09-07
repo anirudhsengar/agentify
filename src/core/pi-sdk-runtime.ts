@@ -442,7 +442,16 @@ export class PiSdkRuntime implements AgentRuntime {
     };
     const promptUntilAbort = async (userPrompt: string): Promise<void> => {
       await Promise.race([session.prompt(userPrompt), abortPromise]);
-      if (admissionFailure) throw admissionFailure.error;
+      if (admissionFailure) {
+        const error = admissionFailure.error;
+        // A provider failure can trigger an SDK retry that our existing cap
+        // refuses. Keep the typed admission failure, but do not hide the
+        // original bounded/redacted provider diagnostic behind that cap.
+        if (error instanceof Error && lastAssistantError !== undefined) {
+          error.message += `; preceding provider failure (${selectedModel?.provider ?? "unknown"}): ${lastAssistantError}`;
+        }
+        throw error;
+      }
       // Pi resolves prompt() after its own retry/compaction loop, including on
       // a final provider error. Structured-output recovery must not start a
       // fresh series of requests against that failed transport.

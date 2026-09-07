@@ -210,6 +210,10 @@ The bridge preserves existing hook content, details, and usage, informs tool-res
 extensions of the rejection, and cannot downgrade either a thrown or structured
 failure to success. Rejected checkpoints and tracer proposals therefore reach
 provider tool results as errors without discarding their application-owned records.
+When an SDK retry after a failed provider response is refused by admission, the
+original typed admission error also retains that bounded, redacted provider
+diagnostic. A provider quota failure is not concealed by the local request cap;
+no extra request, budget waiver, or zero-usage claim is introduced.
 The CLI owns the external audit log through finalization. Semantic closure
 does not emit the terminal result before installation validation; exactly one
 terminal event records the committed installation or its failure and rollback.
