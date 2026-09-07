@@ -609,10 +609,15 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       } } as never);
       if (mode === "prose") return { turns: 1, costUsd: 0.001, aborted: false };
       if (mode === "argument-retry") {
+        // Hono used its one correction call without knowing which checklist
+        // entry or source excerpt had failed the generic review error.
+        await assert.rejects(() => options.customTools![0]!.execute("missing-claim", {
+          checked_claims: Object.keys(input.claims).filter(claim => claim !== "validation"), finding: null,
+        }, undefined, undefined, { cwd } as never), /missing checked claim IDs: validation/);
         await assert.rejects(() => options.customTools![0]!.execute("bad-quote", {
           checked_claims: ["pitfalls[0]"], finding: { claim: "pitfalls[0]", path: "clock.py",
             excerpt: "return False", reason: "An unverified quote cannot establish a finding." },
-        }, undefined, undefined, { cwd } as never), /quote exact supplied source/);
+        }, undefined, undefined, { cwd } as never), /pitfalls\[0\].*excerpt.*clock\.py/);
         options.onEvent!({ type: "tool_execution_end", toolName: "unrelated_tool", isError: true } as never);
         assert.throws(() => options.onProviderRequest!(), /provider-call limit/);
         options.onEvent!({ type: "tool_execution_end", toolName: "submit_specialist_review", isError: true } as never);

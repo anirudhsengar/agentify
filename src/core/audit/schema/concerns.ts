@@ -159,6 +159,22 @@ export const ConcernSchema = Type.Object({
     }),
 });
 
+/** Transport-only amendment; the expanded body still satisfies ConcernSchema. */
+export const ConcernAmendmentSchema = Type.Object({
+    base_digest: Type.String({ pattern: "^[0-9a-f]{64}$" }),
+    changes: Type.Object({
+        one_line: Type.Optional(ConcernSchema.properties.one_line),
+        covers: Type.Optional(ConcernSchema.properties.covers),
+        excludes: Type.Optional(ConcernSchema.properties.excludes),
+        flows: Type.Optional(ConcernSchema.properties.flows),
+        touchpoints: Type.Optional(ConcernSchema.properties.touchpoints),
+        invariants: Type.Optional(ConcernSchema.properties.invariants),
+        pitfalls: Type.Optional(ConcernSchema.properties.pitfalls),
+        entry_questions: Type.Optional(ConcernSchema.properties.entry_questions),
+        validation: Type.Optional(ConcernSchema.properties.validation),
+    }, { additionalProperties: false, minProperties: 1 }),
+}, { additionalProperties: false });
+
 export const ConcernEvidenceSchema = Type.Object({
     concerns: Type.Array(ConcernSchema, {
         description:

@@ -64,7 +64,9 @@ source beneath `TARGET_PATH` for the required concern, without inventing evidenc
 - `MUST` finish by calling `submit_concern_report` for a coherent concern, or
  `submit_concern_rejection` for a source-proven incoherent scout proposal. Put
  a complete concern object in `report_json` as compact JSON without a markdown
- fence. Correct a rejected submission only from observed evidence within the
+ fence. When Agentify supplies an attested baseline and its digest, prefer the
+ compact amendment format below rather than rewriting unchanged claims.
+ Correct a rejected submission only from observed evidence within the
  remaining budget. Do not print or fence JSON as prose.
 - Do not modify any files. You are read-only.
 - `MUST NOT` cite any path listed as untracked below. If the concern's
@@ -122,7 +124,7 @@ source beneath `TARGET_PATH` for the required concern, without inventing evidenc
 
 ## Report
 
-The `report_json` argument must be a compact JSON object with exactly this shape
+For a new concern, the `report_json` argument must be a compact JSON object with exactly this shape
 (the notation below describes JSON types; do not copy the type words):
 
 ```text
@@ -169,6 +171,22 @@ space with speculative claims. `validation` contains only observed executable co
 `spans_subtrees` is optional because Agentify derives it from touchpoint paths.
 Agentify also binds `last_updated` to the exact repository commit. A missing or
 invalid tool submission remains an unresolved tracer.
+
+### Amending an attested concern
+
+When the runtime supplies a current-HEAD baseline and digest, submit
+`{"base_digest":"<exact supplied digest>","changes":{...}}` instead of repeating
+the whole body. Include only changed fields from `one_line`, `covers`, `excludes`,
+`flows`, `touchpoints`, `invariants`, `pitfalls`, `entry_questions`, or `validation`.
+An included array replaces that whole array; preserve its unchanged items
+verbatim. All omitted fields are restored exactly from the attested baseline.
+Do not amend identity, freshness, confidence, recurrence, or stability.
+
+Read source for every new or changed source claim. Unchanged attested evidence
+does not need another read. A stale digest, an empty/no-op amendment, missing
+observations, dropped verified flows, or an expanded body above 16 KB is rejected.
+The digest is an integrity binding, not source evidence or narrative approval;
+the complete expanded body still passes grounding, scope, ownership, and review.
 
 ## Expertise
 

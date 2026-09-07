@@ -462,8 +462,11 @@ test("successful tracers return bounded current compiler obligations without ext
             const body = JSON.parse(report.match(/```json\s*([\s\S]*?)```/u)![1]!) as Concern;
             if (sessions === 2) body.touchpoints.push({ path: "src/extract/extra.ts", symbol: null,
               centrality: "supporting", role: "Provides newly observed extraction support.", line_range: null });
+            const prior = loadCanonicalMapAt(cwd, stateDir)?.concern_evidence?.concerns[0];
             const submitted = await submit.execute("submit", {
-              report_json: JSON.stringify(body),
+              report_json: JSON.stringify(sessions === 2 && prior
+                ? { base_digest: specialistReviewDigest(prior), changes: { touchpoints: body.touchpoints } }
+                : body),
             }, undefined, undefined, { cwd } as never);
             assert.notEqual((submitted as { isError?: boolean }).isError, true);
           },
@@ -671,6 +674,83 @@ test("repair reuses only unchanged evidence attested at the current commit", asy
       assert.equal(recorded, valid, `${scenario}: ${result.content[0]?.text}`);
       assert.equal(result.isError === true, !valid, scenario);
     }
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("digest-bound amendments preserve unread attested claims and every existing gate", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-concern-amendment-"));
+  try {
+    for (const [file, source] of Object.entries({
+      "src/extract/mod.rs": "pub trait FromRequest {}\n",
+      "src/extract/rejection.rs": "pub enum Rejection {}\n",
+      "src/fresh.rs": "pub struct Fresh;\n",
+    })) {
+      fs.mkdirSync(path.dirname(path.join(cwd, file)), { recursive: true });
+      fs.writeFileSync(path.join(cwd, file), source);
+    }
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "amendment fixture");
+    const previous = parseStructuredConcernReport(REPORT, "2026-08-29T00:00:00.000Z")!;
+    // A live Hono retrace rewrote a 13 KB body to add two public surfaces,
+    // exceeded 16 KB, and invalidated observations for unchanged source.
+    previous.pitfalls[0]!.consequence = "The observed failure remains recorded. ".repeat(230);
+    const map = attestCodebaseMap(makeValidCodebaseMap({
+      concern_evidence: { concerns: [previous], not_concerns: [] }, expert_evidence: undefined,
+    }), currentRepositoryCommit(cwd)!);
+    const addition: Concern["touchpoints"][number] = {
+      path: "src/fresh.rs", symbol: "Fresh", role: "Carries newly observed request state.",
+      line_range: null, centrality: "supporting",
+    };
+    const changes = { touchpoints: [...previous.touchpoints, addition] };
+    const amendment = { base_digest: specialistReviewDigest(previous), changes };
+    assert.ok(Buffer.byteLength(JSON.stringify(amendment)) * 5 < Buffer.byteLength(JSON.stringify(previous)),
+      "the transport must not retranscribe the retained source claims");
+    const before = JSON.stringify(map);
+    for (const scenario of ["valid", "changed-unread-claim", "stale-digest", "stale-head", "failed-receipt",
+      "missing-receipt", "unobserved-addition", "identity", "extra-field", "empty", "unchanged", "oversized",
+      "changed-current-body", "removed-current-map", "dropped-flow"]) {
+      const input = structuredClone(map);
+      const proposal: { base_digest: string; changes: Record<string, unknown>; extra?: boolean } = structuredClone(amendment);
+      const observed = new Set(["src/fresh.rs"]);
+      if (scenario === "changed-unread-claim") proposal.changes.covers = "Invents unrelated scope without source.";
+      if (scenario === "stale-digest") proposal.base_digest = "0".repeat(64);
+      if (scenario === "stale-head") input.explorer_receipts!.repository_commit = "0".repeat(40);
+      if (scenario === "failed-receipt") input.explorer_receipts!.receipts.forEach(receipt => { receipt.success = false; });
+      if (scenario === "missing-receipt") delete input.explorer_receipts;
+      if (scenario === "unobserved-addition") observed.clear();
+      if (scenario === "identity") proposal.changes.concern = "Renamed identity";
+      if (scenario === "extra-field") proposal.extra = true;
+      if (scenario === "empty") proposal.changes = {};
+      if (scenario === "unchanged") proposal.changes = { touchpoints: previous.touchpoints };
+      if (scenario === "dropped-flow") proposal.changes.flows = [];
+      if (scenario === "oversized") {
+        proposal.changes.pitfalls = [{ ...previous.pitfalls[0], consequence: "x".repeat(16_000) }];
+        observed.add("src/extract/mod.rs");
+        observed.add("src/extract/rejection.rs");
+      }
+      let submitted: Concern | undefined;
+      const current = structuredClone(input);
+      if (scenario === "changed-current-body") current.concern_evidence!.concerns[0]!.one_line = "A concurrent updated body.";
+      const tool = createConcernSubmissionTool(previous.last_updated, value => { submitted = value; },
+        cwd, previous.concern, ["src/extract/mod.rs"], input, observed,
+        () => scenario === "removed-current-map" ? null : current);
+      const result = await tool.execute("amend", { report_json: JSON.stringify(proposal) },
+        undefined, undefined, { cwd } as never) as { isError?: boolean; content: Array<{ text?: string }> };
+      assert.equal(result.isError === true, scenario !== "valid", `${scenario}: ${result.content[0]?.text}`);
+      if (scenario === "valid") {
+        assert.deepEqual(submitted, { ...previous, ...changes });
+        assert.deepEqual(submitted!.flows, previous.flows);
+        assert.deepEqual(submitted!.pitfalls, previous.pitfalls);
+      } else {
+        assert.equal(submitted, undefined, scenario);
+      }
+    }
+    assert.equal(JSON.stringify(map), before, "proposal validation must not mutate the attested baseline");
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

@@ -19,7 +19,9 @@ export function createSpecialistReviewSubmissionSchema(claimIds: readonly string
     finding: Type.Union([Type.Null(), Type.Object({
       ...SpecialistReviewFindingSchema.properties,
       claim: claimId,
-    }, { additionalProperties: false })]),
+    }, { additionalProperties: false })], {
+      description: "Use JSON null, never an empty object, only after checking every supplied claim ID. Otherwise provide claim, path, excerpt and reason for one source-backed finding.",
+    }),
     additional_findings: Type.Optional(Type.Array(Type.Object({
       ...SpecialistReviewFindingSchema.properties,
       claim: claimId,

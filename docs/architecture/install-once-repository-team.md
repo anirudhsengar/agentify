@@ -163,7 +163,10 @@ no filesystem or command tools, and one provider request within
 90 seconds including source collection. Only a rejected typed submission permits
 one additional request to correct its arguments, within the same deadline and
 shared resource budget. Prose, unrelated tool errors, and a second rejection grant
-no further calls. It submits immediately at the first decisive rejection, retaining
+no further calls. Rejected checklists name missing claim IDs and rejected excerpts
+name their claim and source path in bounded feedback, so the one correction call
+can repair the actual argument error. Approval requires JSON null, never an empty
+finding object, and the complete checklist. It submits immediately at the first decisive rejection, retaining
 additional findings only if already established rather than searching for a quota.
 It submits a typed result: up to three
 unsupported assertions, each with a known claim ID and exact source excerpt, or
@@ -460,7 +463,15 @@ concern schema, binds its freshness to the exact HEAD commit timestamp, and
 requires every cited touchpoint, flow step, invariant, and pitfall path to be a
 regular tracked HEAD file. Concrete touchpoint symbols must occur in bounded
 HEAD blob reads, including compound and qualified names. The compiler repeats
-these checks for persisted evidence. Before a body exists, a tracer may instead
+these checks for persisted evidence. A repair tracer may use a transport-only
+`{base_digest, changes}` amendment against the exact current-HEAD attested body.
+Only selected narrative/evidence fields can change; selected arrays replace the
+whole array and omitted fields remain byte-for-byte identical. The baseline is
+reloaded at submission, and stale digests, unobserved changes, no-op amendments,
+lost flows, new uncovered obligations, and expanded reports above the unchanged
+16 KB limit are rejected. Reused paths retain their original receipts rather
+than becoming new observations. Amendments grant no narrative approval or
+installation credit. Before a body exists, a tracer may instead
 use a distinct typed rejection terminal only when observed immutable source proves
 the scout identity is an incoherent catalog or has no complete behavioral flow.
 The application validates the exact excerpt, checkpoints the rejection, and

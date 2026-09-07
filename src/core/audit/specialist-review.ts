@@ -209,12 +209,19 @@ async function reviewConcern(
       const finding = report.finding;
       const findings = [finding, ...report.additional_findings ?? []].filter(item => item !== null);
       const excerpts = findings.map(item => exactSourceExcerpt(sources.get(item.path), item.excerpt));
-      if ([...checked].some(key => !Object.hasOwn(claims, key))
-        || (finding === null && findings.length > 0)
-        || new Set(findings.map(item => item.claim)).size !== findings.length
-        || (finding === null && Object.keys(claims).some(key => !checked.has(key)))
-        || findings.some((item, index) => !Object.hasOwn(claims, item.claim) || excerpts[index] === null)) {
-        throw new Error("review must cover known claims and quote exact supplied source");
+      const errors: string[] = [];
+      if ([...checked].some(key => !Object.hasOwn(claims, key))) errors.push("checked_claims contains an unknown claim ID");
+      if (finding === null && findings.length > 0) errors.push("a null finding cannot have additional findings");
+      if (new Set(findings.map(item => item.claim)).size !== findings.length) errors.push("finding claim IDs must be distinct");
+      const missing = finding === null ? Object.keys(claims).filter(key => !checked.has(key)) : [];
+      if (missing.length > 0) errors.push(`missing checked claim IDs: ${missing.slice(0, 12).join(", ")}`
+        + (missing.length > 12 ? ` (${missing.length} total; check every supplied ID)` : ""));
+      findings.forEach((item, index) => {
+        if (!Object.hasOwn(claims, item.claim)) errors.push(`unknown finding claim ID: ${item.claim}`);
+        if (excerpts[index] === null) errors.push(`${item.claim}: excerpt is not contiguous verbatim source from ${JSON.stringify(item.path)}; quote one exact supplied expression without ellipses or rewritten indentation`);
+      });
+      if (errors.length > 0) {
+        throw new Error(`review must cover known claims and quote exact supplied source; ${errors.join("; ")}`.slice(0, 2_048));
       }
       submitted = structuredClone(report);
       if (submitted.finding) submitted.finding.excerpt = excerpts[0]!;

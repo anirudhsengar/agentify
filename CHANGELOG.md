@@ -4,6 +4,9 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Let repair tracers submit digest-bound field amendments instead of retranscribing whole attested concern bodies. Reload the baseline at submission, retain unchanged evidence and its original receipts, and preserve all expanded-body size, source, scope, ownership, and narrative gates.
+- Return bounded missing-claim and bad-excerpt diagnostics for rejected specialist reviews; retain the same one argument-correction retry and require explicit null plus a complete checklist for approval.
+
 - Hand coverage-complete audits with pending source receipts to the existing bounded specialist-repair phase. Require current-commit scouting and tracing for every accepted specialist before installation; preserve failed history, cancellation, budgets and single terminal-log ownership.
 
 - Keep optional tracer focus consistent with its required concern identity, enforce reserved submission turns at tool execution, and retain bounded rejected-submission diagnostics without relaxing source receipts.
