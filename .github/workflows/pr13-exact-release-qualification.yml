@@ -57,12 +57,12 @@ jobs:
             printf 'umask='; umask
           } > "$RUNNER_TEMP/pr13-cd24-environment.txt"
           set +e
-          if test "$EXPECTED_NODE" = "22.19.0"; then
-            npm run verify:pack-reproducibility > "$RUNNER_TEMP/pr13-cd24-qualification.log" 2>&1
-          else
-            npm run verify:release > "$RUNNER_TEMP/pr13-cd24-qualification.log" 2>&1
-          fi
+          npm run verify:release > "$RUNNER_TEMP/pr13-cd24-qualification.log" 2>&1
           status=$?
+          if test "$status" = 0 && test "$EXPECTED_NODE" = "22.19.0"; then
+            npm run verify:pack-reproducibility >> "$RUNNER_TEMP/pr13-cd24-qualification.log" 2>&1
+            status=$?
+          fi
           printf '%s\n' "$status" > "$RUNNER_TEMP/pr13-cd24-qualification.exit"
           cat "$RUNNER_TEMP/pr13-cd24-qualification.log"
           exit "$status"
