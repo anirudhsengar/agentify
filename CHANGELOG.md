@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Require an explicit supported/unsupported verdict on specialist-review submissions, avoiding ambiguous null-or-object provider output. Approval still requires every known claim checked, no finding, immutable-source binding, and all independent final gates; persisted review attestations are unchanged.
+
 - Preserve structured validator rejections as SDK and provider tool errors without losing diagnostic details. Failed map checkpoints and tracer reports no longer appear to the model as successful calls; source, receipt, retry, and budget gates remain unchanged.
 
 - Keep enabled Anthropic-compatible thinking inside the final output ceiling with the SDK's answer reserve, instead of sending a larger thinking allowance than the complete response limit. Refuse impossible envelopes before HTTP dispatch/accounting; preserve the configured model, thinking mode, smaller bounds, and aggregate budgets.

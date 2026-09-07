@@ -19,6 +19,30 @@ import { createWriteMapTools } from "../../src/core/audit/write-map-tools.ts";
 import { actionableNarrativeCorrections, runRepositoryAudit,
   structuralNarrativeRetraces } from "../../src/core/runs/repository-audit-run.ts";
 import { AgentifyLog } from "../../src/core/audit/log.ts";
+import { createSpecialistReviewSubmissionSchema, type SpecialistReviewSubmission } from "../../src/core/audit/schema/specialist-review.ts";
+
+function reviewWire(report: SpecialistReviewSubmission) {
+  return { checked_claims: report.checked_claims,
+    ...(report.finding === null ? { verdict: "supported" as const }
+      : { verdict: "unsupported" as const, finding: report.finding }),
+    ...(report.additional_findings ? { additional_findings: report.additional_findings } : {}),
+  };
+}
+
+test("review transport requires an explicit verdict rather than an ambiguous nullable object", () => {
+  const schema = createSpecialistReviewSubmissionSchema(["one_line", "flows[0]"]);
+  assert.equal(Value.Check(schema, { verdict: "supported", checked_claims: ["one_line", "flows[0]"] }), true);
+  assert.equal(Value.Check(schema, { verdict: "unsupported", checked_claims: ["one_line"],
+    finding: { claim: "one_line", path: "clock.py", excerpt: "return int(value)", reason: "Numeric strings are accepted." } }), true);
+  for (const invalid of [
+    { checked_claims: ["one_line", "flows[0]"] },
+    { checked_claims: ["one_line", "flows[0]"], finding: {} },
+    { checked_claims: ["one_line", "flows[0]"], finding: null },
+    { verdict: "supported", checked_claims: ["one_line", "flows[0]"], finding: {} },
+    { verdict: "supported", checked_claims: ["one_line", "flows[0]"], finding: null },
+    { verdict: "approved", checked_claims: ["one_line", "flows[0]"] },
+  ]) assert.equal(Value.Check(schema, invalid), false, JSON.stringify(invalid));
+});
 
 // Reduced from an installed held-out team's false numeric-string rejection.
 // Error-message wording does not override executable int() coercion.
@@ -95,11 +119,11 @@ test("an exact current source review retires an incoherent body without another 
       options.onProviderRequest?.({ inputTokens: 100, outputTokens: 100, costUsd: 0.01 });
       options.onEvent?.({ type: "message_end", message: { role: "assistant", stopReason: "toolUse",
         usage: { input: 50, output: 10, cost: { total: 0.001 } } } } as never);
-      await options.customTools![0]!.execute("review", {
+      await options.customTools![0]!.execute("review", reviewWire({
         checked_claims: Object.keys(claims),
         finding: { claim: "concern", path: "src/extract/mod.rs", excerpt: "pub trait FromRequest {}",
           reason: "Extraction and rejection are separate behaviors without one shared failure domain or invariant set." },
-      }, undefined, undefined, { cwd } as never);
+      }), undefined, undefined, { cwd } as never);
       return { turns: 1, costUsd: 0.001, aborted: true };
     } };
     const reviewed = await reviewSpecialistCompilation({ cwd, runtime,
@@ -160,9 +184,9 @@ test("review re-proves supporting attachments hidden by normalized coverage", as
       assert.equal(Object.hasOwn(supporting, "role"), alteredRole,
         "a compiler-looking prefix must not exempt an added behavioral claim");
       const claim = Object.keys(input.claims).find(key => input.claims[key] === supporting)!;
-      await options.customTools![0]!.execute("review", { checked_claims: Object.keys(input.claims), finding: alteredRole
+      await options.customTools![0]!.execute("review", reviewWire({ checked_claims: Object.keys(input.claims), finding: alteredRole
         ? { claim, path: "clock/warnings.py", excerpt: "class ClockWarning(Warning):", reason: "This class does not convert deadlines." }
-        : null },
+        : null }),
         undefined, undefined, { cwd } as never);
       return { turns: 0, costUsd: 0, aborted: false };
     } };
@@ -221,9 +245,9 @@ test("review removes a rejected surplus pitfall before semantic repair", async (
       reviews += 1;
       const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
       const falseClaim = Object.keys(claims).find(key => JSON.stringify(claims[key]).includes(FALSE_CLAIM));
-      await options.customTools![0]!.execute("review", { checked_claims: Object.keys(claims), finding: falseClaim
+      await options.customTools![0]!.execute("review", reviewWire({ checked_claims: Object.keys(claims), finding: falseClaim
         ? { claim: falseClaim, path: "clock.py", excerpt: "return int(value)", reason: CORRECTION }
-        : null }, undefined, undefined, { cwd } as never);
+        : null }), undefined, undefined, { cwd } as never);
       return { turns: 0, costUsd: 0, aborted: false };
     } };
     const checkpoints: Concern[][] = [];
@@ -277,7 +301,7 @@ test("independent specialist bodies are reviewed with bounded overlap", async ()
       peak = Math.max(peak, active);
       await new Promise(resolve => setTimeout(resolve, 25));
       const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
-      await options.customTools![0]!.execute("review", { checked_claims: Object.keys(claims), finding: null },
+      await options.customTools![0]!.execute("review", reviewWire({ checked_claims: Object.keys(claims), finding: null }),
         undefined, undefined, { cwd } as never);
       assert.equal(options.signal?.aborted, true,
         "an accepted typed review must cancel before another provider request can start");
@@ -328,7 +352,7 @@ test("specialist review overlap falls back to serial admission when reservations
       options.onProviderRequest!({ inputTokens: 1_000, outputTokens: 100, costUsd: 0.1 });
       await new Promise(resolve => setTimeout(resolve, 25));
       const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
-      await options.customTools![0]!.execute("review", { checked_claims: Object.keys(claims), finding: null },
+      await options.customTools![0]!.execute("review", reviewWire({ checked_claims: Object.keys(claims), finding: null }),
         undefined, undefined, { cwd } as never);
       options.onEvent?.({ type: "message_end", message: { role: "assistant", stopReason: "toolUse",
         usage: { input: 50, output: 10, cost: { total: 0.01 } } } } as never);
@@ -412,10 +436,10 @@ test(`claim correction reviews within one session without overwriting concurrent
         }
         const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
         const claim = Object.keys(claims).find(key => JSON.stringify(claims[key]).includes(FALSE_CLAIM));
-        await options.customTools![0]!.execute("review", { checked_claims: Object.keys(claims),
+        await options.customTools![0]!.execute("review", reviewWire({ checked_claims: Object.keys(claims),
           finding: claim ? { claim, path: (claims["touchpoints[0]"] as { path: string }).path,
             excerpt: "return int(value)", reason: CORRECTION } : null,
-        }, undefined, undefined, { cwd } as never);
+        }), undefined, undefined, { cwd } as never);
         options.onEvent?.({ type: "tool_execution_end" } as never);
         return { turns: 1, costUsd: 0.001, aborted: true };
       }
@@ -574,7 +598,7 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
         "normalized review must retain a source-proven strategy family");
       assert.match(options.systemPrompt, /components.*one repository-owned operational outcome.*joint invariant/is,
         "normalized review must retain a source-proven operational outcome");
-      assert.match(options.systemPrompt, /Only return a null finding after every supplied claim is supported/,
+      assert.match(options.systemPrompt, /Only use the supported verdict after every supplied claim is supported/,
         "early rejection must not weaken the complete approval checklist");
       assert.deepEqual(options.executionPolicy.allowedTools, []);
       assert.deepEqual(options.tools, ["submit_specialist_review"]);
@@ -591,11 +615,11 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       assert.ok(!JSON.stringify(input.compiler_attachments).includes(FALSE_CLAIM),
         "authored claims cannot become trusted attachment context");
       const schema = options.customTools![0]!.parameters as unknown as {
-        properties: { finding: { anyOf: Array<{ properties?: {
+        properties: { finding: { properties: {
           claim: { enum?: string[] }; excerpt: { description?: string };
-        } }> } };
+        } } };
       };
-      const findingSchema = schema.properties.finding.anyOf.find(item => item.properties)?.properties;
+      const findingSchema = schema.properties.finding.properties;
       assert.deepEqual(findingSchema?.claim.enum, Object.keys(input.claims),
         "the provider must see exact claim IDs as an enum, not unconstrained text");
       assert.match(findingSchema?.excerpt.description ?? "", /contiguous/);
@@ -611,13 +635,20 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
       if (mode === "argument-retry") {
         // Hono used its one correction call without knowing which checklist
         // entry or source excerpt had failed the generic review error.
-        await assert.rejects(() => options.customTools![0]!.execute("missing-claim", {
+        await assert.rejects(() => options.customTools![0]!.execute("missing-claim", reviewWire({
           checked_claims: Object.keys(input.claims).filter(claim => claim !== "validation"), finding: null,
-        }, undefined, undefined, { cwd } as never), /missing checked claim IDs: validation/);
-        await assert.rejects(() => options.customTools![0]!.execute("bad-quote", {
+        }), undefined, undefined, { cwd } as never), /missing checked claim IDs: validation/);
+        await assert.rejects(() => options.customTools![0]!.execute("bad-quote", reviewWire({
           checked_claims: ["pitfalls[0]"], finding: { claim: "pitfalls[0]", path: "clock.py",
             excerpt: "return False", reason: "An unverified quote cannot establish a finding." },
-        }, undefined, undefined, { cwd } as never), /pitfalls\[0\].*excerpt.*clock\.py/);
+        }), undefined, undefined, { cwd } as never), /pitfalls\[0\].*excerpt.*clock\.py/);
+        await assert.rejects(() => options.customTools![0]!.execute("missing-finding", {
+          verdict: "unsupported", checked_claims: Object.keys(input.claims),
+        }, undefined, undefined, { cwd } as never), /unsupported requires an exact-source finding/);
+        await assert.rejects(() => options.customTools![0]!.execute("conflicting-verdict", {
+          verdict: "supported", checked_claims: Object.keys(input.claims),
+          finding: { claim: "pitfalls[0]", path: "clock.py", excerpt: "return int(value)", reason: CORRECTION },
+        }, undefined, undefined, { cwd } as never), /supported requires no finding property/);
         options.onEvent!({ type: "tool_execution_end", toolName: "unrelated_tool", isError: true } as never);
         assert.throws(() => options.onProviderRequest!(), /provider-call limit/);
         options.onEvent!({ type: "tool_execution_end", toolName: "submit_specialist_review", isError: true } as never);
@@ -630,12 +661,12 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
         } } as never);
       }
       const falseClaim = JSON.stringify(input.claims[reviewedClaim]).includes(FALSE_CLAIM);
-      await options.customTools![0]!.execute("review", {
+      await options.customTools![0]!.execute("review", reviewWire({
         checked_claims: mode === "incomplete" ? [] : Object.keys(input.claims),
         finding: falseClaim ? { claim: reviewedClaim, path: "clock.py",
           excerpt: excerptOverride ?? (forgedExcerpt ? "return False" : "return int(value)"), reason: CORRECTION } : null,
         ...(additionalFindings.length ? { additional_findings: additionalFindings } : {}),
-      } as never, undefined, undefined, { cwd } as never);
+      }), undefined, undefined, { cwd } as never);
       options.onEvent!({ type: "tool_execution_end" } as never);
       return { turns: mode === "argument-retry" ? 2 : 1, costUsd: mode === "argument-retry" ? 0.002 : 0.001, aborted: true };
     } };

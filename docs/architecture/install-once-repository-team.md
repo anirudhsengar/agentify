@@ -165,8 +165,12 @@ one additional request to correct its arguments, within the same deadline and
 shared resource budget. Prose, unrelated tool errors, and a second rejection grant
 no further calls. Rejected checklists name missing claim IDs and rejected excerpts
 name their claim and source path in bounded feedback, so the one correction call
-can repair the actual argument error. Approval requires JSON null, never an empty
-finding object, and the complete checklist. It submits immediately at the first decisive rejection, retaining
+can repair the actual argument error. The wire contract requires an explicit
+`supported` verdict with no finding property and the complete checklist, or an
+`unsupported` verdict with an exact-source finding. Null, empty, missing-verdict,
+and contradictory proposals are rejected rather than interpreted as approval.
+Only validated supported submissions become the existing canonical null finding;
+persisted exact-body review attestations and their meaning are unchanged. It submits immediately at the first decisive rejection, retaining
 additional findings only if already established rather than searching for a quota.
 It submits a typed result: up to three
 unsupported assertions, each with a known claim ID and exact source excerpt, or

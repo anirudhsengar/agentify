@@ -14,19 +14,21 @@ export function createSpecialistReviewSubmissionSchema(claimIds: readonly string
   const claimId = Type.String({ enum: [...claimIds],
     description: "Exact supplied claim ID, never the claim text or a description of it." });
   return Type.Object({
+    verdict: Type.String({ enum: ["supported", "unsupported"],
+      description: "Explicit review decision. supported requires every supplied claim ID checked and no finding. unsupported requires one exact-source finding." }),
     checked_claims: Type.Array(claimId, { maxItems: 512,
-      description: "IDs actually checked. Include every supplied ID only for a null finding." }),
-    finding: Type.Union([Type.Null(), Type.Object({
+      description: "IDs actually checked. Include every supplied ID for the supported verdict." }),
+    finding: Type.Optional(Type.Object({
       ...SpecialistReviewFindingSchema.properties,
       claim: claimId,
-    }, { additionalProperties: false })], {
-      description: "Use JSON null, never an empty object, only after checking every supplied claim ID. Otherwise provide claim, path, excerpt and reason for one source-backed finding.",
-    }),
+    }, { additionalProperties: false,
+      description: "Required for unsupported: claim, path, excerpt and reason. Omit the entire finding property for supported; never send an empty object or null.",
+    })),
     additional_findings: Type.Optional(Type.Array(Type.Object({
       ...SpecialistReviewFindingSchema.properties,
       claim: claimId,
     }, { additionalProperties: false }), { maxItems: 2,
-      description: "Up to two further independent findings after finding. Empty or omitted for a null finding. Stop after three total findings." })),
+      description: "Up to two further independent findings after finding. Empty or omitted for supported. Stop after three total findings." })),
   }, { additionalProperties: false });
 }
 
@@ -46,5 +48,10 @@ export const SpecialistReviewAttestationSchema = Type.Object({
   }, { additionalProperties: false }), { maxItems: 128 }),
 }, { additionalProperties: false });
 
-export type SpecialistReviewSubmission = Static<ReturnType<typeof createSpecialistReviewSubmissionSchema>>;
+/** Canonical application result, after validating the explicit wire verdict. */
+export type SpecialistReviewSubmission = {
+  checked_claims: string[];
+  finding: Static<typeof SpecialistReviewFindingSchema> | null;
+  additional_findings?: Array<Static<typeof SpecialistReviewFindingSchema>>;
+};
 export type SpecialistReviewAttestation = Static<typeof SpecialistReviewAttestationSchema>;
