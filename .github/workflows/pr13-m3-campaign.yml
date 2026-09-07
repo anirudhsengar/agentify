@@ -1,0 +1,202 @@
+name: PR13 frozen M3 qualification wave
+run-name: PR13 cd24 M3 historical/heldout wave 1
+'on':
+  push:
+    branches:
+    - validation/pr13-cd24-m3-20260907
+    paths:
+    - .github/workflows/pr13-m3-campaign.yml
+    - .github/qualification/pr13-cancel-probe.mjs
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: pr13-cd24-m3-wave-1
+  cancel-in-progress: false
+jobs:
+  install:
+    if: github.actor == github.repository_owner
+    name: ${{ matrix.case.cohort }} / ${{ matrix.case.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        case:
+        - name: commander
+          repository: anirudhsengar/commander.js
+          sha: ba6d13ddb4243e5913367734f8c159089ffe7834
+          cohort: historical
+        - name: pyjwt
+          repository: anirudhsengar/pyjwt
+          sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          cohort: heldout-round-1
+        - name: chi
+          repository: anirudhsengar/chi
+          sha: 36611d24579aaca3250ed9732e17e085c5026334
+          cohort: heldout-round-1
+        - name: mustache
+          repository: anirudhsengar/mustache
+          sha: b015f866942a6eb45ce4d34009f2ba6ff16ce4c1
+          cohort: heldout-round-1
+    env:
+      LIVE_REPOSITORY: ${{ matrix.case.repository }}
+      LIVE_TARGET_SHA: ${{ matrix.case.sha }}
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: cd24d0fa2da079a1c0ab8d659cff508d5fc988c1
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Provision pinned candidate toolchain without model credentials
+      run: 'set -euo pipefail
+
+        sudo apt-get update -qq
+
+        sudo apt-get install --no-install-recommends -y ripgrep fd-find
+
+        if ! command -v fd >/dev/null; then sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd; fi
+
+        npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts
+
+        test "$(npm --version)" = 11.19.0
+
+        '
+    - name: Bind source to existing successful qualification, not a repeated gate
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: 'set -euo pipefail
+
+        umask 022
+
+        test "$(git rev-parse HEAD)" = cd24d0fa2da079a1c0ab8d659cff508d5fc988c1
+
+        test "$(git rev-parse HEAD^{tree})" = 69ca127e8920e13a5e981696f104ca64c64a302c
+
+        test -z "$(git status --porcelain)"
+
+        test "$(node --version)" = v22.19.0
+
+        gh api repos/anirudhsengar/agentify/actions/runs/34095601877 > "$RUNNER_TEMP/existing-qualification.json"
+
+        jq -e ''.status == "completed" and .conclusion == "success" and .head_sha == "78ccd453595d46f47235ad29d97df22d5ae316c8"''
+        "$RUNNER_TEMP/existing-qualification.json" >/dev/null
+
+        printf ''LIVE_WORK_DIR=%s/pr13-cd24-%s-%s
+
+        '' "$RUNNER_TEMP" "$GITHUB_RUN_ID" "${{ matrix.case.name }}" >> "$GITHUB_ENV"
+
+        printf ''LIVE_PACK_RESULT=%s/pr13-cd24-pack.json
+
+        '' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        '
+    - name: Pack exact qualified bytes
+      run: 'set -euo pipefail
+
+        umask 022
+
+        npm run --silent pack:release > "$LIVE_PACK_RESULT"
+
+        node --input-type=module -e ''import fs from "node:fs"; import assert from "node:assert/strict"; const p=JSON.parse(fs.readFileSync(process.env.LIVE_PACK_RESULT,"utf8"));
+        assert.equal(p.sha256,"b485ab5c238bb849c506c30b9dc1cf855d8e2830938dd422c19b1ac1b4abf6e4"); console.log(JSON.stringify(p));''
+
+        '
+    - name: Prepare fresh frozen target and install actual npm artifact
+      run: npm run --silent live:prepare
+    - name: Install with production M3 roles, boundaries, and budgets
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        GH_TOKEN: ${{ github.token }}
+      run: npm run --silent live:install
+    - name: Retain redacted per-target evidence
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: pr13-cd24-${{ matrix.case.cohort }}-${{ matrix.case.name }}-${{ github.run_id }}
+        path: '${{ env.LIVE_WORK_DIR }}/evidence
+
+          ${{ runner.temp }}/existing-qualification.json'
+        if-no-files-found: warn
+        include-hidden-files: true
+        retention-days: 14
+    - name: Remove disposable target and credentials
+      if: always()
+      run: if test -n "${LIVE_WORK_DIR:-}"; then rm -rf -- "$LIVE_WORK_DIR"; fi
+  cancellation:
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: cd24d0fa2da079a1c0ab8d659cff508d5fc988c1
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Provision pinned candidate toolchain without model credentials
+      run: 'set -euo pipefail
+
+        sudo apt-get update -qq
+
+        sudo apt-get install --no-install-recommends -y ripgrep fd-find
+
+        if ! command -v fd >/dev/null; then sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd; fi
+
+        npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts
+
+        test "$(npm --version)" = 11.19.0
+
+        '
+    - name: Prepare immutable read-only cancellation target
+      run: 'set -euo pipefail
+
+        test "$(git rev-parse HEAD)" = cd24d0fa2da079a1c0ab8d659cff508d5fc988c1
+
+        test "$(git rev-parse HEAD^{tree})" = 69ca127e8920e13a5e981696f104ca64c64a302c
+
+        printf ''PROBE_TARGET=%s/pr13-cancel-target
+
+        PROBE_HOME=%s/pr13-cancel-home
+
+        PROBE_EVIDENCE=%s/pr13-cancel-evidence
+
+        '' "$RUNNER_TEMP" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        git init -q "$RUNNER_TEMP/pr13-cancel-target"
+
+        git -C "$RUNNER_TEMP/pr13-cancel-target" fetch --depth=1 https://github.com/anirudhsengar/hono.git e2740d5a1bd0b4254e517e3af8b60789284bc7bd
+
+        git -C "$RUNNER_TEMP/pr13-cancel-target" checkout -q --detach FETCH_HEAD
+
+        '
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ${{ github.sha }}
+        path: campaign-code
+        persist-credentials: false
+    - name: Cancel actual M3 production tracer and reconcile reservations
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+      run: node --import tsx campaign-code/.github/qualification/pr13-cancel-probe.mjs
+    - name: Retain cancellation evidence only
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: pr13-cd24-cancellation-${{ github.run_id }}
+        path: ${{ env.PROBE_EVIDENCE }}
+        if-no-files-found: warn
+        retention-days: 14
+    - name: Remove probe credentials and target
+      if: always()
+      run: rm -rf -- "$RUNNER_TEMP/pr13-cancel-home" "$RUNNER_TEMP/pr13-cancel-target"
