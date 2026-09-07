@@ -1,5 +1,5 @@
 name: PR13 explicit review verdict component qualification
-run-name: PR13 M3 explicit verdict on captured real specialist bodies
+run-name: PR13 M3 explicit verdict serial timing on two failed bodies
 'on':
   push:
     branches:
@@ -22,19 +22,13 @@ jobs:
     timeout-minutes: 10
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 1
       matrix:
         case:
         - name: pyjwt-jws
           artifact: pr13-cd24-heldout-round-1-pyjwt-34101652351
           map_sha256: 2bbed000f4b8fb433f2bc74d1cedcfc4cb81e84739ed2317c9d5642b18f11c89
           concern: JWS compact serialization encode/decode
-          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
-          repository: anirudhsengar/pyjwt
-        - name: pyjwt-jwk
-          artifact: pr13-cd24-heldout-round-1-pyjwt-34101652351
-          map_sha256: 2bbed000f4b8fb433f2bc74d1cedcfc4cb81e84739ed2317c9d5642b18f11c89
-          concern: JWK parsing and key-to-algorithm resolution
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
         - name: commander-help

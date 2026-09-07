@@ -22,9 +22,11 @@ const originalDigest=specialistReviewDigest(body);
 // Re-review the unchanged, captured body; this controlled input is not a fresh installation.
 map.concern_evidence.concerns=[body];delete map.specialist_reviews;
 const compilation=compileSpecialistEvidence(map,{cwd});assert.ok(compilation.assessment.accepted_concerns.includes(selected.concern));
-const budget=new AuditResourceBudget();const started=Date.now();const events=[];
+const budget=new AuditResourceBudget();const started=Date.now();const events=[];const stream={first_update_ms:null,last_update_ms:null,updates:0,types:{}};
+const sdk=new PiSdkRuntime();
+const runtime={async runSession(options){const observe=options.onEvent;return sdk.runSession({...options,onEvent(event){if(event.type==='message_update'){stream.updates++;stream.first_update_ms??=Date.now()-started;stream.last_update_ms=Date.now()-started;const type=event.assistantMessageEvent?.type??'unknown';stream.types[type]=(stream.types[type]??0)+1;}observe?.(event);}});}};
 process.env.MINIMAX_API_KEY=process.env.PI_API_KEY;
-const output=await reviewSpecialistCompilation({cwd,runtime:new PiSdkRuntime(),config:MODEL_CONFIG,
+const output=await reviewSpecialistCompilation({cwd,runtime,config:MODEL_CONFIG,
  ui:{status(){}},auditLog:{recordMessageEnd(){},sessionEvent(value){
   const e=value.event;
   if(e?.type==='tool_execution_end')events.push({elapsed_ms:Date.now()-started,toolName:e.toolName,isError:e.isError,feedback:e.isError?JSON.stringify(e.result).slice(0,2200):undefined});
@@ -32,6 +34,6 @@ const output=await reviewSpecialistCompilation({cwd,runtime:new PiSdkRuntime(),c
  }}},compilation,budget,'explicit-verdict-live-'+selected.name);
 const record=output.map.specialist_reviews?.records.find(r=>r.concern===selected.concern);
 const retired=output.map.concern_evidence?.not_concerns.some(r=>r.candidate===selected.concern)&&!output.map.concern_evidence?.concerns.some(r=>r.concern===selected.concern);
-const result={candidate_sha:candidate,case:selected,component_only:true,fresh_installation:false,installation_credit:false,original_body_digest:originalDigest,elapsed_ms:Date.now()-started,production_budget_overrides:false,usage:budget.snapshot(),events,review:record??null,retired_after_source_review:retired===true,valid_typed_outcome:record?.retryable===false||retired===true,source_unchanged:git(cwd,'status','--porcelain')===''};
+const result={candidate_sha:candidate,case:selected,component_only:true,fresh_installation:false,installation_credit:false,original_body_digest:originalDigest,elapsed_ms:Date.now()-started,production_budget_overrides:false,usage:budget.snapshot(),stream,events,review:record??null,serialized_live_probe:true,retired_after_source_review:retired===true,valid_typed_outcome:record?.retryable===false||retired===true,source_unchanged:git(cwd,'status','--porcelain')===''};
 fs.mkdirSync(out,{recursive:true});const text=redactSecrets(JSON.stringify(result,null,2),[process.env.PI_API_KEY]);fs.writeFileSync(path.join(out,'review-probe.json'),text+'\n');console.log(text);
 assert.ok(result.source_unchanged);assert.ok(result.valid_typed_outcome,'bounded review did not reach an explicit typed outcome');
