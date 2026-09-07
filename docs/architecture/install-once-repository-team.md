@@ -138,6 +138,14 @@ report with the map result. The parent still screens and traces proposals;
 scouting alone neither installs a team nor attests a specialist body.
 
 Finalization independently requires a current explorer receipt attestation.
+The enclosing installer owns the final terminal log. When generic coverage and
+specialist evidence are recorded but explorer receipts are incomplete, the
+coverage phase returns an internal checkpoint to the existing bounded
+specialist-repair phase, not a successful audit outcome. Standalone coverage
+audits still require complete receipts. Repair requires a current-HEAD scout
+and successful source-reading traces for every accepted concern, including
+baseline concerns; it preserves failed history and cannot override cancellation
+or the shared resource budget. Finalization independently checks all receipts.
 After deterministic compilation reaches its fixed point, each changed concern
 receives a separate read-only review using the configured primary model and the
 shared audit budget. At most two independent concern reviews overlap; their

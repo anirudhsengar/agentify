@@ -282,6 +282,9 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
   if (deferLogCompletion && ownsLog) {
     throw new Error("deferred audit logging requires a caller-owned AgentifyLog");
   }
+  // Only the enclosing installer, which owns the final terminal log, may
+  // continue to specialist repair with coverage closed but receipts pending.
+  const allowReceiptRepair = deferLogCompletion && !ownsLog;
   const startedAt = Date.now();
   setThinkingLevel(context.config.thinkingLevel);
 
@@ -352,6 +355,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
   context.ui.status("agentify: auditing existing repository");
 
   try {
+    context.signal?.throwIfAborted();
     const baseSessionDurationMs = resourceBudget.remainingDurationMs();
     const baseSessionBudget = resourceBudget.beginSession(baseSessionDurationMs);
     const baseDeadline = setTimeout(() => {
@@ -483,7 +487,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       && (
         closure.unresolved.length > 0
         || !specialistEvidenceRecorded(map)
-        || !receiptAssessment.complete
+        || (!receiptAssessment.complete && !allowReceiptRepair)
       )
       && recoveryPass < maxRecoveryPasses
       && !context.signal?.aborted
@@ -629,6 +633,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       receiptAssessment = explorerReceipts.assess(map);
     }
 
+    context.signal?.throwIfAborted();
     const specialistRecorded = map !== null && specialistEvidenceRecorded(map);
     const receiptsComplete = receiptAssessment.complete;
     const intentionallyStopped = (runtimeResult.aborted || controlledClosure)
@@ -639,6 +644,8 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       && closure.unresolved.length === 0
       && specialistRecorded
       && receiptsComplete;
+    const receiptHandoff = allowReceiptRepair && map !== null
+      && closure.unresolved.length === 0 && specialistRecorded && !receiptsComplete;
     const status = success ? "success" : runtimeResult.aborted ? "aborted" : "partial";
     if (!deferLogCompletion) {
       log.sessionEnd({
@@ -657,7 +664,7 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         agents_md_path: null,
       });
     }
-    if (!success) {
+    if (!success && !receiptHandoff) {
       const failedProvider = providerAuthFailure(runtimeResult.diagnostics);
       if (failedProvider) {
         throw new ProviderAuthFailedError(failedProvider, closure.closed.length, COVERAGE_DIMENSIONS.length);
@@ -690,9 +697,12 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
       mapFilename: DEFAULT_MAP_FILENAME,
     });
 
-    spinner.stop("repository audit complete", "success");
+    spinner.stop(receiptHandoff ? "coverage collected; specialist receipt repair pending" : "repository audit complete",
+      receiptHandoff ? "info" : "success");
     spinnerStopped = true;
-    context.ui.info(`agentify: validated codebase map written to ${stateDir}/${DEFAULT_MAP_FILENAME}`);
+    context.ui.info(receiptHandoff
+      ? `agentify: coverage checkpoint written to ${stateDir}/${DEFAULT_MAP_FILENAME}; specialist source receipts remain unresolved`
+      : `agentify: validated codebase map written to ${stateDir}/${DEFAULT_MAP_FILENAME}`);
     if (!deferLogCompletion) context.ui.info(`agentify: audit log written to ${log.logPath}`);
     return {
       map_path: `${stateDir}/${DEFAULT_MAP_FILENAME}`,

@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Hand coverage-complete audits with pending source receipts to the existing bounded specialist-repair phase. Require current-commit scouting and tracing for every accepted specialist before installation; preserve failed history, cancellation, budgets and single terminal-log ownership.
+
 - Keep optional tracer focus consistent with its required concern identity, enforce reserved submission turns at tool execution, and retain bounded rejected-submission diagnostics without relaxing source receipts.
 
 - Reject Windows batch scripts reached through a parent junction or symlink outside the repository while preserving in-repository links and root aliases. Exercise native batch, junction and credential boundaries in Windows CI.

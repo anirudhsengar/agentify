@@ -21,6 +21,10 @@ import type {
 } from "../../src/core/types.ts";
 import type { RepositoryInstallationPreflight } from "../../src/core/installer/contracts.ts";
 import { attestCodebaseMap, makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
+import { runRepositoryAudit as runCoveragePhase } from "../../src/core/runs/repository-audit-run-core.ts";
+import { compileSpecialistEvidence } from "../../src/core/audit/specialist-compiler.ts";
+import { assessExplorerReceiptAttestation } from "../../src/core/audit/explorer-receipts.ts";
+import { AuditResourceBudget } from "../../src/core/audit/resource-budget.ts";
 import { concernEvidencePaths } from "../../src/core/audit/specialist-completion.ts";
 
 type Concern = NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
@@ -850,3 +854,111 @@ test("same-HEAD audit continuation cannot reset an exhausted aggregate model-cal
     fs.rmSync(repository.cwd, { recursive: true, force: true });
   }
 });
+
+
+for (const outcome of ["repaired", "unresolved", "missing-scout", "cancelled", "cancelled-repair", "standalone", "cancelled-before", "standalone-cancelled-before"] as const) {
+  test(`receipt-only closure uses bounded specialist repair without waiving provenance: ${outcome}`, async () => {
+    const { cwd } = createRepository();
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-receipt-handoff-home-"));
+    const previousHome = process.env.HOME;
+    process.env.HOME = home;
+    const controller = new AbortController();
+    const budget = new AuditResourceBudget();
+    let calls = 0;
+    let repairCalls = 0;
+    const mapPath = path.join(cwd, ".agentify/runtime/audit/codebase_map.json");
+    try {
+      const compiled = compileSpecialistEvidence(aqaShapedMap(), { cwd });
+      assert.equal(compiled.complete, true, "fixture requires a structurally complete portfolio");
+      // Synthetic narrative approval isolates the orchestration boundary. It is
+      // not live/model qualification; source receipts must be supplied separately.
+      const map = attestCodebaseMap(compiled.map, git(cwd, "rev-parse", "HEAD"));
+      delete map.explorer_receipts;
+      const missing = map.concern_evidence!.concerns[0]!;
+      const scout = (options: AgentRuntimeSessionOptions): void => options.onEvent?.({
+        type: "tool_execution_end", toolName: "spawn_explorer", isError: false,
+        resultText: "Sub-agent (mode=concern_scout) explored .\n\n## Report\n",
+        details: { mode: "concern_scout", target_path: ".", report_concern: null },
+      } as never);
+      const trace = (options: AgentRuntimeSessionOptions, concern: Concern, failed: boolean): void => options.onEvent?.({
+        type: "tool_execution_end", toolName: "spawn_explorer", isError: failed,
+        resultText: failed ? "Error: fixture tracer timeout"
+          : `Sub-agent (mode=concern_tracer) explored .\n\n## Report\nconcern: ${concern.concern}`,
+        details: { mode: "concern_tracer", target_path: ".", expected_concern: concern.concern,
+          report_concern: failed ? null : concern.concern, failure_kind: failed ? "timeout" : null,
+          ...(failed ? {} : { observed_paths: concernEvidencePaths(concern) }),
+        },
+      } as never);
+      const runtime: AgentRuntime = {
+        async runSession(options): Promise<AgentRuntimeResult> {
+          calls += 1;
+          assert.equal(options.auditResourceBudget, budget, "all phases share one resource budget");
+          if (calls === 1) {
+            fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+            fs.writeFileSync(mapPath, JSON.stringify(map));
+            if (outcome !== "missing-scout") scout(options);
+            for (const concern of map.concern_evidence!.concerns) {
+              trace(options, concern, outcome !== "missing-scout" && concern.concern === missing.concern);
+            }
+            if (outcome === "cancelled") controller.abort();
+          } else if (outcome !== "standalone") {
+            repairCalls += 1;
+            assert.match(options.userPrompt, /trusted semantic-quality gate/i);
+            assert.equal(budget.snapshot().coverage_recovery_passes, 0,
+              "generic coverage recovery must not consume the specialist repair allowance");
+            assert.ok(budget.snapshot().semantic_repair_passes > 0);
+            assert.deepEqual((JSON.parse(fs.readFileSync(mapPath, "utf8")) as CodebaseMap).concern_evidence,
+              map.concern_evidence, "a phase handoff cannot rewrite specialist claims");
+            if (outcome === "missing-scout") {
+              assert.match(options.userPrompt, /successful concern_scout receipt is missing/);
+              assert.doesNotMatch(options.userPrompt, /Do not rerun a broad concern scout/);
+              scout(options);
+            } else {
+              assert.ok(options.userPrompt.includes(missing.concern), "repair must name the missing trace");
+              if (outcome === "repaired" || outcome === "cancelled-repair") trace(options, missing, false);
+              if (outcome === "cancelled-repair") controller.abort();
+            }
+          }
+          return { turns: 1, costUsd: 0, aborted: controller.signal.aborted };
+        },
+      };
+      const context = { cwd, ui: new RepairUi(), runtime, auditResourceBudget: budget,
+        signal: controller.signal,
+        config: { schemaVersion: 1, thinkingLevel: "high", models: {} } as AgentifyConfig };
+      const cancelledBefore = outcome === "cancelled-before" || outcome === "standalone-cancelled-before";
+      if (cancelledBefore) controller.abort();
+      const execution = outcome.startsWith("standalone") ? runCoveragePhase(context) : runRepositoryAudit(context);
+      const repaired = outcome === "repaired" || outcome === "missing-scout";
+      if (repaired) {
+        await execution;
+        assert.equal(repairCalls, 1);
+        assert.equal(calls, 2);
+      } else {
+        await assert.rejects(execution, outcome === "standalone" ? /structured closure/
+          : outcome === "unresolved" ? /unresolved-obligation fingerprint/ : /abort/i);
+        if (outcome === "cancelled-repair") assert.equal(repairCalls, 1);
+        if (outcome === "cancelled") assert.equal(calls, 1, "cancellation must prevent later review/repair dispatch");
+        if (outcome === "unresolved") assert.ok(repairCalls > 0 && repairCalls <= budget.limits.maxSemanticRepairPasses);
+        if (outcome === "standalone") assert.equal(budget.snapshot().semantic_repair_passes, 0);
+        if (cancelledBefore) assert.equal(calls, 0, "pre-cancelled audits must not dispatch a model");
+      }
+      assert.equal(budget.snapshot().model_calls, calls, "cancellation must retain completed runtime accounting");
+      const persisted = JSON.parse(fs.readFileSync(mapPath, "utf8")) as CodebaseMap;
+      if (repaired) assert.equal(assessExplorerReceiptAttestation(persisted, cwd).complete, true);
+      if (outcome !== "missing-scout" && !cancelledBefore) assert.ok(persisted.explorer_receipts?.receipts.some(receipt =>
+        !receipt.success && receipt.expected_concern === missing.concern), "failed trace history must survive handoff");
+      const logDirectory = path.join(home, ".agentify/logs/agentify");
+      const events = fs.readdirSync(logDirectory).filter(name => name.endsWith(".jsonl")).flatMap(name =>
+        fs.readFileSync(path.join(logDirectory, name), "utf8").trim().split("\n")
+          .map(line => JSON.parse(line) as { event: string; payload: string }));
+      const terminals = events.filter(event => event.event === "agentify.run_end");
+      assert.equal(terminals.length, 1, "handoff must not emit an extra terminal outcome");
+      assert.equal((JSON.parse(terminals[0]!.payload) as { status: string }).status === "success", repaired);
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      fs.rmSync(home, { recursive: true, force: true });
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+}
