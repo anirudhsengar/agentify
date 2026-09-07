@@ -198,6 +198,14 @@ Every corrected body still needs fresh complete review. Existing single-finding
 records and proposals remain valid; missing findings never authorize edits.
 A parent audit that owes its periodic map checkpoint cannot execute further
 read, grep, find, or ls calls until a validated map write resets that checkpoint.
+The incremental map tool exposes canonical topography, module-boundary,
+convention and pitfall shapes rather than an untyped record alone. Nested object
+properties may be omitted when unchanged; submitted arrays retain their complete
+item contracts. The trusted execution boundary normalizes supported transport
+encodings and validates these shapes before persistence, returning a bounded
+field-level error without changing the map or its history. Other sections still
+use the existing complete-map validation, and serialized JSON is not an escape
+from the same checks. This changes no evidence, source, coverage or budget gate.
 Provider tool filtering is advisory; the trusted tool-call boundary enforces
 this pause even when a model emits a no-longer-advertised inspection. Failed
 writes and prose do not reset the checkpoint. Explicit terminal-tool protocols

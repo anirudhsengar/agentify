@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { Value } from "typebox/value";
 import {
     NON_CLOSING_DELTA_DIMENSIONS,
     WriteMapDeltaParamsSchema,
@@ -1370,6 +1371,21 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
                     },
                 )
                 : prepared.delta as UnknownRecord;
+
+            // Tool schemas guide generation but do not authorize persistence.
+            // Normalize existing transport aliases before checking the known
+            // incremental coverage shapes; malformed evidence stays retryable.
+            repairMapShape(delta);
+            const deltaShape = WriteMapDeltaParamsSchema.properties.delta.anyOf[0];
+            if (!Value.Check(deltaShape, delta)) {
+                const errors = [...Value.Errors(deltaShape, delta)].slice(0, 3)
+                    .map(error => `${error.instancePath}: ${error.message}`).join("; ").slice(0, 2_048);
+                return {
+                    content: [{ type: "text", text: `Error: incremental coverage fields failed schema validation: ${errors}. No map change was written. Preserve array shapes and complete item fields; omit unchanged object properties.` }],
+                    isError: true,
+                    details: { recorded: false },
+                };
+            }
 
             const forgedAttestations = ["explorer_receipts", "specialist_reviews", "audit_budget_checkpoint"]
                 .filter((key) => key in delta);

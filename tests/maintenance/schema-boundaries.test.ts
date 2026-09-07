@@ -85,7 +85,7 @@ const ALLOWED_SCHEMA_IMPORTS: ReadonlyMap<SchemaFile, readonly SchemaFile[]> = n
   ["specialist-review.ts", ["primitives.ts"]],
   ["type-contract.ts", []],
   ["validation-surface.ts", []],
-  ["write-map-params.ts", ["primitives.ts"]],
+  ["write-map-params.ts", ["conventions.ts", "module-graph.ts", "pitfalls.ts", "primitives.ts", "skeleton.ts"]],
 ]);
 
 const ALLOWED_EXTERNAL_RELATIVE_IMPORTS: ReadonlyMap<SchemaFile, readonly string[]> = new Map([

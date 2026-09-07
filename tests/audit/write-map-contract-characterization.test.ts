@@ -488,9 +488,8 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   assert.equal(isToolError(partialResult), true);
   assert.equal(
     resultText(partialResult),
-    "Error: merged map failed schema validation. Correct the reported delta fields and retry. Schema validation failed with 1 error(s):\n" +
-      "  - /pitfalls/0: must have required properties module, what, consequence, line_ref, " +
-      "expected unknown",
+    "Error: incremental coverage fields failed schema validation: /pitfalls/0: must have required properties module, what, consequence, line_ref. " +
+      "No map change was written. Preserve array shapes and complete item fields; omit unchanged object properties.",
   );
 
   const coverageCwd = tempDir("coverage");
@@ -549,6 +548,7 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
   const bootstrapDeltaCwd = tempDir("bootstrap-delta-sanitize");
   const bootstrapDeltaTools = createWriteMapTools({ stateDir: ".agentify/runtime/audit-a" });
   await executeTool(bootstrapDeltaTools.writeMapTool, { map: {} }, bootstrapDeltaCwd);
+  const beforeMalformedDelta = fs.readFileSync(bootstrapDeltaTools.canonicalMapPath(bootstrapDeltaCwd), "utf8");
   const bootstrapDeltaResult = await executeTool(
     bootstrapDeltaTools.writeMapDeltaTool,
     {
@@ -559,12 +559,13 @@ async function testHistoryValidationCoverageAndMergeContract(): Promise<void> {
     },
     bootstrapDeltaCwd,
   );
-  assert.equal(isToolError(bootstrapDeltaResult), false);
-  assert.match(resultText(bootstrapDeltaResult), /top_level_tree: \["src\/"\], entry_points: \[\{ path: "path\/to\/entry", role:/);
+  assert.equal(isToolError(bootstrapDeltaResult), true);
+  assert.match(resultText(bootstrapDeltaResult), /\/skeleton\/entry_points\/0.*object/);
   const bootstrapDeltaMap = readJson(bootstrapDeltaTools.canonicalMapPath(bootstrapDeltaCwd));
   assert.deepEqual(bootstrapDeltaMap.skeleton.entry_points, []);
   assert.equal(bootstrapDeltaMap.coverage.D1_topography.status, "gap");
-  assert.match(bootstrapDeltaMap.coverage.D1_topography.evidence_summary, /skeleton\.entry_points/);
+  assert.equal(fs.readFileSync(bootstrapDeltaTools.canonicalMapPath(bootstrapDeltaCwd), "utf8"), beforeMalformedDelta,
+    "malformed evidence must not be persisted as a successful, empty checkpoint");
 
   const validTopographyResult = await executeTool(
     bootstrapDeltaTools.writeMapDeltaTool,

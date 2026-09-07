@@ -1,7 +1,11 @@
 import { StringEnum } from "@earendil-works/pi-ai";
-import { Type, type Static } from "typebox";
+import { Type, type Static, type TSchema } from "typebox";
 import { COVERAGE_DIMENSIONS } from "../coverage.ts";
 import { EvidenceCitationSchema, SafeRelativePathSchema } from "./primitives.ts";
+import { SkeletonSchema } from "./skeleton.ts";
+import { ModuleGraphSchema } from "./module-graph.ts";
+import { ConventionsSchema } from "./conventions.ts";
+import { PitfallSchema } from "./pitfalls.ts";
 
 const SerializedMapTransportSchema = Type.String({
   description:
@@ -13,11 +17,31 @@ const InlineMapTransportSchema = Type.Record(Type.String(), Type.Unknown(), {
 });
 
 const MapTransportSchema = Type.Union([InlineMapTransportSchema, SerializedMapTransportSchema]);
+/** Partial object updates retain exact array-item and primitive contracts. */
+function incrementalObjectShape(schema: TSchema): TSchema {
+  const shape = schema as TSchema & { type?: unknown; properties?: Record<string, TSchema>;
+    additionalProperties?: boolean | TSchema; description?: unknown };
+  if (shape.type !== "object" || typeof shape.properties !== "object" || shape.properties === null) return schema;
+  const properties = Object.fromEntries(Object.entries(shape.properties)
+    .map(([key, value]) => [key, Type.Optional(incrementalObjectShape(value))]));
+  return Type.Object(properties, {
+    additionalProperties: shape.additionalProperties ?? true,
+    ...(typeof shape.description === "string" ? { description: shape.description } : {}),
+  });
+}
+
 const DeltaTransportSchema = Type.Record(Type.String(), Type.Unknown(), {
+  properties: {
+    skeleton: incrementalObjectShape(SkeletonSchema),
+    module_graph: incrementalObjectShape(ModuleGraphSchema),
+    conventions: incrementalObjectShape(ConventionsSchema),
+    pitfalls: Type.Array(PitfallSchema),
+  },
   description:
     "Incremental map update transport. Agentify merges this into the canonical map and strictly validates the complete result. " +
     "Keep this object small: include only the top-level keys (e.g. `skeleton`, `coverage`, `pitfalls`) needed for the one dimension you are closing. " +
-    "Never put the entire map here; use `write_map` for a complete replacement.",
+    "Object properties may be omitted when unchanged; arrays contain complete entries, not keyed objects. " +
+    "Other map sections and the serialized JSON transport still undergo canonical validation. Never put the entire map here; use `write_map` for a complete replacement.",
 });
 
 const ObservedTypeContractSchema = Type.Object({

@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Expose canonical incremental shapes for topography, module boundaries, conventions, and pitfalls in the map tool schema. Reject malformed updates before persistence with bounded field-level feedback, while preserving partial-object updates, serialized transport normalization, and every complete-map/evidence gate.
+
 - Retain the preceding bounded, redacted provider failure when an SDK retry is refused by admission, so quota errors remain actionable without permitting another request or losing the original typed budget error.
 
 - Require an explicit supported/unsupported verdict on specialist-review submissions, avoiding ambiguous null-or-object provider output. Approval still requires every known claim checked, no finding, immutable-source binding, and all independent final gates; persisted review attestations are unchanged.

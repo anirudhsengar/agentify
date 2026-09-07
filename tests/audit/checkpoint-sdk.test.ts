@@ -5,9 +5,98 @@ import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 import { Type } from "typebox";
+import { Value } from "typebox/value";
+import { WriteMapDeltaParamsSchema } from "../../src/core/audit/schema/write-map-params.ts";
+import { createWriteMapTools } from "../../src/core/audit/write-map-tools.ts";
+import { createGapDraftMap } from "../../src/core/audit/map-draft.ts";
+import { writeCanonicalMap } from "../../src/core/audit/map-storage.ts";
 import { PiSdkRuntime } from "../../src/core/pi-sdk-runtime.ts";
 import { AuditResourceBudget } from "../../src/core/audit/resource-budget.ts";
 import { createReadOnlyExecutionPolicy } from "../../src/core/security/execution-policy.ts";
+
+test("incremental coverage transport exposes canonical field shapes without requiring unrelated evidence", () => {
+  for (const delta of [
+    { skeleton: { entry_points: [{ path: "src/index.ts", role: "entry", language: "TypeScript", run_command: "" }] } },
+    { module_graph: { shared_abstractions: ["src/shared.ts"] } },
+    { conventions: { naming: { files: "snake_case.py", functions: "snake_case" }, logging: { pattern: "warnings.warn" } } },
+    { pitfalls: [{ module: "src/index.ts", what: "Throws for an invalid input", consequence: "The request is rejected", line_ref: 1 }] },
+    { concern_evidence: { concerns: [], not_concerns: [] } },
+    { open_questions: ["Unobserved validation remains a gap"] },
+  ]) assert.equal(Value.Check(WriteMapDeltaParamsSchema, { delta }), true, JSON.stringify(delta));
+  for (const delta of [
+    { skeleton: { entry_points: { path: "src/index.ts" } } },
+    { skeleton: { entry_points: [{ path: "src/index.ts", role: "entry" }] } },
+    { module_graph: { shared_abstractions: { path: "src/shared.ts" } } },
+    { conventions: { naming: { files: { pattern: "snake_case.py" } } } },
+    { pitfalls: { module: "src/index.ts", what: "A failure", consequence: "Rejected", line_ref: 1 } },
+    { pitfalls: [{ module: "src/index.ts", what: "A failure" }] },
+  ]) assert.equal(Value.Check(WriteMapDeltaParamsSchema, { delta }), false, JSON.stringify(delta));
+  assert.equal(Value.Check(WriteMapDeltaParamsSchema, { delta: "{\"open_questions\":[]}" }), true,
+    "the existing serialized transport still reaches canonical parsing and validation");
+});
+
+test("actual SDK rejects malformed coverage fields before persistence and accepts the corrected array", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-coverage-shape-sdk-"));
+  const payloads: Array<Record<string, unknown>> = [];
+  const executions: unknown[] = [];
+  const outcomes: boolean[] = [];
+  const mapTools = createWriteMapTools({ stateDir: ".agentify/runtime/audit" });
+  writeCanonicalMap(cwd, createGapDraftMap(), { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
+  const originalMap = fs.readFileSync(mapTools.canonicalMapPath(cwd), "utf8");
+  const pitfall = { module: "fixture.ts", what: "Input validation throws", consequence: "Invalid input is rejected", line_ref: 1 };
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    payloads.push(JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>);
+    const index = payloads.length;
+    if (index === 2 || index === 3) assert.equal(fs.readFileSync(mapTools.canonicalMapPath(cwd), "utf8"), originalMap,
+      "a rejected coverage shape must not modify the map or its exploration trail");
+    const proposal = { pitfalls: index < 3 ? pitfall : [pitfall] };
+    const delta = index < 4 ? { role: "assistant", tool_calls: [{ index: 0, id: `shape_${index}`, type: "function",
+      function: { name: "write_map_delta", arguments: JSON.stringify({ delta: index === 2 ? JSON.stringify(proposal) : proposal }) },
+    }] } : { role: "assistant", content: "done" };
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    response.end(`data: ${JSON.stringify({ id: `shape_${index}`, choices: [{ index: 0, delta,
+      finish_reason: index < 4 ? "tool_calls" : "stop" }],
+      usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 } })}\n\ndata: [DONE]\n\n`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    fs.writeFileSync(path.join(cwd, "models.json"), JSON.stringify({ providers: {
+      openai: { baseUrl: `http://127.0.0.1:${address.port}/v1`, api: "openai-completions", apiKey: "fixture-placeholder",
+        models: [{ id: "shape-fixture", contextWindow: 32768, maxTokens: 128 }] },
+    } }));
+    const result = await new PiSdkRuntime().runSession({
+      cwd, configDir: cwd, config: { schemaVersion: 1, thinkingLevel: "off",
+        models: { primary: { provider: "openai", model: "shape-fixture" } } },
+      systemPrompt: "Local deterministic transport fixture.", userPrompt: "Record observed evidence.",
+      tools: ["write_map_delta"], timeoutMs: 10_000,
+      executionPolicy: createReadOnlyExecutionPolicy({ cwd, tools: [] }),
+      customTools: [{ ...mapTools.writeMapDeltaTool,
+        async execute(...args) {
+          const result = await mapTools.writeMapDeltaTool.execute(...args);
+          if (!(result as { isError?: boolean }).isError) executions.push((args[1] as { delta: unknown }).delta);
+          return result;
+        } }],
+      onEvent(event) {
+        if (event.type === "tool_execution_end" && event.toolName === "write_map_delta") outcomes.push(event.isError);
+      },
+    });
+    assert.equal(result.aborted, false);
+    assert.equal(payloads.length, 4);
+    assert.deepEqual(outcomes, [true, true, false], "serialized transport cannot bypass the same owned validation");
+    assert.deepEqual(executions, [{ pitfalls: [pitfall] }],
+      "the malformed object must not reach persistence or be reported as an accepted checkpoint");
+    assert.match(JSON.stringify(payloads[0]?.tools), /pitfalls.*array/);
+    assert.ok(JSON.stringify(payloads[1]?.messages).includes("pitfalls"), "the rejected field must be named for repair");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
 
 test("actual SDK checkpoints recur, survive tool errors, then restore inspection tools", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-checkpoint-sdk-"));
