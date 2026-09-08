@@ -23,6 +23,7 @@ for (const operation of ["write_map", "write_map_delta"] as const) for (const sc
     const events: AgentSessionEvent[] = [];
     const tracker = new ExplorerReceiptTracker();
     let calls = 0;
+    let traces = 0;
     const failure = new Error("fixture scout failure");
     try {
       fs.writeFileSync(path.join(cwd, "README.md"), "Test fixture evidence citation.\n");
@@ -52,8 +53,19 @@ for (const operation of ["write_map", "write_map_delta"] as const) for (const sc
         name: "spawn_explorer", label: "Fixture scout", description: "Test-only scout implementation.",
         parameters: Type.Object({ mode: Type.String(), target_path: Type.String() }),
         async execute(_id, params, signal) {
-          assert.deepEqual(params, { mode: "concern_scout", target_path: "." });
           assert.equal(signal, controller.signal);
+          const input = params as { mode: string; target_path: string; concern?: string; focus?: string };
+          if (input.mode === "concern_tracer") {
+            assert.equal(input.target_path, ".");
+            assert.equal(input.concern, "Fixture validation");
+            assert.match(input.focus ?? "", /untrusted search guidance/);
+            traces += 1;
+            // Scheduling a child is not successful tracing. This unit fixture
+            // deliberately supplies no validated body or observed-source credit.
+            return { content: [{ type: "text" as const, text: "Fixture tracer remains unresolved." }], isError: true,
+              details: { mode: "concern_tracer", target_path: ".", expected_concern: input.concern } };
+          }
+          assert.deepEqual(params, { mode: "concern_scout", target_path: "." });
           calls += 1;
           await new Promise<void>(resolve => setTimeout(resolve, 2));
           if (scenario === "scout-throws") throw failure;
@@ -83,11 +95,13 @@ for (const operation of ["write_map", "write_map_delta"] as const) for (const sc
       await invoke("last");
       const shouldLaunch = !["failed-write", "open-topography", "prior-success", "cancel-before"].includes(scenario);
       assert.equal(calls, shouldLaunch ? 1 : 0, "automatic dispatch occurs at most once, only with valid topography and no current receipt");
-      assert.equal(events.length, shouldLaunch ? 2 : 0, "exactly one start and end describe an actual dispatch");
       const failed = ["scout-failure", "cancel-after", "scout-throws"].includes(scenario);
+      assert.equal(traces, shouldLaunch && !failed ? 1 : 0, "only a successful scout hands off one distinct fixture proposal");
+      assert.equal(events.length, (calls + traces) * 2, "one start and one end describe each actual scout or tracer dispatch");
       const current = loadCanonicalMapAt(cwd, stateDir)!;
       assert.equal(tracker.assess(current).successful_scouts, shouldLaunch && !failed ? 1 : 0);
-      assert.equal(current.concern_evidence, undefined, "dispatch never writes a specialist body");
+      assert.equal(current.concern_evidence, undefined, "an unresolved tracer cannot fabricate a specialist body");
+      assert.equal(tracker.assess(current).successful_tracers.length, 0, "dispatch alone cannot grant a successful source receipt");
       for (const dimension of COVERAGE_DIMENSIONS) {
         assert.equal(current.coverage[dimension].status, map.coverage[dimension].status,
           "scout scheduling does not change coverage truth");
