@@ -1,0 +1,160 @@
+name: PR13 serial baseline and partitioned source review
+'on':
+  push:
+    branches:
+    - validation/pr13-serial-review-comparison-20260908
+    paths:
+    - .github/workflows/pr13-serial-review.yml
+    - .github/qualification/review-probe.mjs
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: pr13-serial-review-20260908
+  cancel-in-progress: false
+jobs:
+  review:
+    if: github.actor == github.repository_owner
+    name: Review / ${{ matrix.case.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        case:
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: baseline-jwk
+          concern: JWK and JWKSet parsing
+          candidate_sha: 8fbc91c8bfd0afaef680732b4a0be65fa85d4a1e
+          candidate_tree: 488a56492363e160f390f5fde31c4a29870ba90a
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: baseline-jwt
+          concern: JWT claim validation and payload lifecycle
+          candidate_sha: 8fbc91c8bfd0afaef680732b4a0be65fa85d4a1e
+          candidate_tree: 488a56492363e160f390f5fde31c4a29870ba90a
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: baseline-numeric-exp-canary
+          concern: JWT claim validation and payload lifecycle
+          false_claim_canary: true
+          candidate_sha: 8fbc91c8bfd0afaef680732b4a0be65fa85d4a1e
+          candidate_tree: 488a56492363e160f390f5fde31c4a29870ba90a
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: partitioned-jwk
+          concern: JWK and JWKSet parsing
+          candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
+          candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: partitioned-jwt
+          concern: JWT claim validation and payload lifecycle
+          candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
+          candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: partitioned-numeric-exp-canary
+          concern: JWT claim validation and payload lifecycle
+          false_claim_canary: true
+          candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
+          candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ${{ matrix.case.candidate_sha }}
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Install pinned test toolchain, no model credentials
+      run: 'npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts
+
+        test "$(git rev-parse HEAD)" = "${{ matrix.case.candidate_sha }}"
+
+        test "$(git rev-parse HEAD^{tree})" = "${{ matrix.case.candidate_tree }}"
+
+        '
+    - name: Fetch exact retained input and immutable repository
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REVIEW_CASE: ${{ toJSON(matrix.case) }}
+      run: 'set -euo pipefail
+
+        printf ''PROBE_TARGET=%s/probe-target
+
+        PROBE_PREVIOUS=%s/previous
+
+        PROBE_EVIDENCE=%s/evidence
+
+        '' "$RUNNER_TEMP" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        printf ''HOME=%s/probe-home
+
+        USERPROFILE=%s/probe-home
+
+        XDG_CONFIG_HOME=%s/probe-home/.config
+
+        '' "$RUNNER_TEMP" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        name=$(printf ''%s'' "$REVIEW_CASE" | jq -r .artifact)
+
+        repository=$(printf ''%s'' "$REVIEW_CASE" | jq -r .repository)
+
+        sha=$(printf ''%s'' "$REVIEW_CASE" | jq -r .target_sha)
+
+        gh run download 34196528837 -R anirudhsengar/agentify -n "$name" -D "$RUNNER_TEMP/previous"
+
+        git init -q "$RUNNER_TEMP/probe-target"
+
+        git -C "$RUNNER_TEMP/probe-target" fetch --depth=1 "https://github.com/$repository.git" "$sha"
+
+        git -C "$RUNNER_TEMP/probe-target" checkout --detach -q FETCH_HEAD
+
+        mkdir -p "$RUNNER_TEMP/probe-home"
+
+        '
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ${{ github.sha }}
+        path: probe-code
+        persist-credentials: false
+    - name: Run bounded production review with explicit verdicts
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        REVIEW_CASE: ${{ toJSON(matrix.case) }}
+      run: node --import tsx probe-code/.github/qualification/review-probe.mjs
+    - name: Retain redacted review outcome only
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: serial-review-${{ matrix.case.name }}-${{ github.run_id }}
+        path: ${{ env.PROBE_EVIDENCE }}
+        if-no-files-found: warn
+        retention-days: 14
+    - name: Remove disposable inputs and authentication
+      if: always()
+      run: rm -rf -- "$RUNNER_TEMP/probe-home" "$RUNNER_TEMP/probe-target" "$RUNNER_TEMP/previous"
