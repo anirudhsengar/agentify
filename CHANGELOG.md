@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Balance large MiniMax-M3 review claims across two complete-source assignments inside the existing request, deadline and concurrency limits. Approval requires both checklists; incomplete or contradicted assignments cannot approve the body.
+
 - Present complete-review source as literal, separately delimited text rather than nested JSON-escaped strings. Preserve every original claim, source character, precheck contract, and review/provenance gate.
 
 - Start a bounded first source-tracing batch immediately after successful initial scouting, instead of relying on parent timing. Preserve exact candidate names, source receipts, cancellations, remaining proposals, and all production limits and final gates.

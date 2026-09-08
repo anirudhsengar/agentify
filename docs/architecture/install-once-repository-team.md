@@ -160,7 +160,7 @@ baseline concerns; it preserves failed history and cannot override cancellation
 or the shared resource budget. Finalization independently checks all receipts.
 After deterministic compilation reaches its fixed point, each changed concern
 receives a separate read-only review using the configured primary model and the
-shared audit budget. At most two independent concern reviews overlap; their
+shared audit budget. At most two provider review requests overlap; their
 results are applied in portfolio order, and a temporary request-capacity refusal
 is retried serially after the admitted sibling settles. The reviewer receives at most 512 KiB of immutable tracked
 regular source. Attachment relationships are independently recomputed from the
@@ -183,7 +183,25 @@ no filesystem or command tools. Ordinary reviews use one provider request within
 90 seconds including source collection; a rejected typed submission permits one
 additional argument-correction request inside that same deadline and aggregate
 budget. Prose, unrelated tool errors, and a second rejection grant no further calls.
-For bodies with more than 24 review claims, the application may first check a
+For explicitly configured MiniMax-M3 bodies with more than 24 claims, two complete
+review assignments replace the sequential local/full path. Every original local
+claim ID is assigned exactly once, with concern/covers/excludes checked by both.
+The existing source-local retrieval focus stays with its assigned claims; remaining
+claims are balanced deterministically by serialized size with fixed ID overhead.
+Both requests receive the complete immutable source, complete flows and invariants,
+the same exact body digest and their explicit required checklists. A passed subset
+never creates whole-body approval: both assignments must complete successfully.
+An exact-source finding rejects the body and cancels the sibling; the cancelled
+request's unknown usage remains reserved. The shared 90-second deadline, maximum
+two requests, 12,000-token request ceiling and configured thinking remain intact.
+A paired body occupies both existing provider slots rather than overlapping a
+second body. Only a prospectively unadmitted assignment may retry after its peer
+settles, within those same limits; completed or charged work is never replayed.
+Changed HEAD, cancellation, missing IDs, invalid excerpts and incomplete results
+remain failures. This scheduling change does not alter the review schema,
+canonical approval digest, receipt validation or final installation gates.
+Other model configurations retain the prior behavior: for bodies with more than
+24 review claims, the application may first check a
 small immutable module with at most eight directly referenced pitfall/invariant
 assertions. It chooses the smallest eligible source, bounded to 8 KiB, with the
 tracked path as tie-breaker. This local precheck can report a demonstrated source

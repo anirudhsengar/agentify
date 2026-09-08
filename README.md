@@ -250,7 +250,13 @@ without spending or resetting an exhausted model budget when its exact
 normalized bodies already have current-HEAD narrative reviews. Changed bodies
 require fresh review with the configured primary model: 90 seconds and at most
 512 KiB of immutable source per concern. Ordinary reviews use one provider request plus at most one argument-correction
-request after a rejected typed submission. For larger bodies, an eligible small
+request after a rejected typed submission. Explicit MiniMax-M3 large-body reviews
+instead divide the original claims into two balanced assignments with shared
+coherence checks. Each sees the complete immutable source and whole-flow context;
+both complete supported results are required for one body approval. They share
+the existing two-request ceiling, 90-second deadline and two-provider concurrency
+limit; no extra argument-correction request is available on that path. Other
+large-body configurations retain their prior source-local sequence: an eligible small
 source module is checked first for direct counterexamples in its associated
 assertions. When no small module qualifies, one assertion may instead be
 checked beside a bounded, explicitly partial source excerpt. Either path is

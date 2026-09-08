@@ -15,11 +15,13 @@ import { AuditResourceBudget } from "../../src/core/audit/resource-budget.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
 for (const outcome of ["supported", "local-contradiction", "incomplete-full-review"] as const) {
-  test(`native MiniMax source precheck preserves final review authority: ${outcome}`, async () => {
+  test(`native MiniMax paired review preserves final review authority: ${outcome}`, async () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-native-source-check-"));
     const small = "def present(record):\n    return record is not None\n";
     const large = "def relay(record):\n    return record\n" + "# Broader immutable source context.\n".repeat(400);
-    const requests: Array<{ precheck: boolean; cap: number | undefined; thinking: unknown }> = [];
+    const requests: Array<{ index: number; claims: string[]; cap: number | undefined; thinking: unknown }> = [];
+    let pairReady!: () => void;
+    const pair = new Promise<void>(resolve => { pairReady = resolve; });
     const server = createServer(async (request, response) => {
       const chunks: Buffer[] = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -29,24 +31,25 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
       };
       const content = payload.messages.find(message => message.role === "user")!.content;
       const text = typeof content === "string" ? content : content.map(part => part.text ?? "").join("\n");
-      const data = readReviewPrompt(text) as { source_precheck?: boolean; claims: Record<string, unknown>; evidence: Record<string, string> };
-      const precheck = data.source_precheck === true;
-      requests.push({ precheck, cap: payload.max_tokens, thinking: payload.thinking });
+      const data = readReviewPrompt(text) as { claims: Record<string, unknown>; evidence: Record<string, string>;
+        assignment: { index: number; all_claim_ids: string[]; required_checked_claim_ids: string[]; scope: { flows: unknown } } };
+      assert.ok(data.assignment, "native request must carry an exact complete-review assignment");
+      requests.push({ index: data.assignment.index, claims: Object.keys(data.claims), cap: payload.max_tokens, thinking: payload.thinking });
+      if (requests.length === 2) pairReady();
       assert.deepEqual(payload.tool_choice, { type: "auto" });
       assert.equal(data.evidence["small.py"], small);
-      if (precheck) assert.deepEqual(Object.keys(data.claims), ["pitfalls[0]"]);
-      else {
-        assert.equal(data.evidence["large.py"], large);
-        assert.ok(Object.keys(data.claims).length > 24);
-      }
-      const finding = outcome === "local-contradiction" && precheck ? {
+      assert.equal(data.evidence["large.py"], large);
+      assert.deepEqual(Object.keys(data.claims), data.assignment.required_checked_claim_ids);
+      assert.ok(data.assignment.all_claim_ids.length > 24);
+      await pair;
+      const finding = outcome === "local-contradiction" && "pitfalls[0]" in data.claims ? {
         claim: "pitfalls[0]", path: "small.py", excerpt: "return record is not None",
         reason: "A None record makes this predicate False, not True.",
       } : undefined;
       const report = { verdict: finding ? "unsupported" : "supported", checked_claims: Object.keys(data.claims),
         ...(finding ? { finding } : {}) };
-      const useTool = outcome !== "incomplete-full-review" || precheck;
-      const index = requests.length;
+      const useTool = outcome !== "incomplete-full-review" || data.assignment.index === 0;
+      const index = data.assignment.index + 1;
       const events = [
         ["message_start", { type: "message_start", message: { id: `fixture-${index}`, type: "message", role: "assistant",
           model: "MiniMax-M3", content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 100, output_tokens: 0 } } }],
@@ -99,11 +102,15 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
       const result = await reviewSpecialistCompilation({ cwd, runtime, ui: { status() {} },
         config: { schemaVersion: 1, thinkingLevel: "high", models: { primary: { provider: "minimax", model: "MiniMax-M3" } } },
       } as never, compilation, budget, "native-source-local");
-      assert.deepEqual(requests.map(request => request.precheck), outcome === "local-contradiction" ? [true] : [true, false]);
-      assert.deepEqual(requests.map(request => request.cap), outcome === "local-contradiction" ? [12000] : [12000, 12000]);
+      assert.deepEqual(requests.map(request => request.index).sort(), [0, 1]);
+      assert.deepEqual(requests.map(request => request.cap), [12000, 12000]);
       assert.ok(requests.every(request => JSON.stringify(request.thinking) === JSON.stringify({ type: "adaptive" })));
       assert.equal(budget.snapshot().model_calls, requests.length);
-      assert.equal(budget.snapshot().unreported_calls, 0);
+      assert.equal(budget.snapshot().unreserved_calls, 0);
+      if (outcome === "supported") assert.equal(budget.snapshot().unreported_calls, 0);
+      const union = new Set(requests.flatMap(request => request.claims));
+      for (let index = 0; index < 26; index += 1) assert.ok(union.has(`invariants[${index}]`));
+      for (const id of ["pitfalls[0]", "validation", "one_line", "covers", "excludes", "concern", "flows[0]", "touchpoints[0]", "touchpoints[1]"]) assert.ok(union.has(id));
       const record = result.map.specialist_reviews!.records[0]!;
       assert.equal(record.failure === null, outcome === "supported");
       if (outcome === "local-contradiction") assert.equal(record.finding?.claim, "pitfalls[0]");
