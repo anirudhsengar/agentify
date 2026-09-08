@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Give compound source-precheck assertions separate, lossless fragment IDs so a true premise cannot hide a false conclusion. Every fragment remains required, source findings bind back to the original claim, and complete original-body review remains mandatory without new requests or higher limits.
+
 - Present complete-review source as literal, separately delimited text rather than nested JSON-escaped strings. Preserve every original claim, source character, precheck contract, and review/provenance gate.
 
 - Start a bounded first source-tracing batch immediately after successful initial scouting, instead of relying on parent timing. Preserve exact candidate names, source receipts, cancellations, remaining proposals, and all production limits and final gates.

@@ -214,6 +214,17 @@ can repair the actual argument error. The wire contract requires an explicit
 `supported` verdict with no finding property and the complete checklist, or an
 `unsupported` verdict with an exact-source finding. Null, empty, missing-verdict,
 and contradictory proposals are rejected rather than interpreted as approval.
+For a compound precheck assertion, literal sentence, semicolon and selected
+contrast/consequence boundaries produce independently required fragment IDs.
+This is a presentation heuristic, not a natural-language parser. Concatenating
+the fragments reconstructs every original prose field exactly; the full original
+assertion is retained as untrusted guard and antecedent context. Simple assertions
+and checklists exceeding 128 fragments retain the original complete precheck,
+never a truncated subset. Only validated source findings are mapped back to their
+original stable claim IDs, with repeated findings for one original claim collapsed.
+The final reviewer still receives every original claim and immutable source byte.
+No fragment outcome becomes a whole-body attestation, and no extra request,
+deadline, source allowance, model change or reasoning-mode override is introduced.
 Only validated supported submissions become the existing canonical null finding;
 persisted exact-body review attestations and their meaning are unchanged. It submits immediately at the first decisive rejection, retaining
 additional findings only if already established rather than searching for a quota.
