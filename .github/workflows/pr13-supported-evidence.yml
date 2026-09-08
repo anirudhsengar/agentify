@@ -13,6 +13,8 @@ name: PR13 source-backed positive approval experiment
     - .github/qualification/proof-envelope.mjs
     - .github/qualification/proof-envelope-sdk.test.mjs
     - .github/qualification/review-correction-sdk.test.mjs
+    - .github/qualification/source-local-review.mjs
+    - .github/qualification/source-local-review.test.mjs
 permissions:
   contents: read
   actions: read
@@ -35,7 +37,7 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: single-high-jwk
+          name: adjacent-high-jwk
           concern: JWK and JWKSet parsing
           candidate_sha: 64011416fae4314829d0adefd9057fd14f7a4174
           candidate_tree: a8bf5a045cfcd08573d723947c57c5e28cb6d70c
@@ -46,34 +48,12 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: single-high-valid-cache
+          name: adjacent-high-valid-cache
           concern: JWK and JWKSet parsing
           candidate_sha: 64011416fae4314829d0adefd9057fd14f7a4174
           candidate_tree: a8bf5a045cfcd08573d723947c57c5e28cb6d70c
           positive_control: true
           thinking_level: high
-        - artifact: native-live-pyjwt-34196528837
-          source_run: 34196528837
-          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
-          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
-          repository: anirudhsengar/pyjwt
-          name: single-low-jwk
-          concern: JWK and JWKSet parsing
-          candidate_sha: 64011416fae4314829d0adefd9057fd14f7a4174
-          candidate_tree: a8bf5a045cfcd08573d723947c57c5e28cb6d70c
-          thinking_level: low
-          known_bad_fragment: reports as expired
-        - artifact: native-live-pyjwt-34196528837
-          source_run: 34196528837
-          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
-          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
-          repository: anirudhsengar/pyjwt
-          name: single-low-valid-cache
-          concern: JWK and JWKSet parsing
-          candidate_sha: 64011416fae4314829d0adefd9057fd14f7a4174
-          candidate_tree: a8bf5a045cfcd08573d723947c57c5e28cb6d70c
-          positive_control: true
-          thinking_level: low
     steps:
     - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
       with:
@@ -143,6 +123,8 @@ jobs:
       run: node --import tsx --test probe-code/.github/qualification/proof-envelope-sdk.test.mjs
     - name: Verify original single-correction controller without provider credentials
       run: node --import tsx --test probe-code/.github/qualification/review-correction-sdk.test.mjs
+    - name: Verify no claims or immutable sources are omitted from presentation
+      run: node --test probe-code/.github/qualification/source-local-review.test.mjs
     - name: Run bounded production review with explicit verdicts
       env:
         PI_API_KEY: ${{ secrets.PI_API_KEY }}
@@ -159,4 +141,4 @@ jobs:
     - name: Remove disposable inputs and authentication
       if: always()
       run: rm -rf -- "$RUNNER_TEMP/probe-home" "$RUNNER_TEMP/probe-target" "$RUNNER_TEMP/previous"
-run-name: PR13 single-review line records with existing bounded argument correction
+run-name: PR13 source-adjacent review with complete actionable correction feedback

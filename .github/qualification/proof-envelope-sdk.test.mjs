@@ -17,7 +17,7 @@ const {createSpecialistReviewSubmissionSchema}=await import(pathToFileURL(path.j
 const {createReadOnlyExecutionPolicy}=await import(pathToFileURL(path.join(root,'src/core/security/execution-policy.ts')).href);
 const data={claims:{'invariants[4]':'The predicate returns true for a stored record.','validation':[]},evidence:{'cache.py':'def present(record):\n    return record is not None\n'}};
 const citation={source:0,start_line:2,end_line:2,reason:'The return expression tests the record against None.'};
-for(const kind of ['supported','unsupported','canonical-id','missing-claim','malformed-review','extra-envelope-field','extra-report-field']){
+for(const kind of ['supported','supported-single-line','unsupported','bad-record-and-missing-claim','canonical-id','missing-claim','malformed-review','extra-envelope-field','extra-report-field']){
  test('actual MiniMax SDK line review transport: '+kind,async()=>{
   const cwd=fs.mkdtempSync(path.join(os.tmpdir(),'agentify-proof-sdk-'));
   const payloads=[];const outcomes=[];let canonical;let calls=0;const stop=new AbortController();
@@ -30,6 +30,8 @@ for(const kind of ['supported','unsupported','canonical-id','missing-claim','mal
    const proofLine=(code,p)=>code+' S'+p.source+':'+p.start_line+'-'+p.end_line+' '+p.reason;
    let text=proposal.verdict==='unsupported'?'UNSUPPORTED\n'+proofLine(proposal.finding.claim,proposal.finding):
     'SUPPORTED\n'+Object.entries(proposal.support).map(([code,p])=>p===true?code+' EMPTY':proofLine(code,p)).join('\n');
+   if(kind==='supported-single-line')text=text.replace('S0:2-2','S0:2');
+   if(kind==='bad-record-and-missing-claim')text='SUPPORTED\nC000 INVALID';
    if(kind==='malformed-review')text='SUPPORTED\nC000';
    if(kind==='extra-report-field')text+='\nUNEXPECTED FIELD';
    const envelope={review_text:text,...(kind==='extra-envelope-field'?{unexpected:true}:{})};
@@ -69,8 +71,9 @@ for(const kind of ['supported','unsupported','canonical-id','missing-claim','mal
    assert.equal(payloads[0].thinking.type,'enabled');
    assert.deepEqual(payloads[0].tool_choice,{type:'tool',name:tool.name});
    assert.match(JSON.stringify(payloads[0].messages),/C000/);
-   if(kind==='supported'||kind==='unsupported')assert.equal(canonical.verdict,kind);
+   if(kind==='supported'||kind==='supported-single-line'||kind==='unsupported')assert.equal(canonical.verdict,kind==='supported-single-line'?'supported':kind);
    else {assert.equal(canonical,undefined);assert.ok(outcomes.some(e=>e.isError));}
+   if(kind==='bad-record-and-missing-claim'){const feedback=JSON.stringify(outcomes);assert.match(feedback,/Invalid record/);assert.match(feedback,/Missing C001 EMPTY/);}
   } finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));fs.rmSync(cwd,{recursive:true,force:true});}
  });
 }
