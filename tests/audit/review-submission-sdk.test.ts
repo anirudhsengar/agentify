@@ -16,7 +16,7 @@ import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
 for (const outcome of ["supported", "local-contradiction", "incomplete-full-review", "incomplete-observations",
   "forged-observation", "claim-verdict-as-observation", "empty-observations", "false-notes",
-  "cancelled-after-observations", "changed-head", "capacity-refused", "reversed-lines", "fractional-lines", "unknown-path", "pruned-body-reuses-notes", "pruned-argument-repair"] as const) {
+  "cancelled-after-observations", "changed-head", "capacity-refused", "reversed-lines", "fractional-lines", "unknown-path", "pruned-body-reuses-notes", "pruned-argument-repair", "compound-approved", "compound-missing-clause"] as const) {
   test(`native MiniMax source observations preserve final review authority: ${outcome}`, async () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-native-source-check-"));
     const controller = new AbortController();
@@ -53,6 +53,11 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
         assert.equal(data.evidence["large.py"], large);
         assert.ok(Object.keys(data.claims!).length > 24);
         assert.ok(Array.isArray(data.untrusted_source_observations));
+        if (outcome.startsWith("compound-")) {
+          assert.deepEqual(Object.keys(data.claims!).filter(id => id.startsWith("clause:")),
+            ["clause:pitfalls[0].risk:0", "clause:pitfalls[0].risk:1"],
+            "checking a compound parent must not stand in for its individual assertions");
+        }
         if (outcome === "false-notes") assert.equal(data.untrusted_source_observations[0]!.behavior, "A None input returns True.");
         if (outcome !== "empty-observations") assert.equal(data.untrusted_source_observations[0]!.excerpt, "    return record is not None");
       }
@@ -67,7 +72,7 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
           behavior: outcome === "false-notes" ? "A None input returns True." : "A None input returns False." }] }
         : { verdict: finding ? "unsupported" : "supported",
           checked_claims: outcome === "pruned-argument-repair" && fullResponses === 2
-            ? [] : Object.keys(data.claims ?? {}),
+            ? [] : Object.keys(data.claims ?? {}).filter(id => outcome !== "compound-missing-clause" || !id.startsWith("clause:")),
           ...(finding ? { finding } : {}) };
       const useTool = !(outcome === "incomplete-full-review" && !precheck)
         && !(outcome === "incomplete-observations" && precheck);
@@ -116,7 +121,8 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
           { path: "large.py", symbol: "relay", role: "Relays records.", line_range: null, centrality: "core" }],
         invariants: Array.from({ length: 26 }, (_, index) => ({ rule: `Case ${index}: relay returns its argument.`,
           why: "The return expression is record.", reference: "large.py" })),
-        pitfalls: [{ risk: outcome === "local-contradiction" || pruneCase ? "None is reported present." : "None is not reported present.",
+        pitfalls: [{ risk: outcome.startsWith("compound-") ? "None is not present. A populated record is present."
+          : outcome === "local-contradiction" || pruneCase ? "None is reported present." : "None is not reported present.",
           consequence: "Presence is separate from relay.", reference: "small.py" },
           ...(pruneCase ? [{ risk: "None is not present.", consequence: "The presence predicate returns False.", reference: "small.py" }] : [])],
         entry_questions: ["Does this affect presence?"], validation: [], spans_subtrees: [],
@@ -150,7 +156,7 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
       assert.equal(budget.snapshot().model_calls, requests.length);
       assert.equal(budget.snapshot().unreported_calls, 0);
       const record = result.map.specialist_reviews!.records[0]!;
-      assert.equal(record.failure === null, pruneCase || ["supported", "empty-observations", "false-notes"].includes(outcome));
+      assert.equal(record.failure === null, pruneCase || ["supported", "empty-observations", "false-notes", "compound-approved"].includes(outcome));
       if (outcome === "local-contradiction") assert.equal(record.finding?.claim, "pitfalls[0]");
       if (pruneCase) {
         assert.equal(fullResponses, outcome === "pruned-argument-repair" ? 3 : 2,
@@ -160,7 +166,7 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
         assert.equal(result.map.concern_evidence!.concerns[0]!.pitfalls.length, 1);
         assert.equal(requests.filter(request => request.precheck).length, 1, "normalization must not reread identical source");
       }
-      if (outcome === "incomplete-full-review") assert.equal(record.retryable, true);
+      if (outcome === "incomplete-full-review" || outcome === "compound-missing-clause") assert.equal(record.retryable, true);
       if (observationFailed) assert.equal(record.retryable, true);
       assert.ok(!Object.hasOwn(record, "observations"), "reading notes cannot become durable review attestation");
       assert.equal(execFileSync("git", ["-C", cwd, "show", "HEAD:small.py"], { encoding: "utf8" }), small);

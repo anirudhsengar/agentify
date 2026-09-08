@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Require explicit checks of exact compound assertion fragments tied to observed source, in addition to every original full claim. Preserve inherited conditions and canonical finding IDs; fragment checks cannot replace body review or bypass source validation.
+
 - Reuse completed source-only notes during a concern’s normalization loop only for identical immutable source, HEAD and model settings. Remove duplicate reading latency without persisting notes, bypassing fresh complete review or increasing any request/time budget.
 
 - Ground large MiniMax-M3 reviews with bounded source-only observations before exposing proposed claims. Line citations resolve to immutable bytes, fractional ranges cannot be truncated into acceptance, and only the unchanged complete reviewer can grant approval.

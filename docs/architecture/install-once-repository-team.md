@@ -221,6 +221,19 @@ readings grant no reusable notes; completed source usage is never refunded. A ne
 concern evaluation or invocation starts with an empty memo, and no notes enter
 persistent attestations. Reuse logs the source-view and new-body digests without
 claiming semantic approval.
+When source-only notes reference a pitfall or invariant with compound prose,
+full review receives exact contiguous fragments of that assertion as additional
+checklist obligations. Punctuation outside inline code provides deterministic
+boundaries; no text is paraphrased or inferred. Every original claim, evidence
+reference and structural relation remains present and mandatory, and conditions
+in the complete original claim still apply to each fragment. A supported verdict
+must enumerate both original and auxiliary clause IDs. Rejections must target
+the original claim ID and pass the existing immutable-source excerpt validator;
+auxiliary IDs cannot become persistent findings or repair targets. The combined
+checklist is capped at the existing 512 IDs and fails closed instead of dropping
+obligations. Source observations remain fallible, and all request, deadline,
+output, receipt, provenance and exact-body approval gates remain unchanged.
+
 Other model configurations retain the ordinary local-falsification precheck.
 Missing external context is left for the complete reviewer, not treated as a
 local contradiction. A successful precheck must be followed by the original

@@ -29,9 +29,11 @@ export const SourceObservationSubmissionSchema = Type.Object({
 export type SourceObservation = Pick<Static<typeof SourceObservationSubmissionSchema>["observations"][number], "path" | "behavior">
   & { excerpt: string };
 
-export function createSpecialistReviewSubmissionSchema(claimIds: readonly string[]) {
+export function createSpecialistReviewSubmissionSchema(claimIds: readonly string[], findingIds: readonly string[] = claimIds) {
   const claimId = Type.String({ enum: [...claimIds],
     description: "Exact supplied claim ID, never the claim text or a description of it." });
+  const findingId = Type.String({ enum: [...findingIds],
+    description: "Exact original claim ID. Auxiliary clause-check IDs are not valid finding targets; name their original_claim instead." });
   return Type.Object({
     verdict: Type.String({ enum: ["supported", "unsupported"],
       description: "Explicit review decision. supported requires every supplied claim ID checked and no finding. unsupported requires one exact-source finding." }),
@@ -39,13 +41,13 @@ export function createSpecialistReviewSubmissionSchema(claimIds: readonly string
       description: "IDs actually checked. Include every supplied ID for the supported verdict." }),
     finding: Type.Optional(Type.Object({
       ...SpecialistReviewFindingSchema.properties,
-      claim: claimId,
+      claim: findingId,
     }, { additionalProperties: false,
       description: "Required for unsupported: claim, path, excerpt and reason. Omit the entire finding property for supported; never send an empty object or null.",
     })),
     additional_findings: Type.Optional(Type.Array(Type.Object({
       ...SpecialistReviewFindingSchema.properties,
-      claim: claimId,
+      claim: findingId,
     }, { additionalProperties: false }), { maxItems: 2,
       description: "Up to two further independent findings after finding. Empty or omitted for supported. Stop after three total findings." })),
   }, { additionalProperties: false });
