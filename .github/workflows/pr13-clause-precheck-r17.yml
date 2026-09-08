@@ -1,5 +1,5 @@
 name: PR13 predicate-conjunction source controls
-run-name: PR13 8eac223 repeated predicate controls
+run-name: PR13 81f7a6b repeated predicate controls
 'on':
   push:
     branches:
@@ -29,10 +29,10 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: r19-high-jwk-1
+          name: r20-high-jwk-1
           concern: JWK and JWKSet parsing
-          candidate_sha: 8eac223154c99f44d6fc71fe5a33d67333900af7
-          candidate_tree: 8bb25bf33539e86847a0026e4274f9f3a190a360
+          candidate_sha: 81f7a6b726b070d05278e00fdba62b2c3c85bfb7
+          candidate_tree: 8e211dcb112249a3cff4c555b8450be5b8711df0
           thinking_level: high
           known_bad_fragment: reports as expired
           require_source_precheck: true
@@ -41,10 +41,10 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: r19-high-valid-cache-1
+          name: r20-high-valid-cache-1
           concern: JWK and JWKSet parsing
-          candidate_sha: 8eac223154c99f44d6fc71fe5a33d67333900af7
-          candidate_tree: 8bb25bf33539e86847a0026e4274f9f3a190a360
+          candidate_sha: 81f7a6b726b070d05278e00fdba62b2c3c85bfb7
+          candidate_tree: 8e211dcb112249a3cff4c555b8450be5b8711df0
           positive_control: true
           thinking_level: high
         - artifact: native-live-pyjwt-34196528837
@@ -52,10 +52,10 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: r19-numeric-exp-canary-1
+          name: r20-numeric-exp-canary-1
           concern: JWT claim validation and payload lifecycle
-          candidate_sha: 8eac223154c99f44d6fc71fe5a33d67333900af7
-          candidate_tree: 8bb25bf33539e86847a0026e4274f9f3a190a360
+          candidate_sha: 81f7a6b726b070d05278e00fdba62b2c3c85bfb7
+          candidate_tree: 8e211dcb112249a3cff4c555b8450be5b8711df0
           thinking_level: high
           false_claim_canary: true
           require_source_precheck: true
@@ -65,10 +65,10 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: r19-high-jwk-2
+          name: r20-high-jwk-2
           concern: JWK and JWKSet parsing
-          candidate_sha: 8eac223154c99f44d6fc71fe5a33d67333900af7
-          candidate_tree: 8bb25bf33539e86847a0026e4274f9f3a190a360
+          candidate_sha: 81f7a6b726b070d05278e00fdba62b2c3c85bfb7
+          candidate_tree: 8e211dcb112249a3cff4c555b8450be5b8711df0
           thinking_level: high
           known_bad_fragment: reports as expired
           require_source_precheck: true
@@ -77,10 +77,10 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: r19-high-valid-cache-2
+          name: r20-high-valid-cache-2
           concern: JWK and JWKSet parsing
-          candidate_sha: 8eac223154c99f44d6fc71fe5a33d67333900af7
-          candidate_tree: 8bb25bf33539e86847a0026e4274f9f3a190a360
+          candidate_sha: 81f7a6b726b070d05278e00fdba62b2c3c85bfb7
+          candidate_tree: 8e211dcb112249a3cff4c555b8450be5b8711df0
           positive_control: true
           thinking_level: high
         - artifact: native-live-pyjwt-34196528837
@@ -88,10 +88,10 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: r19-numeric-exp-canary-2
+          name: r20-numeric-exp-canary-2
           concern: JWT claim validation and payload lifecycle
-          candidate_sha: 8eac223154c99f44d6fc71fe5a33d67333900af7
-          candidate_tree: 8bb25bf33539e86847a0026e4274f9f3a190a360
+          candidate_sha: 81f7a6b726b070d05278e00fdba62b2c3c85bfb7
+          candidate_tree: 8e211dcb112249a3cff4c555b8450be5b8711df0
           thinking_level: high
           false_claim_canary: true
           require_source_precheck: true
@@ -99,7 +99,7 @@ jobs:
     steps:
     - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
       with:
-        ref: 8eac223154c99f44d6fc71fe5a33d67333900af7
+        ref: 81f7a6b726b070d05278e00fdba62b2c3c85bfb7
         persist-credentials: false
     - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
       with:
@@ -110,9 +110,9 @@ jobs:
 
         npm ci --ignore-scripts
 
-        test "$(git rev-parse HEAD)" = 8eac223154c99f44d6fc71fe5a33d67333900af7
+        test "$(git rev-parse HEAD)" = 81f7a6b726b070d05278e00fdba62b2c3c85bfb7
 
-        test "$(git rev-parse HEAD^{tree})" = 8bb25bf33539e86847a0026e4274f9f3a190a360
+        test "$(git rev-parse HEAD^{tree})" = 8e211dcb112249a3cff4c555b8450be5b8711df0
 
         '
     - name: Fetch exact retained input and immutable repository
@@ -172,7 +172,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: predicate-r19-${{ matrix.case.name }}-${{ github.run_id }}
+        name: predicate-r20-${{ matrix.case.name }}-${{ github.run_id }}
         path: ${{ env.PROBE_EVIDENCE }}
         if-no-files-found: warn
         retention-days: 14
