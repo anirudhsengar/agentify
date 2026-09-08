@@ -34,7 +34,7 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: envelope-high-jwk
+          name: records-high-jwk
           concern: JWK and JWKSet parsing
           candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
           candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
@@ -45,12 +45,34 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: envelope-high-valid-cache
+          name: records-high-valid-cache
           concern: JWK and JWKSet parsing
           candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
           candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
           positive_control: true
           thinking_level: high
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: records-low-jwk
+          concern: JWK and JWKSet parsing
+          candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
+          candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
+          thinking_level: low
+          known_bad_fragment: reports as expired
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: records-low-valid-cache
+          concern: JWK and JWKSet parsing
+          candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
+          candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
+          positive_control: true
+          thinking_level: low
     steps:
     - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
       with:
@@ -134,4 +156,4 @@ jobs:
     - name: Remove disposable inputs and authentication
       if: always()
       run: rm -rf -- "$RUNNER_TEMP/probe-home" "$RUNNER_TEMP/probe-target" "$RUNNER_TEMP/previous"
-run-name: PR13 strict JSON-string review transport, unchanged source-quality controls
+run-name: 'PR13 line-record review controls: high and low thinking, unchanged source gates'

@@ -17,8 +17,8 @@ const {createSpecialistReviewSubmissionSchema}=await import(pathToFileURL(path.j
 const {createReadOnlyExecutionPolicy}=await import(pathToFileURL(path.join(root,'src/core/security/execution-policy.ts')).href);
 const data={claims:{'invariants[4]':'The predicate returns true for a stored record.','validation':[]},evidence:{'cache.py':'def present(record):\n    return record is not None\n'}};
 const citation={source:0,start_line:2,end_line:2,reason:'The return expression tests the record against None.'};
-for(const kind of ['supported','unsupported','canonical-id','missing-claim','malformed-json','extra-envelope-field','extra-report-field']){
- test('actual MiniMax SDK JSON review envelope: '+kind,async()=>{
+for(const kind of ['supported','unsupported','canonical-id','missing-claim','malformed-review','extra-envelope-field','extra-report-field']){
+ test('actual MiniMax SDK line review transport: '+kind,async()=>{
   const cwd=fs.mkdtempSync(path.join(os.tmpdir(),'agentify-proof-sdk-'));
   const payloads=[];const outcomes=[];let canonical;let calls=0;const stop=new AbortController();
   const proposal=kind==='unsupported'?{verdict:'unsupported',finding:{claim:'C000',...citation}}:
@@ -27,8 +27,12 @@ for(const kind of ['supported','unsupported','canonical-id','missing-claim','mal
    const chunks=[];for await(const chunk of request)chunks.push(Buffer.from(chunk));
    payloads.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
    response.writeHead(200,{'Content-Type':'text/event-stream'});
-   const body=kind==='extra-report-field'?{...proposal,unexpected:true}:proposal;
-   const envelope={report_json:kind==='malformed-json'?'{':JSON.stringify(body),...(kind==='extra-envelope-field'?{unexpected:true}:{})};
+   const proofLine=(code,p)=>code+' S'+p.source+':'+p.start_line+'-'+p.end_line+' '+p.reason;
+   let text=proposal.verdict==='unsupported'?'UNSUPPORTED\n'+proofLine(proposal.finding.claim,proposal.finding):
+    'SUPPORTED\n'+Object.entries(proposal.support).map(([code,p])=>p===true?code+' EMPTY':proofLine(code,p)).join('\n');
+   if(kind==='malformed-review')text='SUPPORTED\nC000';
+   if(kind==='extra-report-field')text+='\nUNEXPECTED FIELD';
+   const envelope={review_text:text,...(kind==='extra-envelope-field'?{unexpected:true}:{})};
    const args=JSON.stringify(envelope);const middle=Math.floor(args.length/2);
    const stream=[
     ['message_start',{type:'message_start',message:{id:'fixture',type:'message',role:'assistant',model:'MiniMax-M3',content:[],stop_reason:null,stop_sequence:null,usage:{input_tokens:100,output_tokens:0}}}],
@@ -61,7 +65,7 @@ for(const kind of ['supported','unsupported','canonical-id','missing-claim','mal
     executionPolicy:createReadOnlyExecutionPolicy({cwd,mode:'audit-readonly',tools:[]})});
    assert.equal(payloads.length,1);assert.equal(result.aborted,true);
    const schema=payloads[0].tools.find(t=>t.name===tool.name).input_schema;
-   assert.deepEqual(Object.keys(schema.properties),['report_json']);
+   assert.deepEqual(Object.keys(schema.properties),['review_text']);
    assert.equal(payloads[0].thinking.type,'enabled');
    assert.deepEqual(payloads[0].tool_choice,{type:'tool',name:tool.name});
    assert.match(JSON.stringify(payloads[0].messages),/C000/);
