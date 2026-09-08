@@ -43,22 +43,25 @@ function record(value: unknown): value is Record<string, unknown> {
  * Unknown APIs retain their existing prompt/recovery behavior instead of
  * receiving a guessed wire shape.
  */
-export function forceProviderToolChoice(payload: unknown, api: string, toolName: string | readonly string[], provider?: string): unknown {
+export function forceProviderToolChoice(payload: unknown, api: string, toolName: string | readonly string[], provider?: string, modelId?: string): unknown {
   if (!record(payload)) return payload;
   if (api === "anthropic-messages" && (provider === "minimax" || provider === "minimax-cn")) {
-    // MiniMax's Messages contract supports only auto/none, not named forcing:
-    // https://platform.minimax.io/docs/api-reference/text-chat-anthropic
-    // Restrict available tools without disabling the configured reasoning.
+    // The verified international M3 endpoint accepts named/any selection with
+    // thinking enabled. Preserve auto for older models and unverified backends;
+    // the model identity comes from trusted registry metadata, not payload text.
+    const nativeM3 = provider === "minimax" && modelId === "MiniMax-M3";
     const allowedNames = typeof toolName === "string" ? [toolName] : toolName;
     if (allowedNames.length === 0) return payload;
     return {
       ...payload,
       ...(Array.isArray(payload.tools) ? { tools: payload.tools.filter((tool) => record(tool) && typeof tool.name === "string" && allowedNames.includes(tool.name)) } : {}),
-      tool_choice: { type: "auto" },
+      tool_choice: nativeM3
+        ? allowedNames.length === 1 ? { type: "tool", name: allowedNames[0] } : { type: "any" }
+        : { type: "auto" },
     };
   }
-  // Alternative terminal sets are currently supported only by the verified
-  // MiniMax auto-choice contract. Never guess forcing shapes for other APIs.
+  // Alternative terminal sets use only the verified MiniMax branch above.
+  // Never guess forcing shapes for other APIs.
   if (typeof toolName !== "string") return payload;
   if (api === "anthropic-messages") {
     const next = { ...payload };
@@ -342,7 +345,7 @@ export class PiSdkRuntime implements AgentRuntime {
               }
               if (checkpointCadence?.due) {
                 const before = requestPayload;
-                requestPayload = forceProviderToolChoice(requestPayload, selectedModel?.api ?? "", "write_map_delta", selectedModel?.provider);
+                requestPayload = forceProviderToolChoice(requestPayload, selectedModel?.api ?? "", "write_map_delta", selectedModel?.provider, selectedModel?.id);
                 if (requestPayload !== before) forcedToolChoiceRequests += 1;
               }
               const inputTokenBound = options.auditResourceBudget?.assertProviderInputCapacity(requestPayload);
@@ -371,7 +374,7 @@ export class PiSdkRuntime implements AgentRuntime {
               }
               forcedToolChoiceRequests += 1;
               return admitProviderRequest(
-                forceProviderToolChoice(event.payload, api, recovery.requiredToolName, selectedModel?.provider),
+                forceProviderToolChoice(event.payload, api, recovery.requiredToolName, selectedModel?.provider, selectedModel?.id),
               );
             });
           } else if (recovery && options.forceRequiredToolChoiceAfterTurns !== undefined) {
@@ -384,7 +387,7 @@ export class PiSdkRuntime implements AgentRuntime {
               if (providerRequests + 1 < turnBudget) return admitProviderRequest(event.payload);
               forcedToolChoiceRequests += 1;
               return admitProviderRequest(
-                forceProviderToolChoice(event.payload, api, recovery.requiredToolName, selectedModel?.provider),
+                forceProviderToolChoice(event.payload, api, recovery.requiredToolName, selectedModel?.provider, selectedModel?.id),
               );
             });
           } else {

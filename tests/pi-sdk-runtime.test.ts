@@ -128,7 +128,7 @@ test("SDK admission rejection prevents HTTP dispatch, while admitted requests st
   }
 });
 
-test("MiniMax compatibility keeps reasoning and avoids unsupported named tool choice on the wire", async () => {
+test("MiniMax M3 required terminal selection keeps configured reasoning on the wire", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-sdk-tool-choice-"));
   const payloads: Array<Record<string, unknown>> = [];
   const server = createServer(async (request, response) => {
@@ -159,9 +159,9 @@ test("MiniMax compatibility keeps reasoning and avoids unsupported named tool ch
     }), /provider session failed \(minimax\): 400 .*wire fixture complete/,
     "the intentional HTTP 400 must surface without changing the dispatched wire contract");
     assert.equal(payloads.length, 1);
-    assert.deepEqual(payloads[0]!.tool_choice, { type: "auto" });
+    assert.deepEqual(payloads[0]!.tool_choice, { type: "tool", name: "submit_report" });
     assert.deepEqual((payloads[0]!.tools as Array<{ name: string }>).map((tool) => tool.name), ["submit_report"]);
-    assert.notDeepEqual(payloads[0]!.thinking, { type: "disabled" }, "unsupported forcing must not disable configured reasoning");
+    assert.notDeepEqual(payloads[0]!.thinking, { type: "disabled" }, "native forcing must not disable configured reasoning");
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -394,4 +394,25 @@ test("provider output caps narrow OpenAI responses but never touch the Codex pay
   // every request, so the payload must pass through untouched.
   const codexPayload = { model: "gpt-5.6-luna", tools: [], tool_choice: "auto" };
   assert.equal(capProviderOutputTokens(codexPayload, "openai-codex-responses", 4_096), codexPayload);
+});
+
+
+test("verified international MiniMax M3 forces terminal tools without disabling thinking", () => {
+  const payload = { model: "MiniMax-M3", max_tokens: 12000,
+    thinking: { type: "enabled", budget_tokens: 10976, display: "summarized" },
+    tools: [{ name: "read" }, { name: "submit" }, { name: "reject" }] };
+  const original = structuredClone(payload);
+  for (const names of ["submit", ["submit"], ["submit", "reject"]] as const) {
+    const result = forceProviderToolChoice(payload, "anthropic-messages", names, "minimax", "MiniMax-M3") as typeof payload & { tool_choice: unknown };
+    assert.deepEqual(result.tool_choice, typeof names === "string" || names.length === 1
+      ? { type: "tool", name: "submit" } : { type: "any" });
+    assert.deepEqual(result.thinking, payload.thinking);
+    assert.equal(result.max_tokens, payload.max_tokens);
+    assert.ok(result.tools.every(tool => tool.name !== "read"));
+    assert.deepEqual(payload, original, "request transformation cannot mutate its input");
+  }
+  for (const [provider, model] of [["minimax", "MiniMax-M2.7"], ["minimax", undefined], ["minimax-cn", "MiniMax-M3"]]) {
+    const result = forceProviderToolChoice(payload, "anthropic-messages", "submit", provider, model) as { tool_choice: unknown };
+    assert.deepEqual(result.tool_choice, { type: "auto" }, "unverified model/backend combinations retain their compatibility fallback");
+  }
 });

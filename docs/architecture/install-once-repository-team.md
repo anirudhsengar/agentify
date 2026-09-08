@@ -342,6 +342,13 @@ import graph reaches a network client, broad discovery is not deterministic;
 Agentify may instead use the first tracked offline module only when the nested
 README explicitly documents the individual-unittest command form.
 
+Required terminal requests to the verified international `minimax/MiniMax-M3`
+endpoint retain configured thinking while selecting one named tool or any of the
+permitted terminal alternatives. Other MiniMax models and unverified regional
+endpoints retain automatic selection with the same allowed-tool filtering.
+Schema validation, source checks, deadline and request admission remain decisive;
+a provider selecting a tool is never itself installation or review approval.
+
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30
 minutes, three semantic repair passes, one coverage recovery, 240 model calls and

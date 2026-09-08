@@ -1507,6 +1507,7 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                             ? ["submit_concern_report", "submit_concern_rejection"]
                                             : "submit_concern_report",
                                         subAgentModel.provider,
+                                        subAgentModel.id,
                                     );
                                 }
                                 const inputTokenBound = toolOptions.resourceBudget?.assertProviderInputCapacity(payload);

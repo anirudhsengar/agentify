@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Use verified MiniMax M3 named/any terminal-tool selection without disabling configured thinking or changing response limits. Preserve the auto-selection fallback for older models and unverified regional endpoints.
+
 - Enforce coverage-recovery authority after transport and legacy-key normalization. Serialized and nested specialist updates cannot bypass the phase guard; absent receipts remain absent rather than corrupting handoff with an empty attestation.
 
 - Recover missing coverage metadata before retracing already-recorded specialists. The bounded recovery controller rejects specialist mutations and child dispatches outside its phase, preserves pending receipt obligations, and uses the existing shared limits and final installation gates.
