@@ -1,0 +1,49 @@
+name: PR13 MiniMax native tool contract
+'on':
+  push:
+    branches:
+    - validation/pr13-m3-tool-contract-20260908
+    paths:
+    - .github/workflows/pr13-native-tool-contract.yml
+    - .github/qualification/native-tool-contract.mjs
+permissions:
+  contents: read
+jobs:
+  probe:
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: a115eae61ba1396db184930104044cfb5b430ee2
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Install locked SDK without model credentials
+      run: 'npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts'
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ${{ github.sha }}
+        path: probe-code
+        persist-credentials: false
+    - name: One actual M3 named-tool request, preserve high thinking and response
+        ceiling
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+      run: node --import tsx probe-code/.github/qualification/native-tool-contract.mjs
+    - name: Retain bounded protocol result
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: m3-tool-contract-${{ github.run_id }}
+        path: ${{ runner.temp }}/m3-tool-contract-evidence
+        if-no-files-found: warn
+        retention-days: 14
+    - name: Remove isolated authentication
+      if: always()
+      run: rm -rf -- "$RUNNER_TEMP/m3-tool-contract-home"
