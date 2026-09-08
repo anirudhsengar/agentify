@@ -123,6 +123,10 @@ jobs:
         persist-credentials: false
     - name: Validate native claim-proof batches without model credentials
       run: node --import tsx --test probe-code/.github/qualification/claim-proof-sdk.test.mjs
+    - name: Exercise actual probe imports and immutable inputs without credentials
+      env:
+        REVIEW_CASE: ${{ toJSON(matrix.case) }}
+      run: node --import tsx probe-code/.github/qualification/review-probe.mjs --preflight
     - name: Run bounded production review with explicit verdicts
       env:
         PI_API_KEY: ${{ secrets.PI_API_KEY }}

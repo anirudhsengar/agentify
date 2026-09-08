@@ -15,6 +15,9 @@ const {reviewSpecialistCompilation,specialistReviewDigest}=await load('src/core/
 const {readReviewPrompt}=await load('tests/fixtures/review-prompt.ts');
 const {MODEL_CONFIG,redactSecrets}=await load('scripts/live-installation.mjs');
 const {Value}=await import(execFileSync(process.execPath,['--input-type=module','-e',"process.stdout.write(import.meta.resolve('typebox/value'))"],{cwd:root,encoding:'utf8'}));
+const preflight=process.argv.includes('--preflight');
+assert.ok(process.argv.slice(2).every(argument=>argument==='--preflight'),'Unknown probe argument');
+if(preflight)assert.ok(!process.env.PI_API_KEY&&!process.env.MINIMAX_API_KEY,'Preflight must not receive model credentials');
 const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
 const selected=JSON.parse(process.env.REVIEW_CASE);const out=process.env.PROBE_EVIDENCE,cwd=process.env.PROBE_TARGET;
 const candidate=selected.candidate_sha;assert.equal(git(root,'rev-parse','HEAD'),candidate);assert.equal(git(root,'rev-parse','HEAD^{tree}'),selected.candidate_tree);
@@ -39,8 +42,8 @@ const wireTap=installProviderArgumentTap();const reviewTasks=[];
 const sdk=new PiSdkRuntime();const sdkCalls=[];
 const proofSessions=[];
 const runtime={async runSession(options){
- const observe=options.onEvent,task=parsePrompt(options.userPrompt);
- reviewTasks.push({source_precheck:task.source_precheck===true,source_observation:task.source_observation===true,claim_ids:Object.keys(task.claims??{}),source_paths:Object.keys(task.evidence??{}),source_bytes:Object.values(task.evidence??{}).reduce((n,s)=>n+Buffer.byteLength(s),0),output_cap:options.maxOutputTokens,timeout_ms:options.timeoutMs,untrusted_source_observations:task.untrusted_source_observations??[]});
+ const observe=options.onEvent,task=readReviewPrompt(options.userPrompt);
+ reviewTasks.push({thinking_level:options.config.thinkingLevel,source_precheck:task.source_precheck===true,source_observation:task.source_observation===true,claim_ids:Object.keys(task.claims??{}),source_paths:Object.keys(task.evidence??{}),source_bytes:Object.values(task.evidence??{}).reduce((n,s)=>n+Buffer.byteLength(s),0),output_cap:options.maxOutputTokens,timeout_ms:options.timeoutMs,untrusted_source_observations:task.untrusted_source_observations??[]});
  const batches=[];
  const customTools=options.customTools?.map(original=>{
   const recorded={...original,async execute(...args){const result=await original.execute(...args);
@@ -54,13 +57,17 @@ const runtime={async runSession(options){
   const end=systemPrompt.indexOf('Submit a compact typed review.');if(end>=0)systemPrompt=systemPrompt.slice(0,end);
   systemPrompt+=' Submit one source-backed decision per ORIGINAL claim through separate submit_specialist_review calls in the SAME assistant response. The flat fields are claim, verdict, path, excerpt and reason. For supported, quote one short contiguous verbatim source expression and explain why ALL clauses are supported; a matching name or partly true assertion is insufficient. For an explicitly empty collection such as an empty validation list, use supported with empty path and excerpt and acknowledge the empty value in reason. Every supplied ID must be addressed, including scope, exclusions, questions, and empty collections. For a precise counterexample, submit unsupported for its original claim and stop. Do not send checked_claims or nested finding objects. Batch all positive records now: partial support never approves a specialist, and the application does not grant extra provider requests to finish a list. The original full review executor remains authoritative after these records are validated.';
  }
+ // Exercise the exact imports, immutable inputs, controller, prompt parser and
+ // tool construction without ever dispatching a provider or granting approval.
+ if(preflight)return {turns:0,costUsd:0,aborted:true};
  try{return await sdk.runSession({...options,systemPrompt,customTools,onEvent(event){
   batches.forEach(batch=>batch.observe(event));
+  if(event.type==='tool_execution_start')sdkCalls.push({id:event.toolCallId,args:event.args});
   if(event.type==='message_update'){stream.updates++;stream.first_update_ms??=Date.now()-started;stream.last_update_ms=Date.now()-started;const type=event.assistantMessageEvent?.type??'unknown';stream.types[type]=(stream.types[type]??0)+1;}
   observe?.(event);
  }});}finally{proofSessions.push(...batches.map(batch=>batch.snapshot()));}
 }};
-process.env.MINIMAX_API_KEY=process.env.PI_API_KEY;
+if(!preflight)process.env.MINIMAX_API_KEY=process.env.PI_API_KEY;
 const output=await reviewSpecialistCompilation({cwd,runtime,config:MODEL_CONFIG,
  ui:{status(){}},auditLog:{recordMessageEnd(){},sessionEvent(value){
   const e=value.event;
@@ -69,6 +76,15 @@ const output=await reviewSpecialistCompilation({cwd,runtime,config:MODEL_CONFIG,
   if(e?.type==='message_end'&&e.message?.role==='assistant')events.push({elapsed_ms:Date.now()-started,type:'message_end',stopReason:e.message.stopReason,errorMessage:e.message.errorMessage});
  }}},compilation,budget,'explicit-verdict-live-'+selected.name);
 const provider_wire=await wireTap.finish();
+if(preflight){
+ assert.ok(reviewTasks.length>0,'The real review controller must reach prompt parsing');
+ assert.equal(provider_wire.length,0,'Preflight cannot issue a provider request');
+ assert.equal(budget.snapshot().model_calls,0);
+ assert.equal(acceptedSubmissions.length,0);
+ assert.ok(output.map.specialist_reviews?.records.every(record=>record.failure!==null),'Preflight cannot grant review approval');
+ console.log(JSON.stringify({preflight:true,candidate_sha:candidate,candidate_tree:selected.candidate_tree,case:selected.name,parsed_tasks:reviewTasks.length,model_calls:0,installation_credit:false}));
+ process.exit(0);
+}
 const argument_comparison=provider_wire.flatMap(request=>(request.tool_calls??[]).map(call=>({id:call.id,valid_json:call.valid_json,sdk_match:call.valid_json&&JSON.stringify(call.argument_value)===JSON.stringify(sdkCalls.find(item=>item.id===call.id)?.args)})));
 const finalBody=output.map.concern_evidence?.concerns.find(c=>c.concern===selected.concern);
 const record=output.map.specialist_reviews?.records.find(r=>r.concern===selected.concern);
