@@ -76,6 +76,7 @@ for (const provider of ["minimax", "minimax-cn"]) {
         max_total_steps: 3 } as never, undefined, undefined, { cwd } as never);
       assert.notEqual((result as { isError?: boolean }).isError, true, JSON.stringify({ result, observed }));
       assert.equal(payloads.length, 3, "one source read and the existing bounded argument correction, never a fourth call");
+      assert.equal(payloads[0].thinking, undefined, "compatibility translation must not enable an unset thinking mode");
       assert.ok(payloads[0].tools.some(tool => tool.name === "read"));
       for (const payload of payloads.slice(1)) {
         assert.deepEqual(payload.tools.map(tool => tool.name), [...TERMINALS], "both honest dispositions must replace further inspection near the call cap");

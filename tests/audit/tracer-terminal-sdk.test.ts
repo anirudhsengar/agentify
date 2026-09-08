@@ -111,14 +111,14 @@ async function trace(next: (index: number) => Call | undefined, focus?: string, 
 const read = (file: string): Call => ({ name: "read", input: { path: file } });
 const submit = (body: unknown): Call => ({ name: "submit_concern_report", input: { report_json: JSON.stringify(body) } });
 
-test("actual tracer SDK fits high thinking inside every bounded source and submission request", async () => {
+test("actual tracer SDK keeps M3 thinking enabled and every source and submission response bounded", async () => {
   const outcome = await trace(index => index === 1 ? read("src/entry.ts")
     : index === 2 ? read("src/validate.ts") : submit(BODY), undefined, undefined, true);
   assert.notEqual((outcome.result as { isError?: boolean }).isError, true, JSON.stringify(outcome.result));
   assert.equal(outcome.payloads.length, 3);
   for (const payload of outcome.payloads) {
     assert.equal(payload.max_tokens, 12_000);
-    assert.deepEqual(payload.thinking, { type: "enabled", budget_tokens: 10_976, display: "summarized" });
+    assert.deepEqual(payload.thinking, { type: "adaptive" });
   }
   assert.equal(outcome.usage.model_calls, 3);
   assert.equal(outcome.usage.unreported_calls, 0);

@@ -63,7 +63,7 @@ import { loadCanonicalMapAt } from "./map-storage.ts";
 import { stableMapValueIdentity } from "./map-delta.ts";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
-import { capProviderOutputTokens, forceProviderToolChoice, providerFailureSummary } from "../pi-sdk-runtime.ts";
+import { capProviderOutputTokens, forceProviderToolChoice, normalizeMiniMaxThinking, providerFailureSummary } from "../pi-sdk-runtime.ts";
 import { ConcernAmendmentSchema, ConcernSchema, type Concern } from "./schema/concerns.ts";
 import type { CodebaseMap } from "./schema/index.ts";
 import { assessConcernGrounding, assessSpecialistEvidence, concernEvidencePaths, removeTrustedInferredAttachments } from "./specialist-completion.ts";
@@ -1533,6 +1533,8 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
                                 let payload = capProviderOutputTokens(
                                     event.payload, subAgentModel.api, MAX_EXPLORER_RESPONSE_TOKENS,
                                 );
+                                payload = normalizeMiniMaxThinking(payload, subAgentModel.api,
+                                    subAgentModel.provider, subAgentModel.id);
                                 terminalSubmissionOnly = mode === "concern_tracer"
                                     && submission.concern === null
                                     && submission.rejection === null

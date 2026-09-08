@@ -122,6 +122,16 @@ function boundedTokenValue(current: unknown, maximum: number): number {
 const THINKING_ANSWER_RESERVE_TOKENS = 1_024;
 const MIN_ENABLED_THINKING_TOKENS = 1_024;
 
+/** M3 documents adaptive/disabled thinking, not Claude's enabled token budget. */
+export function normalizeMiniMaxThinking(payload: unknown, api: string, provider?: string, modelId?: string): unknown {
+  if (api !== "anthropic-messages" || provider !== "minimax" || modelId !== "MiniMax-M3"
+    || !record(payload) || !record(payload.thinking) || payload.thinking.type !== "enabled") return payload;
+  // Apply after output-cap validation. Total output and cost reservations are
+  // unchanged; an unsupported reasoning allowance is not a provider bound.
+  // https://platform.minimax.io/docs/api-reference/text-anthropic-api
+  return { ...payload, thinking: { type: "adaptive" } };
+}
+
 /** Apply an application-owned per-request output ceiling to known wire shapes. */
 export function capProviderOutputTokens(payload: unknown, api: string, maximum: number): unknown {
   if (!record(payload) || !Number.isInteger(maximum) || maximum < 1) return payload;
@@ -343,6 +353,8 @@ export class PiSdkRuntime implements AgentRuntime {
                 requestPayload = capProviderOutputTokens(requestPayload, selectedModel?.api ?? "", options.maxOutputTokens);
                 cappedOutputRequests += 1;
               }
+              requestPayload = normalizeMiniMaxThinking(requestPayload, selectedModel?.api ?? "",
+                selectedModel?.provider, selectedModel?.id);
               if (checkpointCadence?.due) {
                 const before = requestPayload;
                 requestPayload = forceProviderToolChoice(requestPayload, selectedModel?.api ?? "", "write_map_delta", selectedModel?.provider, selectedModel?.id);

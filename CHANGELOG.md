@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Translate the international MiniMax M3 thinking-on request to its documented adaptive wire format, preserving disabled thinking, the original total-output and accounting limits, and prior conversation content. Other providers, older models and regional backends retain their existing formats.
+
 - Refuse review-only retracing before child admission: an unchanged, currently attested body with an incomplete reviewer execution needs an explicit independent compiler path or core-ownership obligation before semantic repair can retrace it. Missing observations and failed source receipts remain repairable.
 
 - Classify incomplete reviewer execution separately from rejected source: review-only failures cannot consume repair passes, rewrite attested bodies, or obtain hidden retries; independent source and ownership obligations still require repair.

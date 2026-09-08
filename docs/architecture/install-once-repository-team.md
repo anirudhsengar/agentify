@@ -342,6 +342,18 @@ import graph reaches a network client, broad discovery is not deterministic;
 Agentify may instead use the first tracked offline module only when the nested
 README explicitly documents the individual-unittest command form.
 
+For the international `minimax/MiniMax-M3` Anthropic-compatible endpoint,
+configured thinking-on uses the documented `thinking: {type: "adaptive"}` wire
+format. The pinned SDK emits the older Claude-style enabled/token-budget shape;
+the application translates that shape only for the trusted M3 provider/model
+identity, after validating the existing output cap. Disabled, absent, already
+adaptive and other backend/model settings are unchanged. No conversation content
+or reasoning blocks are rewritten. Both parent and explorer requests use this
+translation. M3's documented mode is on/off, not an independently enforced
+numeric reasoning-token allowance; the complete response's output ceiling,
+request reservations, aggregate limits, cancellation and source gates still apply.
+See https://platform.minimax.io/docs/api-reference/text-anthropic-api.
+
 Required terminal requests to the verified international `minimax/MiniMax-M3`
 endpoint retain configured thinking while selecting one named tool or any of the
 permitted terminal alternatives. Other MiniMax models and unverified regional

@@ -5,13 +5,41 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createServer } from "node:http";
 import { Type } from "typebox";
-import { capProviderOutputTokens, forceProviderToolChoice, PiSdkRuntime } from "../src/core/pi-sdk-runtime.ts";
+import { capProviderOutputTokens, forceProviderToolChoice, normalizeMiniMaxThinking, PiSdkRuntime } from "../src/core/pi-sdk-runtime.ts";
 import { createReadOnlyExecutionPolicy } from "../src/core/security/execution-policy.ts";
 import { createAgentSession } from "@earendil-works/pi-coding-agent";
 import { createAgentifyModelRuntime } from "../src/core/pi-credential-store.ts";
 import { createSpawnExplorerTool } from "../src/core/audit/spawn-explorer-tool.ts";
 import { AuditBudgetExceededError, AuditResourceBudget } from "../src/core/audit/resource-budget.ts";
 import { bindStructuredToolErrors } from "../src/core/structured-tool-errors.ts";
+
+test("M3 thinking translation preserves output bounds and unverified provider contracts", () => {
+  const input = { model: "spoofed-payload-model", max_tokens: 12_000,
+    thinking: { type: "enabled", budget_tokens: 10_976, display: "summarized" },
+    tool_choice: { type: "tool", name: "submit_report" }, tools: [{ name: "submit_report" }],
+    messages: [{ role: "assistant", content: [{ type: "thinking", thinking: "fixture-only", signature: "unchanged" }] }] };
+  const before = structuredClone(input);
+  const result = normalizeMiniMaxThinking(input, "anthropic-messages", "minimax", "MiniMax-M3");
+  assert.deepEqual(result, { ...input, thinking: { type: "adaptive" } });
+  assert.deepEqual(input, before, "translation must not change caller-owned payload or prior thinking blocks");
+  for (const [api, provider, model] of [
+    ["anthropic-messages", "minimax", "MiniMax-M2.7"],
+    ["anthropic-messages", "minimax-cn", "MiniMax-M3"],
+    ["anthropic-messages", "anthropic", "MiniMax-M3"],
+    ["openai-completions", "minimax", "MiniMax-M3"],
+    ["anthropic-messages", "minimax", undefined],
+  ]) assert.equal(normalizeMiniMaxThinking(input, api!, provider, model), input,
+    "only trusted provider/model metadata authorizes the compatibility translation");
+  for (const thinking of [undefined, { type: "disabled" }, { type: "adaptive" }, { type: "unknown" }]) {
+    const payload = { max_tokens: 12_000, thinking };
+    assert.equal(normalizeMiniMaxThinking(payload, "anthropic-messages", "minimax", "MiniMax-M3"), payload);
+  }
+  assert.throws(() => normalizeMiniMaxThinking(capProviderOutputTokens(input, "anthropic-messages", 2_047),
+    "anthropic-messages", "minimax", "MiniMax-M3"), /cannot fit enabled thinking/,
+  "output validation remains before provider-specific adaptation");
+  assert.deepEqual(normalizeMiniMaxThinking(capProviderOutputTokens(input, "anthropic-messages", 6_000),
+    "anthropic-messages", "minimax", "MiniMax-M3"), { ...input, max_tokens: 6_000, thinking: { type: "adaptive" } });
+});
 
 test("structured tool errors retain hook diagnostics and cannot become success", async () => {
   type Agent = Parameters<typeof bindStructuredToolErrors>[0];
@@ -312,7 +340,7 @@ test("Anthropic output caps retain enabled thinking inside the answer-reserved e
   });
 });
 
-test("actual M3 SDK request caps fit thinking and refuse impossible caps before HTTP or accounting", async () => {
+test("actual M3 SDK requests preserve output caps and refuse impossible caps before HTTP or accounting", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-sdk-thinking-cap-"));
   const payloads: Array<Record<string, unknown>> = [];
   const server = createServer(async (request, response) => {
@@ -359,7 +387,7 @@ test("actual M3 SDK request caps fit thinking and refuse impossible caps before 
           await assert.rejects(run, /thinking-cap wire fixture complete/);
           assert.equal(payloads.length, before + 1);
           assert.equal(payloads.at(-1)!.max_tokens, cap);
-          assert.deepEqual(payloads.at(-1)!.thinking, { type: "enabled", budget_tokens: 10_976, display: "summarized" });
+          assert.deepEqual(payloads.at(-1)!.thinking, { type: "adaptive" });
           assert.equal(budget.snapshot().model_calls, 1);
           assert.equal(budget.snapshot().reserved_output_tokens, cap,
             "a bounded thinking allocation remains inside the existing full output reservation");
@@ -416,3 +444,47 @@ test("verified international MiniMax M3 forces terminal tools without disabling 
     assert.deepEqual(result.tool_choice, { type: "auto" }, "unverified model/backend combinations retain their compatibility fallback");
   }
 });
+
+for (const forced of [false, true]) {
+test(`MiniMax M3 sends documented adaptive thinking without changing terminal authority: ${forced}`, async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-sdk-tool-choice-"));
+  const payloads: Array<Record<string, unknown>> = [];
+  const server = createServer(async (request, response) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    payloads.push(JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>);
+    // A deterministic non-retryable response suffices to inspect dispatch.
+    response.writeHead(400, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "wire fixture complete" } }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    fs.writeFileSync(path.join(cwd, "models.json"), JSON.stringify({ providers: {
+      minimax: { baseUrl: `http://127.0.0.1:${address.port}`, api: "anthropic-messages",
+        apiKey: "local-test-placeholder", models: [{ id: "MiniMax-M3", reasoning: true, contextWindow: 32768, maxTokens: 4096 }] },
+    } }));
+    await assert.rejects(new PiSdkRuntime().runSession({
+      cwd, configDir: cwd,
+      config: { schemaVersion: 1, thinkingLevel: "high", models: { primary: { provider: "minimax", model: "MiniMax-M3" } } },
+      systemPrompt: "Local wire test.", userPrompt: "Read the fixture.", tools: ["read", "submit_report"], timeoutMs: 5000,
+      executionPolicy: createReadOnlyExecutionPolicy({ cwd, mode: "audit-readonly", tools: ["read"] }),
+      customTools: [{ name: "submit_report", label: "Submit", description: "Submit fixture result.", parameters: Type.Object({}),
+        async execute() { return { content: [{ type: "text", text: "recorded" }], details: {} }; } }],
+      forceRequiredToolChoice: forced,
+      recoveryPromptIfToolNotCalled: { requiredToolName: "submit_report", userPrompt: "Submit.", maxAttempts: 0 },
+    }), /provider session failed \(minimax\): 400 .*wire fixture complete/,
+    "the intentional HTTP 400 must surface without changing the dispatched wire contract");
+    assert.equal(payloads.length, 1);
+    if (forced) assert.deepEqual(payloads[0]!.tool_choice, { type: "tool", name: "submit_report" });
+    if (forced) assert.deepEqual((payloads[0]!.tools as Array<{ name: string }>).map((tool) => tool.name), ["submit_report"]);
+    assert.deepEqual(payloads[0]!.thinking, { type: "adaptive" }, "M3 uses its documented on/off mode, not a Claude-style token budget");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+}
