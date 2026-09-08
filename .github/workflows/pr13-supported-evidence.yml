@@ -6,6 +6,8 @@ name: PR13 source-backed positive approval experiment
     paths:
     - .github/workflows/pr13-supported-evidence.yml
     - .github/qualification/review-probe.mjs
+    - .github/qualification/support-protocol.mjs
+    - .github/qualification/support-protocol.test.mjs
 permissions:
   contents: read
   actions: read
@@ -114,6 +116,8 @@ jobs:
         ref: ${{ github.sha }}
         path: probe-code
         persist-credentials: false
+    - name: Validate positive-approval source binding before model credentials
+      run: node --test probe-code/.github/qualification/support-protocol.test.mjs
     - name: Run bounded production review with explicit verdicts
       env:
         PI_API_KEY: ${{ secrets.PI_API_KEY }}
