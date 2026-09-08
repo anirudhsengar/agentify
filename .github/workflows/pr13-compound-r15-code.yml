@@ -1,20 +1,20 @@
-name: PR13 final native-selection code qualification
-run-name: PR13 ecb1753 exact code qualification, no repeated model probes
+name: PR13 final semantic code qualification
+run-name: PR13 18247d0 exact code qualification, no model probes
 'on':
   push:
     branches:
-    - validation/pr13-compound-r15-code-20260908
+    - validation/pr13-final-r21-code-20260908
     paths:
     - .github/workflows/pr13-compound-r15-code.yml
 permissions:
   contents: read
 concurrency:
-  group: pr13-compound-r15-code-20260908
+  group: pr13-final-r21-code-20260908
   cancel-in-progress: false
 jobs:
   qualify:
     if: github.actor == github.repository_owner
-    name: Exact ecb1753 qualification (Node ${{ matrix.node }})
+    name: Exact 18247d0 qualification (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -26,7 +26,7 @@ jobs:
     steps:
     - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
       with:
-        ref: ecb17537b8aeba23d18684e99278d424cfbd02af
+        ref: 18247d0b868aff8e3ff77b6d01c66e33d886f613
         persist-credentials: false
     - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
       with:
@@ -52,8 +52,8 @@ jobs:
       shell: bash
       env:
         EXPECTED_NODE: ${{ matrix.node }}
-      run: "set -euo pipefail\numask 022\ntest \"$(git rev-parse HEAD)\" = ecb17537b8aeba23d18684e99278d424cfbd02af\n\
-        test \"$(git rev-parse HEAD^{tree})\" = c0dfde8051bf0aad855136faf4d54e4f5fe649f5\ntest \"$(node --version)\"\
+      run: "set -euo pipefail\numask 022\ntest \"$(git rev-parse HEAD)\" = 18247d0b868aff8e3ff77b6d01c66e33d886f613\n\
+        test \"$(git rev-parse HEAD^{tree})\" = 8e211dcb112249a3cff4c555b8450be5b8711df0\ntest \"$(node --version)\"\
         \ = \"v$EXPECTED_NODE\"\ntest \"$(npm --version)\" = \"11.19.0\"\ntest -z \"$(git status --porcelain)\"\n\
         {\n  git show -s --format='candidate=%H%ntree=%T'\n  node --version\n  npm --version\n  printf 'umask=';\
         \ umask\n} > \"$RUNNER_TEMP/pr13-compound-r15-code-environment.txt\"\nset +e\nnpm run verify:release > \"$RUNNER_TEMP/pr13-compound-r15-code-qualification.log\"\
@@ -65,7 +65,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: pr13-compound-r15-code-node-${{ matrix.node }}-${{ github.run_id }}
+        name: pr13-final-r21-code-node-${{ matrix.node }}-${{ github.run_id }}
         path: '${{ runner.temp }}/pr13-compound-r15-code-environment.txt
 
           ${{ runner.temp }}/pr13-compound-r15-code-qualification.log
