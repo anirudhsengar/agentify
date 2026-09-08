@@ -1,0 +1,151 @@
+{
+  "concern": "JWK cache state and expiry",
+  "one_line": "Caches one parsed JWK set with a monotonic timestamp and optional expiry.",
+  "covers": "Storing, clearing, retrieving and expiring one parsed JWK set.",
+  "excludes": "JWK JSON parsing, key selection, cryptographic verification and HTTP fetching.",
+  "flows": [
+    {
+      "name": "Store a parsed set",
+      "description": "Cache a non-None set with a fresh timestamp wrapper.",
+      "steps": [
+        {
+          "path": "jwt/jwk_set_cache.py",
+          "what_happens": "put receives the set and constructs PyJWTSetWithTimestamp."
+        },
+        {
+          "path": "jwt/api_jwk.py",
+          "what_happens": "The wrapper stores the set and captures time.monotonic()."
+        }
+      ]
+    },
+    {
+      "name": "Read cached state",
+      "description": "Reject empty or expired state and otherwise return the stored set.",
+      "steps": [
+        {
+          "path": "jwt/jwk_set_cache.py",
+          "what_happens": "get returns None for an empty cache or when is_expired is true."
+        },
+        {
+          "path": "jwt/api_jwk.py",
+          "what_happens": "get_jwk_set returns the cached set for the unexpired branch."
+        }
+      ]
+    }
+  ],
+  "touchpoints": [
+    {
+      "path": "jwt/jwk_set_cache.py",
+      "symbol": "JWKSetCache",
+      "role": "Owns stored cache state and expiration decisions.",
+      "line_range": null,
+      "centrality": "core"
+    },
+    {
+      "path": "jwt/api_jwk.py",
+      "symbol": "PyJWTSetWithTimestamp",
+      "role": "Stores the parsed set and its monotonic insertion timestamp.",
+      "line_range": null,
+      "centrality": "supporting"
+    }
+  ],
+  "invariants": [
+    {
+      "rule": "The cache constructor starts with no stored timestamp wrapper.",
+      "why": "It assigns jwk_set_with_timestamp to None.",
+      "reference": "jwt/jwk_set_cache.py"
+    },
+    {
+      "rule": "The constructor retains the supplied lifespan without validating its sign.",
+      "why": "It assigns self.lifespan directly.",
+      "reference": "jwt/jwk_set_cache.py"
+    },
+    {
+      "rule": "put(None) clears the stored timestamp wrapper.",
+      "why": "The else branch assigns None to jwk_set_with_timestamp.",
+      "reference": "jwt/jwk_set_cache.py"
+    },
+    {
+      "rule": "put() with a non-None set creates a new PyJWTSetWithTimestamp wrapper.",
+      "why": "The non-None branch constructs the wrapper for that set.",
+      "reference": "jwt/jwk_set_cache.py"
+    },
+    {
+      "rule": "The timestamp wrapper retains the supplied JWK set object.",
+      "why": "Its constructor assigns the argument to self.jwk_set.",
+      "reference": "jwt/api_jwk.py"
+    },
+    {
+      "rule": "The timestamp wrapper records time.monotonic() when constructed.",
+      "why": "Its timestamp is assigned by calling time.monotonic().",
+      "reference": "jwt/api_jwk.py"
+    },
+    {
+      "rule": "get_timestamp returns the recorded timestamp.",
+      "why": "It returns self.timestamp without refreshing it.",
+      "reference": "jwt/api_jwk.py"
+    },
+    {
+      "rule": "get_jwk_set returns the stored JWK set.",
+      "why": "It returns self.jwk_set without creating a copy.",
+      "reference": "jwt/api_jwk.py"
+    },
+    {
+      "rule": "get() returns None when the cache is empty.",
+      "why": "The initial None condition returns before reading the wrapper.",
+      "reference": "jwt/jwk_set_cache.py"
+    },
+    {
+      "rule": "is_expired() returns False when the cache is empty.",
+      "why": "Its first conjunct requires a non-None timestamp wrapper.",
+      "reference": "jwt/jwk_set_cache.py"
+    },
+    {
+      "rule": "Lifespans less than or equal to -1 disable expiration for stored entries.",
+      "why": "The expiration predicate requires self.lifespan > -1.",
+      "reference": "jwt/jwk_set_cache.py"
+    },
+    {
+      "rule": "Expiration requires the current monotonic time to be strictly greater than timestamp plus lifespan.",
+      "why": "The predicate uses > rather than >=.",
+      "reference": "jwt/jwk_set_cache.py"
+    },
+    {
+      "rule": "An entry is not expired at exact equality with timestamp plus lifespan.",
+      "why": "The strict greater-than comparison is False at equality.",
+      "reference": "jwt/jwk_set_cache.py"
+    },
+    {
+      "rule": "get() returns None for an expired stored entry.",
+      "why": "The is_expired() branch returns None.",
+      "reference": "jwt/jwk_set_cache.py"
+    },
+    {
+      "rule": "get() returns the stored set for a present unexpired entry.",
+      "why": "It calls the stored wrapper get_jwk_set().",
+      "reference": "jwt/jwk_set_cache.py"
+    },
+    {
+      "rule": "Returning None for expiration does not itself clear the stored wrapper.",
+      "why": "get() performs no assignment before the expired return.",
+      "reference": "jwt/jwk_set_cache.py"
+    }
+  ],
+  "pitfalls": [
+    {
+      "risk": "A lifespan at or below -1 leaves stored entries without expiration.",
+      "consequence": "Elapsed monotonic time alone cannot make is_expired return True for those lifespan values.",
+      "reference": "jwt/jwk_set_cache.py"
+    }
+  ],
+  "entry_questions": [
+    "Should this change affect clearing, the expiry boundary, or retention of the stored set?"
+  ],
+  "validation": [],
+  "spans_subtrees": [
+    "jwt"
+  ],
+  "stability": "high",
+  "recurrence": "high",
+  "confidence": "high"
+}
