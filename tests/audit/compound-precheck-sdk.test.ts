@@ -14,13 +14,14 @@ import { reviewSpecialistCompilation } from "../../src/core/audit/specialist-rev
 import { AuditResourceBudget } from "../../src/core/audit/resource-budget.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
-for (const outcome of ["complete", "contradiction", "missing-clause", "unbound-id", "forged-excerpt", "duplicate-parent", "pruned-source-finding"] as const) {
+for (const outcome of ["complete", "contradiction", "missing-clause", "unbound-id", "forged-excerpt", "duplicate-parent", "pruned-source-finding", "pruned-partition-incomplete", "pruned-partition-foreign-id"] as const) {
   test(`native MiniMax compound precheck preserves complete review authority: ${outcome}`, async () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-native-source-check-"));
     const small = "def present(record):\n    return record is not None\n";
     const large = "def relay(record):\n    return record\n" + "# Broader immutable source context.\n".repeat(400);
     let sawClausePlan = false;
     let prechecks = 0;
+    const assignments: string[][] = [];
     const requests: Array<{ precheck: boolean; cap: number | undefined; thinking: unknown }> = [];
     const server = createServer(async (request, response) => {
       const chunks: Buffer[] = [];
@@ -31,7 +32,8 @@ for (const outcome of ["complete", "contradiction", "missing-clause", "unbound-i
       };
       const content = payload.messages.find(message => message.role === "user")!.content;
       const text = typeof content === "string" ? content : content.map(part => part.text ?? "").join("\n");
-      const data = readReviewPrompt(text) as { source_precheck?: boolean; claims: Record<string, { original_claim?: string; field?: string; text?: string }>; evidence: Record<string, string>; original_claim_context?: Record<string, unknown> };
+      const data = readReviewPrompt(text) as { source_precheck?: boolean; claims: Record<string, { original_claim?: string; field?: string; text?: string }>; evidence: Record<string, string>; original_claim_context?: Record<string, unknown>;
+        review_assignment?: { index: number; count: number; scope_context: { concern: string; flows: unknown[] } } };
       const precheck = data.source_precheck === true;
       if (precheck) prechecks += 1;
       requests.push({ precheck, cap: payload.max_tokens, thinking: payload.thinking });
@@ -40,7 +42,7 @@ for (const outcome of ["complete", "contradiction", "missing-clause", "unbound-i
       if (precheck) {
         sawClausePlan = data.original_claim_context !== undefined && Object.keys(data.claims).length > 2;
         if (sawClausePlan) {
-          const expectedParents = outcome === "pruned-source-finding" && prechecks === 1
+          const expectedParents = outcome.startsWith("pruned-") && prechecks === 1
             ? ["pitfalls[0]", "pitfalls[1]"] : ["pitfalls[0]"];
           assert.deepEqual(Object.keys(data.original_claim_context!), expectedParents);
           assert.ok(Object.values(data.claims).every(clause => expectedParents.includes(clause.original_claim!)));
@@ -48,23 +50,30 @@ for (const outcome of ["complete", "contradiction", "missing-clause", "unbound-i
       }
       else {
         assert.equal(data.evidence["large.py"], large);
-        assert.ok(Object.keys(data.claims).length > 24);
+        if (outcome.startsWith("pruned-")) {
+          assert.deepEqual(data.review_assignment?.count, 2);
+          assert.equal(data.review_assignment?.scope_context.concern, "Record presence and relay");
+          assert.equal(data.review_assignment?.scope_context.flows.length, 1);
+          assignments.push(Object.keys(data.claims));
+        } else assert.ok(Object.keys(data.claims).length > 24);
       }
       const target = Object.entries(data.claims).find(([, clause]) => clause.text?.includes("absent record"))?.[0] ?? "pitfalls[0]";
       const rejects = ["contradiction", "unbound-id", "forged-excerpt", "duplicate-parent"].includes(outcome)
-        || outcome === "pruned-source-finding" && prechecks === 1;
+        || outcome.startsWith("pruned-") && prechecks === 1;
       const finding = rejects && precheck ? {
         claim: outcome === "unbound-id" ? "pitfalls[0]" : target, path: "small.py",
         excerpt: outcome === "forged-excerpt" ? "return True" : "return record is not None",
         reason: "A None record makes the predicate False, not True.",
       } : undefined;
       const other = Object.keys(data.claims).find(id => id !== target)!;
+      const checkedClaims = Object.keys(data.claims);
+      if (outcome === "pruned-partition-foreign-id" && !precheck && data.review_assignment?.index === 2) checkedClaims.push("pitfalls[999]");
       const report = { verdict: finding ? "unsupported" : "supported",
-        checked_claims: outcome === "missing-clause" && precheck ? Object.keys(data.claims).slice(0,-1) : Object.keys(data.claims),
+        checked_claims: outcome === "missing-clause" && precheck ? Object.keys(data.claims).slice(0,-1) : checkedClaims,
         ...(finding ? { finding } : {}),
         ...(outcome === "duplicate-parent" && precheck ? { additional_findings: [{ ...finding!, claim: other }] } : {}),
       };
-      const useTool = true;
+      const useTool = !(outcome === "pruned-partition-incomplete" && !precheck && data.review_assignment?.index === 2);
       const index = requests.length;
       const events = [
         ["message_start", { type: "message_start", message: { id: `fixture-${index}`, type: "message", role: "assistant",
@@ -105,11 +114,11 @@ for (const outcome of ["complete", "contradiction", "missing-clause", "unbound-i
           { path: "large.py", symbol: "relay", role: "Relays records.", line_range: null, centrality: "core" }],
         invariants: Array.from({ length: 26 }, (_, index) => ({ rule: `Case ${index}: relay returns its argument.`,
           why: "The return expression is record.", reference: "large.py" })),
-        pitfalls: [{ risk: ["contradiction", "duplicate-parent", "pruned-source-finding"].includes(outcome)
+        pitfalls: [{ risk: ["contradiction", "duplicate-parent"].includes(outcome) || outcome.startsWith("pruned-")
           ? "The predicate compares record with None, so an absent record returns True. The comparison controls presence."
           : "The predicate compares record with None. An absent record returns False. The comparison controls presence.",
           consequence: "Presence is separate from relay.", reference: "small.py" },
-          ...(outcome === "pruned-source-finding" ? [{
+          ...(outcome.startsWith("pruned-") ? [{
             risk: "The predicate compares record with None. An absent record returns False. The comparison controls presence.",
             consequence: "The supported fallback claim remains after pruning.", reference: "small.py",
           }] : [])],
@@ -126,8 +135,16 @@ for (const outcome of ["complete", "contradiction", "missing-clause", "unbound-i
       } as never, compilation, budget, "native-source-local");
       assert.equal(sawClausePlan,true,"compound prose must be assigned separate immutable clause IDs");
       assert.deepEqual(requests.map(request => request.precheck),
-        outcome === "complete" || outcome === "pruned-source-finding" ? [true,false] : [true],
-        "a source finding may prune a surplus assertion, but the changed body must proceed directly to complete review");
+        outcome === "complete" ? [true,false] : outcome.startsWith("pruned-") ? [true,false,false] : [true],
+        "a source finding may prune a surplus assertion, then every complete-review assignment must finish");
+      if (outcome.startsWith("pruned-")) {
+        assert.equal(assignments.length, 2);
+        const overlap = assignments[0]!.filter(id => assignments[1]!.includes(id)).sort();
+        assert.deepEqual(overlap, ["concern", "covers", "excludes"], "only global coherence claims may overlap");
+        const union = new Set(assignments.flat());
+        for (let index = 0; index < body.invariants.length; index += 1) assert.ok(union.has(`invariants[${index}]`));
+        for (const id of ["pitfalls[0]", "flows[0]", "touchpoints[0]", "one_line", "entry_questions", "validation"]) assert.ok(union.has(id), id);
+      }
       assert.ok(requests.every(request => request.cap === 12000));
       assert.ok(requests.every(request => JSON.stringify(request.thinking) === JSON.stringify({ type: "adaptive" })));
       assert.equal(budget.snapshot().model_calls,requests.length);
@@ -139,7 +156,7 @@ for (const outcome of ["complete", "contradiction", "missing-clause", "unbound-i
         assert.equal(record.finding?.claim,"pitfalls[0]","a local clause finding must bind the original stable claim");
         assert.equal(record.additional_findings?.length ?? 0,0,"one original claim must not be pruned twice");
       } else if(outcome !== "complete" && outcome !== "pruned-source-finding") assert.equal(record.retryable,true);
-      if (outcome === "pruned-source-finding") {
+      if (outcome.startsWith("pruned-")) {
         const reviewed = result.map.concern_evidence!.concerns.find(item => item.concern === body.concern)!;
         assert.equal(reviewed.pitfalls.length, 1, "only the source-rejected surplus claim is pruned");
         assert.match(reviewed.pitfalls[0]!.risk, /returns False/);

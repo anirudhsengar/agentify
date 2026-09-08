@@ -229,10 +229,17 @@ The final reviewer still receives every original claim and immutable source byte
 No fragment outcome becomes a whole-body attestation, and no extra request,
 deadline, source allowance, model change or reasoning-mode override is introduced.
 If a validated precheck finding causes trusted surplus-claim pruning, the next
-review of that changed digest bypasses another local precheck and enters the
-complete review directly. Repeating the same heuristic cannot consume the fresh
-body's review window; every remaining original claim and immutable source byte
-still requires the ordinary complete review under its existing request limits.
+review of that changed digest bypasses another local precheck. When more than 24
+claims remain, the complete review is divided into two mandatory assignments.
+Each receives every immutable source byte plus untrusted whole-body scope context;
+`concern`, `covers`, and `excludes` are checked by both assignments so either can
+reject incoherence, while every other original claim ID is assigned exactly once.
+Both typed checklists must complete before approval. Each assignment retains the
+12,000-token response ceiling and together they use the ordinary changed-body
+two-request allowance, with no third argument-correction request. A source finding
+in either assignment is decisive; incomplete, foreign-ID, cancelled, stale-HEAD,
+or capacity-unresolved assignments fail closed. A large body occupies both review
+concurrency slots so this does not raise provider concurrency.
 Only validated supported submissions become the existing canonical null finding;
 persisted exact-body review attestations and their meaning are unchanged. It submits immediately at the first decisive rejection, retaining
 additional findings only if already established rather than searching for a quota.

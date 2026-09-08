@@ -263,8 +263,11 @@ introduces an executable behavior, so a correct return value cannot support an
 incorrect state predicate. Every fragment must be checked; findings map back to
 the original claim without changing the installed body or complete-review contract.
 After trusted pruning removes a source-rejected surplus assertion, the changed
-body proceeds directly to its mandatory complete review instead of repeating the
-same local precheck. The full review and existing request limits remain authoritative.
+body skips another local precheck. If more than 24 claims remain, its complete
+review uses two mandatory assignments: both receive all immutable source and
+whole-body scope context, while non-scope claim IDs are assigned exactly once.
+Both must complete before approval; each keeps the 12,000-token response ceiling
+and together they consume only the ordinary changed-body two-request allowance.
 Two independent read-only bodies may be
 reviewed concurrently; results are applied in portfolio order, and temporary
 aggregate-reservation refusal falls back to serial admission. Reviews submit
