@@ -109,7 +109,8 @@ test("actual SDK semantic repair refuses coverage explorers before child admissi
   }
 });
 
-test("actual SDK launches an accounted scout after topography even when the parent never chooses spawn_explorer", async () => {
+for (const phase of ["initial", "coverage-recovery"] as const) {
+test(`actual SDK launches automatic scouts only during the initial audit: ${phase}`, async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-initial-scout-sdk-"));
   const stateDir = ".agentify/runtime/audit";
   const payloads: Array<Record<string, unknown>> = [];
@@ -176,6 +177,7 @@ test("actual SDK launches an accounted scout after topography even when the pare
       systemPrompt: "Local deterministic parent fixture.", userPrompt: "Record topography.",
       tools: ["read", "write_map_delta", "spawn_explorer"], customTools: [tools.writeMapDeltaTool],
       spawnExplorerAgentDir: cwd, spawnExplorerStateDir: stateDir,
+      ...(phase === "coverage-recovery" ? { spawnExplorerPurpose: phase } : {}),
       auditResourceBudget: budget, timeoutMs: 10_000,
       onProviderRequest: reservation => budget.recordProviderRequest(parentBudget, reservation),
       onEvent(event) {
@@ -192,20 +194,22 @@ test("actual SDK launches an accounted scout after topography even when the pare
     });
     assert.equal(result.aborted, false);
     assert.equal(parentCalls, 3);
-    assert.equal(scoutCalls, 2, "the real scout must read source and return its report exactly once");
-    assert.equal(budget.snapshot().explorer_spawns, 1);
-    assert.equal(budget.snapshot().model_calls, 5, "parent and child requests retain shared admission/accounting");
+    const expectedScouts = phase === "initial" ? 1 : 0;
+    assert.equal(scoutCalls, expectedScouts * 2, "coverage recovery cannot trigger an automatic scout");
+    assert.equal(budget.snapshot().explorer_spawns, expectedScouts);
+    assert.equal(budget.snapshot().model_calls, 3 + expectedScouts * 2, "parent and child requests retain shared admission/accounting");
     assert.equal(budget.snapshot().unreported_calls, 0);
-    assert.equal(events.filter(e => e.type === "tool_execution_start" && e.toolName === "spawn_explorer").length, 1);
-    assert.equal(events.filter(e => e.type === "tool_execution_end" && e.toolName === "spawn_explorer").length, 1);
+    assert.equal(events.filter(e => e.type === "tool_execution_start" && e.toolName === "spawn_explorer").length, expectedScouts);
+    assert.equal(events.filter(e => e.type === "tool_execution_end" && e.toolName === "spawn_explorer").length, expectedScouts);
     const scouts = payloads.filter(p => p.model === "scout-fixture");
-    assert.ok(JSON.stringify(scouts[1]?.messages).includes("Test fixture evidence citation."),
+    if (phase === "initial") assert.ok(JSON.stringify(scouts[1]?.messages).includes("Test fixture evidence citation."),
       "the scout must actually receive readable repository source, not a blocked read result");
     const parents = payloads.filter(p => p.model === "parent-fixture");
-    assert.ok(JSON.stringify(parents[1]?.messages).includes("Request validation"), "parent continuation receives the real scout report");
+    if (phase === "initial") assert.ok(JSON.stringify(parents[1]?.messages).includes("Request validation"), "parent continuation receives the real scout report");
     const finalMap = loadCanonicalMapAt(cwd, stateDir)!;
-    assert.equal(tracker.assess(finalMap).successful_scouts, 1);
-    assert.equal(finalMap.explorer_receipts?.receipts[0]?.mode, "concern_scout");
+    assert.equal(tracker.assess(finalMap).successful_scouts, expectedScouts);
+    if (phase === "initial") assert.equal(finalMap.explorer_receipts?.receipts[0]?.mode, "concern_scout");
+    else assert.equal(finalMap.explorer_receipts, undefined, "no synthetic receipt may be created by coverage recovery");
     assert.equal(finalMap.concern_evidence, undefined, "scouting cannot fabricate a traced body");
     assert.equal(assessAuditCompletion(finalMap, { cwd }).complete, false, "scout alone never grants installation credit");
   } finally {
@@ -214,3 +218,4 @@ test("actual SDK launches an accounted scout after topography even when the pare
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+}

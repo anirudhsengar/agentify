@@ -967,3 +967,107 @@ for (const outcome of ["repaired", "unresolved", "missing-scout", "cancelled", "
     }
   });
 }
+
+
+test("coverage recovery preserves specialist state after transport normalization", async () => {
+  const { cwd, head } = createRepository();
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-coverage-boundary-home-"));
+  const previousHome = process.env.HOME;
+  process.env.HOME = home;
+  const budget = new AuditResourceBudget();
+  const mapPath = path.join(cwd, ".agentify/runtime/audit/codebase_map.json");
+  let calls = 0;
+  let testedProposals = 0;
+  try {
+    const compiled = compileSpecialistEvidence(aqaShapedMap(), { cwd });
+    assert.equal(compiled.complete, true);
+    const map = attestCodebaseMap(compiled.map, head);
+    delete map.explorer_receipts;
+    const lifecycle = structuredClone(map.meta.lifecycle);
+    map.meta.lifecycle.sdlc_model = "";
+    map.meta.lifecycle.issue_types = [];
+    map.coverage.D9_process.status = "gap";
+    const specialistSnapshot = JSON.stringify(map.concern_evidence);
+    const runtime: AgentRuntime = { async runSession(options) {
+      calls += 1;
+      assert.equal(options.auditResourceBudget, budget);
+      if (calls === 1) {
+        fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+        fs.writeFileSync(mapPath, JSON.stringify(map));
+        return { turns: 1, costUsd: 0, aborted: false };
+      }
+      if (calls === 2) {
+        assert.equal(options.spawnExplorerPurpose, "coverage-recovery");
+        assert.match(options.systemPrompt, /bounded coverage-recovery controller/);
+        assert.ok(!options.tools.includes("write_map"));
+        assert.ok(!options.customTools?.some(tool => tool.name === "write_map"));
+        assert.ok(!options.userPrompt.includes("explorer_receipt"));
+        const tool = options.customTools!.find(tool => tool.name === "write_map_delta")!;
+        const before = fs.readFileSync(mapPath, "utf8");
+        const evidence = { concerns: [], not_concerns: [] };
+        const rawProposals = [
+          { delta: { concern_evidence: evidence } },
+          { delta: JSON.stringify({ concern_evidence: evidence }) },
+          { delta: { "concern_evidence.concerns": [] } },
+          { delta: JSON.stringify({ "concern_evidence.concerns": [] }) },
+          { delta: { meta: { concern_evidence: evidence } } },
+          { delta: JSON.stringify({ meta: { concern_evidence: evidence } }) },
+          { delta: { meta: { lifecycle: { concerns: [map.concern_evidence!.concerns[0]] } } } },
+          { delta: { meta: { lifecycle: { concern_evidence: { concerns: [map.concern_evidence!.concerns[0]] } } } } },
+          { delta: {}, core_owner: { path: "compile.sh", concern: map.concern_evidence!.concerns[0]!.concern } },
+          { delta: {}, claim_correction: { concern: "fixture", digest: "0".repeat(64), claim: "one_line", statement: "Changed", rationale: "No authorization" } },
+          ...["specialist_reviews", "explorer_receipts", "audit_budget_checkpoint", "expert_evidence"]
+            .map(key => ({ delta: { [key]: {} } })),
+        ];
+        for (const raw of rawProposals) {
+          for (const sdkPrepared of [false, true]) {
+            const input = structuredClone(raw);
+            const proposal = sdkPrepared && tool.prepareArguments ? await tool.prepareArguments(input) : input;
+            const result = await tool.execute("forbidden", proposal, undefined, undefined, { cwd } as never) as { isError?: boolean; details?: { coverage_recovery_refused?: boolean } };
+            assert.equal(result.isError, true, JSON.stringify(raw));
+            assert.equal(result.details?.coverage_recovery_refused, true, JSON.stringify(raw));
+            assert.equal(fs.readFileSync(mapPath, "utf8"), before, "rejection cannot write a map or exploration checkpoint");
+            assert.deepEqual(input, raw, "phase checking must not mutate caller arguments");
+            testedProposals += 1;
+          }
+        }
+        const result = await tool.execute("coverage", {
+          delta: JSON.stringify({ meta: { lifecycle } }), merge_strategy: "deep_merge",
+          dimension: "D9_process", confidence: "high", evidence_summary: "Fixture process metadata observed in README.",
+          evidence: [{ path: "README.md", excerpt: "README.md", kind: "positive" }],
+        }, undefined, undefined, { cwd } as never) as { isError?: boolean };
+        assert.notEqual(result.isError, true);
+        const persisted = JSON.parse(fs.readFileSync(mapPath, "utf8")) as CodebaseMap;
+        assert.equal(persisted.coverage.D9_process.status, "covered");
+        assert.equal(JSON.stringify(persisted.concern_evidence), specialistSnapshot);
+        assert.ok(options.signal?.aborted, "metadata closure must hand off without another broad provider request");
+        return { turns: 1, costUsd: 0, aborted: true };
+      }
+      assert.equal(calls, 3, "one recovery phase followed by one receipt-repair phase");
+      assert.equal(options.spawnExplorerPurpose, "specialist-repair");
+      assert.equal(budget.snapshot().coverage_recovery_passes, 1);
+      assert.equal(budget.snapshot().semantic_repair_passes, 1);
+      options.onEvent?.({ type: "tool_execution_end", toolName: "spawn_explorer", isError: false,
+        resultText: "Sub-agent (mode=concern_scout) explored .\n\n## Report\n",
+        details: { mode: "concern_scout", target_path: ".", report_concern: null } } as never);
+      for (const concern of map.concern_evidence!.concerns) {
+        options.onEvent?.({ type: "tool_execution_end", toolName: "spawn_explorer", isError: false,
+          resultText: `Sub-agent (mode=concern_tracer) explored .\n\n## Report\nconcern: ${concern.concern}`,
+          details: { mode: "concern_tracer", target_path: ".", expected_concern: concern.concern,
+            report_concern: concern.concern, observed_paths: concernEvidencePaths(concern) } } as never);
+      }
+      return { turns: 1, costUsd: 0, aborted: false };
+    } };
+    await runRepositoryAudit({ cwd, ui: new RepairUi(), runtime, auditResourceBudget: budget,
+      config: { schemaVersion: 1, thinkingLevel: "high", models: {} } });
+    assert.equal(calls, 3);
+    assert.equal(testedProposals, 28, "every inline, serialized and normalized alias must actually execute");
+    assert.equal(assessExplorerReceiptAttestation(JSON.parse(fs.readFileSync(mapPath, "utf8")), cwd).complete, true);
+    assert.equal(budget.snapshot().model_calls, 3);
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});

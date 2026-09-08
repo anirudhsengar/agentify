@@ -63,6 +63,32 @@ const REPORT = `## Report
 }
 \`\`\``;
 
+test("coverage recovery refuses specialist modes before child admission", async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-coverage-mode-"));
+  try {
+    let sessions = 0;
+    const budget = new AuditResourceBudget();
+    const tool = createSpawnExplorerTool({
+      agentDir: cwd, stateDir: ".agentify/runtime/audit", purpose: "coverage-recovery",
+      explorerModel: { id: "fixture", provider: "fixture", api: "openai-completions", maxTokens: 12_000 } as Model<Api>,
+      resourceBudget: budget,
+      createSession: async () => { sessions += 1; throw new Error("forbidden child session"); },
+    });
+    for (const mode of [undefined, "concern_scout", "concern_tracer", "custom"]) {
+      const result = await tool.execute("forbidden", { target_path: ".", ...(mode ? { mode } : {}) },
+        undefined, undefined, { cwd } as never) as { isError?: boolean; details?: { purpose_refused?: boolean } };
+      assert.equal(result.isError, true, String(mode));
+      assert.equal(result.details?.purpose_refused, true, String(mode));
+    }
+    assert.equal(sessions, 0);
+    assert.equal(budget.snapshot().model_calls, 0);
+    assert.equal(budget.snapshot().explorer_spawns, 0);
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify")), false);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("semantic-repair mode restrictions are enforced even when tool schema validation is bypassed", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-repair-mode-"));
   try {

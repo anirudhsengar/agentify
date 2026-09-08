@@ -362,7 +362,11 @@ recorded, the installer's delegated coverage recovery uses a metadata-only
 controller. It can call fixed coverage explorers and write small metadata deltas,
 but cannot scout or retrace concerns, invoke custom explorers, replace the map,
 or change specialist bodies, reviews, receipts or ownership. Automatic scouting
-does not run inside that phase. Up to two in-session checkpoint follow-ups use
+does not run inside that phase. The write boundary checks canonical keys after
+JSON-string parsing, dotted-key expansion and legacy nesting normalization,
+before any persistence. When no receipt exists, handoff preserves that absence
+instead of writing a schema-invalid empty attestation; actual scouting and
+tracing remain mandatory in specialist repair. Up to two in-session checkpoint follow-ups use
 the same session deadline and aggregate call/token/cost budgets; completed
 coverage stops those follow-ups even when specialist receipts remain pending.
 The coverage-pass limit and standalone audit behavior are unchanged. Deferred

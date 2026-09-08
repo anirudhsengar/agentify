@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Enforce coverage-recovery authority after transport and legacy-key normalization. Serialized and nested specialist updates cannot bypass the phase guard; absent receipts remain absent rather than corrupting handoff with an empty attestation.
+
 - Recover missing coverage metadata before retracing already-recorded specialists. The bounded recovery controller rejects specialist mutations and child dispatches outside its phase, preserves pending receipt obligations, and uses the existing shared limits and final installation gates.
 
 - Expose canonical incremental shapes for topography, module boundaries, conventions, and pitfalls in the map tool schema. Reject malformed updates before persistence with bounded field-level feedback, while preserving partial-object updates, serialized transport normalization, and every complete-map/evidence gate.

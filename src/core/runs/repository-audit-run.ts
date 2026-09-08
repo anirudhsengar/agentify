@@ -403,8 +403,10 @@ async function repairSpecialistPortfolio(
   const preserveReceiptAttestation = (map: CodebaseMap | null): CodebaseMap | null => {
     if (map === null) return map;
     const attestation = combinedReceiptAttestation();
-    if (JSON.stringify(map.explorer_receipts) === JSON.stringify(attestation)) return map;
-    const preserved = { ...map, explorer_receipts: attestation };
+    const preserved = { ...map };
+    if (attestation.receipts.length > 0) preserved.explorer_receipts = attestation;
+    else delete preserved.explorer_receipts;
+    if (JSON.stringify(map.explorer_receipts) === JSON.stringify(preserved.explorer_receipts)) return map;
     writeCanonicalMap(context.cwd, preserved, {
       stateDir: AUDIT_STATE_RELATIVE_DIR,
       mapFilename: DEFAULT_MAP_FILENAME,

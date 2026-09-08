@@ -196,23 +196,6 @@ const COVERAGE_RECOVERY_SYSTEM_PROMPT = [
   "Complete each supported dimension with its required data and coverage citation. Do not waste the shared budget on empty or unchanged checkpoints. Finish with the strongest structured checkpoint supported by gathered evidence, not a prose completion claim. Only the application can establish coverage closure, and that alone never authorizes installation.",
 ].join("\n\n");
 
-function coverageOnlyMapDeltaTool(tool: ToolDefinition): ToolDefinition {
-  return { ...tool,
-    description: `${tool.description} In coverage recovery, preserve specialist bodies and receipts; only metadata deltas are permitted.`,
-    async execute(...args) {
-      const proposal = args[1] as { delta?: unknown; core_owner?: unknown; claim_correction?: unknown };
-      const delta = proposal.delta;
-      if (proposal.core_owner !== undefined || proposal.claim_correction !== undefined
-        || delta !== null && typeof delta === "object"
-          && ["concern_evidence", "specialist_reviews", "explorer_receipts", "expert_evidence"].some(key => key in delta)) {
-        return { content: [{ type: "text", text: "Error: coverage recovery cannot replace specialist bodies, receipts, reviews or ownership. Submit only the missing dimension metadata; specialist obligations remain pending for the later phase." }],
-          isError: true, details: { coverage_recovery_refused: true } };
-      }
-      return tool.execute(...args);
-    },
-  };
-}
-
 function buildAuditRecoveryPrompt(
   closure: { closed: string[]; unresolved: string[]; reasons: Record<string, string> },
   options?: {
@@ -541,7 +524,9 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
         mapTools.writeMapTool, () => recoveryController.abort(),
       );
       const recoveryWriteMapDeltaTool = cancelAfterCompleteWrite(
-        coverageRecovery ? coverageOnlyMapDeltaTool(mapTools.writeMapDeltaTool) : mapTools.writeMapDeltaTool,
+        coverageRecovery
+          ? createWriteMapTools({ stateDir, specialistEvidenceReadOnly: true }).writeMapDeltaTool
+          : mapTools.writeMapDeltaTool,
         () => recoveryController.abort(),
       );
       try {
@@ -726,10 +711,12 @@ export async function runRepositoryAudit(context: RunContext): Promise<FocusedAu
     if (repositoryCommit === null || map === null) {
       throw new Error("cannot bind explorer receipts to the current repository commit");
     }
-    map = {
-      ...map,
-      explorer_receipts: explorerReceipts.attestation(repositoryCommit, log.runId),
-    };
+    const attestation = explorerReceipts.attestation(repositoryCommit, log.runId);
+    map = { ...map };
+    // Missing receipts stay missing, not a schema-invalid empty attestation.
+    // The enclosing specialist phase must still obtain the actual source work.
+    if (attestation.receipts.length > 0) map.explorer_receipts = attestation;
+    else delete map.explorer_receipts;
     writeCanonicalMap(context.cwd, map, {
       stateDir,
       mapFilename: DEFAULT_MAP_FILENAME,

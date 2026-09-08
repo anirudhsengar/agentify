@@ -1282,7 +1282,7 @@ function defineWriteMapTool(context: MapToolExecutionContext): ToolDefinition {
     }) as unknown as ToolDefinition;
 }
 
-function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefinition {
+function defineWriteMapDeltaTool(context: MapToolExecutionContext, specialistEvidenceReadOnly = false): ToolDefinition {
     return defineTool({
         name: "write_map_delta",
         label: "Write Codebase Map Delta",
@@ -1376,6 +1376,19 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
             // Normalize existing transport aliases before checking the known
             // incremental coverage shapes; malformed evidence stays retryable.
             repairMapShape(delta);
+            // Phase authority applies to canonical keys, not the provider's
+            // transport spelling. JSON strings, dotted keys and legacy nested
+            // sections all reach this boundary before any state change.
+            if (specialistEvidenceReadOnly && (prepared.core_owner !== undefined
+                || prepared.claim_correction !== undefined
+                || ["concern_evidence", "specialist_reviews", "explorer_receipts", "expert_evidence", "audit_budget_checkpoint"]
+                    .some(key => key in delta))) {
+                return {
+                    content: [{ type: "text", text: "Error: coverage recovery cannot replace specialist bodies, receipts, reviews or ownership. Submit only the missing dimension metadata; specialist obligations remain pending for the later phase." }],
+                    isError: true,
+                    details: { coverage_recovery_refused: true },
+                };
+            }
             const deltaShape = WriteMapDeltaParamsSchema.properties.delta.anyOf[0];
             if (!Value.Check(deltaShape, delta)) {
                 const errors = [...Value.Errors(deltaShape, delta)].slice(0, 3)
@@ -1650,7 +1663,10 @@ function defineWriteMapDeltaTool(context: MapToolExecutionContext): ToolDefiniti
     }) as unknown as ToolDefinition;
 }
 
-export function createWriteMapTools(config: MapPathConfig): MapTools {
+export function createWriteMapTools(config: MapPathConfig & {
+    /** Application-owned coverage phase boundary; never a model parameter. */
+    specialistEvidenceReadOnly?: boolean;
+}): MapTools {
     const context: MapToolExecutionContext = Object.freeze({
         stateDir: config.stateDir,
         mapFilename: config.mapFilename ?? DEFAULT_MAP_FILENAME,
@@ -1658,7 +1674,7 @@ export function createWriteMapTools(config: MapPathConfig): MapTools {
     const normalize = (value: string): string => value.replace(/\\/g, "/");
     return {
         writeMapTool: defineWriteMapTool(context),
-        writeMapDeltaTool: defineWriteMapDeltaTool(context),
+        writeMapDeltaTool: defineWriteMapDeltaTool(context, config.specialistEvidenceReadOnly),
         canonicalMapPath: (cwd: string) => path.join(cwd, context.stateDir, context.mapFilename),
         canonicalMapRelative: normalize(path.join(context.stateDir, context.mapFilename)),
         draftDirectoryRelative: normalize(path.join(context.stateDir, ".agentify")),
