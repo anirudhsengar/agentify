@@ -10,18 +10,20 @@ import type { Concern } from "../../src/core/audit/schema/concerns.ts";
 import type { AgentRuntime } from "../../src/core/types.ts";
 import { PiSdkRuntime } from "../../src/core/pi-sdk-runtime.ts";
 import { compileSpecialistEvidence } from "../../src/core/audit/specialist-compiler.ts";
-import { reviewSpecialistCompilation } from "../../src/core/audit/specialist-review.ts";
+import { reviewSpecialistCompilation, specialistReviewDigest } from "../../src/core/audit/specialist-review.ts";
 import { AuditResourceBudget } from "../../src/core/audit/resource-budget.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
 for (const outcome of ["supported", "local-contradiction", "incomplete-full-review", "incomplete-observations",
   "forged-observation", "claim-verdict-as-observation", "empty-observations", "false-notes",
-  "cancelled-after-observations", "changed-head", "capacity-refused", "reversed-lines", "fractional-lines", "unknown-path"] as const) {
+  "cancelled-after-observations", "changed-head", "capacity-refused", "reversed-lines", "fractional-lines", "unknown-path", "pruned-body-reuses-notes", "pruned-argument-repair"] as const) {
   test(`native MiniMax source observations preserve final review authority: ${outcome}`, async () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-native-source-check-"));
     const controller = new AbortController();
     const small = "def present(record):\n    return record is not None\n";
     const large = "def relay(record):\n    return record\n" + "# Broader immutable source context.\n".repeat(400);
+    let fullResponses = 0;
+    const pruneCase = outcome === "pruned-body-reuses-notes" || outcome === "pruned-argument-repair";
     const requests: Array<{ precheck: boolean; cap: number | undefined; thinking: unknown }> = [];
     const serverErrors: unknown[] = [];
     const server = createServer(async (request, response) => {
@@ -46,6 +48,7 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
         assert.deepEqual(data.evidence["small.py"], small.split("\n").map((text, index) => `${index + 1}|${text}`).join("\n"));
       }
       else {
+        fullResponses += 1;
         assert.equal(data.evidence["small.py"], small);
         assert.equal(data.evidence["large.py"], large);
         assert.ok(Object.keys(data.claims!).length > 24);
@@ -53,7 +56,7 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
         if (outcome === "false-notes") assert.equal(data.untrusted_source_observations[0]!.behavior, "A None input returns True.");
         if (outcome !== "empty-observations") assert.equal(data.untrusted_source_observations[0]!.excerpt, "    return record is not None");
       }
-      const finding = outcome === "local-contradiction" && !precheck ? {
+      const finding = !precheck && (outcome === "local-contradiction" || pruneCase && fullResponses === 1) ? {
         claim: "pitfalls[0]", path: "small.py", excerpt: "return record is not None",
         reason: "A None record makes this predicate False, not True.",
       } : undefined;
@@ -62,7 +65,9 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
           start_line: outcome === "reversed-lines" ? 3 : outcome === "fractional-lines" ? 1.5 : 2,
           end_line: outcome === "forged-observation" ? 99 : 2,
           behavior: outcome === "false-notes" ? "A None input returns True." : "A None input returns False." }] }
-        : { verdict: finding ? "unsupported" : "supported", checked_claims: Object.keys(data.claims ?? {}),
+        : { verdict: finding ? "unsupported" : "supported",
+          checked_claims: outcome === "pruned-argument-repair" && fullResponses === 2
+            ? [] : Object.keys(data.claims ?? {}),
           ...(finding ? { finding } : {}) };
       const useTool = !(outcome === "incomplete-full-review" && !precheck)
         && !(outcome === "incomplete-observations" && precheck);
@@ -111,8 +116,9 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
           { path: "large.py", symbol: "relay", role: "Relays records.", line_range: null, centrality: "core" }],
         invariants: Array.from({ length: 26 }, (_, index) => ({ rule: `Case ${index}: relay returns its argument.`,
           why: "The return expression is record.", reference: "large.py" })),
-        pitfalls: [{ risk: outcome === "local-contradiction" ? "None is reported present." : "None is not reported present.",
-          consequence: "Presence is separate from relay.", reference: "small.py" }],
+        pitfalls: [{ risk: outcome === "local-contradiction" || pruneCase ? "None is reported present." : "None is not reported present.",
+          consequence: "Presence is separate from relay.", reference: "small.py" },
+          ...(pruneCase ? [{ risk: "None is not present.", consequence: "The presence predicate returns False.", reference: "small.py" }] : [])],
         entry_questions: ["Does this affect presence?"], validation: [], spans_subtrees: [],
         stability: "high", recurrence: "high", confidence: "high", last_updated: "2026-08-31T00:00:00.000Z",
       };
@@ -137,15 +143,23 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
       assert.equal(JSON.stringify(config), originalConfig, "source reading cannot mutate the configured full-review behavior");
       const observationFailed = ["incomplete-observations", "forged-observation", "claim-verdict-as-observation",
         "cancelled-after-observations", "changed-head", "capacity-refused", "reversed-lines", "fractional-lines", "unknown-path"].includes(outcome);
-      assert.deepEqual(requests.map(request => request.precheck), observationFailed ? [true] : [true, false]);
-      assert.deepEqual(requests.map(request => request.cap), observationFailed ? [12000] : [12000, 12000]);
+      assert.deepEqual(requests.map(request => request.precheck), observationFailed ? [true] : pruneCase ? outcome === "pruned-argument-repair" ? [true, false, false, false] : [true, false, false] : [true, false]);
+      assert.deepEqual(requests.map(request => request.cap), requests.map(() => 12000));
       assert.ok(requests.every(request => JSON.stringify(request.thinking) === JSON.stringify({ type: "adaptive" })),
         "source reading and complete review retain the configured thinking policy");
       assert.equal(budget.snapshot().model_calls, requests.length);
       assert.equal(budget.snapshot().unreported_calls, 0);
       const record = result.map.specialist_reviews!.records[0]!;
-      assert.equal(record.failure === null, ["supported", "empty-observations", "false-notes"].includes(outcome));
+      assert.equal(record.failure === null, pruneCase || ["supported", "empty-observations", "false-notes"].includes(outcome));
       if (outcome === "local-contradiction") assert.equal(record.finding?.claim, "pitfalls[0]");
+      if (pruneCase) {
+        assert.equal(fullResponses, outcome === "pruned-argument-repair" ? 3 : 2,
+          "every changed body requires full review; only an actual rejected checklist permits argument repair");
+        assert.equal(record.retryable, false);
+        assert.notEqual(record.digest, specialistReviewDigest(body), "pruning invalidates the original body digest");
+        assert.equal(result.map.concern_evidence!.concerns[0]!.pitfalls.length, 1);
+        assert.equal(requests.filter(request => request.precheck).length, 1, "normalization must not reread identical source");
+      }
       if (outcome === "incomplete-full-review") assert.equal(record.retryable, true);
       if (observationFailed) assert.equal(record.retryable, true);
       assert.ok(!Object.hasOwn(record, "observations"), "reading notes cannot become durable review attestation");

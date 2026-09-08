@@ -256,6 +256,10 @@ assertions. For explicitly configured MiniMax-M3, that first request reads only
 the selected source, without the proposed assertions, and returns bounded
 line-cited observations. The complete reviewer independently checks those
 fallible notes and every original assertion; notes cannot grant approval.
+When normalization removes a disproven claim, that concern may reuse only its
+completed notes for identical source bytes, HEAD and model settings. The changed
+body still needs a complete fresh review; notes are not persisted or shared
+across independent invocations.
 When no small module qualifies, one assertion may instead select a bounded,
 explicitly partial source excerpt. Either path is
 followed by the complete original review before approval. Those stages share the

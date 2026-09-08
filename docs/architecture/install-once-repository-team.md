@@ -210,6 +210,17 @@ Empty notes grant no credit and do not replace complete review. Configured
 thinking, both 12,000-token ceilings, the shared two-request maximum and one
 90-second deadline remain unchanged. Cancellation or changed HEAD after reading
 prevents the full review, and no reading notes enter persistent attestations.
+Within a single concern's normalization loop, one completed nonempty source-note
+entry may be retained transiently. Its key binds the immutable repository HEAD,
+selected source paths and bytes, partial-view marker, model and thinking settings.
+A changed source view or policy does not reuse it. Every changed body still needs
+a complete independent review and its own exact digest. A cache hit uses no model
+request, leaving only the existing at-most-one typed-argument correction inside
+the unchanged two-request and 90-second review bounds. Empty, failed or in-flight
+readings grant no reusable notes; completed source usage is never refunded. A new
+concern evaluation or invocation starts with an empty memo, and no notes enter
+persistent attestations. Reuse logs the source-view and new-body digests without
+claiming semantic approval.
 Other model configurations retain the ordinary local-falsification precheck.
 Missing external context is left for the complete reviewer, not treated as a
 local contradiction. A successful precheck must be followed by the original
