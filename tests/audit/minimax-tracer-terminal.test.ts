@@ -79,7 +79,8 @@ for (const provider of ["minimax", "minimax-cn"]) {
       assert.ok(payloads[0].tools.some(tool => tool.name === "read"));
       for (const payload of payloads.slice(1)) {
         assert.deepEqual(payload.tools.map(tool => tool.name), [...TERMINALS], "both honest dispositions must replace further inspection near the call cap");
-        assert.deepEqual(payload.tool_choice, { type: "auto" }, "MiniMax must not receive unsupported named or required forcing");
+        assert.deepEqual(payload.tool_choice, { type: provider === "minimax" ? "any" : "auto" },
+          "verified M3 uses required alternatives; the unverified regional endpoint retains automatic selection");
         assert.deepEqual(payload.thinking, payloads[0].thinking);
       }
       const details = result.details as { structured_concern: unknown; structured_rejection: { candidate: string; why_rejected: string };
