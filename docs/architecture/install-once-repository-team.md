@@ -134,8 +134,20 @@ model-directed discovery. At most one automatic attempt occurs per parent
 session, including concurrent checkpoint writes; failures and cancellation
 receive no success credit. The application reports actual dispatch start/end
 events through the existing receipt observer and returns the actual scout
-report with the map result. The parent still screens and traces proposals;
+report with the map result. The parent still resolves unstarted or failed proposals;
 scouting alone neither installs a team nor attests a specialist body.
+For an empty portfolio, a successful same-HEAD scout immediately hands its first
+four distinct parsed proposals to one concurrent batch of the existing
+concern-tracer tool. Scout prose is bounded, untrusted search guidance, never
+source or installation evidence. No read, request, cost, time or concurrency
+limits are raised; the ordinary explorer performs admission and validation.
+Every actual child start and terminal result passes through the existing
+receipt/checkpoint callback. Missing, failed, cancelled and throwing children
+cannot grant success credit, and admitted siblings settle before an exception
+escapes. Later map writes cannot duplicate the automatic batch. Changed HEAD,
+existing portfolios, failed scouts and coverage recovery do not enter it.
+Unstarted proposals are returned explicitly to the parent; the batch neither
+fixes a portfolio-size quota nor waives narrative or final installation gates.
 
 Finalization independently requires a current explorer receipt attestation.
 The enclosing installer owns the final terminal log. When generic coverage and

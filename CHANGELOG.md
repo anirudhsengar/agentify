@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Start a bounded first source-tracing batch immediately after successful initial scouting, instead of relying on parent timing. Preserve exact candidate names, source receipts, cancellations, remaining proposals, and all production limits and final gates.
+
 - Retain the original per-request review output ceiling for local prechecks; a shorter transport allowance must not consume the model's response before it can submit. Both stages still share the existing two-request and single-deadline limits.
 
 - Keep large-source assertions eligible for bounded local falsification using contiguous, explicitly partial source excerpts. Excerpt checks never grant approval or replace the mandatory full-source review, and retain the existing source, request, and time limits.

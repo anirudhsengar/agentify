@@ -236,6 +236,11 @@ A successful tracer
 is reusable only after its complete concern
 body has also been checkpointed. Concern checkpoints append and deduplicate by
 default so later bounded invocations cannot erase earlier tracer evidence.
+After the first topography checkpoint, the application runs the initial scout
+and immediately traces its first four distinct proposals through the existing
+read-only explorer. This happens only for an empty portfolio at the same HEAD;
+all remaining proposals stay visible to the parent. Source, receipt, review and
+installation gates still determine what can be retained or installed.
 The parent receives a short typed-report acknowledgement and bounded compiler
 obligations; the complete concern stays in application-owned checkpoint data,
 without duplicating every flow and invariant in subsequent model requests.
