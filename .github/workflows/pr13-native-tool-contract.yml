@@ -31,7 +31,7 @@ jobs:
         ref: ${{ github.sha }}
         path: probe-code
         persist-credentials: false
-    - name: One actual M3 named-tool request, preserve high thinking and response
+    - name: One actual M3 any-tool request, preserve high thinking and response
         ceiling
       env:
         PI_API_KEY: ${{ secrets.PI_API_KEY }}

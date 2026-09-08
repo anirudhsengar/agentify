@@ -20,7 +20,7 @@ const loader=new DefaultResourceLoader({cwd,agentDir:home,noContextFiles:true,no
   try {
   if(requests>=1){refusal='one-request probe limit';stop();throw new Error(refusal);}
   const capped=capProviderOutputTokens(event.payload,model.api,12000);
-  const payload={...capped,tool_choice:{type:'tool',name:'submit_probe'}};
+  const payload={...capped,tool_choice:{type:'any'}};
   wire={api:model.api,model:model.id,max_tokens:payload.max_tokens,thinking:payload.thinking,tool_choice:payload.tool_choice};
   const input=budget.assertProviderInputCapacity(payload);budget.recordProviderRequest(account,providerRequestReservation(model,12000,input));requests++;
   return payload;
@@ -32,8 +32,9 @@ const created=await createAgentSession({cwd,agentDir:home,modelRuntime,model,thi
  parameters:Type.Object({numeric_strings_accepted:Type.Boolean()},{additionalProperties:false}),
  async execute(_id,input){assert.equal(input.numeric_strings_accepted,true);submitted=input;stop();return {content:[{type:'text',text:'Recorded.'}],details:{}};}
 }]});session=created.session;
-const events=[];session.subscribe(event=>{budget.observeParentEvent(event,account);if(event.type==='message_end'&&event.message?.role==='assistant')events.push({stopReason:event.message.stopReason,error:event.message.errorMessage?providerFailureSummary(event.message.errorMessage,[process.env.PI_API_KEY]):null});});
+let completedProviderResponse=false;
+const events=[];session.subscribe(event=>{if(event.type==='message_end'&&event.message?.role==='assistant'&&!completedProviderResponse){budget.observeParentEvent(event,account);completedProviderResponse=true;}if(event.type==='message_end'&&event.message?.role==='assistant')events.push({stopReason:event.message.stopReason,error:event.message.errorMessage?providerFailureSummary(event.message.errorMessage,[process.env.PI_API_KEY]):null});});
 const started=Date.now();const timeout=setTimeout(stop,90000);let error=null;
 try{await session.prompt('Python source: value = int(payload["exp"]). Does this accept a valid numeric string such as "12345"? Call submit_probe.');}catch(e){error=providerFailureSummary(String(e),[process.env.PI_API_KEY]);}finally{clearTimeout(timeout);session.dispose();}
-const result={scope:'one-request native API contract probe, not installation or quality credit',model:'minimax/MiniMax-M3',thinking_level:'high',production_budget_overrides:false,wire,submitted,error,refusal,events,usage:budget.snapshot(),elapsed_ms:Date.now()-started,named_tool_with_thinking_accepted:submitted!==null};
+const result={scope:'one-request native API contract probe, not installation or quality credit',model:'minimax/MiniMax-M3',thinking_level:'high',production_budget_overrides:false,wire,submitted,error,refusal,events,usage:budget.snapshot(),elapsed_ms:Date.now()-started,any_tool_with_thinking_accepted:submitted!==null,dispatch_admissions:requests};
 fs.writeFileSync(path.join(out,'result.json'),JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result,null,2));
