@@ -9,6 +9,7 @@ name: PR13 source-backed positive approval experiment
     - .github/qualification/support-protocol.mjs
     - .github/qualification/support-protocol.test.mjs
     - .github/qualification/valid-cache-control.json
+    - .github/qualification/support-transport-sdk.test.mjs
 permissions:
   contents: read
   actions: read
@@ -31,7 +32,7 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: keyed-high-jwk
+          name: opaque-high-jwk
           concern: JWK and JWKSet parsing
           candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
           candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
@@ -42,34 +43,12 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: keyed-high-valid-cache
+          name: opaque-high-valid-cache
           concern: JWK and JWKSet parsing
           candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
           candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
           positive_control: true
           thinking_level: high
-        - artifact: native-live-pyjwt-34196528837
-          source_run: 34196528837
-          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
-          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
-          repository: anirudhsengar/pyjwt
-          name: keyed-direct-jwk
-          concern: JWK and JWKSet parsing
-          candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
-          candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
-          thinking_level: 'off'
-          known_bad_fragment: reports as expired
-        - artifact: native-live-pyjwt-34196528837
-          source_run: 34196528837
-          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
-          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
-          repository: anirudhsengar/pyjwt
-          name: keyed-direct-valid-cache
-          concern: JWK and JWKSet parsing
-          candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
-          candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
-          positive_control: true
-          thinking_level: 'off'
     steps:
     - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
       with:
@@ -135,6 +114,8 @@ jobs:
         persist-credentials: false
     - name: Validate positive-approval source binding before model credentials
       run: node --test probe-code/.github/qualification/support-protocol.test.mjs
+    - name: Validate actual SDK claim-code round trip without provider credentials
+      run: node --import tsx --test probe-code/.github/qualification/support-transport-sdk.test.mjs
     - name: Run bounded production review with explicit verdicts
       env:
         PI_API_KEY: ${{ secrets.PI_API_KEY }}
@@ -151,4 +132,4 @@ jobs:
     - name: Remove disposable inputs and authentication
       if: always()
       run: rm -rf -- "$RUNNER_TEMP/probe-home" "$RUNNER_TEMP/probe-target" "$RUNNER_TEMP/previous"
-run-name: 'PR13 claim-keyed proofs: real contradiction and valid source controls'
+run-name: 'PR13 opaque claim codes: unchanged high-thinking source controls'

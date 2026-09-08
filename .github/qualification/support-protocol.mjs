@@ -9,7 +9,7 @@ function citationSchema(data,negative=false){
    : 'Briefly justify every clause. Before claiming support, evaluate any compound condition on empty, missing, disabled and boundary-value inputs.'}},
   required:['source','start_line','end_line','reason'],additionalProperties:false};
 }
-export function supportParameters(parameters,data){
+function canonicalSupportParameters(parameters,data){
  const negative=citationSchema(data,true);
  const finding={...negative,properties:{claim:structuredClone(parameters.properties.checked_claims.items),...negative.properties},
   required:['claim',...negative.required]};
@@ -31,7 +31,7 @@ export function materializeCitation(proof,data,maxCharacters=1024){
  assert.ok(typeof proof.reason==='string'&&proof.reason.trim()&&proof.reason.length<=1024,'Source finding requires a bounded reason.');
  return {claim:proof.claim,path,excerpt,reason:proof.reason};
 }
-export function normalizeReviewReport(report,data){
+function normalizeCanonicalReviewReport(report,data){
  assert.ok(report&&['supported','unsupported'].includes(report.verdict),'Explicit supported/unsupported verdict required.');
  if(report.verdict==='supported'){
   assert.ok(report.finding===undefined&&(!report.additional_findings||report.additional_findings.length===0),'Approval cannot contain a source finding.');
@@ -50,4 +50,35 @@ export function normalizeReviewReport(report,data){
  assert.ok(report.finding,'Unsupported verdict requires an immutable-source finding.');
  return {verdict:'unsupported',checked_claims:[],finding:materializeCitation(report.finding,data),
   ...(report.additional_findings!==undefined?{additional_findings:report.additional_findings.map(x=>materializeCitation(x,data))}:{})};
+}
+
+export function claimBindings(data) {
+ return Object.fromEntries(Object.keys(data.claims).map((id,index)=>['C'+String(index).padStart(3,'0'),id]));
+}
+
+export function encodedClaims(data) {
+ return Object.fromEntries(Object.entries(claimBindings(data)).map(([code,id])=>[code,{original_id:id,assertion:data.claims[id]}]));
+}
+
+export function supportParameters(parameters,data) {
+ const bindings=claimBindings(data);
+ const encoded={...data,claims:Object.fromEntries(Object.entries(bindings).map(([code,id])=>[code,data.claims[id]]))};
+ const schema={...parameters,properties:{...parameters.properties,checked_claims:{...parameters.properties.checked_claims,
+  items:{type:'string',enum:Object.keys(bindings)}}}};
+ return canonicalSupportParameters(schema,encoded);
+}
+
+export function normalizeReviewReport(report,data) {
+ const bindings=claimBindings(data);
+ const decode=code=>{
+  assert.ok(typeof code==='string'&&Object.hasOwn(bindings,code),'Unknown assigned claim code.');
+  return bindings[code];
+ };
+ const decoded={...report};
+ if(report.support&&typeof report.support==='object'&&!Array.isArray(report.support)) {
+  decoded.support=Object.fromEntries(Object.entries(report.support).map(([code,proof])=>[decode(code),proof]));
+ }
+ if(report.finding)decoded.finding={...report.finding,claim:decode(report.finding.claim)};
+ if(Array.isArray(report.additional_findings))decoded.additional_findings=report.additional_findings.map(proof=>({...proof,claim:decode(proof.claim)}));
+ return normalizeCanonicalReviewReport(decoded,data);
 }
