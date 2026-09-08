@@ -31,7 +31,7 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: lines-high-jwk
+          name: keyed-high-jwk
           concern: JWK and JWKSet parsing
           candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
           candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
@@ -42,28 +42,7 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: lines-high-jwt
-          concern: JWT claim validation and payload lifecycle
-          candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
-          candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
-          thinking_level: high
-        - artifact: native-live-pyjwt-34196528837
-          source_run: 34196528837
-          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
-          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
-          repository: anirudhsengar/pyjwt
-          name: lines-high-numeric-exp-canary
-          concern: JWT claim validation and payload lifecycle
-          false_claim_canary: true
-          candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
-          candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
-          thinking_level: high
-        - artifact: native-live-pyjwt-34196528837
-          source_run: 34196528837
-          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
-          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
-          repository: anirudhsengar/pyjwt
-          name: lines-high-valid-cache
+          name: keyed-high-valid-cache
           concern: JWK and JWKSet parsing
           candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
           candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
@@ -74,7 +53,7 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: lines-direct-jwk
+          name: keyed-direct-jwk
           concern: JWK and JWKSet parsing
           candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
           candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
@@ -85,7 +64,7 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: lines-direct-valid-cache
+          name: keyed-direct-valid-cache
           concern: JWK and JWKSet parsing
           candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
           candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
@@ -172,4 +151,4 @@ jobs:
     - name: Remove disposable inputs and authentication
       if: always()
       run: rm -rf -- "$RUNNER_TEMP/probe-home" "$RUNNER_TEMP/probe-target" "$RUNNER_TEMP/previous"
-run-name: PR13 source-line citations, known contradiction and positive controls
+run-name: 'PR13 claim-keyed proofs: real contradiction and valid source controls'
