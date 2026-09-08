@@ -1220,7 +1220,7 @@ for (const outcome of ["complete", "local-contradiction", "local-incomplete", "f
       }), { cwd });
       assert.ok(compiled.assessment.accepted_concerns.includes(concern.concern), compiled.reasons.join("; "));
       const before = JSON.stringify(compiled.map);
-      const budget = new AuditResourceBudget(outcome === "capacity-refused" ? { maxOutputTokens: 10_000 } : {});
+      const budget = new AuditResourceBudget(outcome === "capacity-refused" ? { maxOutputTokens: 16_000 } : {});
       let sessions = 0;
       let admitted = 0;
       const checkpoints: CodebaseMap[] = [];
@@ -1246,7 +1246,7 @@ for (const outcome of ["complete", "local-contradiction", "local-incomplete", "f
           assert.equal(data.source_excerpt, isLargeSource,
             "the reviewer must know whether it received a partial source view");
           if (!isLargeSource) assert.equal(visible, small);
-          assert.equal(options.maxOutputTokens, 4_096);
+          assert.equal(options.maxOutputTokens, 12_000);
         } else {
           assert.equal(data.evidence["small.py"], small);
           assert.equal(data.evidence["large.py"], large, "the complete review retains every original immutable source byte");
@@ -1277,7 +1277,7 @@ for (const outcome of ["complete", "local-contradiction", "local-incomplete", "f
           return { turns: 0, costUsd: null, aborted: true };
         }
         options.onEvent?.({ type: "message_end", message: { role: "assistant", stopReason: "toolUse",
-          usage: { input: 50, output: 10, cost: { total: 0.001 } } } } as never);
+          usage: { input: 50, output: outcome === "capacity-refused" ? 5_000 : 10, cost: { total: 0.001 } } } } as never);
         if (outcome === "local-incomplete" && precheck || outcome === "full-incomplete" && !precheck) {
           return { turns: 1, costUsd: 0.001, aborted: true };
         }
@@ -1310,7 +1310,7 @@ for (const outcome of ["complete", "local-contradiction", "local-incomplete", "f
       assert.equal(budget.snapshot().unreserved_calls, 0);
       if (outcome === "cancelled") {
         assert.equal(budget.snapshot().unreported_calls, 1);
-        assert.equal(budget.snapshot().reserved_output_tokens, 4_096);
+        assert.equal(budget.snapshot().reserved_output_tokens, 12_000);
       }
       if (outcome === "capacity-refused" || outcome === "deadline-refused") assert.equal(admitted, 1);
       assert.equal(JSON.stringify(compiled.map), before, "source review must not mutate its input evidence");

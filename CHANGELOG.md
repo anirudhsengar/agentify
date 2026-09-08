@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Retain the original per-request review output ceiling for local prechecks; a shorter transport allowance must not consume the model's response before it can submit. Both stages still share the existing two-request and single-deadline limits.
+
 - Keep large-source assertions eligible for bounded local falsification using contiguous, explicitly partial source excerpts. Excerpt checks never grant approval or replace the mandatory full-source review, and retain the existing source, request, and time limits.
 
 - Check small-source assertions for direct counterexamples before large complete reviews, using the existing two-request ceiling and one shared deadline. A passed local check grants no approval; every original claim and immutable source still requires complete review.

@@ -99,7 +99,7 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
         config: { schemaVersion: 1, thinkingLevel: "high", models: { primary: { provider: "minimax", model: "MiniMax-M3" } } },
       } as never, compilation, budget, "native-source-local");
       assert.deepEqual(requests.map(request => request.precheck), outcome === "local-contradiction" ? [true] : [true, false]);
-      assert.deepEqual(requests.map(request => request.cap), outcome === "local-contradiction" ? [4096] : [4096, 12000]);
+      assert.deepEqual(requests.map(request => request.cap), outcome === "local-contradiction" ? [12000] : [12000, 12000]);
       assert.ok(requests.every(request => JSON.stringify(request.thinking) === JSON.stringify({ type: "adaptive" })));
       assert.equal(budget.snapshot().model_calls, requests.length);
       assert.equal(budget.snapshot().unreported_calls, 0);

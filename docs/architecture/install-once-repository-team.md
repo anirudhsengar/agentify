@@ -180,8 +180,11 @@ Missing external context is left for the complete reviewer, not treated as a
 local contradiction. A successful precheck must be followed by the original
 complete claim set, every original immutable source byte and the ordinary
 coherence/approval checks. These sequential stages share one 90-second deadline
-and at most two requests, with response ceilings of 4,096 and 12,000 tokens and
-no extra argument-correction request. Existing aggregate limits and two-body
+and at most two requests, each retaining the original 12,000-token response
+ceiling, with no extra argument-correction request. This is the same maximum
+24,000-token request allowance as an ordinary review plus its one correction;
+all reported usage and outstanding reservations still count against the shared
+audit budget. Existing aggregate limits and two-body
 concurrency are unchanged. Incomplete stages, changed HEAD and cancellation fail
 closed. A capacity refusal after a charged precheck cannot replay that precheck;
 its reservations and unresolved result remain accounted. No intermediate

@@ -325,7 +325,10 @@ async function reviewClaimTask(
       cwd: context.cwd, configDir: defaultConfigDir(), config: context.config, modelRole: "primary",
       tools: [tool.name], customTools: [tool], signal: controller.signal,
       executionPolicy: createReadOnlyExecutionPolicy({ cwd: context.cwd, tools: [] }),
-      timeoutMs: duration, inactivityTimeoutMs: duration, maxOutputTokens: task.precheck ? 4_096 : 12_000,
+      // Each request retains the existing production ceiling. The local/full
+      // sequence still shares two requests and one deadline; no extra request
+      // is available for truncation or argument correction on this path.
+      timeoutMs: duration, inactivityTimeoutMs: duration, maxOutputTokens: 12_000,
       recoveryPromptIfToolNotCalled: {
         requiredToolName: tool.name, userPrompt: "Submit the typed source review now.", maxAttempts: 0,
       },
