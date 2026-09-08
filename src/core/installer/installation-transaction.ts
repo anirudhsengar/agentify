@@ -1,9 +1,11 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { MAX_MAP_FILE_BYTES } from "../audit/map-input.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
+import { readBoundedRegularFile } from "./bounded-regular-file.ts";
 
-const MANAGED_INSTALLATION_PATHS = [
+export const MANAGED_INSTALLATION_PATHS = [
   ".agentify",
   ".github/agentify",
   ".github/agentify-task-policy.json",
@@ -17,6 +19,12 @@ const MANAGED_INSTALLATION_PATHS = [
   "SETUP.md",
 ] as const;
 
+const MANAGED_PARENT_DIRECTORIES = [
+  ".github/scripts",
+  ".github/workflows",
+  ".github",
+] as const;
+
 interface SnapshotEntry {
   relativePath: string;
   kind: "file" | "directory" | "symlink";
@@ -28,6 +36,8 @@ interface PendingInstallation {
   snapshotRoot: string;
   entries: SnapshotEntry[];
   freshAgentifyRoot: boolean;
+  freshManagedParentDirectories: string[];
+  retainDiagnosticProgress: boolean;
 }
 
 const pendingInstallations = new Map<string, PendingInstallation>();
@@ -104,11 +114,27 @@ export function beginPendingInstallation(cwd: string): void {
       snapshotRoot,
       entries,
       freshAgentifyRoot: !fs.existsSync(path.join(root, ".agentify")),
+      freshManagedParentDirectories: MANAGED_PARENT_DIRECTORIES
+        .filter((relativePath) => !fs.existsSync(path.join(root, ...relativePath.split("/")))),
+      retainDiagnosticProgress: false,
     });
   } catch (error) {
     removeSnapshot(snapshotRoot);
     throw error;
   }
+}
+
+/**
+ * Allow a validated diagnostic-only continuation to retain its newest map on
+ * rollback. Callers must establish the exact current-HEAD attested topology
+ * before enabling this transaction capability.
+ */
+export function retainDiagnosticProgressOnRollback(cwd: string): void {
+  const pending = pendingInstallations.get(normalizedRoot(cwd));
+  if (pending === undefined) {
+    throw new Error("cannot retain diagnostic progress without a pending installation");
+  }
+  pending.retainDiagnosticProgress = true;
 }
 
 function restoreEntry(pending: PendingInstallation, entry: SnapshotEntry): void {
@@ -132,6 +158,21 @@ function restoreEntry(pending: PendingInstallation, entry: SnapshotEntry): void 
   }
 }
 
+function removeFreshEmptyParentDirectories(pending: PendingInstallation): void {
+  for (const relativePath of pending.freshManagedParentDirectories) {
+    const directory = path.join(pending.cwd, ...relativePath.split("/"));
+    try {
+      const stat = fs.lstatSync(directory);
+      if (!stat.isSymbolicLink() && stat.isDirectory() && fs.readdirSync(directory).length === 0) {
+        fs.rmdirSync(directory);
+      }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") throw error;
+    }
+  }
+}
+
 /**
  * Restore the repository to its exact pre-installation state. A fresh failed
  * audit retains only its canonical diagnostic map; no identities, policies,
@@ -146,9 +187,10 @@ export function rollbackPendingInstallation(cwd: string): boolean {
     root,
     ...`${AUDIT_STATE_RELATIVE_DIR}/codebase_map.json`.split("/"),
   );
-  const diagnosticMap = pending.freshAgentifyRoot && fs.existsSync(diagnosticMapPath)
-    ? fs.readFileSync(diagnosticMapPath)
-    : null;
+  let diagnosticMap: Buffer | null = null;
+  if (pending.freshAgentifyRoot || pending.retainDiagnosticProgress) {
+    diagnosticMap = readBoundedRegularFile(diagnosticMapPath, MAX_MAP_FILE_BYTES);
+  }
 
   try {
     for (const relativePath of MANAGED_INSTALLATION_PATHS) {
@@ -162,6 +204,7 @@ export function rollbackPendingInstallation(cwd: string): boolean {
       fs.mkdirSync(path.dirname(diagnosticMapPath), { recursive: true });
       fs.writeFileSync(diagnosticMapPath, diagnosticMap);
     }
+    removeFreshEmptyParentDirectories(pending);
     return true;
   } finally {
     removeSnapshot(pending.snapshotRoot);
@@ -183,9 +226,20 @@ export function pendingInstallationActive(cwd: string): boolean {
   return pendingInstallations.has(normalizedRoot(cwd));
 }
 
-process.once("exit", () => {
+function removePendingSnapshots(): void {
   for (const pending of pendingInstallations.values()) {
     removeSnapshot(pending.snapshotRoot);
   }
   pendingInstallations.clear();
-});
+}
+
+function rollbackPendingForSignal(exitCode: number): void {
+  for (const cwd of [...pendingInstallations.keys()]) {
+    rollbackPendingInstallation(cwd);
+  }
+  process.exit(exitCode);
+}
+
+process.once("SIGINT", () => rollbackPendingForSignal(130));
+process.once("SIGTERM", () => rollbackPendingForSignal(143));
+process.once("exit", removePendingSnapshots);

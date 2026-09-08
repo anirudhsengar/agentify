@@ -16,6 +16,13 @@ automated read-only reviewer, and a path-restricted knowledge maintainer.
 Application changes stop at an unmerged draft pull request. A human retains
 merge authority.
 
+Specialist installation is distinct from execution readiness. A complete,
+attested specialist team may install as `analysis-ready` when repository-owned
+validation is not reproducible. Its execution workflows/runtimes are absent and
+task policy unconfigured; issue intake, publication, autonomous mutation and
+learning are disabled. Semantic quality and atomicity requirements are unchanged.
+External evaluation locks never authorize execution or become repository evidence.
+
 Durable learning is versioned external memory. Every learned record requires
 provenance, a supporting commit, confidence, freshness, and deterministic
 invalidation. Automatic learning is confined to the validated knowledge

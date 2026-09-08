@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { compileSpecialistEvidence } from "../../src/core/audit/schema.ts";
 import { initializeTeamMemoryStore } from "../../src/core/memory/index.ts";
 import {
   buildSpecialistEvidenceReference,
@@ -9,8 +10,10 @@ import {
 } from "../../src/core/specialists/index.ts";
 import {
   SPECIALIST_FIXTURE_TRACKED_FILES,
+  SPECIALIST_FIXTURE_SOURCES,
   makeSpecialistFixtureMap,
 } from "../fixtures/specialist-map.ts";
+import { attestCodebaseMap } from "../fixtures/codebase-map.ts";
 
 const cwd = process.argv[2];
 assert.ok(cwd, "fixture repository path is required");
@@ -39,8 +42,9 @@ write("package.json", `${JSON.stringify({
   name: `installer-fixture-${profile}`,
   private: true,
   scripts,
+  ...(profile === "lockless" ? { dependencies: { "must-never-be-fetched-in-analysis": "1.0.0" } } : {}),
 }, null, 2)}\n`);
-write("package-lock.json", `${JSON.stringify({
+if (profile !== "lockless") write("package-lock.json", `${JSON.stringify({
   name: "installer-fixture",
   lockfileVersion: 3,
   requires: true,
@@ -64,7 +68,7 @@ const mapEvidencePaths = [
 for (const relativePath of new Set([
   ...mapEvidencePaths,
   ...(layouts[profile] ?? layouts.attached!),
-])) write(relativePath, `${relativePath}\n`);
+])) write(relativePath, SPECIALIST_FIXTURE_SOURCES[relativePath] ?? `${relativePath}\n`);
 write(".gitignore", "node_modules/\n");
 
 git("init", "-q");
@@ -110,4 +114,12 @@ if (profile === "small") {
     },
   );
 }
-write(".agentify/runtime/audit/codebase_map.json", `${JSON.stringify(map, null, 2)}\n`);
+const compilation = compileSpecialistEvidence(
+  attestCodebaseMap(map, commit, "installed-installer-fixture"),
+  { cwd },
+);
+assert.equal(compilation.complete, true, compilation.reasons.join("; "));
+write(
+  ".agentify/runtime/audit/codebase_map.json",
+  `${JSON.stringify(compilation.map, null, 2)}\n`,
+);

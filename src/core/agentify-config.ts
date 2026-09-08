@@ -12,6 +12,10 @@ import {
   isAgentifyProvider,
   type AgentifyProviderDefinition,
 } from "./provider-auth.ts";
+import {
+  resolveAuditBudgets,
+  type AuditBudgetOverrides,
+} from "./audit/resource-budget.ts";
 import type {
   AgentifyConfig,
   AgentifyProvider,
@@ -30,6 +34,22 @@ const THINKING_LEVELS = new Set<ThinkingLevel>([
   "high",
   "xhigh",
 ]);
+const AUDIT_BUDGET_KEYS = [
+  "maxTotalDurationMs",
+  "maxSessionDurationMs",
+  "maxScoutDurationMs",
+  "maxTracerDurationMs",
+  "maxExplorerDurationMs",
+  "maxModelCalls",
+  "maxTurns",
+  "maxInputTokens",
+  "maxOutputTokens",
+  "maxTotalCostUsd",
+  "maxCoverageRecoveryPasses",
+  "maxSemanticRepairPasses",
+  "maxRepeatedFingerprintStates",
+  "maxExplorerSpawns",
+] as const satisfies ReadonlyArray<keyof AuditBudgetOverrides>;
 
 export function defaultConfigDir(): string {
   return path.join(os.homedir(), ".agentify");
@@ -74,11 +94,34 @@ function parseModelSlot(value: unknown, context: string): ModelSlot {
   return { provider: value.provider, model: value.model.trim() };
 }
 
+function parseAuditBudgets(value: unknown, context: string): AuditBudgetOverrides {
+  if (!isRecord(value)) throw new Error(`${context} must be an object`);
+  assertExactKeys(value, new Set(AUDIT_BUDGET_KEYS), context);
+  const result: AuditBudgetOverrides = {};
+  for (const key of AUDIT_BUDGET_KEYS) {
+    const candidate = value[key];
+    if (candidate === undefined) continue;
+    if (typeof candidate !== "number" || !Number.isFinite(candidate) || candidate <= 0) {
+      throw new Error(`${context}.${key} must be a positive finite number`);
+    }
+    if (key !== "maxTotalCostUsd" && !Number.isSafeInteger(candidate)) {
+      throw new Error(`${context}.${key} must be a positive safe integer`);
+    }
+    result[key] = candidate;
+  }
+  try {
+    resolveAuditBudgets(result);
+  } catch (error) {
+    throw new Error(`${context} is invalid: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return result;
+}
+
 function parseAgentifyConfig(value: unknown, filePath: string): AgentifyConfig {
   if (!isRecord(value)) throw new Error(`Agentify config at ${filePath} must be an object`);
   assertExactKeys(
     value,
-    new Set(["schemaVersion", "provider", "thinkingLevel", "models"]),
+    new Set(["schemaVersion", "provider", "thinkingLevel", "models", "auditBudgets"]),
     `Agentify config at ${filePath}`,
   );
   if (value.schemaVersion !== 1) {
@@ -105,6 +148,9 @@ function parseAgentifyConfig(value: unknown, filePath: string): AgentifyConfig {
     schemaVersion: 1,
     thinkingLevel: value.thinkingLevel as ThinkingLevel,
     models,
+    ...(value.auditBudgets === undefined
+      ? {}
+      : { auditBudgets: parseAuditBudgets(value.auditBudgets, `Agentify config at ${filePath}.auditBudgets`) }),
     ...(typeof value.provider === "string" ? { provider: value.provider as AgentifyProvider } : {}),
   };
 }

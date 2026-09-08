@@ -48,7 +48,10 @@
     "docs/architecture/issue-lifecycle.md",
     "docs/build-and-package.md",
     "docs/release-process.md",
+    "docs/releases/2026-08-stabilization-evaluation.json",
+    "docs/releases/2026-08-stabilization-release-report.md",
     "docs/state-lifecycle.md",
+    "docs/validation/live-installation-actions.md",
     "docs/validation/live-multi-language-report.md",
     "docs/validation/edge-case-campaign-report.md",
     "docs/validation/toolchain-verified-campaign.md",
@@ -106,7 +109,9 @@
     "build": "node scripts/build.mjs",
     "prepack": "npm run build",
     "test:memory": "tsx tests/memory/memory-schema.test.ts && tsx tests/memory/memory-provenance.test.ts && tsx tests/memory/memory-store.test.ts && tsx tests/memory/memory-queries-compaction.test.ts",
-    "verify:repository-clean": "node scripts/verify-implementation-diff.mjs"
+    "verify:repository-clean": "node scripts/verify-implementation-diff.mjs",
+    "live:prepare": "node scripts/live-installation.mjs prepare",
+    "live:install": "node scripts/live-installation.mjs run"
   },
   "exports": {
     "./package.json": "./package.json"

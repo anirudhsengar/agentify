@@ -1,4 +1,6 @@
 import type { AgentifyLog } from "../audit/log.ts";
+import type { AuditResourceBudget } from "../audit/resource-budget.ts";
+import type { RepositoryInstallationPreflight } from "../installer/contracts.ts";
 import type {
   AgentifyConfig,
   AgentifyUi,
@@ -15,4 +17,8 @@ export interface RunContext {
   /** Internal ownership handoff used to keep coverage and semantic repair in one log. */
   auditLog?: AgentifyLog;
   deferAuditLogCompletion?: boolean;
+  /** Internal aggregate budget shared by coverage and semantic repair. */
+  auditResourceBudget?: AuditResourceBudget;
+  /** Immutable installer evidence used to seed deterministic audit facts. */
+  repositoryPreflight?: RepositoryInstallationPreflight;
 }

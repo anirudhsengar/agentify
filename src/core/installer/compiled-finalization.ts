@@ -1,6 +1,8 @@
 import { DEFAULT_MAP_FILENAME, writeCanonicalMap } from "../audit/map-storage.ts";
 import { AUDIT_STATE_RELATIVE_DIR } from "../audit/paths.ts";
 import { compileSpecialistEvidence } from "../audit/schema.ts";
+import { assessExplorerReceiptAttestation } from "../audit/explorer-receipts.ts";
+import { assessSpecialistReviews } from "../audit/specialist-review.ts";
 import { loadCanonicalMapAt } from "../audit/write-map-tool.ts";
 import type {
   InstallerBlocker,
@@ -21,19 +23,12 @@ export type { FinalizeOneTimeInstallationInput };
 
 const ATOMIC_ROLLBACK_PREFIX = "Atomic installation rolled back";
 
-function auditIntentionallyDeferred(input: FinalizeOneTimeInstallationInput): boolean {
-  return input.preflight.blockers.some((blocker) =>
-    blocker.code === "validation_consent_required"
-    || blocker.code === "validation_policy_stale"
-  );
-}
-
 function atomicBlocker(message: string): InstallerBlocker {
   return {
     code: "installation_canary_failed",
     message: `${ATOMIC_ROLLBACK_PREFIX}: ${message}`,
     remediation:
-      "Repair the compiled specialist evidence or Agentify-owned installation conflict, then rerun Agentify. No partial repository team was retained.",
+      "Repair the readiness blocker(s) reported above, then rerun Agentify. No partial repository team was retained.",
   };
 }
 
@@ -59,14 +54,14 @@ function reportAfterRollback(
   };
 }
 
-function structuralFailure(report: OneTimeInstallationReport): string | null {
-  const critical = report.blockers.filter((blocker) =>
-    blocker.code === "installation_canary_failed"
-    || blocker.code === "ambiguous_agentify_state"
-    || blocker.code === "user_owned_workflow_conflict"
-  );
-  if (critical.length === 0) return null;
-  return critical.map((blocker) => `[${blocker.code}] ${blocker.message}`).join("; ");
+function installationFailure(report: OneTimeInstallationReport): string | null {
+  if (report.disposition === "ready" || report.disposition === "analysis-ready") return null;
+  const blockers = report.blockers
+    .map((blocker) => `[${blocker.code}] ${blocker.message}`)
+    .join("; ");
+  return blockers.length > 0
+    ? `readiness disposition ${report.disposition}: ${blockers}`
+    : `readiness disposition ${report.disposition} did not authorize persistent installation`;
 }
 
 /**
@@ -77,42 +72,55 @@ function structuralFailure(report: OneTimeInstallationReport): string | null {
 export function finalizeOneTimeInstallation(
   input: FinalizeOneTimeInstallationInput,
 ): OneTimeInstallationReport {
-  const map = loadCanonicalMapAt(input.cwd, AUDIT_STATE_RELATIVE_DIR);
-  let expectedSpecialists: number | null = null;
+  if (!input.preflight.analysis_allowed) {
+    throw new Error("repository preflight forbids specialist installation");
+  }
+  beginPendingInstallation(input.cwd);
+  try {
+    const map = loadCanonicalMapAt(input.cwd, AUDIT_STATE_RELATIVE_DIR);
+    let expectedSpecialists: number | null = null;
 
-  if (map === null) {
-    if (!auditIntentionallyDeferred(input)) {
-      rollbackPendingInstallation(input.cwd);
+    if (map === null) {
       throw new Error(
         "cannot finalize Agentify without a canonical codebase map that passed specialist compilation",
       );
-    }
-  } else {
-    const compilation = compileSpecialistEvidence(map, { cwd: input.cwd });
-    if (compilation.map !== map) {
-      writeCanonicalMap(input.cwd, compilation.map, {
-        stateDir: AUDIT_STATE_RELATIVE_DIR,
-        mapFilename: DEFAULT_MAP_FILENAME,
-      });
-    }
-    if (!compilation.complete) {
-      rollbackPendingInstallation(input.cwd);
-      throw new Error(
-        "repository specialist compilation failed before installation: "
-          + compilation.reasons.join("; "),
+    } else {
+      const compilation = compileSpecialistEvidence(map, { cwd: input.cwd });
+      if (compilation.map !== map) {
+        writeCanonicalMap(input.cwd, compilation.map, {
+          stateDir: AUDIT_STATE_RELATIVE_DIR,
+          mapFilename: DEFAULT_MAP_FILENAME,
+        });
+      }
+      if (!compilation.complete) {
+        throw new Error(
+          "repository specialist compilation failed before installation: "
+            + compilation.reasons.join("; "),
+        );
+      }
+      const receiptAttestation = assessExplorerReceiptAttestation(
+        compilation.map,
+        input.cwd,
       );
+      if (!receiptAttestation.complete) {
+        throw new Error(
+          "repository specialist compilation failed before installation: explorer attestation: "
+            + receiptAttestation.reasons.join("; "),
+        );
+      }
+      if (compilation.assessment.source === "concern_evidence") {
+        const reviewReasons = assessSpecialistReviews(compilation.map, input.cwd);
+        if (reviewReasons.length > 0) {
+          throw new Error(`repository specialist narrative review incomplete: ${reviewReasons.join("; ")}`);
+        }
+        expectedSpecialists = compilation.assessment.accepted_concerns.length;
+      }
     }
-    if (compilation.assessment.source === "concern_evidence") {
-      expectedSpecialists = compilation.assessment.accepted_concerns.length;
-    }
-  }
 
-  beginPendingInstallation(input.cwd);
-  try {
     const report = finalizeBaseInstallation(input);
     const mismatch = expectedSpecialists !== null
       && report.specialists_installed !== expectedSpecialists;
-    const failure = structuralFailure(report);
+    const failure = installationFailure(report);
 
     if (mismatch || failure !== null) {
       rollbackPendingInstallation(input.cwd);

@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { packageRoot, PiSdkRuntime } from "./core/pi-sdk-runtime.ts";
 import { readPackageVersion } from "./core/package-version.ts";
 import { runAgentifyApp } from "./core/agentify-app.ts";
+import { AgentifyLog } from "./core/audit/log.ts";
 import {
   authPath,
   defaultConfigDir,
@@ -33,6 +34,10 @@ import {
   type RepositoryInstallationPreflight,
   type RepositoryValidationApproval,
 } from "./core/installer/index.ts";
+import {
+  beginPendingInstallation,
+  rollbackPendingInstallation,
+} from "./core/installer/installation-transaction.ts";
 import { ClackUi, printBanner } from "./core/ui/index.ts";
 import { getProviderEnvValue, isAgentifyProvider } from "./core/provider-auth.ts";
 import { selectModelForRole } from "./core/models/resolver.ts";
@@ -54,9 +59,10 @@ Options:
 
 Install Agentify once in an existing GitHub repository. Agentify audits the
 codebase, creates a persistent orchestrator and evidence-backed read-only
-specialists, installs the controlled GitHub runtime, and verifies readiness.
+specialists, and verifies readiness. A validated team may be analysis-ready with
+execution disabled; only operational readiness installs the GitHub runtime.
 
-After installation, authorized GitHub issues are the normal work interface.
+When operationally ready, authorized GitHub issues are the normal work interface.
 Agentify plans with the orchestrator and specialists, gives exactly one builder
 write authority on an isolated task branch, validates the change, obtains a
 role-separated automated read-only review, and opens an unmerged draft pull request. A human
@@ -126,13 +132,21 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
-  const memoryRecovery = recoverTeamMemoryStore(process.cwd());
-  if (memoryRecovery.status === "recovered") {
-    ui.info(
-      `agentify: recovered persistent agent memory (${memoryRecovery.repaired.join(", ")}).`,
-    );
+  const log = new AgentifyLog({ cwd: process.cwd(), configDir: defaultConfigDir() });
+  try {
+    await installRepository(ui, log);
+    log.runEnd({ exit_code: 0, status: "success", agents_md_path: "AGENTS.md" });
+  } catch (error) {
+    rollbackPendingInstallation(process.cwd());
+    log.runEnd({ exit_code: 1, status: "error", error_message: error instanceof Error ? error.message : String(error) });
+    throw error;
+  } finally {
+    await log.close();
+    ui.info(`agentify: audit log written to ${log.logPath}`);
   }
+}
 
+async function installRepository(ui: ClackUi, log: AgentifyLog): Promise<void> {
   let installerPreflight = inspectRepositoryForInstallation({
     cwd: process.cwd(),
     runValidation: false,
@@ -141,7 +155,19 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     for (const blocker of installerPreflight.blockers) {
       ui.error(`agentify: blocker [${blocker.code}]: ${blocker.message} ${blocker.remediation}`);
     }
+    log.runEnd({
+      exit_code: 1,
+      status: "error",
+      error_message: installerPreflight.blockers
+        .map((blocker) => `[${blocker.code}]: ${blocker.message} ${blocker.remediation}`).join("\n"),
+    });
     throw new Error("repository is not safe to analyze or install; no Agentify files were changed");
+  }
+  const memoryRecovery = recoverTeamMemoryStore(process.cwd());
+  if (memoryRecovery.status === "recovered") {
+    ui.info(
+      `agentify: recovered persistent agent memory (${memoryRecovery.repaired.join(", ")}).`,
+    );
   }
   let validationApproval: RepositoryValidationApproval | null = null;
   const existingPolicy = readRepositoryTaskPolicyConfiguration(process.cwd());
@@ -192,42 +218,51 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   }
 
   let repairedPaths: string[] = [];
-  const repair = repairInstalledRuntime({
-    cwd: process.cwd(),
-    packageRoot: packageRoot(),
-    agentifyVersion: readPackageVersion(),
-    preflight: installerPreflight,
-    validationApproval: validationApproval ?? undefined,
-  });
-  repairedPaths = repair.repaired_paths;
-  if (repair.conflicts.length > 0) {
-    installerPreflight = {
-      ...installerPreflight,
-      disposition: "analyzable-only",
-      blockers: [
-        ...installerPreflight.blockers,
-        {
-          code: "user_owned_workflow_conflict",
-          message: `User-owned files conflict with ${repair.conflicts.length} required Agentify runtime path(s).`,
-          remediation: "Review the preserved *.agentify.* files and explicitly resolve each workflow conflict.",
-        },
-      ],
-    };
-  }
+  beginPendingInstallation(process.cwd());
+  try {
+    const repair = repairInstalledRuntime({
+      cwd: process.cwd(),
+      packageRoot: packageRoot(),
+      agentifyVersion: readPackageVersion(),
+      preflight: installerPreflight,
+      validationApproval: validationApproval ?? undefined,
+    });
+    repairedPaths = repair.repaired_paths;
+    if (repair.conflicts.length > 0) {
+      installerPreflight = {
+        ...installerPreflight,
+        disposition: "analyzable-only",
+        blockers: [
+          ...installerPreflight.blockers,
+          {
+            code: "user_owned_workflow_conflict",
+            message: `User-owned files conflict with ${repair.conflicts.length} required Agentify runtime path(s).`,
+            remediation: "Review the preserved *.agentify.* files and explicitly resolve each workflow conflict.",
+          },
+        ],
+      };
+    }
 
-  prepareOneTimeInstallationState(process.cwd(), installerPreflight);
+    prepareOneTimeInstallationState(process.cwd(), installerPreflight);
+  } catch (error) {
+    rollbackPendingInstallation(process.cwd());
+    throw error;
+  }
 
   const validationConsentBlocked = installerPreflight.blockers.some((blocker) => (
     blocker.code === "validation_consent_required" || blocker.code === "validation_policy_stale"
   ));
   if (validationConsentBlocked) {
-    ui.info("agentify: repository audit and issue intake remain disabled until installer attestation for the current validation commands is recorded.");
-  } else {
+    ui.info("agentify: execution remains disabled until current validation is attested; specialist discovery remains read-only.");
+  }
+  {
     await runAgentifyApp({
       args: [],
       cwd: process.cwd(),
       ui,
       runtime: new PiSdkRuntime(),
+      repositoryPreflight: installerPreflight,
+      auditLog: log,
     });
   }
 
@@ -238,7 +273,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     let resolvedModel: string | null = null;
     let providerVerified = false;
     let localApiKey: string | undefined;
-    if (!validationConsentBlocked) {
+    {
       try {
         const environmentKey = config.provider
           ? getProviderEnvValue(config.provider)
@@ -275,7 +310,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     let credentialSecret: GitHubConfigurationInput["credentialSecret"];
     let automationSecret: GitHubConfigurationInput["automationSecret"];
     const credentialStore = new AgentifyCredentialStore(authPath(configDir));
-    const storedCredentials = resolvedProvider ? await credentialStore.list() : [];
+    const executionEligible = installerPreflight.disposition === "ready";
+    const storedCredentials = resolvedProvider && executionEligible ? await credentialStore.list() : [];
     if (storedCredentials.length > 0) {
       if (input.isTTY) {
         const kinds = [...new Set(storedCredentials.map((entry) => entry.type === "oauth" ? "OAuth subscription" : "API key"))].join(" and ");
@@ -291,9 +327,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           if (raw.trim()) credentialSecret = { name: "PI_AUTH_JSON", value: raw, explicitConsent: true };
         }
       }
-    } else if (resolvedProvider && localApiKey) {
+    } else if (executionEligible && resolvedProvider && localApiKey) {
       providerSecret = { name: "PI_API_KEY", value: localApiKey, explicitConsent: true };
-    } else if (input.isTTY && resolvedProvider) {
+    } else if (executionEligible && input.isTTY && resolvedProvider) {
       const choice = await ui.promptSelect(
         "Set the provider API key as the PI_API_KEY GitHub Actions secret now? The value is sent to GitHub only through stdin and is never logged or stored in the repository.",
         [
@@ -306,7 +342,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         if (value) providerSecret = { name: "PI_API_KEY", value, explicitConsent: true };
       }
     }
-    if (input.isTTY) {
+    if (executionEligible && input.isTTY) {
       const choice = await ui.promptSelect(
         "Set a dedicated GitHub automation token so Agentify-created pull requests trigger the repository's normal pull-request workflows and rotated OAuth credentials can be written back to PI_AUTH_JSON? The token is sent to GitHub only through stdin and is never logged or stored in the repository.",
         [
@@ -337,18 +373,18 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       if (line.startsWith("Blocker")) ui.error(`agentify: ${line}`);
       else ui.info(`agentify: ${line}`);
     }
-    if (!credentialSecret && !providerSecret && resolvedProvider) {
+    if (report.disposition === "ready" && !credentialSecret && !providerSecret && resolvedProvider) {
       if (storedCredentials.length > 0) {
         ui.info("agentify: carry the stored credentials to Actions with `gh secret set PI_AUTH_JSON < ~/.agentify/auth.json`; enter the value through stdin, never as a command argument.");
       } else {
         ui.info("agentify: configure the PI_API_KEY Actions secret with `gh secret set PI_API_KEY`; enter the value through stdin, never as a command argument.");
       }
     }
-    if (!automationSecret) {
+    if (report.disposition === "ready" && !automationSecret) {
       ui.info("agentify: optional but recommended: configure AGENT_PAT with target-repository Contents, Pull requests, and Secrets read/write so Agentify-created pull requests trigger normal checks and rotated OAuth credentials persist; enter the token through stdin.");
     }
-    if (report.disposition !== "ready") {
-      throw new Error(`installation completed with readiness status ${report.disposition}`);
+    if (report.disposition !== "ready" && report.disposition !== "analysis-ready") {
+      throw new Error(`installation rolled back: readiness status ${report.disposition}`);
     }
     return;
   }

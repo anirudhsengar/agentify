@@ -8,7 +8,7 @@ const mapTools = fs.readFileSync("src/core/audit/write-map-tools.ts", "utf8");
 const auditPaths = fs.readFileSync("src/core/audit/paths.ts", "utf8");
 
 assert.match(repositoryAudit, /createWriteMapTools\(\{ stateDir \}\)/);
-assert.match(repositoryAudit, /mapTools\.writeMapTool/);
+assert.doesNotMatch(repositoryAudit, /mapTools\.writeMapTool/);
 assert.match(repositoryAudit, /mapTools\.writeMapDeltaTool/);
 assert.match(repositoryAudit, /AUDIT_STATE_RELATIVE_DIR/);
 assert.match(auditPaths, /AUDIT_STATE_RELATIVE_DIR = "\.agentify\/runtime\/audit"/);

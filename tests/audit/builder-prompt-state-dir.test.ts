@@ -99,6 +99,10 @@ async function testPromptUsesConfiguredExplorerModelByDefault(): Promise<void> {
 
 async function testPromptKeepsExplorerDispatchBounded(): Promise<void> {
   const raw = readRawBuilderPrompt();
+  assert.ok(
+    raw.indexOf("### Concern discovery") < raw.indexOf("### Cross-cutting evidence"),
+    "required concern discovery must precede optional cross-cutting explorer work",
+  );
   assert.match(
     raw,
     /dispatch one\nhigh-value feature explorer\. Read and merge its report before dispatching the\nnext one/,
@@ -114,8 +118,18 @@ async function testPromptKeepsExplorerDispatchBounded(): Promise<void> {
   );
   assert.match(
     raw,
-    /run `concern_tracer` with the concern name/,
+    /run `concern_tracer` with the proposal's\n   exact name in `concern`/,
     "builder prompt must trace each candidate concern",
+  );
+  assert.match(
+    raw,
+    /After the scout.*write_map_delta.*Agentify rejects renamed reports unless a current source review rejects\n   that identity.*validates each complete report and\n   checkpoints it directly; do not retranscribe it/s,
+    "builder prompt must checkpoint scout decisions without retranscribing validated tracer bodies",
+  );
+  assert.match(
+    raw,
+    /subsumed.*public type surface.*release or contribution process/s,
+    "builder prompt must screen overlapping, surface-only, and process-only candidates before tracing",
   );
   assert.match(
     raw,
@@ -123,7 +137,7 @@ async function testPromptKeepsExplorerDispatchBounded(): Promise<void> {
     "builder prompt must state that concerns are not directories",
   );
   const budget = raw.match(
-    /at most 16 explorers per\n+audit, two active at once, and ([a-z]+) minutes per explorer/,
+    /at most 24 explorers per\n+audit, up to four independent explorers active at once when the shared output\n+budget preserves the parent continuation reserve, with tighter envelopes reducing that ceiling, and ([a-z]+) minutes per explorer/,
   );
   assert.ok(budget, "builder prompt must disclose the finite explorer budget");
   const timeoutWord = budget[1]?.toLowerCase();
@@ -162,6 +176,39 @@ function readRawGapFillerPrompt(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const promptPath = path.resolve(here, "../../src/core/audit/prompts/explorers/gap_filler.md");
   return fs.readFileSync(promptPath, "utf-8").replaceAll("\r\n", "\n");
+}
+
+function readExplorerPrompt(name: string): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const promptPath = path.resolve(here, `../../src/core/audit/prompts/explorers/${name}.md`);
+  return fs.readFileSync(promptPath, "utf-8").replaceAll("\r\n", "\n");
+}
+
+async function testConcernPromptsRespectFileLevelCoreOwnership(): Promise<void> {
+  const builder = readRawBuilderPrompt();
+  const scout = readExplorerPrompt("concern_scout");
+  const tracer = readExplorerPrompt("concern_tracer");
+  assert.doesNotMatch(tracer, /2–5 invariants|2–5 pitfalls|A concern with fifteen/,
+    "field and core-path quotas cannot substitute for behavioral evidence");
+  assert.match(tracer, /counterexample input or state/,
+    "tracers must check the direction and preconditions of their claims");
+  for (const [name, prompt] of [["builder", builder], ["scout", scout]] as const) {
+    assert.match(
+      prompt,
+      /same sole tracked\s+implementation file[\s\S]*group[^.]*broader behavioral concern/i,
+      `${name} prompt must group proposals that cannot have independent file-level core ownership`,
+    );
+  }
+  assert.match(
+    tracer,
+    /exactly one specialist\s+may core-own a shared tracked file/i,
+    "tracer prompt must treat core ownership as portfolio-wide and file-level",
+  );
+  assert.match(
+    tracer,
+    /independent tracked\s+implementation file[\s\S]*core/i,
+    "tracer prompt must prefer concern-specific implementation ownership over shared orchestration",
+  );
 }
 
 async function testPromptMatchesSubstanceGateForSmallRepositories(): Promise<void> {
@@ -223,8 +270,9 @@ async function main(): Promise<void> {
   await testPromptDoesNotRequestUnavailableInternalTemplate();
   await testPromptMatchesSubstanceGateForSmallRepositories();
   await testGapFillerMatchesSubstanceGateForSmallRepositories();
+  await testConcernPromptsRespectFileLevelCoreOwnership();
   // eslint-disable-next-line no-console
-  console.log("builder-prompt-state-dir: all 9 checks passed");
+  console.log("builder-prompt-state-dir: all 10 checks passed");
 }
 
 await main();

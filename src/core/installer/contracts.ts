@@ -2,6 +2,7 @@ import type { TaskLifecyclePolicy } from "../task-lifecycle/contracts.ts";
 
 export type InstallerDisposition =
   | "ready"
+  | "analysis-ready"
   | "partially-ready"
   | "analyzable-only"
   | "blocked";
@@ -14,6 +15,7 @@ export type InstallerBlockerCode =
   | "github_cli_unavailable"
   | "github_auth_unavailable"
   | "repository_identity_mismatch"
+  | "repository_policy_prohibits_ai"
   | "missing_github_permission"
   | "unknown_branch_policy"
   | "unsupported_build_system"
@@ -105,7 +107,7 @@ export interface RepositoryTaskPolicyConfiguration {
 export interface RepositoryValidationExecution {
   mode: "maintainer-approved-unsandboxed";
   child_environment_credentials: "removed";
-  repository_mutation: "detected-and-rejected";
+  repository_mutation: "disposable-checkout";
   network_isolation: "not-provided";
   os_sandbox: "not-provided";
 }

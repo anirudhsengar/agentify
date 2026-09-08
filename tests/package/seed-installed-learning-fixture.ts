@@ -1,13 +1,14 @@
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { compileSpecialistEvidence } from "../../src/core/audit/schema.ts";
 import { initializeTeamMemoryStore } from "../../src/core/memory/index.ts";
 import {
   buildSpecialistEvidenceReference,
   readGitCommitTimestamp,
   synchronizeRepositorySpecialists,
 } from "../../src/core/specialists/index.ts";
-import { makeSpecialistFixtureMap } from "../fixtures/specialist-map.ts";
+import { makeSpecialistFixtureMap, SPECIALIST_FIXTURE_TRACKED_FILES, SPECIALIST_FIXTURE_SOURCES } from "../fixtures/specialist-map.ts";
 import { installSelfUpdatePolicy } from "../learning/installation-fixture.ts";
 
 const cwd = path.resolve(process.argv[2] ?? "");
@@ -30,12 +31,12 @@ write("package.json", `${JSON.stringify({ name: "installed-learning-fixture", pr
 for (const relativePath of [
   "src/index.ts",
   "src/lib.ts",
-  "src/billing/index.ts",
+  ...SPECIALIST_FIXTURE_TRACKED_FILES,
   "src/billing/types.ts",
   "tests/billing.test.ts",
   "scripts/prime-db.sh",
 ]) {
-  write(relativePath, `${relativePath}\n`);
+  write(relativePath, SPECIALIST_FIXTURE_SOURCES[relativePath] ?? `${relativePath}\n`);
 }
 
 git("init", "-q");
@@ -62,9 +63,13 @@ initializeTeamMemoryStore({
   options: { now: () => new Date(observedAt) },
 });
 installSelfUpdatePolicy({ cwd, supportingCommit: commit, observedAt });
+const compilation = compileSpecialistEvidence(makeSpecialistFixtureMap(), { cwd });
+if (!compilation.complete) {
+  throw new Error(`package learning fixture failed specialist compilation: ${compilation.reasons.join("; ")}`);
+}
 write(
   ".agentify/runtime/audit/codebase_map.json",
-  `${JSON.stringify(makeSpecialistFixtureMap(), null, 2)}\n`,
+  `${JSON.stringify(compilation.map, null, 2)}\n`,
 );
 synchronizeRepositorySpecialists(cwd);
 git("add", ".agentify");

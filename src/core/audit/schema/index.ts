@@ -14,6 +14,14 @@ export type {
   FeatureAgentIntent,
 } from "./artifact-intents.ts";
 export {
+  AuditBudgetCheckpointSchema,
+  AuditBudgetUsageSchema,
+} from "./audit-budget.ts";
+export type {
+  AuditBudgetCheckpoint,
+  AuditBudgetUsage,
+} from "./audit-budget.ts";
+export {
   CodebaseMapSchema,
   PartialCodebaseMapSchema,
 } from "./codebase-map.ts";
@@ -21,6 +29,14 @@ export type {
   CodebaseMap,
   PartialCodebaseMap,
 } from "./codebase-map.ts";
+export {
+  ExplorerReceiptAttestationSchema,
+  ExplorerReceiptSchema,
+} from "./explorer-receipts.ts";
+export type {
+  ExplorerReceiptAttestation,
+  ExplorerReceiptRecord,
+} from "./explorer-receipts.ts";
 export {
   CustomizationEvidenceSchema,
   ExpertEvidenceSchema,

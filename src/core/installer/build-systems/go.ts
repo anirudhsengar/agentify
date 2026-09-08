@@ -3,11 +3,13 @@ import {
   makeCommand,
   makefileCommands,
   mergeValidationCommands,
+  readText,
   type BuildSystemDiscovery,
 } from "./shared.ts";
 
 export function discoverGoBuildSystem(cwd: string): BuildSystemDiscovery | null {
   if (!fileExists(cwd, "go.mod")) return null;
+  const manifestText = readText(cwd, "go.mod");
   const commands = mergeValidationCommands([
     makeCommand({
       kind: "test",
@@ -27,6 +29,6 @@ export function discoverGoBuildSystem(cwd: string): BuildSystemDiscovery | null 
     manifest: { path: "go.mod", ecosystem: "go" },
     commands,
     lockfile: fileExists(cwd, "go.sum") ? { path: "go.sum" } : null,
-    requiresLockfile: true,
+    requiresLockfile: manifestText === null || /^\s*require\b/m.test(manifestText),
   };
 }

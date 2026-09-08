@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -31,6 +32,12 @@ function repositoryIdentity() {
 function fixture(): string {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-verified-test-"));
   fs.writeFileSync(path.join(cwd, "Makefile"), "fmt:\n\t@true\n\ntest:\n\t@true\n");
+  const git = (...args: string[]) => spawnSync("git", ["-C", cwd, ...args], { encoding: "utf-8" });
+  assert.equal(git("init", "-q").status, 0);
+  assert.equal(git("config", "user.name", "Agentify Test").status, 0);
+  assert.equal(git("config", "user.email", "agentify@example.invalid").status, 0);
+  assert.equal(git("add", ".").status, 0);
+  assert.equal(git("commit", "-qm", "fixture").status, 0);
   return cwd;
 }
 
@@ -179,6 +186,53 @@ test("a passing audited test replaces a failed test and closes readiness", () =>
       ).configured,
       true,
     );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("audited validation is confined to a disposable checkout", () => {
+  const cwd = fixture();
+  try {
+    const map = makeSpecialistFixtureMap();
+    map.validation_surface.test_command = "make test";
+    const validationCwds: string[] = [];
+    const mutatingRunner: InstallerProcessRunner = {
+      run(request) {
+        validationCwds.push(request.cwd);
+        fs.mkdirSync(path.join(request.cwd, ".cache"), { recursive: true });
+        fs.writeFileSync(path.join(request.cwd, ".cache", "generated"), "residue\n");
+        return {
+          status: 0,
+          stdout: "passed\n",
+          stderr: "",
+          timedOut: false,
+          errorMessage: null,
+        };
+      },
+    };
+    const refined = refinePreflightWithAudit({
+      cwd,
+      map,
+      runner: mutatingRunner,
+      preflight: preflight([{
+        command_id: "test-existing-failure",
+        kind: "test",
+        argv: ["false"],
+        cwd: ".",
+        timeout_ms: 60_000,
+        required: true,
+        assessment: "failed",
+        exit_code: 1,
+        output_digest: "a".repeat(64),
+        detail: "failed",
+      }]),
+    });
+    assert.equal(refined.preflight.disposition, "ready");
+    assert.ok(validationCwds.length > 0);
+    assert.ok(validationCwds.every((validationCwd) => validationCwd !== cwd));
+    assert.ok(validationCwds.every((validationCwd) => !fs.existsSync(validationCwd)));
+    assert.equal(fs.existsSync(path.join(cwd, ".cache")), false);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

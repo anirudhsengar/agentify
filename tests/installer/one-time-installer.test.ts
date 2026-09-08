@@ -10,6 +10,7 @@ import {
   finalizeOneTimeInstallation,
   inspectRepositoryForInstallation,
   prepareOneTimeInstallationState,
+  readRepositoryTaskPolicyConfiguration,
   refinePreflightWithAudit,
   repairInstalledRuntime,
   repositoryTaskPolicySchemaStatus,
@@ -21,8 +22,11 @@ import {
 } from "../../src/core/installer/index.ts";
 import {
   SPECIALIST_FIXTURE_TRACKED_FILES,
+  SPECIALIST_FIXTURE_SOURCES,
   makeSpecialistFixtureMap,
 } from "../fixtures/specialist-map.ts";
+import { attestCodebaseMap } from "../fixtures/codebase-map.ts";
+import { concernEvidencePaths } from "../../src/core/audit/specialist-completion.ts";
 import { runAgentifyApp } from "../../src/core/agentify-app.ts";
 import { installScaffoldRuntime } from "../../src/core/scaffold-installer.ts";
 import { packageRoot as installedPackageRoot } from "../../src/core/pi-sdk-runtime.ts";
@@ -73,7 +77,7 @@ class InstallerAuditRuntime implements AgentRuntime {
       line_range: null,
       centrality: "supporting",
     });
-    const map = JSON.stringify(fixtureMap, null, 2)
+    const map = JSON.stringify(attestCodebaseMap(fixtureMap, git(options.cwd, "rev-parse", "HEAD")), null, 2)
       .replaceAll(".pi/", ".agents/");
     fs.writeFileSync(destination, `${map}\n`);
     options.onEvent?.({
@@ -97,6 +101,7 @@ class InstallerAuditRuntime implements AgentRuntime {
           target_path: ".",
           focus: concern.concern,
           report_concern: concern.concern,
+          observed_paths: concernEvidencePaths(concern),
         },
       } as never);
     }
@@ -183,6 +188,7 @@ function fakeRunner(cwd: string, options: FakeRunnerOptions = {}): InstallerProc
         if (options.protection === "unprotected") return failed("HTTP 404: Not Found");
         return ok("{}");
       }
+      if (key === "npm ci --ignore-scripts --no-audit --no-fund") return ok("dependencies ready\n");
       if (key.startsWith("npm run ")) {
         const status = options.validationFailsAfterInstall
           && fs.existsSync(path.join(cwd, ".github", "agentify", "task-runtime.mjs"))
@@ -201,6 +207,11 @@ function fakeRunner(cwd: string, options: FakeRunnerOptions = {}): InstallerProc
 async function testInstalledFilesMustPreserveValidation(): Promise<void> {
   const cwd = tempRepo("agentify-installer-post-install-validation-");
   try {
+    for (const relative of [...SPECIALIST_FIXTURE_TRACKED_FILES, "src/lib.ts"]) {
+      const destination = path.join(cwd, relative);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.writeFileSync(destination, SPECIALIST_FIXTURE_SOURCES[relative] ?? `${relative}\n`);
+    }
     git(cwd, "init", "-q");
     git(cwd, "config", "user.name", "Agentify Test");
     git(cwd, "config", "user.email", "agentify@example.invalid");
@@ -208,17 +219,40 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
     git(cwd, "commit", "-qm", "fixture");
     const commit = git(cwd, "rev-parse", "HEAD");
     const requests: InstallerProcessRequest[] = [];
-    const runner = fakeRunner(cwd, {
+    const delegate = fakeRunner(cwd, {
       head: commit,
       validationFailsAfterInstall: true,
       requests,
     });
+    const postInstallValidationCwds: string[] = [];
+    const postInstallProvisioningCwds: string[] = [];
+    const runner: InstallerProcessRunner = {
+      run(request): InstallerProcessResult {
+        if (
+          request.program === "npm"
+          && request.args[0] === "ci"
+          && fs.existsSync(path.join(cwd, ".github", "agentify", "task-runtime.mjs"))
+        ) {
+          postInstallProvisioningCwds.push(request.cwd);
+        }
+        if (
+          request.program === "npm"
+          && request.args[0] === "run"
+          && fs.existsSync(path.join(cwd, ".github", "agentify", "task-runtime.mjs"))
+        ) {
+          postInstallValidationCwds.push(request.cwd);
+          fs.mkdirSync(path.join(request.cwd, ".pytest_cache"), { recursive: true });
+          fs.writeFileSync(path.join(request.cwd, ".pytest_cache", "validation-cache"), "generated\n");
+        }
+        return delegate.run(request);
+      },
+    };
     const preflight = inspectRepositoryForInstallation({ cwd, runner, runValidation: true });
     assert.equal(preflight.disposition, "ready");
     prepareOneTimeInstallationState(cwd, preflight);
     const mapPath = path.join(cwd, ".agentify", "runtime", "audit", "codebase_map.json");
     fs.mkdirSync(path.dirname(mapPath), { recursive: true });
-    fs.writeFileSync(mapPath, `${JSON.stringify(makeSpecialistFixtureMap(), null, 2)}\n`);
+    fs.writeFileSync(mapPath, `${JSON.stringify(attestCodebaseMap(makeSpecialistFixtureMap(), commit), null, 2)}\n`);
 
     const report = finalizeOneTimeInstallation({
       cwd,
@@ -230,21 +264,74 @@ async function testInstalledFilesMustPreserveValidation(): Promise<void> {
       validationApproval: approvedConfiguration(cwd, preflight).approval,
       runner,
     });
-    assert.equal(report.disposition, "analyzable-only");
+    assert.equal(report.disposition, "analysis-ready");
     assert.ok(report.blockers.some((entry) => (
       entry.code === "validation_failed" && /after Agentify installed/.test(entry.message)
     )));
+    assert.equal(report.blockers.some((entry) => entry.code === "installation_canary_failed"), false);
+    assert.ok(report.specialists_installed > 0);
     assert.equal(report.github_issue_intake_enabled, false);
-    assert.equal(report.procedures_installed, 0);
-    const policy = JSON.parse(
-      fs.readFileSync(path.join(cwd, ".github", "agentify-task-policy.json"), "utf8"),
-    ) as { configured: boolean; policy: unknown };
-    assert.equal(policy.configured, false);
-    assert.equal(policy.policy, null);
+    assert.equal(report.draft_pr_publication_enabled, false);
+    assert.equal(report.automatic_knowledge_refresh_enabled, false);
+    assert.equal(report.procedures_installed, 0, "unverified command-only procedures must not survive");
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "manifest.json")), true);
+    assert.equal(fs.existsSync(path.join(cwd, ".agentify", "agents")), true);
+    assert.equal(readRepositoryTaskPolicyConfiguration(cwd)?.configured, false);
+    assert.equal(readRepositoryTaskPolicyConfiguration(cwd)?.policy, null);
+    assert.equal(fs.existsSync(path.join(cwd, ".github", "agentify")), false);
+    assert.equal(fs.existsSync(path.join(cwd, ".github", "scripts")), false);
+    assert.equal(fs.existsSync(path.join(cwd, ".github", "workflows", "agentify-issue.yml")), false);
+    assert.equal(fs.existsSync(path.join(cwd, ".github", "workflows", "agentify-learn.yml")), false);
+    assert.match(fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf8"), /analysis-ready/);
+    assert.match(fs.readFileSync(path.join(cwd, "SETUP.md"), "utf8"), /validation_failed/);
+    assert.ok(postInstallValidationCwds.length > 0);
+    assert.deepEqual(postInstallProvisioningCwds, [postInstallValidationCwds[0]!]);
+    assert.ok(postInstallValidationCwds.every((validationCwd) => validationCwd !== cwd));
+    assert.ok(postInstallValidationCwds.every((validationCwd) => !fs.existsSync(validationCwd)));
+    assert.equal(fs.existsSync(path.join(cwd, ".pytest_cache")), false);
+    assert.equal(fs.existsSync(mapPath), true, "the validated canonical map is installed");
     assert.equal(
       requests.some((request) => request.program === "gh" && request.args[0] === "label"),
       false,
     );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testValidationRunsInDisposableCheckout(): Promise<void> {
+  const cwd = tempRepo("agentify-installer-validation-isolation-");
+  try {
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "fixture");
+    const commit = git(cwd, "rev-parse", "HEAD");
+    const delegate = fakeRunner(cwd, { head: commit });
+    const validationCwds: string[] = [];
+    const runner: InstallerProcessRunner = {
+      run(request): InstallerProcessResult {
+        if (request.program === "npm" && request.args[0] === "run") {
+          validationCwds.push(request.cwd);
+          fs.mkdirSync(path.join(request.cwd, ".venv"), { recursive: true });
+          fs.writeFileSync(path.join(request.cwd, ".venv", "validation-cache"), "generated\n");
+        }
+        return delegate.run(request);
+      },
+    };
+
+    const preflight = inspectRepositoryForInstallation({ cwd, runner, runValidation: true });
+
+    assert.equal(preflight.disposition, "ready");
+    assert.ok(validationCwds.length > 0);
+    assert.ok(validationCwds.every((validationCwd) => validationCwd !== cwd));
+    assert.equal(
+      fs.existsSync(path.join(cwd, ".venv")),
+      false,
+      "validation-generated ignored files must never enter the installation target",
+    );
+    assert.ok(validationCwds.every((validationCwd) => !fs.existsSync(validationCwd)));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -265,7 +352,7 @@ async function testEligibleRepositoryAndPolicy(): Promise<void> {
     assert.equal(preflight.identity?.current_commit, HEAD);
     assert.equal(preflight.identity?.actor_login, "maintainer");
     assert.deepEqual(preflight.allowed_write_paths, ["src", "tests"]);
-    assert.ok(preflight.commands.some((command) => command.kind === "install" && command.assessment === "characterized"));
+    assert.ok(preflight.commands.some((command) => command.kind === "install" && command.assessment === "verified"));
     assert.ok(preflight.commands.filter((command) => command.required).every((command) => command.assessment === "verified"));
 
     const configuration = approvedConfiguration(cwd, preflight).configuration;
@@ -360,26 +447,45 @@ async function testValidationEnvironmentRemovesCredentials(): Promise<void> {
   const cwd = tempRepo("agentify-installer-sanitized-env-");
   const beforeProvider = process.env.MINIMAX_API_KEY;
   const beforeGitHub = process.env.GH_TOKEN;
+  const beforeNoColor = process.env.NO_COLOR;
+  const beforeForceColor = process.env.FORCE_COLOR;
+  const beforeCliColorForce = process.env.CLICOLOR_FORCE;
   try {
     process.env.MINIMAX_API_KEY = "provider-secret-placeholder";
     process.env.GH_TOKEN = "github-secret-placeholder";
+    process.env.NO_COLOR = "1";
+    process.env.FORCE_COLOR = "3";
+    process.env.CLICOLOR_FORCE = "1";
     const result = DEFAULT_INSTALLER_PROCESS_RUNNER.run({
       program: process.execPath,
       args: [
         "--input-type=module",
         "--eval",
-        "process.exit(process.env.MINIMAX_API_KEY || process.env.GH_TOKEN ? 1 : 0)",
+        "process.stdout.write(JSON.stringify({ secret: Boolean(process.env.MINIMAX_API_KEY || process.env.GH_TOKEN), noColor: process.env.NO_COLOR ?? null, forceColor: process.env.FORCE_COLOR ?? null, cliColorForce: process.env.CLICOLOR_FORCE ?? null, ci: process.env.CI ?? null }))",
       ],
       cwd,
       timeoutMs: 10_000,
     });
     assert.equal(result.status, 0);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /secret-placeholder/);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      secret: false,
+      noColor: null,
+      forceColor: null,
+      cliColorForce: null,
+      ci: "1",
+    });
   } finally {
     if (beforeProvider === undefined) delete process.env.MINIMAX_API_KEY;
     else process.env.MINIMAX_API_KEY = beforeProvider;
     if (beforeGitHub === undefined) delete process.env.GH_TOKEN;
     else process.env.GH_TOKEN = beforeGitHub;
+    if (beforeNoColor === undefined) delete process.env.NO_COLOR;
+    else process.env.NO_COLOR = beforeNoColor;
+    if (beforeForceColor === undefined) delete process.env.FORCE_COLOR;
+    else process.env.FORCE_COLOR = beforeForceColor;
+    if (beforeCliColorForce === undefined) delete process.env.CLICOLOR_FORCE;
+    else process.env.CLICOLOR_FORCE = beforeCliColorForce;
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 }
@@ -602,14 +708,13 @@ async function testInitialInstallationAndIdempotentAttach(): Promise<void> {
   try {
     for (const relative of [
       "src/lib.ts",
-      "src/billing/index.ts",
+      ...SPECIALIST_FIXTURE_TRACKED_FILES,
       "src/billing/types.ts",
-      "tests/billing.test.ts",
       "scripts/prime-db.sh",
     ]) {
       const destination = path.join(cwd, relative);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
-      fs.writeFileSync(destination, `${relative}\n`);
+      fs.writeFileSync(destination, SPECIALIST_FIXTURE_SOURCES[relative] ?? `${relative}\n`);
     }
     git(cwd, "init", "-q");
     git(cwd, "config", "user.name", "Agentify Test");
@@ -624,7 +729,7 @@ async function testInitialInstallationAndIdempotentAttach(): Promise<void> {
 
     const mapPath = path.join(cwd, ".agentify", "runtime", "audit", "codebase_map.json");
     fs.mkdirSync(path.dirname(mapPath), { recursive: true });
-    fs.writeFileSync(mapPath, `${JSON.stringify(makeSpecialistFixtureMap(), null, 2)}\n`);
+    fs.writeFileSync(mapPath, `${JSON.stringify(attestCodebaseMap(makeSpecialistFixtureMap(), commit), null, 2)}\n`);
     for (const relative of [
       ".github/workflows/agentify-issue.yml",
       ".github/workflows/agentify-learn.yml",
@@ -656,7 +761,7 @@ async function testInitialInstallationAndIdempotentAttach(): Promise<void> {
       runner,
     });
     assert.equal(first.disposition, "ready");
-    assert.equal(first.specialists_installed, 1);
+    assert.equal(first.specialists_installed, 2);
     assert.ok(first.procedures_installed > 0);
     assert.ok(fs.existsSync(path.join(cwd, ".agentify/manifest.json")));
     for (const relative of [
@@ -732,7 +837,7 @@ async function testOneCommandInitialAuditInstallation(): Promise<void> {
     ]) {
       const destination = path.join(cwd, relative);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
-      fs.writeFileSync(destination, `${relative}\n`);
+      fs.writeFileSync(destination, SPECIALIST_FIXTURE_SOURCES[relative] ?? `${relative}\n`);
     }
     git(cwd, "init", "-q");
     git(cwd, "config", "user.name", "Agentify Test");
@@ -921,6 +1026,7 @@ const tests: Array<{ name: string; fn: () => Promise<void> }> = [
   { name: "eligible repository and policy", fn: testEligibleRepositoryAndPolicy },
   { name: "validation approval binding", fn: testValidationApprovalBinding },
   { name: "validation environment removes credentials", fn: testValidationEnvironmentRemovesCredentials },
+  { name: "validation runs in disposable checkout", fn: testValidationRunsInDisposableCheckout },
   { name: "installed files preserve repository validation", fn: testInstalledFilesMustPreserveValidation },
   { name: "no history blocks analysis", fn: testNoHistoryBlocksAnalysis },
   { name: "non-GitHub remote blocks analysis", fn: testNonGitHubRemoteBlocksAnalysis },

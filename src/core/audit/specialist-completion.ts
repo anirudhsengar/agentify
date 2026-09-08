@@ -3,6 +3,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CodebaseMap } from "./schema/index.ts";
 import {
+  explicitlyAcceptsConcern,
+  isSubstantiveConcernRejection,
+} from "./concern-rejection.ts";
+import {
   assessCoverageClosure,
   type CoverageClosureOptions,
   type CoverageClosureResult,
@@ -19,6 +23,10 @@ const GLOB_SIGNAL = /[*?\[\]{}]/;
 const GIT_PATH_CHUNK_SIZE = 128;
 const GIT_PATH_CHUNK_CHARACTERS = 12_000;
 const GIT_PATH_MAX_BUFFER = 8 * 1024 * 1024;
+const MODULE_EDGE_MAX_FILES = 512;
+const MODULE_EDGE_MAX_BUFFER = 16 * 1024 * 1024;
+const MODULE_SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/i;
+const JAVA_SOURCE_EXTENSION = /\.java$/i;
 const WELL_KNOWN_FILE_NAMES = new Set([
   "dockerfile",
   "gemfile",
@@ -58,6 +66,7 @@ const DOCUMENTATION_DIRECTORY_NAMES = new Set([
   "man",
   "manual",
 ]);
+const AUXILIARY_DIRECTORY_NAMES = new Set(["example", "examples", "fixture", "fixtures"]);
 const GENERATED_DIRECTORY_NAMES = new Set([
   ".cache",
   ".venv",
@@ -96,6 +105,12 @@ export interface RejectedSpecialistConcern {
   reasons: string[];
 }
 
+export interface AuxiliaryDuplicateConcern {
+  concern: string;
+  paths: string[];
+  overlapping_concerns: string[];
+}
+
 export interface RepositoryBehaviorCluster {
   cluster_key: string;
   implementation_paths: string[];
@@ -109,6 +124,12 @@ export interface RepositoryConcernAttachment {
   reason: string;
 }
 
+export interface RepositoryCoreOwnershipResolution {
+  concern: string;
+  path: string;
+  reason: string;
+}
+
 export interface SpecialistEvidenceAssessment {
   complete: boolean;
   source: "concern_evidence" | "legacy_expert_evidence" | "absent";
@@ -119,9 +140,11 @@ export interface SpecialistEvidenceAssessment {
   uncovered_paths: string[];
   accepted_concerns: string[];
   rejected_concerns: RejectedSpecialistConcern[];
+  auxiliary_duplicate_concerns: AuxiliaryDuplicateConcern[];
   repository_clusters: RepositoryBehaviorCluster[];
   uncovered_clusters: RepositoryBehaviorCluster[];
   attachments: RepositoryConcernAttachment[];
+  core_ownership_resolutions: RepositoryCoreOwnershipResolution[];
 }
 
 export interface AuditCompletionResult {
@@ -135,6 +158,7 @@ type RepositoryPathResolver = (value: unknown) => string | null;
 interface RepositoryEvidenceContext {
   resolvePath: RepositoryPathResolver;
   trackedFiles: Set<string> | undefined;
+  cwd: string | undefined;
 }
 
 function normalizeRepositoryPathSyntax(value: unknown): string | null {
@@ -353,8 +377,64 @@ function eligibleImplementationPath(repositoryPath: string): boolean {
   if (isTestRepositoryPath(repositoryPath) || isGenericPlumbing(repositoryPath)) return false;
   const directories = repositoryPath.split("/").slice(0, -1).map((segment) => segment.toLowerCase());
   return !directories.some((segment) =>
-    DOCUMENTATION_DIRECTORY_NAMES.has(segment) || GENERATED_DIRECTORY_NAMES.has(segment)
+    DOCUMENTATION_DIRECTORY_NAMES.has(segment)
+    || GENERATED_DIRECTORY_NAMES.has(segment)
   );
+}
+
+function independentCoreImplementationPath(repositoryPath: string): boolean {
+  if (!eligibleImplementationPath(repositoryPath)) return false;
+  return !repositoryPath.split("/").slice(0, -1)
+    .some((segment) => AUXILIARY_DIRECTORY_NAMES.has(segment.toLowerCase()));
+}
+
+/** Apply only a portfolio classification proposal, never new source evidence. */
+export function resolveConcernCoreOwner(
+  map: CodebaseMap,
+  proposal: { path: string; concern: string },
+  cwd: string,
+  repositoryCommit: string | null,
+): CodebaseMap {
+  const evidence = map.concern_evidence;
+  const attestation = map.explorer_receipts;
+  if (!repositoryCommit || attestation?.repository_commit !== repositoryCommit || !evidence) {
+    throw new Error("core_owner requires current-HEAD attested concern evidence");
+  }
+  const claimants = evidence.concerns.filter(concern => concern.touchpoints.some(point =>
+    point.path === proposal.path && point.centrality === "core"));
+  const owners = claimants.filter(concern => concern.concern === proposal.concern);
+  if (owners.length !== 1 || !owners[0]!.flows.some(flow =>
+    flow.steps.length >= 2 && flow.steps.some(step => step.path === proposal.path))) {
+    throw new Error("core_owner must name one existing core claimant with a verified flow through the file");
+  }
+  for (const concern of claimants) {
+    const observed = new Set(attestation.receipts.filter(receipt =>
+      receipt.mode === "concern_tracer" && receipt.success && receipt.report_concern === concern.concern
+    ).flatMap(receipt => receipt.observed_paths ?? []));
+    if (concernEvidencePaths(concern).some(file => !observed.has(file))
+      || assessConcernGrounding(concern, cwd).length > 0) {
+      throw new Error(`core_owner requires observed, grounded evidence for ${concern.concern}`);
+    }
+    if (concern.concern === proposal.concern) continue;
+    if (!concern.touchpoints.some(point => point.centrality === "core"
+      && point.path !== proposal.path && independentCoreImplementationPath(point.path)
+      && !evidence.concerns.some(other => other !== concern && other.touchpoints.some(candidate =>
+        candidate.path === point.path && candidate.centrality === "core")))) {
+      throw new Error(`core_owner would remove independent implementation ownership from ${concern.concern}; trace or group the behavior instead`);
+    }
+  }
+  if (claimants.length === 1) return map;
+  return { ...map, concern_evidence: { ...evidence, concerns: evidence.concerns.map(concern =>
+    concern.concern === proposal.concern ? concern : {
+      ...concern,
+      touchpoints: concern.touchpoints.map(point => point.path === proposal.path && point.centrality === "core"
+        ? { ...point, centrality: "supporting" as const } : point),
+    }) } };
+}
+
+function auxiliaryRepositoryPath(repositoryPath: string): boolean {
+  return repositoryPath.split("/").slice(0, -1)
+    .some((segment) => AUXILIARY_DIRECTORY_NAMES.has(segment.toLowerCase()));
 }
 
 const PACKAGE_MANIFEST_NAMES = new Set([
@@ -651,6 +731,7 @@ function createRepositoryEvidenceContext(
           && likelyFileWithoutRepository(normalized) ? normalized : null;
       },
       trackedFiles: undefined,
+      cwd: undefined,
     };
   }
 
@@ -667,6 +748,7 @@ function createRepositoryEvidenceContext(
           && tracked.files.has(normalized) ? normalized : null;
       },
       trackedFiles: tracked.complete ? tracked.files : undefined,
+      cwd: tracked.complete ? cwd : undefined,
     };
   }
 
@@ -682,6 +764,7 @@ function createRepositoryEvidenceContext(
         && regularFileOnDisk(cwd, normalized) ? normalized : null;
     },
     trackedFiles: undefined,
+    cwd: undefined,
   };
 }
 
@@ -741,6 +824,9 @@ interface AssessedConcern {
   contextPaths: string[];
   corePaths: string[];
 }
+
+type ConcernRecord = NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
+type RejectionRecord = NonNullable<CodebaseMap["concern_evidence"]>["not_concerns"][number];
 
 function assessConcern(
   concern: NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number],
@@ -813,6 +899,11 @@ const SEMANTIC_STOP_WORDS = new Set([
   "module", "repository", "runtime", "supporting", "test", "tests", "through", "with",
 ]);
 
+const WEAK_ATTACHMENT_TOKENS = new Set([
+  "accept", "body", "client", "component", "context", "handler", "path", "request",
+  "response", "server", "type", "url", "util", "utility", "value",
+]);
+
 function semanticTokens(value: string): Set<string> {
   const tokens = new Set<string>();
   for (const raw of value.toLowerCase().match(/[a-z0-9]+/g) ?? []) {
@@ -836,7 +927,6 @@ function concernSemanticTokens(
     concern.concern,
     concern.one_line,
     concern.covers,
-    ...concern.entry_questions,
     ...concern.flows.flatMap((flow) => [flow.name, flow.description]),
     ...concern.touchpoints.flatMap((touchpoint) => [
       touchpoint.path,
@@ -854,7 +944,27 @@ function pathSemanticTokens(paths: readonly string[], label: string): Set<string
   // Compare only the behavioral label and file stems; path affinity is
   // evaluated independently by directoryAffinity().
   const stems = paths.map((repositoryPath) => filenameStem(repositoryPath));
-  return semanticTokens(`${label} ${stems.join(" ")}`);
+  return semanticTokens(`${label.split("@", 1)[0] ?? label} ${stems.join(" ")}`);
+}
+
+const NON_BEHAVIORAL_LOCALITY_SEGMENTS = new Set([
+  "common", "helper", "helpers", "internal", "shared", "util", "utils", "utilities",
+]);
+
+function pathLocalityTokens(paths: readonly string[]): Set<string> {
+  return semanticTokens(paths.flatMap((repositoryPath) =>
+    localitySegments(repositoryPath).filter((segment) =>
+      !NON_BEHAVIORAL_LOCALITY_SEGMENTS.has(segment.toLowerCase())
+    )
+  ).join(" "));
+}
+
+function pathLocalityDepth(paths: readonly string[]): number {
+  return Math.max(...paths.map((repositoryPath) =>
+    localitySegments(repositoryPath).filter((segment) =>
+      !NON_BEHAVIORAL_LOCALITY_SEGMENTS.has(segment.toLowerCase())
+    ).length
+  ), 0);
 }
 
 function matchingTokenCount(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
@@ -865,15 +975,88 @@ function matchingTokenCount(left: ReadonlySet<string>, right: ReadonlySet<string
   return matches;
 }
 
+function delegatedOwnerDescription(value: string): string | null {
+  return /\bsubsum(?:e|ed|es|ing)\s+by\s+(?:the\s+)?([^.;\n]{3,160})/i.exec(value)?.[1]?.trim()
+    ?? null;
+}
+
+function rejectionHasGroundedDisposition(
+  rejection: RejectionRecord,
+  acceptedConcerns: readonly ConcernRecord[],
+): boolean {
+  if (rejection.grouped_into !== undefined) {
+    return acceptedConcerns.some((concern) => concern.concern === rejection.grouped_into);
+  }
+  const delegatedOwner = delegatedOwnerDescription(rejection.why_rejected);
+  if (delegatedOwner === null) return true;
+  const delegatedTokens = semanticTokens(delegatedOwner);
+  return acceptedConcerns.some((concern) =>
+    matchingTokenCount(
+      delegatedTokens,
+      semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`),
+    ) >= 2
+  );
+}
+
+function concernExclusionPaths(concern: ConcernRecord, trackedFiles?: ReadonlySet<string>): string[] {
+  return [...concern.excludes.matchAll(
+    /(?:^|[^A-Za-z0-9_.-])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.*-]+)+)/g,
+  )].flatMap((match) => match[1] ? [match[1].replace(/\*+$/, "").replace(/\/$/, "")] : [])
+    .filter((excludedPath) => trackedFiles === undefined || [...trackedFiles].some((repositoryPath) =>
+      excludedPathCoversRepositoryPath(excludedPath, repositoryPath)
+    ));
+}
+
+function excludedPathCoversRepositoryPath(excludedPath: string, repositoryPath: string): boolean {
+  return repositoryPath === excludedPath
+    || repositoryPath.startsWith(`${excludedPath}/`)
+    || repositoryPath.endsWith(`/${excludedPath}`)
+    || repositoryPath.includes(`/${excludedPath}/`);
+}
+
 function attachmentConflictsWithExclusions(
   candidate: AttachmentConcernCandidate,
   paths: readonly string[],
   label: string,
+  inferred = false,
 ): boolean {
-  return matchingTokenCount(
-    pathSemanticTokens(paths, label),
-    candidate.excludedTokens,
-  ) > 0;
+  const clusterTokens = new Set([
+    ...pathSemanticTokens(paths, label),
+    ...pathLocalityTokens(paths),
+  ]);
+  const exclusionPaths = candidate.exclusionPaths;
+  const pathExclusionApplies = exclusionPaths.some((excludedPath) =>
+    paths.some((repositoryPath) => excludedPathCoversRepositoryPath(excludedPath, repositoryPath))
+  );
+  const pathTokens = semanticTokens(exclusionPaths.join(" "));
+  const effectiveExcludedTokens = pathExclusionApplies
+    ? candidate.excludedTokens
+    : new Set([...candidate.excludedTokens].filter((token) => !pathTokens.has(token)));
+  const matched = [...clusterTokens].filter((token) =>
+    [...effectiveExcludedTokens].some((excluded) => tokensRelated(token, excluded))
+  );
+  if (pathExclusionApplies) return true;
+  if (inferred && [...clusterTokens].some((token) =>
+    !WEAK_ATTACHMENT_TOKENS.has(token) && effectiveExcludedTokens.has(token)
+  )) return true;
+  if (inferred && matched.length >= 2) return true;
+  if (matched.length >= 2) return true;
+  if (
+    matched.length > 0
+    && /\bother\b[^.]{0,160}\b(?:remain|kept)\s+separate\b/i.test(candidate.concern.excludes)
+  ) return true;
+  return matched.some((token) =>
+    ![...candidate.tokens].some((positive) => tokensRelated(token, positive))
+  );
+}
+
+function attachmentHasPathExclusion(
+  candidate: AttachmentConcernCandidate,
+  paths: readonly string[],
+): boolean {
+  return candidate.exclusionPaths.some((excludedPath) =>
+    paths.some((repositoryPath) => excludedPathCoversRepositoryPath(excludedPath, repositoryPath))
+  );
 }
 
 function directoryAffinity(candidate: string, contextPath: string): number {
@@ -894,7 +1077,9 @@ interface AttachmentConcernCandidate {
   concern: NonNullable<CodebaseMap["concern_evidence"]>["concerns"][number];
   assessment: AssessedConcern;
   tokens: Set<string>;
+  scopeTokens: Set<string>;
   excludedTokens: Set<string>;
+  exclusionPaths: string[];
 }
 
 function selectUniqueConcern(input: {
@@ -904,6 +1089,8 @@ function selectUniqueConcern(input: {
   mode: "cluster" | "high-signal";
 }): AttachmentConcernCandidate | null {
   const candidateTokens = pathSemanticTokens(input.paths, input.label);
+  const localityTokens = pathLocalityTokens(input.paths);
+  const localityDepth = pathLocalityDepth(input.paths);
   const ranked = input.candidates.map((candidate) => {
     const pathScore = Math.max(
       ...input.paths.flatMap((repositoryPath) =>
@@ -912,17 +1099,35 @@ function selectUniqueConcern(input: {
       0,
     );
     const semanticMatches = matchingTokenCount(candidateTokens, candidate.tokens);
-    const exclusionMatches = matchingTokenCount(candidateTokens, candidate.excludedTokens);
+    const distinctiveSemanticMatches = [...candidateTokens].filter((token) =>
+      !WEAK_ATTACHMENT_TOKENS.has(token) && candidate.tokens.has(token)
+    ).length;
+    const localityMatches = matchingTokenCount(localityTokens, candidate.scopeTokens);
     return {
       candidate,
       pathScore,
       semanticMatches,
-      exclusionMatches,
-      score: pathScore + Math.min(semanticMatches, 4) * 160,
+      distinctiveSemanticMatches,
+      localityMatches,
+      score: pathScore
+        + Math.min(semanticMatches, 4) * 160
+        + Math.min(distinctiveSemanticMatches, 2) * 240
+        + Math.min(localityMatches, 3) * 200,
     };
-  }).filter((entry) => entry.exclusionMatches === 0 && (
+  }).filter((entry) => !attachmentConflictsWithExclusions(
+    entry.candidate,
+    input.paths,
+    input.label,
+    true,
+  ) && (
     input.mode === "cluster"
-      ? entry.semanticMatches > 0 && (entry.pathScore >= 40 || entry.semanticMatches >= 2)
+      ? (localityDepth >= 2 && entry.pathScore >= 850 && entry.localityMatches >= 2)
+        || (localityDepth >= 2
+          && entry.pathScore >= 40
+          && entry.semanticMatches > 0
+          && entry.localityMatches > 0)
+        || (entry.pathScore >= 40 && entry.distinctiveSemanticMatches > 0)
+        || (entry.pathScore >= 40 && entry.semanticMatches >= 2)
       : entry.pathScore >= 850
   )).sort((left, right) => right.score - left.score
     || left.candidate.concern.concern.localeCompare(right.candidate.concern.concern));
@@ -933,11 +1138,350 @@ function selectUniqueConcern(input: {
   return best.candidate;
 }
 
+function repositoryBlobsAtHead(
+  cwd: string,
+  repositoryPaths: readonly string[],
+): Map<string, string> {
+  const paths = [...new Set(repositoryPaths)]
+    .filter((repositoryPath) => !/[\r\n]/.test(repositoryPath))
+    .sort((left, right) => left.localeCompare(right));
+  if (paths.length === 0) return new Map();
+  const blobs = new Map<string, string>();
+  let remainingBytes = MODULE_EDGE_MAX_BUFFER;
+  for (let batchStart = 0; batchStart < paths.length; batchStart += MODULE_EDGE_MAX_FILES) {
+    const batch = paths.slice(batchStart, batchStart + MODULE_EDGE_MAX_FILES);
+    if (remainingBytes <= 0) break;
+    const result = spawnSync(
+      "git",
+      ["-C", cwd, "cat-file", "--batch"],
+      {
+        input: `${batch.map((repositoryPath) => `HEAD:${repositoryPath}`).join("\n")}\n`,
+        maxBuffer: remainingBytes,
+        windowsHide: true,
+      },
+    );
+    if (result.error || result.status !== 0 || !Buffer.isBuffer(result.stdout)) break;
+    remainingBytes -= result.stdout.length;
+    let offset = 0;
+    for (const repositoryPath of batch) {
+      const headerEnd = result.stdout.indexOf(0x0a, offset);
+      if (headerEnd < 0) return new Map();
+      const header = result.stdout.subarray(offset, headerEnd).toString("utf8");
+      const size = /\sblob\s(\d+)$/.exec(header)?.[1];
+      if (size === undefined) return new Map();
+      const length = Number.parseInt(size, 10);
+      const contentStart = headerEnd + 1;
+      const contentEnd = contentStart + length;
+      if (!Number.isSafeInteger(length) || contentEnd >= result.stdout.length) return new Map();
+      blobs.set(repositoryPath, result.stdout.subarray(contentStart, contentEnd).toString("utf8"));
+      offset = contentEnd + 1;
+    }
+  }
+  return blobs;
+}
+
+function resolveRelativeModule(
+  importer: string,
+  specifier: string,
+  trackedFiles: ReadonlySet<string>,
+): string | null {
+  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(importer), specifier));
+  if (resolved === ".." || resolved.startsWith("../") || resolved.startsWith("/")) return null;
+  const extension = path.posix.extname(resolved);
+  const base = MODULE_SOURCE_EXTENSION.test(resolved) ? resolved.slice(0, -extension.length) : resolved;
+  const candidates = [
+    resolved,
+    ...[".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]
+      .flatMap((suffix) => [`${base}${suffix}`, `${base}/index${suffix}`]),
+  ];
+  return candidates.find((candidate) => trackedFiles.has(candidate)) ?? null;
+}
+
+function skipModuleTrivia(source: string, start: number): number {
+  let index = start;
+  while (index < source.length) {
+    if (/\s/.test(source[index]!)) {
+      index += 1;
+    } else if (source.startsWith("//", index)) {
+      index = source.indexOf("\n", index + 2);
+      if (index < 0) return source.length;
+    } else if (source.startsWith("/*", index)) {
+      const end = source.indexOf("*/", index + 2);
+      if (end < 0) return source.length;
+      index = end + 2;
+    } else {
+      break;
+    }
+  }
+  return index;
+}
+
+function readModuleString(
+  source: string,
+  start: number,
+): { value: string; end: number } | null {
+  const quote = source[start];
+  if (quote !== '"' && quote !== "'" && quote !== "`") return null;
+  let value = "";
+  for (let index = start + 1; index < source.length; index += 1) {
+    const character = source[index]!;
+    if (character === "\\") {
+      index += 1;
+      if (index >= source.length) return null;
+      value += source[index]!;
+    } else if (character === quote) {
+      return { value, end: index + 1 };
+    } else {
+      value += character;
+    }
+  }
+  return null;
+}
+
+function callModuleSpecifier(source: string, start: number): string | null {
+  let index = skipModuleTrivia(source, start);
+  if (source[index] !== "(") return null;
+  index = skipModuleTrivia(source, index + 1);
+  return readModuleString(source, index)?.value ?? null;
+}
+
+function staticModuleSpecifier(source: string, start: number, sideEffect: boolean): string | null {
+  let index = skipModuleTrivia(source, start);
+  if (sideEffect) {
+    const direct = readModuleString(source, index);
+    if (direct !== null) return direct.value;
+  }
+  const limit = Math.min(source.length, start + 4_096);
+  while (index < limit && source[index] !== ";") {
+    if (source.startsWith("//", index) || source.startsWith("/*", index) || /\s/.test(source[index]!)) {
+      index = skipModuleTrivia(source, index);
+      continue;
+    }
+    const quoted = readModuleString(source, index);
+    if (quoted !== null) {
+      index = quoted.end;
+      continue;
+    }
+    const identifier = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(source.slice(index))?.[0];
+    if (identifier === "from") {
+      return readModuleString(source, skipModuleTrivia(source, index + identifier.length))?.value ?? null;
+    }
+    index += identifier?.length ?? 1;
+  }
+  return null;
+}
+
+function relativeModuleSpecifiers(source: string): string[] {
+  const specifiers: string[] = [];
+  let index = 0;
+  while (index < source.length) {
+    const next = skipModuleTrivia(source, index);
+    if (next !== index) {
+      index = next;
+      continue;
+    }
+    const quoted = readModuleString(source, index);
+    if (quoted !== null) {
+      index = quoted.end;
+      continue;
+    }
+    const identifier = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(source.slice(index))?.[0];
+    if (identifier === undefined) {
+      index += 1;
+      continue;
+    }
+    const after = index + identifier.length;
+    const specifier = identifier === "require"
+      ? callModuleSpecifier(source, after)
+      : identifier === "import"
+        ? callModuleSpecifier(source, after) ?? staticModuleSpecifier(source, after, true)
+        : identifier === "export"
+          ? staticModuleSpecifier(source, after, false)
+          : null;
+    if (specifier?.startsWith("./") || specifier?.startsWith("../")) specifiers.push(specifier);
+    index = after;
+  }
+  return specifiers;
+}
+
+function isPureRelativeReexport(source: string): boolean {
+  let index = skipModuleTrivia(source, 0);
+  let exports = 0;
+  while (index < source.length) {
+    const statement = /^export\s+(?:type\s+)?(?:\{[^{};]*\}|\*(?:\s+as\s+[A-Za-z_$][\w$]*)?)\s+from\s*/.exec(source.slice(index));
+    if (statement === null) return false;
+    const specifier = readModuleString(source, index + statement[0].length);
+    if (specifier === null || !/^\.\.?\//.test(specifier.value)) return false;
+    exports += 1;
+    index = skipModuleTrivia(source, specifier.end);
+    if (source[index] === ";") index = skipModuleTrivia(source, index + 1);
+  }
+  return exports > 0;
+}
+
+function directModuleEdges(input: {
+  cwd: string;
+  trackedFiles: ReadonlySet<string>;
+  paths: readonly string[];
+}): { edges: Map<string, Set<string>>; facades: Set<string> } {
+  const blobs = repositoryBlobsAtHead(input.cwd, input.paths.filter((repositoryPath) => MODULE_SOURCE_EXTENSION.test(repositoryPath)));
+  const edges = new Map<string, Set<string>>();
+  const facades = new Set<string>();
+  for (const [importer, source] of blobs) {
+    if (isPureRelativeReexport(source)) facades.add(importer);
+    for (const specifier of relativeModuleSpecifiers(source)) {
+      const imported = resolveRelativeModule(importer, specifier, input.trackedFiles);
+      if (imported === null) {
+        facades.delete(importer);
+        continue;
+      }
+      const imports = edges.get(importer) ?? new Set<string>();
+      imports.add(imported);
+      edges.set(importer, imports);
+    }
+  }
+  return { edges, facades };
+}
+
+function javaInheritanceEdges(input: {
+  cwd: string;
+  trackedFiles: ReadonlySet<string>;
+  paths: readonly string[];
+}): Map<string, Set<string>> {
+  const blobs = repositoryBlobsAtHead(input.cwd,
+    input.paths.filter((repositoryPath) => JAVA_SOURCE_EXTENSION.test(repositoryPath)));
+  const declarations = new Map<string, string>();
+  const parsed = new Map<string, { packageName: string; imports: Map<string, string>; source: string }>();
+  for (const [repositoryPath, source] of blobs) {
+    let code = "";
+    let state: "code" | "line" | "block" | "string" | "character" | "text" = "code";
+    for (let index = 0; index < source.length; index += 1) {
+      const character = source[index]!;
+      if (state === "line") {
+        if (character === "\n") { state = "code"; code += "\n"; } else code += " ";
+      } else if (state === "block") {
+        if (source.startsWith("*/", index)) { state = "code"; code += "  "; index += 1; }
+        else code += character === "\n" ? "\n" : " ";
+      } else if (state === "text") {
+        if (source.startsWith('\"\"\"', index)) { state = "code"; code += "   "; index += 2; }
+        else code += character === "\n" ? "\n" : " ";
+      } else if (state === "string" || state === "character") {
+        if (character === "\\") { code += "  "; index += 1; }
+        else if ((state === "string" && character === '\"') || (state === "character" && character === "'")) {
+          state = "code"; code += " ";
+        } else code += character === "\n" ? "\n" : " ";
+      } else if (source.startsWith("//", index)) {
+        state = "line"; code += "  "; index += 1;
+      } else if (source.startsWith("/*", index)) {
+        state = "block"; code += "  "; index += 1;
+      } else if (source.startsWith('\"\"\"', index)) {
+        state = "text"; code += "   "; index += 2;
+      } else if (character === '\"' || character === "'") {
+        state = character === '\"' ? "string" : "character"; code += " ";
+      } else code += character;
+    }
+    const packageName = /\bpackage\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*;/.exec(code)?.[1] ?? "";
+    const typeName = /\b(?:class|record|interface|enum)\s+([A-Za-z_$][\w$]*)/.exec(code)?.[1];
+    if (typeName === undefined) continue;
+    const imports = new Map([...code.matchAll(/\bimport\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\s*;/g)]
+      .map((match) => [match[1]!.slice(match[1]!.lastIndexOf(".") + 1), match[1]!]));
+    declarations.set(packageName ? `${packageName}.${typeName}` : typeName, repositoryPath);
+    parsed.set(repositoryPath, { packageName, imports, source: code });
+  }
+  const edges = new Map<string, Set<string>>();
+  for (const [repositoryPath, { packageName, imports, source }] of parsed) {
+    const inherited = /\bextends\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)/.exec(source)?.[1];
+    if (inherited === undefined) continue;
+    const target = declarations.get(inherited.includes(".") || !packageName
+      ? inherited : imports.get(inherited) ?? `${packageName}.${inherited}`);
+    if (target !== undefined) edges.set(repositoryPath, new Set([target]));
+  }
+  return edges;
+}
+
+function validationWrappers(
+  concern: AttachmentConcernCandidate["concern"],
+  trackedFiles: ReadonlySet<string>,
+): string[] {
+  return ["mvnw", "mvnw.cmd", "gradlew", "gradlew.bat"].filter((repositoryPath) =>
+    trackedFiles.has(repositoryPath)
+    && concern.validation.some((command) =>
+      new RegExp(`(?:^|[\\s\x60])(?:\\./)?${repositoryPath.replace(".", "\\.")}(?:[\\s\x60]|$)`, "i").test(command)
+    )
+  );
+}
+
+function prioritizeRepositoryClusters(input: {
+  clusters: readonly RepositoryBehaviorCluster[];
+  cwd: string | undefined;
+  trackedFiles: ReadonlySet<string> | undefined;
+}): RepositoryBehaviorCluster[] {
+  if (input.cwd === undefined || input.trackedFiles === undefined) return [...input.clusters];
+  const { edges } = directModuleEdges({
+    cwd: input.cwd,
+    trackedFiles: input.trackedFiles,
+    paths: [...input.trackedFiles],
+  });
+  const neighbors = new Map<string, Set<string>>();
+  for (const [from, targets] of edges) {
+    for (const to of targets) {
+      const fromNeighbors = neighbors.get(from) ?? new Set<string>();
+      const toNeighbors = neighbors.get(to) ?? new Set<string>();
+      fromNeighbors.add(to);
+      toNeighbors.add(from);
+      neighbors.set(from, fromNeighbors);
+      neighbors.set(to, toNeighbors);
+    }
+  }
+  const degree = (cluster: RepositoryBehaviorCluster): number => new Set(
+    cluster.implementation_paths.flatMap((repositoryPath) => [...(neighbors.get(repositoryPath) ?? [])]),
+  ).size;
+  return [...input.clusters].sort((left, right) => degree(right) - degree(left)
+    || left.cluster_key.localeCompare(right.cluster_key));
+}
+
+function directDependencyConcerns(input: {
+  implementationPaths: readonly string[];
+  candidates: readonly AttachmentConcernCandidate[];
+  edges: ReadonlyMap<string, ReadonlySet<string>>;
+  facades: ReadonlySet<string>;
+  label: string;
+}): AttachmentConcernCandidate[] {
+  const linked = input.candidates.filter((candidate) =>
+    input.implementationPaths.some((implementationPath) =>
+      candidate.assessment.corePaths.some((corePath) =>
+        input.edges.get(corePath)?.has(implementationPath)
+      ) || (
+        input.facades.has(implementationPath)
+        && (input.edges.get(implementationPath)?.size ?? 0) > 0
+        && [...input.edges.get(implementationPath)!].every((target) =>
+          candidate.assessment.corePaths.includes(target)
+        )
+      )
+    )
+  );
+  return linked.filter((candidate) => !attachmentConflictsWithExclusions(
+    candidate,
+    input.implementationPaths,
+    input.label,
+    true,
+  ));
+}
+
+function selectUniqueDirectDependencyConcern(
+  input: Parameters<typeof directDependencyConcerns>[0],
+): AttachmentConcernCandidate | "unresolved" | null {
+  const eligible = directDependencyConcerns(input);
+  return eligible.length === 1 ? eligible[0]! : eligible.length > 1 ? "unresolved" : null;
+}
+
 function inferRepositoryConcernAttachments(input: {
   map: CodebaseMap;
   accepted: readonly AssessedConcern[];
   clusters: readonly RepositoryBehaviorCluster[];
   structuralHighSignal: readonly string[];
+  cwd: string;
+  trackedFiles: ReadonlySet<string>;
 }): RepositoryConcernAttachment[] {
   const concerns = input.map.concern_evidence?.concerns ?? [];
   const candidates: AttachmentConcernCandidate[] = input.accepted.flatMap((assessment) => {
@@ -946,8 +1490,29 @@ function inferRepositoryConcernAttachments(input: {
       concern,
       assessment,
       tokens: concernSemanticTokens(concern),
+      scopeTokens: semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`),
       excludedTokens: semanticTokens(concern.excludes),
+      exclusionPaths: concernExclusionPaths(concern, input.trackedFiles),
     }];
+  });
+  const acceptedConcernRecords = candidates.map((candidate) => candidate.concern);
+  const { edges: moduleEdges, facades } = directModuleEdges({
+    cwd: input.cwd,
+    trackedFiles: input.trackedFiles,
+    paths: [
+      ...input.clusters.flatMap((cluster) => cluster.implementation_paths),
+      ...candidates.flatMap((candidate) => candidate.assessment.contextPaths),
+      ...input.structuralHighSignal,
+    ],
+  });
+  const javaEdges = javaInheritanceEdges({
+    cwd: input.cwd,
+    trackedFiles: input.trackedFiles,
+    paths: [
+      ...input.clusters.flatMap((cluster) => cluster.implementation_paths),
+      ...candidates.flatMap((candidate) => candidate.assessment.contextPaths),
+      ...input.structuralHighSignal,
+    ],
   });
   const attachmentPaths = new Map<string, Set<string>>();
   const reasons = new Map<string, Set<string>>();
@@ -961,25 +1526,73 @@ function inferRepositoryConcernAttachments(input: {
   };
   const rejected = (repositoryPath: string): boolean =>
     (input.map.concern_evidence?.not_concerns ?? [])
-      .some((entry) => rejectionCoversPath(entry, repositoryPath));
+      .some((entry) =>
+        rejectionHasGroundedDisposition(entry, acceptedConcernRecords)
+        && rejectionCoversPath(entry, repositoryPath)
+      );
+
+  for (const candidate of candidates) {
+    const wrappers = validationWrappers(candidate.concern, input.trackedFiles);
+    if (wrappers.length > 0) {
+      add(candidate.concern.concern, wrappers, "tracked validation wrapper named by the specialist command");
+    }
+  }
 
   for (const cluster of input.clusters) {
     const clusterPaths = [...cluster.implementation_paths, ...cluster.test_paths]
       .filter((repositoryPath) => !rejected(repositoryPath));
-    const direct = candidates.filter((candidate) =>
-      !attachmentConflictsWithExclusions(
-        candidate,
-        cluster.implementation_paths,
-        cluster.cluster_key,
-      )
-      && clusterPaths.some((repositoryPath) =>
+    const direct = candidates.filter((candidate) => {
+      const explicitImplementation = cluster.implementation_paths.some((repositoryPath) =>
         candidate.assessment.contextPaths.includes(repositoryPath)
-      )
-    );
+      );
+      const conflicts = explicitImplementation
+        ? attachmentHasPathExclusion(candidate, cluster.implementation_paths)
+        : attachmentConflictsWithExclusions(
+          candidate,
+          cluster.implementation_paths,
+          cluster.cluster_key,
+        );
+      return !conflicts && clusterPaths.some((repositoryPath) =>
+        candidate.assessment.contextPaths.includes(repositoryPath)
+      );
+    });
     if (direct.length > 0) {
       for (const candidate of direct) {
         add(candidate.concern.concern, clusterPaths, "tracked path-local implementation/test mirror");
       }
+      continue;
+    }
+    const javaDependencyOwners = directDependencyConcerns({
+      implementationPaths: cluster.implementation_paths,
+      candidates,
+      edges: javaEdges,
+      facades,
+      label: cluster.cluster_key,
+    });
+    if (javaDependencyOwners.length > 0) {
+      for (const dependencyOwner of javaDependencyOwners) {
+        add(
+          dependencyOwner.concern.concern,
+          clusterPaths,
+          "direct tracked dependency to accepted concern evidence",
+        );
+      }
+      continue;
+    }
+    const dependencyOwner = selectUniqueDirectDependencyConcern({
+      implementationPaths: cluster.implementation_paths,
+      candidates,
+      edges: moduleEdges,
+      facades,
+      label: cluster.cluster_key,
+    });
+    if (dependencyOwner === "unresolved") continue;
+    if (dependencyOwner !== null) {
+      add(
+        dependencyOwner.concern.concern,
+        clusterPaths,
+        "direct relative module dependency to accepted concern evidence",
+      );
       continue;
     }
     const selected = selectUniqueConcern({
@@ -993,6 +1606,24 @@ function inferRepositoryConcernAttachments(input: {
         selected.concern.concern,
         clusterPaths,
         "unique path-local and semantic match to accepted concern evidence",
+      );
+    }
+  }
+
+  for (const repositoryPath of input.structuralHighSignal) {
+    if (rejected(repositoryPath)) continue;
+    const dependencyOwners = directDependencyConcerns({
+      implementationPaths: [repositoryPath],
+      candidates,
+      edges: javaEdges,
+      facades,
+      label: filenameStem(repositoryPath),
+    });
+    for (const dependencyOwner of dependencyOwners) {
+      add(
+        dependencyOwner.concern.concern,
+        [repositoryPath],
+        "direct tracked dependency to accepted concern evidence",
       );
     }
   }
@@ -1044,15 +1675,127 @@ function rejectionCoversPath(
   ) {
     return true;
   }
-  return rejection.why_rejected.includes(candidate);
+  const escaped = candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const exactPathMention = new RegExp(`(^|[^A-Za-z0-9._/-])${escaped}(?=$|[^A-Za-z0-9._/-])`);
+  return exactPathMention.test(rejection.candidate);
 }
 
-function pathsMentionedByRejections(map: CodebaseMap, candidates: readonly string[]): string[] {
-  const mentioned = new Set<string>();
-  const rejections = map.concern_evidence?.not_concerns ?? [];
-  for (const candidate of candidates) {
-    if (rejections.some((entry) => rejectionCoversPath(entry, candidate))) mentioned.add(candidate);
+function symbolBackedRejectionPaths(
+  rejections: readonly NonNullable<CodebaseMap["concern_evidence"]>["not_concerns"][number][],
+  candidates: readonly string[],
+  cwd: string,
+): Set<string> {
+  const declarationCandidates = candidates.filter((repositoryPath) => !isTestRepositoryPath(repositoryPath))
+    .map((repositoryPath) => ({ repositoryPath,
+      symbol: path.posix.basename(repositoryPath).replace(/\.[^.]+$/, "") }))
+    .filter(({ symbol }) => /^[A-Za-z_$][A-Za-z0-9_$]{3,}$/.test(symbol)
+      && rejections.some((rejection) => new RegExp(`\\b${symbol}\\b`).test(rejection.candidate)));
+  const sources = repositoryBlobsAtHead(cwd, declarationCandidates.map(candidate => candidate.repositoryPath));
+  const declarations = new Map<string, string[]>();
+  for (const { repositoryPath, symbol } of declarationCandidates) {
+    const source = sources.get(repositoryPath);
+    if (source === undefined) continue;
+    const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (!new RegExp(`\\b(?:class|record|interface|enum|trait|struct|module|def|function|fn|func|type)\\s+${escaped}\\b`)
+      .test(source)) continue;
+    const paths = declarations.get(symbol) ?? [];
+    paths.push(repositoryPath);
+    declarations.set(symbol, paths);
   }
+  const unique = [...declarations].flatMap(([symbol, paths]) => paths.length === 1 ? [{ symbol, path: paths[0]! }] : []);
+  const matched = new Set<string>();
+  for (const rejection of rejections) {
+    const definitions = unique.filter(({ symbol }) => new RegExp(`\\b${symbol}\\b`).test(rejection.candidate));
+    for (const definition of definitions) matched.add(definition.path);
+    const possibleTests = candidates.filter((repositoryPath) => isTestRepositoryPath(repositoryPath)
+      && definitions.some(({ symbol }) => path.posix.basename(repositoryPath).includes(symbol)));
+    const testSources = repositoryBlobsAtHead(cwd, possibleTests);
+    for (const testPath of possibleTests) {
+      const source = testSources.get(testPath);
+      if (source !== undefined && definitions.some(({ symbol }) => new RegExp(`\\b${symbol}\\b`).test(source))) {
+        matched.add(testPath);
+      }
+    }
+  }
+  return matched;
+}
+
+function concreteTouchpointSymbols(value: string | null): Set<string> {
+  if (value === null) return new Set();
+  return new Set(value.split(/[,/|]/).map((candidate) =>
+    candidate.trim().replace(/\(\)$/, "")
+  ).filter((candidate) =>
+    /^[A-Za-z_$][A-Za-z0-9_$]*(?:(?:::|[.#])[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(candidate)
+  ));
+}
+
+export function concernEvidencePaths(concern: ConcernRecord): string[] {
+  return [...new Set([
+    ...concern.touchpoints.map((touchpoint) => touchpoint.path),
+    ...concern.flows.flatMap((flow) => flow.steps.map((step) => step.path)),
+    ...concern.invariants.map((invariant) => invariant.reference),
+    ...concern.pitfalls.map((pitfall) => pitfall.reference),
+  ])].sort((left, right) => left.localeCompare(right));
+}
+
+/** Reject definite contradictions; lexical presence is not a semantic proof. */
+export function assessConcernGrounding(concern: ConcernRecord, cwd: string): string[] {
+  const citedPaths = concernEvidencePaths(concern);
+  const tracked = trackedRegularFilesAtHead(cwd, citedPaths);
+  if (tracked === null) return ["cannot verify concern evidence against repository HEAD"];
+  const reasons = citedPaths.filter((repositoryPath) => {
+    const normalized = normalizeRepositoryPathSyntax(repositoryPath);
+    return normalized === null || !tracked.files.has(normalized);
+  }).map((repositoryPath) => `concern evidence is not a regular tracked HEAD file: ${repositoryPath}`);
+  const claims = concern.touchpoints.flatMap((touchpoint) => {
+    const repositoryPath = normalizeRepositoryPathSyntax(touchpoint.path);
+    if (repositoryPath === null || !tracked.files.has(repositoryPath)) return [];
+    const symbols = [...concreteTouchpointSymbols(touchpoint.symbol)];
+    return symbols.length === 0 ? [] : [{ path: repositoryPath, symbols }];
+  });
+  const blobs = repositoryBlobsAtHead(cwd, [...new Set([
+    ...claims.map((claim) => claim.path),
+    ...concern.flows.flatMap((flow) => flow.steps.map((step) => step.path)),
+  ])]);
+  for (const flow of concern.flows) {
+    if (flow.steps.length > 0 && flow.steps.every((step) => {
+      const source = blobs.get(step.path);
+      return source !== undefined && isPureRelativeReexport(source);
+    })) {
+      reasons.push(`flow "${flow.name}" only lists re-export facades; trace the delegated implementation through its effect`);
+    }
+  }
+  for (const claim of claims) {
+    const source = blobs.get(claim.path);
+    if (source === undefined) {
+      reasons.push(`cannot read bounded HEAD evidence for symbols in ${claim.path}`);
+      continue;
+    }
+    const identifiers = new Set(source.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) ?? []);
+    for (const symbol of claim.symbols) {
+      if (symbol.split(/::|[.#]/).some((part) => !identifiers.has(part))) {
+        reasons.push(`claimed symbol ${symbol} is absent from HEAD file ${claim.path}`);
+      }
+    }
+  }
+  return reasons;
+}
+
+function pathsMentionedByRejections(
+  map: CodebaseMap,
+  candidates: readonly string[],
+  acceptedConcerns: readonly ConcernRecord[],
+  cwd: string | undefined,
+): string[] {
+  const mentioned = new Set<string>();
+  const rejections = (map.concern_evidence?.not_concerns ?? [])
+    .filter((entry) =>
+      isSubstantiveConcernRejection(entry.why_rejected)
+      && rejectionHasGroundedDisposition(entry, acceptedConcerns)
+    );
+  const symbolBacked = cwd === undefined ? new Set<string>() : symbolBackedRejectionPaths(rejections, candidates, cwd);
+  for (const candidate of candidates) if (symbolBacked.has(candidate)
+    || rejections.some((entry) => rejectionCoversPath(entry, candidate))) mentioned.add(candidate);
   return [...mentioned].sort((left, right) => left.localeCompare(right));
 }
 
@@ -1099,9 +1842,11 @@ export function assessSpecialistEvidence(
       uncovered_paths: [],
       accepted_concerns: [],
       rejected_concerns: [],
+      auxiliary_duplicate_concerns: [],
       repository_clusters: [],
       uncovered_clusters: [],
       attachments: [],
+      core_ownership_resolutions: [],
     };
   }
 
@@ -1122,9 +1867,23 @@ export function assessSpecialistEvidence(
     ...structuralHighSignal,
     ...clusterPaths,
   ])].sort((left, right) => left.localeCompare(right));
-  const assessments = map.concern_evidence.concerns.map((concern) =>
-    assessConcern(concern, resolvePath)
-  );
+  const assessments = map.concern_evidence.concerns.map((concern) => {
+    const assessment = assessConcern(concern, resolvePath);
+    if (options?.cwd !== undefined) {
+      const grounding = assessConcernGrounding(concern, options.cwd);
+      assessment.reasons.push(...grounding);
+      if (grounding.length > 0) {
+        assessment.eligible = false;
+        // A candidate with no tracked core was already outside repository
+        // ownership. Contradictions in an otherwise owned behavior need repair,
+        // not automatic retirement and reassignment to an adjacent specialist.
+        if (assessment.corePaths.length > 0) {
+          reasons.push(`concern "${concern.concern}" has unresolved source contradictions: ${grounding.join("; ")}`);
+        }
+      }
+    }
+    return assessment;
+  });
   const accepted = assessments.filter((assessment) => assessment.eligible);
   const rejected = assessments
     .filter((assessment) => !assessment.eligible)
@@ -1132,18 +1891,74 @@ export function assessSpecialistEvidence(
       concern: assessment.concern,
       reasons: assessment.reasons,
     }));
+  const concernsByName = new Map(
+    map.concern_evidence.concerns.map((concern) => [concern.concern, concern]),
+  );
+  const acceptedConcernRecords = accepted.flatMap((assessment) => {
+    const concern = concernsByName.get(assessment.concern);
+    return concern === undefined ? [] : [concern];
+  });
+  const portfolioTokens = new Map(accepted.flatMap((assessment) => {
+    const concern = concernsByName.get(assessment.concern);
+    return concern === undefined ? [] : [[
+      assessment.concern,
+      semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`),
+    ] as const];
+  }));
+  const auxiliaryDuplicateConcerns: AuxiliaryDuplicateConcern[] = [];
+  for (const assessment of accepted) {
+    if (
+      assessment.corePaths.length === 0
+      || !assessment.corePaths.every(auxiliaryRepositoryPath)
+    ) {
+      continue;
+    }
+    const tokens = portfolioTokens.get(assessment.concern);
+    if (tokens === undefined) continue;
+    const overlapping = accepted.filter((candidate) => {
+      if (
+        candidate.concern === assessment.concern
+        || !candidate.corePaths.some(independentCoreImplementationPath)
+      ) {
+        return false;
+      }
+      const other = portfolioTokens.get(candidate.concern);
+      if (other === undefined) return false;
+      const thirdPartyTokens = accepted
+        .filter((entry) =>
+          entry.concern !== assessment.concern && entry.concern !== candidate.concern
+        )
+        .flatMap((entry) => [...(portfolioTokens.get(entry.concern) ?? [])]);
+      return [...tokens].filter((token) =>
+        [...other].some((otherToken) => tokensRelated(token, otherToken))
+        && !thirdPartyTokens.some((otherToken) => tokensRelated(token, otherToken))
+      ).length >= 2;
+    });
+    if (overlapping.length > 0) {
+      auxiliaryDuplicateConcerns.push({
+        concern: assessment.concern,
+        paths: [...assessment.contextPaths],
+        overlapping_concerns: overlapping.map((candidate) => candidate.concern),
+      });
+      reasons.push(
+        `auxiliary-only accepted concern "${assessment.concern}" overlaps implementation-owned concern(s) ${overlapping.map((candidate) => `"${candidate.concern}"`).join(", ")}; attach the auxiliary evidence to the implementing behavior or reject the narrower candidate substantively`,
+      );
+    }
+  }
   // Inferred attachments depend on an exact tracked repository tree. Without
   // one (for example schema-only callers and degraded non-Git fixtures), only
   // explicit concern evidence may satisfy semantic closure. This prevents
   // filename or directory heuristics from silently absorbing distinct public
   // surfaces such as help rendering or type declarations.
-  const attachments = repository.trackedFiles === undefined
+  const attachments = repository.trackedFiles === undefined || repository.cwd === undefined
     ? []
     : inferRepositoryConcernAttachments({
       map,
       accepted,
       clusters: repositoryClusters,
       structuralHighSignal,
+      cwd: repository.cwd,
+      trackedFiles: repository.trackedFiles,
     });
   const contextualPaths = new Set([
     ...accepted.flatMap((assessment) => assessment.contextPaths),
@@ -1152,20 +1967,273 @@ export function assessSpecialistEvidence(
   const coreOwnedPaths = new Set(
     accepted.flatMap((assessment) => assessment.corePaths),
   );
+  const coreOwnersByPath = new Map<string, string[]>();
+  for (const assessment of accepted) {
+    for (const repositoryPath of assessment.corePaths) {
+      const owners = coreOwnersByPath.get(repositoryPath) ?? [];
+      owners.push(assessment.concern);
+      coreOwnersByPath.set(repositoryPath, owners);
+    }
+  }
+  const coreOwnershipResolutions: RepositoryCoreOwnershipResolution[] = [];
+  const ownershipResolutionByPath = new Map<string, RepositoryCoreOwnershipResolution>();
+  const addOwnershipResolution = (resolution: RepositoryCoreOwnershipResolution): void => {
+    if (ownershipResolutionByPath.has(resolution.path)) return;
+    ownershipResolutionByPath.set(resolution.path, resolution);
+    coreOwnershipResolutions.push(resolution);
+  };
+  const retainsUnsharedCoreImplementation = (
+    concernName: string,
+    sharedPath: string,
+  ): boolean => accepted.find((assessment) => assessment.concern === concernName)
+    ?.corePaths.some((candidate) =>
+      candidate !== sharedPath
+      && independentCoreImplementationPath(candidate)
+      && (coreOwnersByPath.get(candidate)?.length ?? 0) === 1
+    ) === true;
+  for (const [repositoryPath, owners] of coreOwnersByPath) {
+    if (owners.length <= 1) continue;
+    const symbolClaims = owners.map((owner) => {
+      const concern = concernsByName.get(owner);
+      const symbols = new Set((concern?.touchpoints ?? []).flatMap((touchpoint) => {
+        if (
+          touchpoint.centrality !== "core"
+          || resolvePath(touchpoint.path) !== repositoryPath
+        ) return [];
+        return [...concreteTouchpointSymbols(touchpoint.symbol)];
+      }));
+      return { owner, symbols };
+    });
+    const dominant = symbolClaims.filter((claimant) =>
+      claimant.symbols.size > 0
+      && symbolClaims.every((other) =>
+        other.owner === claimant.owner
+        || (
+          other.symbols.size > 0
+          && claimant.symbols.size > other.symbols.size
+          && [...other.symbols].every((symbol) => claimant.symbols.has(symbol))
+        )
+      )
+    );
+    if (dominant.length === 1) {
+      addOwnershipResolution({
+        concern: dominant[0]!.owner,
+        path: repositoryPath,
+        reason:
+          "the selected concern cites a strict superset of every competing concrete symbol claim in this shared file",
+      });
+      continue;
+    }
+    const soleDependentOwners = accepted.filter((assessment) =>
+      owners.includes(assessment.concern)
+      && assessment.corePaths.length === 1
+      && assessment.corePaths[0] === repositoryPath
+    );
+    if (
+      eligibleImplementationPath(repositoryPath)
+      && soleDependentOwners.length === 1
+      && owners
+        .filter((owner) => owner !== soleDependentOwners[0]!.concern)
+        .every((owner) => retainsUnsharedCoreImplementation(owner, repositoryPath))
+    ) {
+      addOwnershipResolution({
+        concern: soleDependentOwners[0]!.concern,
+        path: repositoryPath,
+        reason:
+          "the selected concern has no other core implementation path while every adjacent concern retains independent core ownership",
+      });
+      continue;
+    }
+    const dependentSupportingClaimants = accepted.filter((assessment) =>
+      !owners.includes(assessment.concern)
+      && assessment.contextPaths.includes(repositoryPath)
+      && !assessment.corePaths.some(independentCoreImplementationPath)
+    );
+    const everyCurrentOwnerRetainsImplementation = owners.every((owner) =>
+      retainsUnsharedCoreImplementation(owner, repositoryPath)
+    );
+    if (
+      eligibleImplementationPath(repositoryPath)
+      && dependentSupportingClaimants.length === 1
+      && everyCurrentOwnerRetainsImplementation
+    ) {
+      addOwnershipResolution({
+        concern: dependentSupportingClaimants[0]!.concern,
+        path: repositoryPath,
+        reason:
+          "the selected concern is the sole supporting claimant without another core implementation while every current core owner retains independent implementation ownership",
+      });
+    }
+  }
+  const concernByName = concernsByName;
+  const explicitTouchpointsByConcern = new Map(accepted.map((assessment) => {
+    const concern = concernByName.get(assessment.concern);
+    const paths = new Set((concern?.touchpoints ?? []).flatMap((touchpoint) => {
+      const repositoryPath = resolvePath(touchpoint.path);
+      return repositoryPath === null ? [] : [repositoryPath];
+    }));
+    return [assessment.concern, paths] as const;
+  }));
+  for (const cluster of repositoryClusters) {
+    const clusterPaths = [...new Set([...cluster.implementation_paths, ...cluster.test_paths])];
+    if (clusterPaths.length < 2) continue;
+    const completeClaimants = accepted.filter((assessment) => {
+      const explicitPaths = explicitTouchpointsByConcern.get(assessment.concern);
+      const concern = concernByName.get(assessment.concern);
+      return explicitPaths !== undefined
+        && concern !== undefined
+        && clusterPaths.every((repositoryPath) => explicitPaths.has(repositoryPath))
+        && matchingTokenCount(
+          pathSemanticTokens(cluster.implementation_paths, cluster.cluster_key),
+          semanticTokens(concern.excludes),
+        ) === 0;
+    });
+    if (completeClaimants.length !== 1) continue;
+    const claimant = completeClaimants[0]!;
+    const hasConflictingCoreOwner = clusterPaths.some((repositoryPath) =>
+      (coreOwnersByPath.get(repositoryPath) ?? [])
+        .some((owner) => owner !== claimant.concern)
+      && ownershipResolutionByPath.get(repositoryPath)?.concern !== claimant.concern
+    );
+    if (hasConflictingCoreOwner) continue;
+    for (const repositoryPath of clusterPaths) {
+      addOwnershipResolution({
+        concern: claimant.concern,
+        path: repositoryPath,
+        reason:
+          `the selected concern is the only accepted concern that explicitly cites every tracked path in mirrored cluster ${cluster.cluster_key}`,
+      });
+    }
+  }
+  for (const assessment of accepted) {
+    if (assessment.corePaths.length === 0 || !assessment.corePaths.every(isTestRepositoryPath)) continue;
+    const uniqueImplementationPaths = assessment.contextPaths.filter((repositoryPath) =>
+      !isTestRepositoryPath(repositoryPath)
+      && eligibleImplementationPath(repositoryPath)
+      && accepted.filter((candidate) => candidate.contextPaths.includes(repositoryPath)).length === 1
+      && (coreOwnersByPath.get(repositoryPath) ?? []).every((owner) => owner === assessment.concern)
+    );
+    if (uniqueImplementationPaths.length !== 1) continue;
+    addOwnershipResolution({
+      concern: assessment.concern,
+      path: uniqueImplementationPaths[0]!,
+      reason:
+        "the selected concern is the only accepted concern that cites this tracked implementation while its prior core evidence is test-only",
+    });
+  }
+  const typeTrace = map.type_contract_surface.one_type_trace;
+  const typeTracePaths = typeTrace === null ? [] : [...new Set([
+    ...(map.type_contract_surface.type_definitions ?? []),
+    ...map.type_contract_surface.typescript_interfaces,
+    ...map.type_contract_surface.pydantic_models,
+    ...map.type_contract_surface.db_models,
+  ].filter((entry) => entry.name === typeTrace.name)
+    .flatMap((entry) => {
+      const repositoryPath = resolvePath(entry.path);
+      return repositoryPath === null ? [] : [repositoryPath];
+    }))];
+  const typeTracePath = typeTracePaths.length === 1 ? typeTracePaths[0]! : null;
+  if (typeTrace !== null && typeTracePath !== null) {
+    const runtimeOwners = new Set(typeTrace.flow.flatMap((step) => {
+      const cited = resolvePath(step.match(/^([^:]+?)(?::(?:\s|$)|$)/)?.[1]);
+      if (cited === null || cited === typeTracePath) return [];
+      const normalizedOwner = ownershipResolutionByPath.get(cited)?.concern;
+      if (normalizedOwner !== undefined) return [normalizedOwner];
+      const owners = coreOwnersByPath.get(cited) ?? [];
+      return owners.length === 1 ? owners : [];
+    }));
+    if (runtimeOwners.size === 1) {
+      const concern = [...runtimeOwners][0]!;
+      addOwnershipResolution({
+        concern,
+        path: typeTracePath,
+        reason:
+          "the observed public type trace reaches runtime files with one unambiguous normalized core owner",
+      });
+      const attachment = attachments.find((entry) => entry.concern === concern);
+      if (attachment === undefined) {
+        attachments.push({
+          concern,
+          paths: [typeTracePath],
+          reason: "observed public type trace to one runtime core owner",
+        });
+      } else if (!attachment.paths.includes(typeTracePath)) {
+        attachment.paths.push(typeTracePath);
+        attachment.paths.sort((left, right) => left.localeCompare(right));
+      }
+      contextualPaths.add(typeTracePath);
+    }
+  }
+  for (const [repositoryPath, owners] of coreOwnersByPath) {
+    if (owners.length <= 1 || ownershipResolutionByPath.has(repositoryPath)) continue;
+    reasons.push(
+      `tracked file ${repositoryPath} has multiple core owners: ${owners.sort((left, right) => left.localeCompare(right)).join(", ")}; retain exactly one defensible core owner and mark adjacent touchpoints supporting`,
+    );
+  }
+  for (const resolution of coreOwnershipResolutions) coreOwnedPaths.add(resolution.path);
+  for (const assessment of accepted) {
+    const implementationContext = assessment.contextPaths.filter((repositoryPath) =>
+      !isTestRepositoryPath(repositoryPath) && eligibleImplementationPath(repositoryPath)
+    );
+    const hasResolvedImplementationOwner = implementationContext.some((repositoryPath) =>
+      ownershipResolutionByPath.get(repositoryPath)?.concern === assessment.concern
+    );
+    if (
+      assessment.corePaths.length > 0
+      && assessment.corePaths.every(isTestRepositoryPath)
+      && implementationContext.length > 0
+      && !hasResolvedImplementationOwner
+    ) {
+      reasons.push(
+        `accepted concern "${assessment.concern}" has test-only core ownership despite tracked implementation context: ${implementationContext.join(", ")}; assign core ownership to the implementing behavior, merge the duplicate concern, or reject it substantively`,
+      );
+    }
+  }
   const explicitOwnersByPath = new Map<string, Set<string>>();
   for (const assessment of accepted) {
+    const concern = concernsByName.get(assessment.concern);
+    const candidate = concern === undefined ? undefined : {
+      concern,
+      assessment,
+      tokens: concernSemanticTokens(concern),
+      scopeTokens: semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`),
+      excludedTokens: semanticTokens(concern.excludes),
+      exclusionPaths: concernExclusionPaths(concern, repository.trackedFiles),
+    };
     for (const repositoryPath of assessment.contextPaths) {
+      const touchpoint = concern?.touchpoints.find((entry) =>
+        resolvePath(entry.path) === repositoryPath
+      );
+      if (
+        candidate !== undefined
+        && touchpoint?.centrality === "supporting"
+        && attachmentHasPathExclusion(candidate, [repositoryPath])
+      ) continue;
       const owners = explicitOwnersByPath.get(repositoryPath) ?? new Set<string>();
       owners.add(assessment.concern);
       explicitOwnersByPath.set(repositoryPath, owners);
     }
   }
 
+  const requiredCorePaths = new Set([
+    ...repositoryClusters.filter((cluster) => cluster.kind !== undefined)
+      .flatMap((cluster) => cluster.implementation_paths),
+    ...[
+      ...(map.type_contract_surface.type_definitions ?? []),
+      ...map.type_contract_surface.typescript_interfaces,
+      ...map.type_contract_surface.pydantic_models,
+      ...map.type_contract_surface.db_models,
+      ...(map.type_contract_surface.api_contracts ?? []),
+    ].flatMap((entry) => {
+      const repositoryPath = resolvePath(entry.path);
+      return repositoryPath === null ? [] : [repositoryPath];
+    }),
+  ]);
   const coveredSet = new Set<string>();
   for (const cluster of repositoryClusters) {
     const implementationsCovered = cluster.implementation_paths.every((repositoryPath) => {
       const explicitOwnerCount = explicitOwnersByPath.get(repositoryPath)?.size ?? 0;
-      return explicitOwnerCount > 1
+      return explicitOwnerCount > 1 || requiredCorePaths.has(repositoryPath)
         ? coreOwnedPaths.has(repositoryPath)
         : contextualPaths.has(repositoryPath);
     });
@@ -1176,23 +2244,38 @@ export function assessSpecialistEvidence(
     }
   }
   for (const repositoryPath of structuralHighSignal) {
-    if (!isGenericPlumbing(repositoryPath) && contextualPaths.has(repositoryPath)) {
+    if (
+      requiredCorePaths.has(repositoryPath)
+        ? coreOwnedPaths.has(repositoryPath)
+        : !isGenericPlumbing(repositoryPath) && contextualPaths.has(repositoryPath)
+    ) {
       coveredSet.add(repositoryPath);
     }
   }
   const covered = [...coveredSet].sort((left, right) => left.localeCompare(right));
-  const exempted = pathsMentionedByRejections(map, highSignal);
+  const exempted = pathsMentionedByRejections(map, highSignal, acceptedConcernRecords, repository.cwd);
   const exemptedSet = new Set(exempted);
   const uncovered = highSignal.filter((candidate) =>
     !coveredSet.has(candidate)
     && !exemptedSet.has(candidate)
-    && (!isGenericPlumbing(candidate) || clusterObligationPaths.has(candidate))
+    && (!isGenericPlumbing(candidate) || clusterObligationPaths.has(candidate) || requiredCorePaths.has(candidate))
   );
+  const unownedSurfaces = uncovered.filter((repositoryPath) => requiredCorePaths.has(repositoryPath));
+  if (unownedSurfaces.length > 0) {
+    reasons.push(
+      `${unownedSurfaces.length} public/workspace surfaces require a core owner or substantive rejection: `
+      + `${unownedSurfaces.slice(0, 12).join(", ")}; supporting touchpoints alone do not establish core ownership`,
+    );
+  }
   const uncoveredSet = new Set(uncovered);
-  const uncoveredClusters = repositoryClusters.filter((cluster) =>
-    [...cluster.implementation_paths, ...cluster.test_paths]
-      .some((candidate) => uncoveredSet.has(candidate))
-  );
+  const uncoveredClusters = prioritizeRepositoryClusters({
+    clusters: repositoryClusters.filter((cluster) =>
+      [...cluster.implementation_paths, ...cluster.test_paths]
+        .some((candidate) => uncoveredSet.has(candidate))
+    ),
+    cwd: repository.cwd,
+    trackedFiles: repository.trackedFiles,
+  });
 
   if (
     map.meta.project_type.trim().length === 0
@@ -1219,6 +2302,17 @@ export function assessSpecialistEvidence(
     if (seen.has(key)) reasons.push(`duplicate concern name: ${concern.concern}`);
     seen.add(key);
   }
+  for (const rejection of map.concern_evidence.not_concerns) {
+    if (!isSubstantiveConcernRejection(rejection.why_rejected)) {
+      reasons.push(
+        `not_concerns candidate "${rejection.candidate}" does not contain a substantive rejection`,
+      );
+    } else if (!rejectionHasGroundedDisposition(rejection, acceptedConcernRecords)) {
+      reasons.push(
+        `not_concerns candidate "${rejection.candidate}" delegates behavior to "${rejection.grouped_into ?? delegatedOwnerDescription(rejection.why_rejected)}", but no accepted concern semantically matches that disposition`,
+      );
+    }
+  }
 
   const concerns = map.concern_evidence.concerns;
   if (concerns.length === 0) {
@@ -1242,7 +2336,9 @@ export function assessSpecialistEvidence(
 
   const areas = topLevelAreas(highSignal);
   const pathBackedRejections = map.concern_evidence.not_concerns.filter((entry) =>
-    highSignal.some((candidate) => rejectionCoversPath(entry, candidate))
+    isSubstantiveConcernRejection(entry.why_rejected)
+    && rejectionHasGroundedDisposition(entry, acceptedConcernRecords)
+    && highSignal.some((candidate) => rejectionCoversPath(entry, candidate))
   ).length;
   if (
     accepted.length === 1
@@ -1284,10 +2380,215 @@ export function assessSpecialistEvidence(
     accepted_concerns: accepted.map((assessment) => assessment.concern)
       .sort((left, right) => left.localeCompare(right)),
     rejected_concerns: rejected.sort((left, right) => left.concern.localeCompare(right.concern)),
+    auxiliary_duplicate_concerns: auxiliaryDuplicateConcerns,
     repository_clusters: repositoryClusters,
     uncovered_clusters: uncoveredClusters,
     attachments,
+    core_ownership_resolutions: coreOwnershipResolutions,
   };
+}
+
+export function reconcileExplicitlyRetainedCandidates(map: CodebaseMap): CodebaseMap {
+  if (map.concern_evidence === undefined) return map;
+  const concernTokens = map.concern_evidence.concerns.map((concern) =>
+    semanticTokens(`${concern.concern} ${concern.one_line} ${concern.covers}`)
+  );
+  const notConcerns = map.concern_evidence.not_concerns.filter((entry) => {
+    if (!explicitlyAcceptsConcern(entry.why_rejected)) return true;
+    const candidateTokens = semanticTokens(entry.candidate);
+    return !concernTokens.some((tokens) =>
+      matchingTokenCount(candidateTokens, tokens) >= 2
+    );
+  });
+  if (notConcerns.length === map.concern_evidence.not_concerns.length) return map;
+  return {
+    ...map,
+    concern_evidence: {
+      concerns: map.concern_evidence.concerns,
+      not_concerns: notConcerns,
+    },
+  };
+}
+
+/**
+ * Retire an accepted concern only after a grounded delegated rejection names
+ * one retained owner that already preserves its core paths and verified flow
+ * structure. This makes model-requested grouping a checked normalization, not
+ * a deletion mechanism.
+ */
+export function reconcileSubsumedConcernEvidence(map: CodebaseMap): CodebaseMap {
+  const evidence = map.concern_evidence;
+  if (evidence === undefined) return map;
+  const concerns = [...evidence.concerns];
+  let notConcerns = evidence.not_concerns;
+  const retired = new Set<string>();
+  const groupedOwners = new Set<string>();
+  const appendUnique = <T>(left: readonly T[], right: readonly T[]): T[] => {
+    const seen = new Set(left.map((entry) => JSON.stringify(entry)));
+    return [...left, ...right.filter((entry) => {
+      const identity = JSON.stringify(entry);
+      if (seen.has(identity)) return false;
+      seen.add(identity);
+      return true;
+    })];
+  };
+  for (let index = 0; index < notConcerns.length; index += 1) {
+    const rejection = notConcerns[index]!;
+    if (
+      !isSubstantiveConcernRejection(rejection.why_rejected)
+      || rejection.grouped_into === undefined
+    ) continue;
+    const sourceIndex = concerns.findIndex((concern) =>
+      concern.concern.trim().toLowerCase() === rejection.candidate.trim().toLowerCase()
+    );
+    const ownerIndex = concerns.findIndex((concern) =>
+      concern.concern === rejection.grouped_into
+    );
+    if (sourceIndex < 0 || ownerIndex < 0 || sourceIndex === ownerIndex) continue;
+    const source = concerns[sourceIndex]!;
+    const owner = concerns[ownerIndex]!;
+    const ownerCorePaths = new Set(owner.touchpoints.flatMap((touchpoint) => {
+      const repositoryPath = normalizeRepositoryPathSyntax(touchpoint.path);
+      return touchpoint.centrality === "core" && repositoryPath !== null ? [repositoryPath] : [];
+    }));
+    const sharesCore = source.touchpoints.some((touchpoint) => {
+      const repositoryPath = normalizeRepositoryPathSyntax(touchpoint.path);
+      return touchpoint.centrality === "core"
+        && repositoryPath !== null
+        && ownerCorePaths.has(repositoryPath);
+    });
+    if (!sharesCore) continue;
+    const ownerFlows = new Map(owner.flows.map((flow) => [
+      flow.name.trim().toLowerCase(),
+      flow.steps.map((step) => step.path).join("\0"),
+    ]));
+    if (source.flows.some((flow) => {
+      const existing = ownerFlows.get(flow.name.trim().toLowerCase());
+      return existing !== undefined && existing !== flow.steps.map((step) => step.path).join("\0");
+    })) continue;
+    concerns[ownerIndex] = {
+      ...owner,
+      one_line: `${owner.one_line} ${source.one_line}`,
+      covers: `${owner.covers} Also covers: ${source.covers}`,
+      flows: appendUnique(owner.flows, source.flows),
+      touchpoints: appendUnique(owner.touchpoints, source.touchpoints),
+      invariants: appendUnique(owner.invariants, source.invariants),
+      pitfalls: appendUnique(owner.pitfalls, source.pitfalls),
+      entry_questions: appendUnique(owner.entry_questions, source.entry_questions),
+      validation: appendUnique(owner.validation, source.validation),
+      spans_subtrees: [...new Set([...owner.spans_subtrees, ...source.spans_subtrees])].sort(),
+      last_updated: owner.last_updated > source.last_updated ? owner.last_updated : source.last_updated,
+    };
+    concerns.splice(sourceIndex, 1);
+    // The verified owner now retains this body's paths and flows. Preserve
+    // explicit delegations too, including later steps in a grouping chain.
+    notConcerns = notConcerns.map(entry => entry.grouped_into === source.concern
+      ? { ...entry, grouped_into: owner.concern } : entry);
+    retired.add(source.concern.trim().toLowerCase());
+    groupedOwners.add(owner.concern.trim().toLowerCase());
+  }
+  if (retired.size === 0) return map;
+  const remainingNames = concerns.map((concern) => concern.concern);
+  const normalizedConcerns = concerns.map((concern) => groupedOwners.has(concern.concern.trim().toLowerCase())
+    ? {
+        ...concern,
+        excludes: `Adjacent accepted concerns remain separate: ${remainingNames.filter((name) => name !== concern.concern).join(", ")}.`,
+      }
+    : concern);
+  return {
+    ...map,
+    concern_evidence: {
+      ...evidence,
+      concerns: normalizedConcerns,
+      not_concerns: notConcerns,
+    },
+  };
+}
+
+export function reconcileAuxiliaryDuplicateConcerns(
+  map: CodebaseMap,
+  assessment: SpecialistEvidenceAssessment,
+): CodebaseMap {
+  if (
+    assessment.source !== "concern_evidence"
+    || map.concern_evidence === undefined
+    || assessment.auxiliary_duplicate_concerns.length === 0
+  ) {
+    return map;
+  }
+  const duplicateNames = new Set(
+    assessment.auxiliary_duplicate_concerns.map((duplicate) => duplicate.concern),
+  );
+  const concerns = map.concern_evidence.concerns.filter((concern) =>
+    !duplicateNames.has(concern.concern)
+  );
+  const notConcerns = [...map.concern_evidence.not_concerns];
+  const existing = new Set(notConcerns.map((entry) => entry.candidate.trim().toLowerCase()));
+  for (const duplicate of assessment.auxiliary_duplicate_concerns) {
+    for (const candidate of [duplicate.concern, ...duplicate.paths]) {
+      if (existing.has(candidate.trim().toLowerCase())) continue;
+      existing.add(candidate.trim().toLowerCase());
+      notConcerns.push({
+        candidate,
+        why_rejected:
+          `Trusted normalization rejected this auxiliary-only candidate because its tracked evidence (${duplicate.paths.join(", ")}) overlaps implementation-owned concern(s) ${duplicate.overlapping_concerns.join(", ")}; examples and fixtures are supporting evidence, not independent specialist ownership.`,
+      });
+    }
+  }
+  return {
+    ...map,
+    concern_evidence: {
+      concerns,
+      not_concerns: notConcerns,
+    },
+  };
+}
+
+export function reconcileScoutConcernIdentities(map: CodebaseMap): CodebaseMap {
+  const evidence = map.concern_evidence;
+  const proposals = map.explorer_receipts?.receipts
+    .filter((receipt) => receipt.mode === "concern_scout" && receipt.success)
+    .flatMap((receipt) => receipt.proposed_concerns ?? []) ?? [];
+  if (evidence === undefined || proposals.length === 0) return map;
+  let changed = false;
+  const occupied = new Set(evidence.concerns.map((concern) => concern.concern.trim().toLowerCase()));
+  const concerns = evidence.concerns.map((concern) => {
+    const current = concern.concern.trim();
+    const matches = proposals.filter((proposal) => {
+      const canonical = proposal.trim();
+      return canonical.length > 0
+        && current.toLowerCase().startsWith(`${canonical.toLowerCase()};`);
+    });
+    if (matches.length !== 1) return concern;
+    const canonical = matches[0]!.trim();
+    if (occupied.has(canonical.toLowerCase())) return concern;
+    changed = true;
+    return {
+      ...concern,
+      concern: canonical,
+      touchpoints: concern.touchpoints.map((touchpoint) => (
+        touchpoint.role.includes("Trusted ownership normalization")
+          ? { ...touchpoint, role: touchpoint.role.replaceAll(current, canonical) }
+          : touchpoint
+      )),
+    };
+  });
+  return changed ? { ...map, concern_evidence: { ...evidence, concerns } } : map;
+}
+
+export function removeTrustedInferredAttachments(map: CodebaseMap): CodebaseMap {
+  const evidence = map.concern_evidence;
+  if (evidence === undefined) return map;
+  let changed = false;
+  const concerns = evidence.concerns.map((concern) => {
+    const touchpoints = concern.touchpoints.filter((touchpoint) => (
+      !touchpoint.role.startsWith("Trusted semantic closure attached this tracked dependency:")
+    ));
+    if (touchpoints.length === concern.touchpoints.length) return concern;
+    changed = true;
+    return { ...concern, touchpoints };
+  });
+  return changed ? { ...map, concern_evidence: { ...evidence, concerns } } : map;
 }
 
 /**
@@ -1315,22 +2616,51 @@ export function reconcileSpecialistEvidence(
   const attachmentsByConcern = new Map(
     assessment.attachments.map((attachment) => [attachment.concern, attachment]),
   );
+  const ownershipByPath = new Map(
+    assessment.core_ownership_resolutions.map((resolution) => [resolution.path, resolution]),
+  );
   let attachmentsChanged = false;
+  let ownershipChanged = false;
   const concerns = map.concern_evidence.concerns
     .filter((concern) => accepted.has(concern.concern))
     .map((concern) => {
+      const touchpoints = concern.touchpoints.map((touchpoint) => {
+        const repositoryPath = normalizeRepositoryPathSyntax(touchpoint.path);
+        const resolution = repositoryPath === null
+          ? undefined
+          : ownershipByPath.get(repositoryPath);
+        if (resolution === undefined) return touchpoint;
+        if (resolution.concern === concern.concern) {
+          if (touchpoint.centrality === "core") return touchpoint;
+          ownershipChanged = true;
+          return {
+            ...touchpoint,
+            centrality: "core" as const,
+          };
+        }
+        if (touchpoint.centrality !== "core") return touchpoint;
+        ownershipChanged = true;
+        return {
+          ...touchpoint,
+          centrality: "supporting" as const,
+        };
+      });
       const attachment = attachmentsByConcern.get(concern.concern);
-      if (attachment === undefined) return concern;
-      const existing = new Set(concern.touchpoints.map((touchpoint) =>
+      if (attachment === undefined) {
+        return touchpoints === concern.touchpoints ? concern : { ...concern, touchpoints };
+      }
+      const existing = new Set(touchpoints.map((touchpoint) =>
         normalizeRepositoryPathSyntax(touchpoint.path) ?? touchpoint.path
       ));
       const additions = attachment.paths.filter((repositoryPath) => !existing.has(repositoryPath));
-      if (additions.length === 0) return concern;
+      if (additions.length === 0) {
+        return touchpoints === concern.touchpoints ? concern : { ...concern, touchpoints };
+      }
       attachmentsChanged = true;
       return {
         ...concern,
         touchpoints: [
-          ...concern.touchpoints,
+          ...touchpoints,
           ...additions.map((repositoryPath) => ({
             path: repositoryPath,
             symbol: null,
@@ -1356,7 +2686,9 @@ export function reconcileSpecialistEvidence(
   const openQuestions = map.open_questions.filter((question) =>
     !PLACEHOLDER_QUESTION.test(question.trim())
   );
-  const concernsChanged = concerns.length !== map.concern_evidence.concerns.length || attachmentsChanged;
+  const concernsChanged = concerns.length !== map.concern_evidence.concerns.length
+    || attachmentsChanged
+    || ownershipChanged;
   const rejectionsChanged = notConcerns.length !== map.concern_evidence.not_concerns.length;
   const questionsChanged = openQuestions.length !== map.open_questions.length;
   if (!concernsChanged && !rejectionsChanged && !questionsChanged) return map;

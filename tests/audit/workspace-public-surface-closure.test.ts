@@ -6,6 +6,7 @@ import * as path from "node:path";
 import test from "node:test";
 import {
   assessSpecialistEvidence,
+  compileSpecialistEvidence,
   type CodebaseMap,
 } from "../../src/core/audit/schema.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
@@ -133,6 +134,7 @@ test("workspace public surfaces and inline-tested modules remain semantic obliga
     const incomplete = assessSpecialistEvidence(map, { cwd });
     assert.equal(incomplete.complete, false);
     for (const repositoryPath of [
+      "axum/src/routing.rs",
       "axum-extra/src/lib.rs",
       "axum-extra/src/response/mod.rs",
       "axum-macros/src/lib.rs",
@@ -159,8 +161,78 @@ test("workspace public surfaces and inline-tested modules remain semantic obliga
         core: "axum-macros/src/lib.rs",
       }),
     );
+    for (const owner of map.concern_evidence!.concerns) {
+      for (const touchpoint of owner.touchpoints) touchpoint.centrality = "core";
+    }
     const complete = assessSpecialistEvidence(map, { cwd });
     assert.equal(complete.complete, true, complete.reasons.join("; "));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("an observed public type trace inherits one unambiguous runtime core owner", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-public-type-trace-"));
+  try {
+    write(cwd, "lib/command.js", "export class Command {}\n");
+    write(cwd, "lib/option.js", "export class Option {}\n");
+    write(cwd, "typings/index.d.ts", "export class Command {}\n");
+    write(cwd, "tests/command.test.js", "// command behavior\n");
+    git(cwd, "init", "-q");
+    git(cwd, "config", "user.name", "Agentify Test");
+    git(cwd, "config", "user.email", "agentify@example.invalid");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "-qm", "type trace fixture");
+
+    const map = workspaceMap();
+    map.meta.project_type = "JavaScript CLI library";
+    map.meta.languages = ["JavaScript", "TypeScript"];
+    map.skeleton.entry_points = [{
+      path: "lib/command.js",
+      role: "runtime command API",
+      language: "JavaScript",
+      run_command: "npm test",
+    }];
+    map.skeleton.first_5_files_for_fresh_agent = [{ path: "lib/command.js", why: "runtime API" }];
+    map.operational_surface.build.recipe_file = "lib/command.js";
+    map.concern_evidence = { concerns: [concern({
+      name: "command routing",
+      core: "lib/command.js",
+      supporting: ["tests/command.test.js"],
+    })], not_concerns: [] };
+    map.type_contract_surface.typescript_interfaces = [{
+      path: "typings/index.d.ts",
+      name: "Command",
+      fields: ["commands"],
+    }];
+    map.type_contract_surface.one_type_trace = {
+      name: "Command",
+      flow: ["typings/index.d.ts: declaration", "lib/command.js: runtime implementation"],
+    };
+
+    const supportingOnly = structuredClone(map);
+    supportingOnly.type_contract_surface.one_type_trace = null;
+    supportingOnly.concern_evidence!.concerns[0]!.touchpoints.push({
+      path: "typings/index.d.ts", symbol: "Command", role: "Adjacent public type surface.",
+      line_range: null, centrality: "supporting",
+    });
+    const unowned = compileSpecialistEvidence(supportingOnly, { cwd });
+    assert.equal(unowned.complete, false, "supporting type mentions cannot establish public core ownership");
+    assert.ok(unowned.assessment.uncovered_paths.includes("typings/index.d.ts"));
+
+    const compiled = compileSpecialistEvidence(map, { cwd });
+    assert.equal(compiled.complete, true, compiled.reasons.join("; "));
+    assert.equal(
+      compiled.map.concern_evidence?.concerns[0]?.touchpoints
+        .find((touchpoint) => touchpoint.path === "typings/index.d.ts")?.centrality,
+      "core",
+    );
+
+    map.concern_evidence.concerns.push(concern({ name: "option values", core: "lib/option.js" }));
+    map.type_contract_surface.one_type_trace!.flow.push("lib/option.js: adjacent runtime implementation");
+    const ambiguous = compileSpecialistEvidence(map, { cwd });
+    assert.equal(ambiguous.complete, false);
+    assert.ok(ambiguous.reasons.some((reason) => /typings\/index\.d\.ts/i.test(reason)));
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

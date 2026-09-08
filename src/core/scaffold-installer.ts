@@ -8,13 +8,15 @@ import {
 import type { ArtifactWrite } from "./types.ts";
 import type { RepositoryTaskPolicyConfiguration } from "./installer/contracts.ts";
 import { isAgentifyOwnedTaskPolicyFile } from "./installer/task-policy.ts";
-import { AGENTIFY_INSTALLED_CONTROL_PATHS } from "./artifacts/managed-installation-paths.ts";
+import { readBoundedRegularFile } from "./installer/bounded-regular-file.ts";
+import { AGENTIFY_ANALYSIS_CONTROL_PATHS, AGENTIFY_INSTALLED_CONTROL_PATHS } from "./artifacts/managed-installation-paths.ts";
 
 const TASK_POLICY_PORTABLE_PATH = ".github/agentify-task-policy.json";
 const RUNTIME_LOADER_PORTABLE_PATH = ".github/agentify/runtime-loader.mjs";
 const AGENTS_PORTABLE_PATH = "AGENTS.md";
 const SETUP_PORTABLE_PATH = "SETUP.md";
 const RUNTIME_VERSION_PLACEHOLDER = "__AGENTIFY_RUNTIME_VERSION__";
+const MAX_MANAGED_EXECUTABLE_BYTES = 32 * 1024 * 1024;
 
 export interface InstallScaffoldRuntimeOptions {
   cwd: string;
@@ -103,20 +105,6 @@ function packageVersion(packageRoot: string): string {
   return metadata.version;
 }
 
-function replaceDocumentationSection(
-  content: string,
-  startHeading: string,
-  endHeading: string,
-  replacement: string,
-): string {
-  const start = content.indexOf(`${startHeading}\n`);
-  const end = content.indexOf(`${endHeading}\n`, start + startHeading.length);
-  if (start < 0 || end < 0 || end <= start) {
-    throw new Error(`Agentify scaffold documentation is missing ${startHeading}`);
-  }
-  return `${content.slice(0, start)}${replacement.trimEnd()}\n\n${content.slice(end)}`;
-}
-
 function readinessAwareDocumentation(
   source: string,
   portableRelative: string,
@@ -125,53 +113,25 @@ function readinessAwareDocumentation(
   const content = fs.readFileSync(source, "utf8");
   if (configuration.configured) return content;
 
-  if (portableRelative === AGENTS_PORTABLE_PATH) {
-    const readyGuidance = [
-      "Use GitHub issues with the `agentify:queue` label to request implementation.",
-      "Agentify plans with a read-only planner and repository-specific read-only",
-      "specialists, grants exactly one builder bounded write authority, validates",
-      "deterministically, obtains an role-separated automated read-only review, and",
-      "stops at an unmerged draft pull request.",
+  // Use one disabled guide rather than retaining operational credential,
+  // queue, or learning instructions from the fully operational scaffold.
+  if (portableRelative === AGENTS_PORTABLE_PATH || portableRelative === SETUP_PORTABLE_PATH) {
+    return [
+      "<!-- agentify:managed -->",
+      "# Agentify analysis-ready repository team",
+      "",
+      "The semantically validated specialist team is installed for read-only analysis.",
+      "GitHub issue intake, PR publication, autonomous mutation, and learning are disabled.",
+      "Execution workflows and their runtimes are not installed. Do not queue work or supply Actions credentials.",
+      "Read `.agentify/agents/specialists/` for scopes, exclusions, tracked ownership, flows, invariants, and entry questions.",
+      "",
+      "## Execution enablement requirements",
+      "",
+      configuration.instructions,
+      "",
+      "Do not edit the task policy to bypass these requirements. Rerun Agentify to verify and atomically enable execution.",
+      "",
     ].join("\n");
-    const disabledGuidance = [
-      "Issue execution is disabled because the trusted repository task policy is not",
-      "configured. The orchestrator and specialists are available only for analysis.",
-      "Resolve the installer blockers and rerun Agentify verification before adding",
-      "the `agentify:queue` label or expecting a draft pull request.",
-    ].join("\n");
-    if (!content.includes(readyGuidance)) {
-      throw new Error("Agentify AGENTS.md scaffold is missing its managed work guidance");
-    }
-    return content.replace(readyGuidance, disabledGuidance);
-  }
-
-  if (portableRelative === SETUP_PORTABLE_PATH) {
-    const readyIntroduction = [
-      "Agentify is installed once for this repository. Authorized GitHub issues are",
-      "the normal work interface; do not rerun the CLI for ordinary tasks.",
-    ].join("\n");
-    const disabledIntroduction = [
-      "Agentify's repository analysis and specialist memory are installed, but issue",
-      "execution is disabled because the trusted repository task policy is not",
-      "configured. Do not queue work until the installer reports readiness `ready`.",
-    ].join("\n");
-    if (!content.includes(readyIntroduction)) {
-      throw new Error("Agentify SETUP.md scaffold is missing its managed introduction");
-    }
-    return replaceDocumentationSection(
-      content.replace(readyIntroduction, disabledIntroduction),
-      "## Queue work",
-      "## Credentials",
-      [
-        "## Issue execution disabled",
-        "",
-        "The `agentify:queue` label will not start authorized work in this state.",
-        "Resolve the installer blockers—typically a missing toolchain, failed repository",
-        "validation, or incomplete policy attestation—and rerun Agentify verification.",
-        "When `.github/agentify-task-policy.json` becomes configured, Agentify rewrites",
-        "this guide with the issue workflow and trusted maintainer commands.",
-      ].join("\n"),
-    );
   }
 
   return content;
@@ -220,6 +180,31 @@ export function installScaffoldRuntime(options: InstallScaffoldRuntimeOptions): 
     const portableRelative = relative.split(path.sep).join("/");
     if (!AGENTIFY_INSTALLED_CONTROL_PATHS.has(portableRelative)) continue;
     const destination = path.join(options.cwd, relative);
+    if (options.taskPolicyConfiguration?.configured === false
+      && !AGENTIFY_ANALYSIS_CONTROL_PATHS.has(portableRelative)) {
+      // A downgrade must remove old execution entry points, never overwrite or
+      // follow an unrecognized user file. The caller owns atomic rollback.
+      let ancestor = options.cwd;
+      for (const segment of relative.split(path.sep)) {
+        ancestor = path.join(ancestor, segment);
+        let stat: fs.Stats;
+        try { stat = fs.lstatSync(ancestor); } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
+          throw error;
+        }
+        if (stat.isSymbolicLink()) throw new Error(`Cannot disable execution through a symlink: ${portableRelative}`);
+      }
+      if (fs.existsSync(destination)) {
+        const existing = readBoundedRegularFile(destination, MAX_MANAGED_EXECUTABLE_BYTES);
+        if (existing === null || !existing.toString("utf8").includes(markerFor(destination))) {
+          throw new Error(`Cannot disable execution at user-owned path: ${portableRelative}`);
+        }
+        fs.unlinkSync(destination);
+        const parent = path.dirname(destination);
+        if (fs.readdirSync(parent).length === 0) fs.rmdirSync(parent);
+      }
+      continue;
+    }
     writes.push(copyManaged(source, destination, {
       content: contentFor(source, portableRelative, options),
       knownManaged: options.knownManagedPaths?.has(portableRelative) === true

@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Value } from "typebox/value";
 import { CodebaseMapSchema, type CodebaseMap } from "./schema.ts";
-import { loadMapFromFile } from "./map-input.ts";
+import { loadMapFromFile, MAX_MAP_FILE_BYTES } from "./map-input.ts";
 
 export const DEFAULT_MAP_FILENAME = "codebase_map.json";
 
@@ -61,6 +61,13 @@ export function writeCanonicalMap(
     map: CodebaseMap,
     context: MapToolExecutionContext,
 ): { path: string; size_bytes: number } {
+    const content = JSON.stringify(map, null, 2);
+    const sizeBytes = Buffer.byteLength(content, "utf8");
+    if (sizeBytes > MAX_MAP_FILE_BYTES) {
+        throw new Error(
+            `canonical codebase map is ${sizeBytes} bytes, exceeds ${MAX_MAP_FILE_BYTES} byte cap`,
+        );
+    }
     const dir = path.join(cwd, context.stateDir);
     fs.mkdirSync(dir, { recursive: true });
 
@@ -78,9 +85,8 @@ export function writeCanonicalMap(
     }
 
     const filePath = path.join(dir, context.mapFilename);
-    const content = JSON.stringify(map, null, 2);
     fs.writeFileSync(filePath, content, { mode: 0o644 });
-    return { path: filePath, size_bytes: Buffer.byteLength(content, "utf8") };
+    return { path: filePath, size_bytes: sizeBytes };
 }
 
 export function writeDraftAtomically(

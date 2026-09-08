@@ -124,7 +124,9 @@ export function makeDefenseHook(
   );
 
   return async (event) => {
-    const cwd = path.resolve((event as { cwd?: string }).cwd ?? process.cwd());
+    // SDK tool events have no cwd. Resolve exactly as the session tools do,
+    // from the trusted repository policy rather than process or event state.
+    const cwd = policy.repositoryRoot;
 
     if (event.toolName === "bash") {
       const command = (event.input as { command?: string } | undefined)?.command ?? "";

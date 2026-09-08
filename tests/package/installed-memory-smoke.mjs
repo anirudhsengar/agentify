@@ -37,6 +37,24 @@ function runNpm(args, options = {}) {
   return run(nodeCommand, [npmCliPath, ...args], options);
 }
 
+function initializeRepository(repository) {
+  run("git", ["init", "--initial-branch=main"], { cwd: repository });
+  fs.writeFileSync(path.join(repository, "README.md"), "# Package smoke fixture\n");
+  run("git", ["add", "README.md"], { cwd: repository });
+  run(
+    "git",
+    [
+      "-c", "user.name=Agentify package smoke",
+      "-c", "user.email=agentify-package-smoke@example.invalid",
+      "commit", "-m", "fixture",
+    ],
+    { cwd: repository },
+  );
+  run("git", ["remote", "add", "origin", "https://github.com/fixture/repo.git"], {
+    cwd: repository,
+  });
+}
+
 const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf-8"));
 const installRoot = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-memory-package-"));
 const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-memory-home-"));
@@ -61,7 +79,7 @@ try {
     NO_COLOR: "1",
   };
 
-  fs.mkdirSync(path.join(corruptRepo, ".git"));
+  initializeRepository(corruptRepo);
   fs.mkdirSync(path.join(corruptRepo, ".agentify", "agents"), { recursive: true });
   fs.writeFileSync(
     path.join(corruptRepo, ".agentify", ".gitignore"),
@@ -92,7 +110,7 @@ try {
     "malformed installed memory must fail before mutation",
   );
 
-  fs.mkdirSync(path.join(userOwnedRepo, ".git"));
+  initializeRepository(userOwnedRepo);
   fs.mkdirSync(path.join(userOwnedRepo, ".agentify"));
   fs.writeFileSync(path.join(userOwnedRepo, ".agentify", "notes.txt"), "user-owned\n");
   const userOwned = run(nodeCommand, [bin], {

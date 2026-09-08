@@ -5,18 +5,29 @@ import type { CodebaseMap } from "../audit/schema.ts";
 import type {
   InstallerCommand,
   InstallerCommandKind,
+  InstallerProcessResult,
   InstallerProcessRunner,
   RepositoryInstallationPreflight,
   RepositoryValidationApproval,
 } from "./contracts.ts";
 import { DEFAULT_INSTALLER_PROCESS_RUNNER } from "./process-runner.ts";
-import { commandId, COMMAND_TIMEOUTS, unsafeReason } from "./build-systems/shared.ts";
+import {
+  commandId,
+  COMMAND_TIMEOUTS,
+  runValidationCommandSet,
+  unsafeReason,
+} from "./build-systems/shared.ts";
 import { createRepositoryValidationApproval } from "./task-policy.ts";
 import { packageRoot } from "../pi-sdk-runtime.ts";
 import {
   AGENTIFY_VALIDATION_SMOKE_COMMAND_ID,
   isVerifiedRepositoryTestCommand,
 } from "./validation-contract.ts";
+import {
+  hasCommittedGitCheckout,
+  runInDisposableValidationCheckout,
+  type ValidationCheckoutResult,
+} from "./validation-isolation.ts";
 
 export interface ParsedCommandTarget {
   program: string;
@@ -147,6 +158,7 @@ export function testAuditedValidationCommand(
   commandStr: string,
   runner: InstallerProcessRunner,
   kind: InstallerCommandKind = "test",
+  dependencyCommand?: InstallerCommand,
 ): InstallerCommand | null {
   if (INSTALL_SCRIPT_PATTERN.test(commandStr) || PACKAGE_INSTALL_PATTERN.test(commandStr)) {
     return null;
@@ -158,49 +170,52 @@ export function testAuditedValidationCommand(
   const unsafe = unsafeReason(commandStr);
   if (unsafe) return null;
 
-  const executionCwd = path.resolve(cwd, parsed.cwdRelative);
-  if (!fs.existsSync(executionCwd)) return null;
-
-  const result = runner.run({
-    program: parsed.program,
-    args: parsed.args,
-    cwd: executionCwd,
-    timeoutMs: Math.min(COMMAND_TIMEOUTS[kind], 60_000),
-  });
-
-  if (result.status !== 0 || result.timedOut) {
-    // If python3 failed, fallback retry with python
-    if (parsed.program === "python3") {
-      const fallbackResult = runner.run({
-        program: "python",
-        args: parsed.args,
-        cwd: executionCwd,
-        timeoutMs: Math.min(COMMAND_TIMEOUTS[kind], 60_000),
-      });
-      if (fallbackResult.status === 0 && !fallbackResult.timedOut) {
-        const output = `${fallbackResult.stdout}\n${fallbackResult.stderr}`;
-        return {
-          command_id: commandId(kind, `audited-python-${parsed.args[0] ?? "run"}`),
-          kind,
-          argv: ["python", ...parsed.args],
-          cwd: parsed.cwdRelative,
-          timeout_ms: COMMAND_TIMEOUTS[kind],
-          required: true,
-          assessment: "verified",
-          exit_code: fallbackResult.status,
-          output_digest: crypto.createHash("sha256").update(output).digest("hex"),
-          detail: `verified from agent audit validation surface (${commandStr})`,
-        };
-      }
+  const execute = (checkoutCwd: string): {
+    program: string;
+    result: InstallerProcessResult;
+  } | null => {
+    if (dependencyCommand !== undefined) {
+      const [provisioned] = runValidationCommandSet(checkoutCwd, runner, [{
+        ...dependencyCommand,
+        assessment: "characterized",
+      }]);
+      if (provisioned?.assessment !== "verified") return null;
     }
-    return null;
-  }
+    const executionCwd = path.resolve(checkoutCwd, parsed.cwdRelative);
+    if (!fs.existsSync(executionCwd)) return null;
+    const result = runner.run({
+      program: parsed.program,
+      args: parsed.args,
+      cwd: executionCwd,
+      timeoutMs: Math.min(COMMAND_TIMEOUTS[kind], 60_000),
+    });
+    if (result.status === 0 && !result.timedOut && result.errorMessage === null) {
+      return { program: parsed.program, result };
+    }
+    if (parsed.program !== "python3") return null;
+    const fallbackResult = runner.run({
+      program: "python",
+      args: parsed.args,
+      cwd: executionCwd,
+      timeoutMs: Math.min(COMMAND_TIMEOUTS[kind], 60_000),
+    });
+    return fallbackResult.status === 0
+      && !fallbackResult.timedOut
+      && fallbackResult.errorMessage === null
+      ? { program: "python", result: fallbackResult }
+      : null;
+  };
+  const execution: ValidationCheckoutResult<ReturnType<typeof execute>> = hasCommittedGitCheckout(cwd)
+    ? runInDisposableValidationCheckout({ cwd, operation: execute })
+    : { ok: true, value: execute(cwd) };
+  if (!execution.ok || execution.value === null) return null;
 
+  const { program, result } = execution.value;
   const output = `${result.stdout}\n${result.stderr}`;
   return {
-    command_id: commandId(kind, `audited-${parsed.program}-${parsed.args[0] ?? "run"}`),
+    command_id: commandId(kind, `audited-${program}-${parsed.args[0] ?? "run"}`),
     kind,
-    argv: [parsed.program, ...parsed.args],
+    argv: [program, ...parsed.args],
     cwd: parsed.cwdRelative,
     timeout_ms: COMMAND_TIMEOUTS[kind],
     required: true,
@@ -257,14 +272,23 @@ export function scaffoldValidationSmokeCommand(
   runner: InstallerProcessRunner,
 ): InstallerCommand | null {
   if (!installValidationSmokeAsset(cwd)) return null;
-  const result = runner.run({
+  const execute = (checkoutCwd: string) => runner.run({
     program: "node",
     args: [VALIDATION_SMOKE_RELATIVE_PATH],
-    cwd,
+    cwd: checkoutCwd,
     timeoutMs: 60_000,
   });
+  const execution = hasCommittedGitCheckout(cwd)
+    ? runInDisposableValidationCheckout({
+      cwd,
+      overlayPaths: [".github/agentify"],
+      operation: execute,
+    })
+    : { ok: true as const, value: execute(cwd) };
+  if (!execution.ok) return null;
+  const result = execution.value;
   const output = `${result.stdout}\n${result.stderr}`;
-  if (result.status !== 0 || result.timedOut) return null;
+  if (result.status !== 0 || result.timedOut || result.errorMessage !== null) return null;
   return {
     command_id: AGENTIFY_VALIDATION_SMOKE_COMMAND_ID,
     kind: "test",
@@ -289,6 +313,13 @@ export function refinePreflightWithAudit(input: {
   validationApproval: RepositoryValidationApproval | null;
 } {
   const runner = input.runner ?? DEFAULT_INSTALLER_PROCESS_RUNNER;
+  // Read-only specialist installation must not implicitly renew execution
+  // consent or test against dependencies that cannot be reproduced from HEAD.
+  if (input.preflight.blockers.some((blocker) =>
+    blocker.code === "missing_dependency_lock"
+    || blocker.code === "validation_consent_required"
+    || blocker.code === "validation_policy_stale"
+  )) return { preflight: input.preflight, validationApproval: null };
   let preflight = { ...input.preflight };
   let commands = [...preflight.commands];
 
@@ -300,6 +331,9 @@ export function refinePreflightWithAudit(input: {
 
   if (!hasPassingRequiredTest && input.map) {
     const candidates = extractAuditedCommandCandidates(input.map);
+    const dependencyCommand = commands.find((command) => (
+      command.kind === "install" && command.assessment === "verified"
+    ));
     for (const candidate of candidates) {
       if (candidate.kind !== "test") continue;
       const verified = testAuditedValidationCommand(
@@ -307,6 +341,7 @@ export function refinePreflightWithAudit(input: {
         candidate.command,
         runner,
         candidate.kind,
+        dependencyCommand,
       );
       if (verified) {
         commands = [

@@ -178,12 +178,18 @@ function printSummary(s) {
     console.log(`  status:           ${re.status ?? "?"}`);
     console.log(`  duration_ms:      ${re.duration_ms ?? "?"}  (${((re.duration_ms ?? 0) / 1000).toFixed(1)}s)`);
     console.log(`  files_written:    ${re.files_written ?? "?"}`);
+    console.log(`  usage_scope:      ${re.total_usage_scope ?? "legacy_unspecified"}`);
     console.log(`  total_turns:      ${re.total_turns ?? "?"}`);
     console.log(`  mean_turn_ms:     ${re.mean_turn_latency_ms ?? "?"}`);
     console.log(`  input_tokens:     ${re.total_input_tokens ?? "?"}`);
     console.log(`  output_tokens:    ${re.total_output_tokens ?? "?"}`);
     console.log(`  cache_read:       ${re.total_cache_read_tokens ?? "?"}`);
     console.log(`  cost_usd:         $${re.total_cost_usd?.toFixed(6) ?? "?"}`);
+    if (re.aggregate_usage) {
+      console.log(`  lineage_usage:    ${JSON.stringify(re.aggregate_usage)}`);
+      console.log(`  unanswered_calls: ${re.unanswered_model_calls ?? "?"}`);
+      console.log(`  cost_status:      ${re.aggregate_cost_status ?? "legacy_unspecified"}`);
+    }
   }
 
   console.log("");

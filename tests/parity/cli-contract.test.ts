@@ -114,7 +114,7 @@ test("default execution is focused and unsupported options are rejected", () => 
   try {
     const focused = runCompiledCli([], defaultSandbox);
     assert.notEqual(focused.status, 0);
-    assert.equal(focused.stdout, "");
+    assert.match(focused.stdout, /^agentify: audit log written to [^\n]+\.jsonl\n$/);
     assert.match(focused.stderr, /blocker \[not_git_repository\]/);
 
     for (const unsupported of ["--mode", "--targets", "--migrate-state", "--github-runtime"]) {

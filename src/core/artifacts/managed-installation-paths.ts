@@ -13,3 +13,9 @@ export const AGENTIFY_INSTALLED_CONTROL_PATHS: ReadonlySet<string> = new Set([
   ".github/workflows/agentify-issue.yml",
   ".github/workflows/agentify-learn.yml",
 ]);
+
+export const AGENTIFY_ANALYSIS_CONTROL_PATHS: ReadonlySet<string> = new Set([
+  "AGENTS.md",
+  "SETUP.md",
+  ".github/agentify-task-policy.json",
+]);
