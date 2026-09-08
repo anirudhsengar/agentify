@@ -1,0 +1,207 @@
+name: PR13 source-first observation qualification
+run-name: PR13 0c44bee exact source, code and source-first M3 controls
+'on':
+  push:
+    branches:
+    - validation/pr13-observations-r8-20260908
+    paths:
+    - .github/workflows/pr13-observations-r8.yml
+    - .github/qualification/**
+permissions:
+  contents: read
+concurrency:
+  group: pr13-observations-r8-20260908
+  cancel-in-progress: false
+jobs:
+  qualify:
+    if: github.actor == github.repository_owner
+    name: Exact 0c44bee qualification (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+        - 22.19.0
+        - 24.19.0
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: 0c44bee7755a47c3457fa390d750442412e89bb0
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: ${{ matrix.node }}
+        cache: npm
+    - name: Provision SDK search tools
+      run: 'sudo apt-get update -qq
+
+        sudo apt-get install --no-install-recommends -y ripgrep fd-find
+
+        if ! command -v fd >/dev/null; then sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd; fi
+
+        '
+    - name: Install the pinned toolchain without model credentials
+      run: 'npm install --global npm@11.19.0
+
+        test "$(npm --version)" = "11.19.0"
+
+        npm ci
+
+        '
+    - name: Verify immutable source and qualify the exact candidate
+      shell: bash
+      env:
+        EXPECTED_NODE: ${{ matrix.node }}
+      run: "set -euo pipefail\numask 022\ntest \"$(git rev-parse HEAD)\" = 0c44bee7755a47c3457fa390d750442412e89bb0\n\
+        test \"$(git rev-parse HEAD^{tree})\" = bf6dfdc2dc9a87b74230d04455486c2ae58d3851\ntest \"$(node --version)\"\
+        \ = \"v$EXPECTED_NODE\"\ntest \"$(npm --version)\" = \"11.19.0\"\ntest -z \"$(git status --porcelain)\"\n\
+        {\n  git show -s --format='candidate=%H%ntree=%T'\n  node --version\n  npm --version\n  printf 'umask=';\
+        \ umask\n} > \"$RUNNER_TEMP/pr13-observations-r8-environment.txt\"\nset +e\nnpm run verify:release > \"\
+        $RUNNER_TEMP/pr13-observations-r8-qualification.log\" 2>&1\nstatus=$?\nif test \"$status\" = 0 && test \"\
+        $EXPECTED_NODE\" = \"22.19.0\"; then\n  npm run verify:pack-reproducibility >> \"$RUNNER_TEMP/pr13-observations-r8-qualification.log\"\
+        \ 2>&1\n  status=$?\nfi\nprintf '%s\\n' \"$status\" > \"$RUNNER_TEMP/pr13-observations-r8-qualification.exit\"\
+        \ncat \"$RUNNER_TEMP/pr13-observations-r8-qualification.log\"\nexit \"$status\"\n"
+    - name: Retain exact-candidate evidence even on failure
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: pr13-observations-r8-node-${{ matrix.node }}-${{ github.run_id }}
+        path: '${{ runner.temp }}/pr13-observations-r8-environment.txt
+
+          ${{ runner.temp }}/pr13-observations-r8-qualification.log
+
+          ${{ runner.temp }}/pr13-observations-r8-qualification.exit
+
+          '
+        if-no-files-found: warn
+        retention-days: 14
+  review:
+    if: github.actor == github.repository_owner
+    name: Review / ${{ matrix.case.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        case:
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r8-high-jwk
+          concern: JWK and JWKSet parsing
+          candidate_sha: 0c44bee7755a47c3457fa390d750442412e89bb0
+          candidate_tree: bf6dfdc2dc9a87b74230d04455486c2ae58d3851
+          thinking_level: high
+          known_bad_fragment: reports as expired
+          require_source_observation: true
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r8-high-valid-cache
+          concern: JWK and JWKSet parsing
+          candidate_sha: 0c44bee7755a47c3457fa390d750442412e89bb0
+          candidate_tree: bf6dfdc2dc9a87b74230d04455486c2ae58d3851
+          positive_control: true
+          thinking_level: high
+          require_source_observation: true
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r8-numeric-exp-canary
+          concern: JWT claim validation and payload lifecycle
+          candidate_sha: 0c44bee7755a47c3457fa390d750442412e89bb0
+          candidate_tree: bf6dfdc2dc9a87b74230d04455486c2ae58d3851
+          thinking_level: high
+          false_claim_canary: true
+          require_source_excerpt: true
+          require_source_observation: true
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: 0c44bee7755a47c3457fa390d750442412e89bb0
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Install pinned test toolchain, no model credentials
+      run: 'npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts
+
+        test "$(git rev-parse HEAD)" = 0c44bee7755a47c3457fa390d750442412e89bb0
+
+        test "$(git rev-parse HEAD^{tree})" = bf6dfdc2dc9a87b74230d04455486c2ae58d3851
+
+        '
+    - name: Fetch exact retained input and immutable repository
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REVIEW_CASE: ${{ toJSON(matrix.case) }}
+      run: 'set -euo pipefail
+
+        printf ''PROBE_TARGET=%s/probe-target
+
+        PROBE_PREVIOUS=%s/previous
+
+        PROBE_EVIDENCE=%s/evidence
+
+        '' "$RUNNER_TEMP" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        printf ''HOME=%s/probe-home
+
+        USERPROFILE=%s/probe-home
+
+        XDG_CONFIG_HOME=%s/probe-home/.config
+
+        '' "$RUNNER_TEMP" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        name=$(printf ''%s'' "$REVIEW_CASE" | jq -r .artifact)
+
+        repository=$(printf ''%s'' "$REVIEW_CASE" | jq -r .repository)
+
+        sha=$(printf ''%s'' "$REVIEW_CASE" | jq -r .target_sha)
+
+        gh run download 34196528837 -R anirudhsengar/agentify -n "$name" -D "$RUNNER_TEMP/previous"
+
+        git init -q "$RUNNER_TEMP/probe-target"
+
+        git -C "$RUNNER_TEMP/probe-target" fetch --depth=1 "https://github.com/$repository.git" "$sha"
+
+        git -C "$RUNNER_TEMP/probe-target" checkout --detach -q FETCH_HEAD
+
+        mkdir -p "$RUNNER_TEMP/probe-home"
+
+        '
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ${{ github.sha }}
+        path: probe-code
+        persist-credentials: false
+    - name: Run bounded production review with explicit verdicts
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        REVIEW_CASE: ${{ toJSON(matrix.case) }}
+      run: node --import tsx probe-code/.github/qualification/review-probe.mjs
+    - name: Retain redacted review outcome only
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: observations-r8-${{ matrix.case.name }}-${{ github.run_id }}
+        path: ${{ env.PROBE_EVIDENCE }}
+        if-no-files-found: warn
+        retention-days: 14
+    - name: Remove disposable inputs and authentication
+      if: always()
+      run: rm -rf -- "$RUNNER_TEMP/probe-home" "$RUNNER_TEMP/probe-target" "$RUNNER_TEMP/previous"
+    permissions:
+      contents: read
+      actions: read
