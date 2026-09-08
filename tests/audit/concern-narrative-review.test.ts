@@ -1182,11 +1182,14 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
 
 
 for (const outcome of ["complete", "local-contradiction", "local-incomplete", "full-incomplete",
-  "full-contradiction", "cancelled", "changed-head", "capacity-refused", "deadline-refused", "small-body"] as const) {
+  "full-contradiction", "cancelled", "changed-head", "capacity-refused", "deadline-refused", "small-body", "large-source", "large-source-rejection", "oversized-source-line"] as const) {
   test(`source-local prechecks cannot substitute for complete review: ${outcome}`, async () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-source-local-review-"));
     const parent = new AbortController();
-    const small = "def present(record):\n    return record is not None\n";
+    const isLargeSource = outcome.startsWith("large-source") || outcome === "oversized-source-line";
+    const prefix = outcome === "oversized-source-line" ? "#" + "π".repeat(9_000) + "\n"
+      : isLargeSource ? "# unrelated configuration π\n".repeat(600) : "";
+    const small = prefix + "def present(record):\n    return record is not None\n";
     const large = "def relay(record):\n    return record\n" + "# Immutable broader module context.\n".repeat(400);
     try {
       fs.writeFileSync(path.join(cwd, "small.py"), small);
@@ -1207,7 +1210,7 @@ for (const outcome of ["complete", "local-contradiction", "local-incomplete", "f
         invariants: Array.from({ length: outcome === "small-body" ? 2 : 26 }, (_, index) => ({
           rule: `Case ${index}: relay returns its original argument.`, why: "The return expression is record.", reference: "large.py",
         })),
-        pitfalls: [{ risk: outcome === "local-contradiction" ? "An absent record is reported present."
+        pitfalls: [{ risk: (outcome === "local-contradiction" || outcome === "large-source-rejection") ? "An absent record is reported present."
           : "An absent record is not reported present.", consequence: "Presence must be checked separately from relay.", reference: "small.py" }],
         entry_questions: ["Does the change affect presence or record identity?"], validation: [], spans_subtrees: [],
         stability: "high", recurrence: "high", confidence: "high", last_updated: "2026-08-31T00:00:00.000Z",
@@ -1226,7 +1229,7 @@ for (const outcome of ["complete", "local-contradiction", "local-incomplete", "f
       const runtime: AgentRuntime = { async runSession(options) {
         sessions += 1;
         const data = JSON.parse(options.userPrompt) as { claims: Record<string, unknown>;
-          evidence: Record<string, string>; source_precheck?: boolean };
+          evidence: Record<string, string>; source_precheck?: boolean; source_excerpt?: boolean };
         const precheck = data.source_precheck === true;
         stages.push(precheck);
         assert.equal(precheck, outcome !== "small-body" && sessions === 1);
@@ -1235,7 +1238,14 @@ for (const outcome of ["complete", "local-contradiction", "local-incomplete", "f
         if (precheck) {
           firstTimeout = options.timeoutMs;
           assert.deepEqual(Object.keys(data.claims), ["pitfalls[0]"]);
-          assert.deepEqual(data.evidence, { "small.py": small }, "a local check receives the exact selected source only");
+          assert.deepEqual(Object.keys(data.evidence), ["small.py"]);
+          const visible = data.evidence["small.py"]!;
+          assert.ok(small.includes(visible), "the selected view must be contiguous immutable source bytes");
+          assert.ok(Buffer.byteLength(visible) <= 8 * 1_024, "large modules cannot raise the local source budget");
+          assert.ok(visible.includes("def present(record):\n    return record is not None"));
+          assert.equal(data.source_excerpt, isLargeSource,
+            "the reviewer must know whether it received a partial source view");
+          if (!isLargeSource) assert.equal(visible, small);
           assert.equal(options.maxOutputTokens, 4_096);
         } else {
           assert.equal(data.evidence["small.py"], small);
@@ -1271,7 +1281,7 @@ for (const outcome of ["complete", "local-contradiction", "local-incomplete", "f
         if (outcome === "local-incomplete" && precheck || outcome === "full-incomplete" && !precheck) {
           return { turns: 1, costUsd: 0.001, aborted: true };
         }
-        const finding = outcome === "local-contradiction" && precheck
+        const finding = (outcome === "local-contradiction" || outcome === "large-source-rejection") && precheck
           ? { claim: "pitfalls[0]", path: "small.py", excerpt: "return record is not None",
             reason: "An absent record is None, making the predicate False rather than True." }
           : outcome === "full-contradiction" && !precheck
@@ -1287,13 +1297,13 @@ for (const outcome of ["complete", "local-contradiction", "local-incomplete", "f
         config: { schemaVersion: 1, thinkingLevel: "high", models: {} }, ui: { status() {} } } as never,
       compiled, budget, "source-local-test", map => { checkpoints.push(map); });
       const record = reviewed.map.specialist_reviews!.records.find(item => item.concern === concern.concern)!;
-      const approved = outcome === "complete" || outcome === "small-body";
+      const approved = outcome === "complete" || outcome === "small-body" || outcome === "large-source" || outcome === "oversized-source-line";
       assert.equal(record.failure === null, approved);
-      if (outcome === "local-contradiction" || outcome === "full-contradiction") {
+      if (outcome === "local-contradiction" || outcome === "large-source-rejection" || outcome === "full-contradiction") {
         assert.equal(record.retryable, false);
-        assert.equal(record.finding?.claim, outcome === "local-contradiction" ? "pitfalls[0]" : "one_line");
+        assert.equal(record.finding?.claim, outcome !== "full-contradiction" ? "pitfalls[0]" : "one_line");
       } else if (!approved) assert.equal(record.retryable, true);
-      const onlyLocal = ["local-contradiction", "local-incomplete", "cancelled", "changed-head"].includes(outcome);
+      const onlyLocal = ["local-contradiction", "large-source-rejection", "local-incomplete", "cancelled", "changed-head"].includes(outcome);
       assert.equal(sessions, onlyLocal || outcome === "small-body" ? 1 : 2);
       assert.equal(budget.snapshot().model_calls, admitted);
       assert.ok(admitted <= 2);

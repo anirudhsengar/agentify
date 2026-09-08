@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Keep large-source assertions eligible for bounded local falsification using contiguous, explicitly partial source excerpts. Excerpt checks never grant approval or replace the mandatory full-source review, and retain the existing source, request, and time limits.
+
 - Check small-source assertions for direct counterexamples before large complete reviews, using the existing two-request ceiling and one shared deadline. A passed local check grants no approval; every original claim and immutable source still requires complete review.
 
 - Translate the international MiniMax M3 thinking-on request to its documented adaptive wire format, preserving disabled thinking, the original total-output and accounting limits, and prior conversation content. Other providers, older models and regional backends retain their existing formats.

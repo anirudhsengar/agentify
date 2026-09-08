@@ -247,7 +247,9 @@ require fresh review with the configured primary model: 90 seconds and at most
 512 KiB of immutable source per concern. Ordinary reviews use one provider request plus at most one argument-correction
 request after a rejected typed submission. For larger bodies, an eligible small
 source module is checked first for direct counterexamples in its associated
-assertions, followed by the complete original review. Those stages share the
+assertions. When no small module qualifies, one assertion may instead be
+checked beside a bounded, explicitly partial source excerpt. Either path is
+followed by the complete original review before approval. Those stages share the
 same 90-second deadline and two-request ceiling, with no extra correction call.
 The precheck cannot approve a body or replace any full-source claim check.
 Two independent read-only bodies may be

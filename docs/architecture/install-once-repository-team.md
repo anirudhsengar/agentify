@@ -168,6 +168,14 @@ small immutable module with at most eight directly referenced pitfall/invariant
 assertions. It chooses the smallest eligible source, bounded to 8 KiB, with the
 tracked path as tie-breaker. This local precheck can report a demonstrated source
 counterexample but cannot decide overall coherence or approve the specialist.
+When no complete small module qualifies, the application selects the first
+referenced assertion with a retrievable large-source span. A deterministic
+lexical window selects at most 8 KiB of contiguous whole-line source bytes;
+rare matching terms receive greater weight. The excerpt is explicitly marked
+as partial context. An oversized line is never split or reconstructed, and a
+file without a matching bounded span receives no excerpt precheck. Selection
+is only a retrieval hint: missing surrounding context cannot establish a
+contradiction, and passing this check cannot approve any claim or specialist.
 Missing external context is left for the complete reviewer, not treated as a
 local contradiction. A successful precheck must be followed by the original
 complete claim set, every original immutable source byte and the ordinary
