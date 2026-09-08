@@ -14,13 +14,18 @@ import { reviewSpecialistCompilation } from "../../src/core/audit/specialist-rev
 import { AuditResourceBudget } from "../../src/core/audit/resource-budget.ts";
 import { makeValidCodebaseMap } from "../fixtures/codebase-map.ts";
 
-for (const outcome of ["supported", "local-contradiction", "incomplete-full-review"] as const) {
-  test(`native MiniMax source precheck preserves final review authority: ${outcome}`, async () => {
+for (const outcome of ["supported", "local-contradiction", "incomplete-full-review", "incomplete-observations",
+  "forged-observation", "claim-verdict-as-observation", "empty-observations", "false-notes",
+  "cancelled-after-observations", "changed-head", "capacity-refused", "reversed-lines", "fractional-lines", "unknown-path"] as const) {
+  test(`native MiniMax source observations preserve final review authority: ${outcome}`, async () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-native-source-check-"));
+    const controller = new AbortController();
     const small = "def present(record):\n    return record is not None\n";
     const large = "def relay(record):\n    return record\n" + "# Broader immutable source context.\n".repeat(400);
     const requests: Array<{ precheck: boolean; cap: number | undefined; thinking: unknown }> = [];
+    const serverErrors: unknown[] = [];
     const server = createServer(async (request, response) => {
+      try {
       const chunks: Buffer[] = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
@@ -29,29 +34,44 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
       };
       const content = payload.messages.find(message => message.role === "user")!.content;
       const text = typeof content === "string" ? content : content.map(part => part.text ?? "").join("\n");
-      const data = readReviewPrompt(text) as { source_precheck?: boolean; claims: Record<string, unknown>; evidence: Record<string, string> };
-      const precheck = data.source_precheck === true;
+      const data = readReviewPrompt(text) as { source_observation?: boolean; claims?: Record<string, unknown>;
+        evidence: Record<string, string>;
+        untrusted_source_observations?: Array<{ behavior: string; excerpt: string }> };
+      const precheck = data.source_observation === true;
       requests.push({ precheck, cap: payload.max_tokens, thinking: payload.thinking });
       assert.deepEqual(payload.tool_choice, { type: "auto" });
-      assert.equal(data.evidence["small.py"], small);
-      if (precheck) assert.deepEqual(Object.keys(data.claims), ["pitfalls[0]"]);
-      else {
-        assert.equal(data.evidence["large.py"], large);
-        assert.ok(Object.keys(data.claims).length > 24);
+      if (precheck) {
+        assert.equal(data.claims, undefined, "source reading must not be anchored to a proposed assertion");
+        assert.deepEqual(Object.keys(data.evidence), ["small.py"]);
+        assert.deepEqual(data.evidence["small.py"], small.split("\n").map((text, index) => `${index + 1}|${text}`).join("\n"));
       }
-      const finding = outcome === "local-contradiction" && precheck ? {
+      else {
+        assert.equal(data.evidence["small.py"], small);
+        assert.equal(data.evidence["large.py"], large);
+        assert.ok(Object.keys(data.claims!).length > 24);
+        assert.ok(Array.isArray(data.untrusted_source_observations));
+        if (outcome === "false-notes") assert.equal(data.untrusted_source_observations[0]!.behavior, "A None input returns True.");
+        if (outcome !== "empty-observations") assert.equal(data.untrusted_source_observations[0]!.excerpt, "    return record is not None");
+      }
+      const finding = outcome === "local-contradiction" && !precheck ? {
         claim: "pitfalls[0]", path: "small.py", excerpt: "return record is not None",
         reason: "A None record makes this predicate False, not True.",
       } : undefined;
-      const report = { verdict: finding ? "unsupported" : "supported", checked_claims: Object.keys(data.claims),
-        ...(finding ? { finding } : {}) };
-      const useTool = outcome !== "incomplete-full-review" || precheck;
+      const report = precheck && outcome !== "claim-verdict-as-observation"
+        ? { observations: outcome === "empty-observations" ? [] : [{ path: outcome === "unknown-path" ? "outside.py" : "small.py",
+          start_line: outcome === "reversed-lines" ? 3 : outcome === "fractional-lines" ? 1.5 : 2,
+          end_line: outcome === "forged-observation" ? 99 : 2,
+          behavior: outcome === "false-notes" ? "A None input returns True." : "A None input returns False." }] }
+        : { verdict: finding ? "unsupported" : "supported", checked_claims: Object.keys(data.claims ?? {}),
+          ...(finding ? { finding } : {}) };
+      const useTool = !(outcome === "incomplete-full-review" && !precheck)
+        && !(outcome === "incomplete-observations" && precheck);
       const index = requests.length;
       const events = [
         ["message_start", { type: "message_start", message: { id: `fixture-${index}`, type: "message", role: "assistant",
           model: "MiniMax-M3", content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 100, output_tokens: 0 } } }],
         ["content_block_start", { type: "content_block_start", index: 0, content_block: useTool
-          ? { type: "tool_use", id: `check-${index}`, name: "submit_specialist_review", input: {} } : { type: "text", text: "" } }],
+          ? { type: "tool_use", id: `check-${index}`, name: precheck ? "submit_source_observations" : "submit_specialist_review", input: {} } : { type: "text", text: "" } }],
         ["content_block_delta", { type: "content_block_delta", index: 0, delta: useTool
           ? { type: "input_json_delta", partial_json: JSON.stringify(report) }
           : { type: "text_delta", text: "A prose summary is not a complete review." } }],
@@ -62,6 +82,11 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
       ];
       response.writeHead(200, { "Content-Type": "text/event-stream" });
       response.end(events.map(([event, value]) => `event: ${event}\ndata: ${JSON.stringify(value)}\n\n`).join(""));
+      } catch (error) {
+        serverErrors.push(error);
+        response.writeHead(400, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "fixture request assertion failed" } }));
+      }
     });
     await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
     try {
@@ -94,20 +119,36 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
       const compilation = compileSpecialistEvidence(makeValidCodebaseMap({ concern_evidence: { concerns: [body], not_concerns: [] },
         expert_evidence: undefined }), { cwd });
       assert.ok(compilation.assessment.accepted_concerns.includes(body.concern));
-      const budget = new AuditResourceBudget();
-      const runtime: AgentRuntime = { runSession: options => new PiSdkRuntime().runSession({ ...options, configDir: cwd }) };
-      const result = await reviewSpecialistCompilation({ cwd, runtime, ui: { status() {} },
-        config: { schemaVersion: 1, thinkingLevel: "high", models: { primary: { provider: "minimax", model: "MiniMax-M3" } } },
+      const budget = new AuditResourceBudget(outcome === "capacity-refused" ? { maxOutputTokens: 12_020 } : {});
+      const runtime: AgentRuntime = { async runSession(options) {
+        const result = await new PiSdkRuntime().runSession({ ...options, configDir: cwd });
+        if (options.tools.includes("submit_source_observations")) {
+          if (outcome === "cancelled-after-observations") controller.abort();
+          if (outcome === "changed-head") execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture",
+            "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-qm", "changed source identity"]);
+        }
+        return result;
+      } };
+      const config = { schemaVersion: 1, thinkingLevel: "high", models: { primary: { provider: "minimax", model: "MiniMax-M3" } } };
+      const originalConfig = JSON.stringify(config);
+      const result = await reviewSpecialistCompilation({ cwd, runtime, signal: controller.signal, ui: { status() {} }, config,
       } as never, compilation, budget, "native-source-local");
-      assert.deepEqual(requests.map(request => request.precheck), outcome === "local-contradiction" ? [true] : [true, false]);
-      assert.deepEqual(requests.map(request => request.cap), outcome === "local-contradiction" ? [12000] : [12000, 12000]);
-      assert.ok(requests.every(request => JSON.stringify(request.thinking) === JSON.stringify({ type: "adaptive" })));
+      assert.deepEqual(serverErrors, [], "native request must satisfy the source-observation contract");
+      assert.equal(JSON.stringify(config), originalConfig, "source reading cannot mutate the configured full-review behavior");
+      const observationFailed = ["incomplete-observations", "forged-observation", "claim-verdict-as-observation",
+        "cancelled-after-observations", "changed-head", "capacity-refused", "reversed-lines", "fractional-lines", "unknown-path"].includes(outcome);
+      assert.deepEqual(requests.map(request => request.precheck), observationFailed ? [true] : [true, false]);
+      assert.deepEqual(requests.map(request => request.cap), observationFailed ? [12000] : [12000, 12000]);
+      assert.ok(requests.every(request => JSON.stringify(request.thinking) === JSON.stringify({ type: "adaptive" })),
+        "source reading and complete review retain the configured thinking policy");
       assert.equal(budget.snapshot().model_calls, requests.length);
       assert.equal(budget.snapshot().unreported_calls, 0);
       const record = result.map.specialist_reviews!.records[0]!;
-      assert.equal(record.failure === null, outcome === "supported");
+      assert.equal(record.failure === null, ["supported", "empty-observations", "false-notes"].includes(outcome));
       if (outcome === "local-contradiction") assert.equal(record.finding?.claim, "pitfalls[0]");
       if (outcome === "incomplete-full-review") assert.equal(record.retryable, true);
+      if (observationFailed) assert.equal(record.retryable, true);
+      assert.ok(!Object.hasOwn(record, "observations"), "reading notes cannot become durable review attestation");
       assert.equal(execFileSync("git", ["-C", cwd, "show", "HEAD:small.py"], { encoding: "utf8" }), small);
     } finally {
       server.closeAllConnections();

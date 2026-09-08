@@ -10,6 +10,25 @@ const SpecialistReviewFindingSchema = Type.Object({
     description: "Why this excerpt falsifies or fails to support the named assertion." }),
 }, { additionalProperties: false });
 
+/** Ephemeral reading notes, never a claim decision or persistent attestation. */
+export const SourceObservationSubmissionSchema = Type.Object({
+  observations: Type.Array(Type.Object({
+    path: SafeRelativePathSchema,
+    // Use a number with an integral constraint: SDK integer conversion would
+    // otherwise truncate a fractional citation before application validation.
+    start_line: Type.Number({ minimum: 1, multipleOf: 1,
+      description: "Inclusive one-based line number in the supplied source view." }),
+    end_line: Type.Number({ minimum: 1, multipleOf: 1,
+      description: "Inclusive end line in the same source view. Choose at most 1024 source characters." }),
+    behavior: Type.String({ minLength: 1, maxLength: 1_024,
+      description: "What the quoted executable code does, including a concrete boundary or absent-input case. Do not infer missing context." }),
+  }, { additionalProperties: false }), { maxItems: 4,
+    description: "Up to four source-backed observations. Use an empty array when no behavior can be established from this view." }),
+}, { additionalProperties: false });
+
+export type SourceObservation = Pick<Static<typeof SourceObservationSubmissionSchema>["observations"][number], "path" | "behavior">
+  & { excerpt: string };
+
 export function createSpecialistReviewSubmissionSchema(claimIds: readonly string[]) {
   const claimId = Type.String({ enum: [...claimIds],
     description: "Exact supplied claim ID, never the claim text or a description of it." });

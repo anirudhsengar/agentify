@@ -196,6 +196,21 @@ as partial context. An oversized line is never split or reconstructed, and a
 file without a matching bounded span receives no excerpt precheck. Selection
 is only a retrieval hint: missing surrounding context cannot establish a
 contradiction, and passing this check cannot approve any claim or specialist.
+For explicitly configured MiniMax-M3, the selected source is read before the
+proposed specialist assertions are shown. A source-only tool records at most
+four ephemeral behavior observations. The application resolves their inclusive
+line ranges against immutable source; missing paths, fractional or reversed
+ranges, empty spans and oversized excerpts are refused. The schema preserves
+fractions until validation rather than allowing SDK integer coercion to truncate
+them. Source text is presented literally with one-based line labels, never as
+instructions. The complete original reviewer then receives the untrusted notes
+alongside every original claim and source byte. Notes may be mistaken and cannot
+approve or reject a body; only the complete source-review terminal can decide.
+Empty notes grant no credit and do not replace complete review. Configured
+thinking, both 12,000-token ceilings, the shared two-request maximum and one
+90-second deadline remain unchanged. Cancellation or changed HEAD after reading
+prevents the full review, and no reading notes enter persistent attestations.
+Other model configurations retain the ordinary local-falsification precheck.
 Missing external context is left for the complete reviewer, not treated as a
 local contradiction. A successful precheck must be followed by the original
 complete claim set, every original immutable source byte and the ordinary

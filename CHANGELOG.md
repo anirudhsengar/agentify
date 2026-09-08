@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Ground large MiniMax-M3 reviews with bounded source-only observations before exposing proposed claims. Line citations resolve to immutable bytes, fractional ranges cannot be truncated into acceptance, and only the unchanged complete reviewer can grant approval.
+
 - Present complete-review source as literal, separately delimited text rather than nested JSON-escaped strings. Preserve every original claim, source character, precheck contract, and review/provenance gate.
 
 - Start a bounded first source-tracing batch immediately after successful initial scouting, instead of relying on parent timing. Preserve exact candidate names, source receipts, cancellations, remaining proposals, and all production limits and final gates.
