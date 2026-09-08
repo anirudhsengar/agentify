@@ -1,0 +1,118 @@
+name: PR13 installed CLI cancellation and rollback
+run-name: PR13 6401141 exact installed-CLI cancellation and accounting
+'on':
+  push:
+    branches:
+    - validation/pr13-640-cli-cancel-20260908
+    paths:
+    - .github/workflows/pr13-cli-cancel.yml
+    - .github/qualification/cli-cancellation.mjs
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: pr13-640-cli-cancellation-20260908
+  cancel-in-progress: false
+jobs:
+  install:
+    if: github.actor == github.repository_owner
+    name: Installed CLI cancellation and rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        case:
+        - name: pyjwt
+          repository: anirudhsengar/pyjwt
+          sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          cohort: heldout-round-1
+    env:
+      LIVE_REPOSITORY: ${{ matrix.case.repository }}
+      LIVE_TARGET_SHA: ${{ matrix.case.sha }}
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: 64011416fae4314829d0adefd9057fd14f7a4174
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Provision pinned candidate toolchain without model credentials
+      run: 'set -euo pipefail
+
+        sudo apt-get update -qq
+
+        sudo apt-get install --no-install-recommends -y ripgrep fd-find
+
+        if ! command -v fd >/dev/null; then sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd; fi
+
+        npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts
+
+        test "$(npm --version)" = 11.19.0
+
+        '
+    - name: Require successful exact-candidate qualification and its verified package hash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: "set -euo pipefail\numask 022\ntest \"$(git rev-parse HEAD)\" = 64011416fae4314829d0adefd9057fd14f7a4174\n\
+        test \"$(git rev-parse HEAD^{tree})\" = a8bf5a045cfcd08573d723947c57c5e28cb6d70c\ntest -z \"$(git status\
+        \ --porcelain)\"\ntest \"$(node --version)\" = v22.19.0\nfor attempt in $(seq 1 35); do\n  gh api repos/anirudhsengar/agentify/actions/runs/34209864639\
+        \ > \"$RUNNER_TEMP/existing-qualification.json\"\n  status=$(jq -r .status \"$RUNNER_TEMP/existing-qualification.json\"\
+        )\n  if test \"$status\" = completed; then break; fi\n  sleep 20\ndone\njq -e '.status == \"completed\"\
+        \ and .conclusion == \"success\" and .head_sha == \"46381e910d76d660d9991f11f826be0c15acac49\"' \"$RUNNER_TEMP/existing-qualification.json\"\
+        \ >/dev/null\ngh run download 34209864639 -R anirudhsengar/agentify -n pr13-retrace-admission-node-22.19.0-34209864639\
+        \ -D \"$RUNNER_TEMP/qualified-source\"\ntest \"$(cat \"$RUNNER_TEMP/qualified-source/pr13-retrace-admission-qualification.exit\"\
+        )\" = 0\ngrep -Fx 'candidate=64011416fae4314829d0adefd9057fd14f7a4174' \"$RUNNER_TEMP/qualified-source/pr13-retrace-admission-environment.txt\"\
+        \ngrep -Fx 'tree=a8bf5a045cfcd08573d723947c57c5e28cb6d70c' \"$RUNNER_TEMP/qualified-source/pr13-retrace-admission-environment.txt\"\
+        \npython3 - <<'PYQUAL'\nfrom pathlib import Path\nimport os,re\nroot=Path(os.environ['RUNNER_TEMP']);log=(root/'qualified-source/pr13-retrace-admission-qualification.log').read_text()\n\
+        found=re.findall(r'exact installed artifact qualification passed \\([^,]+, ([a-f0-9]{64}), 52 entries\\\
+        )',log)\nassert len(found)==1\nwith open(os.environ['GITHUB_ENV'],'a') as f:f.write('LIVE_EXPECTED_PACKAGE_HASH='+found[0]+'\\\
+        n')\nPYQUAL\nprintf 'LIVE_WORK_DIR=%s/pr13-native-cancellation-%s\\n' \"$RUNNER_TEMP\" \"$GITHUB_RUN_ID\"\
+        \ >> \"$GITHUB_ENV\"\nprintf 'LIVE_PACK_RESULT=%s/pr13-native-cancellation-pack.json\\n' \"$RUNNER_TEMP\"\
+        \ >> \"$GITHUB_ENV\"\n"
+    - name: Pack exact qualified bytes
+      run: 'set -euo pipefail
+
+        umask 022
+
+        npm run --silent pack:release > "$LIVE_PACK_RESULT"
+
+        node --input-type=module -e ''import fs from "node:fs"; import assert from "node:assert/strict"; const p=JSON.parse(fs.readFileSync(process.env.LIVE_PACK_RESULT,"utf8"));
+        assert.equal(p.sha256,process.env.LIVE_EXPECTED_PACKAGE_HASH); console.log(JSON.stringify(p));''
+
+        '
+    - name: Prepare fresh frozen target and install actual npm artifact
+      run: npm run --silent live:prepare
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ${{ github.sha }}
+        path: probe-code
+        persist-credentials: false
+    - name: Validate checkpoint observation before model credentials
+      run: node --test probe-code/.github/qualification/cancellation-events.test.mjs
+    - name: Interrupt the actual installed CLI after an accounted response and accepted checkpoint
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        GH_TOKEN: ${{ github.token }}
+      run: node probe-code/.github/qualification/cli-cancellation.mjs
+    - name: Retain redacted per-target evidence
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: cli-cancellation-640-${{ github.run_id }}
+        path: '${{ env.LIVE_WORK_DIR }}/evidence
+
+          ${{ runner.temp }}/existing-qualification.json
+
+          ${{ runner.temp }}/qualified-source/pr13-retrace-admission-environment.txt'
+        if-no-files-found: warn
+        include-hidden-files: true
+        retention-days: 14
+    - name: Remove disposable target and credentials
+      if: always()
+      run: if test -n "${LIVE_WORK_DIR:-}"; then rm -rf -- "$LIVE_WORK_DIR"; fi
