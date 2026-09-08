@@ -1,5 +1,5 @@
 name: PR13 installed CLI cancellation and rollback
-run-name: PR13 b8220ce actual installed-CLI interruption and rollback
+run-name: PR13 b8220ce CLI cancellation at the validated write boundary
 'on':
   push:
     branches:
@@ -93,6 +93,8 @@ jobs:
         ref: ${{ github.sha }}
         path: probe-code
         persist-credentials: false
+    - name: Validate checkpoint observation before model credentials
+      run: node --test probe-code/.github/qualification/cancellation-events.test.mjs
     - name: Interrupt the actual installed CLI after an accounted response and accepted checkpoint
       env:
         PI_API_KEY: ${{ secrets.PI_API_KEY }}

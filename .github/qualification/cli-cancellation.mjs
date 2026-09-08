@@ -14,6 +14,7 @@ const logDirectory = path.join(root, 'home/.agentify/logs/agentify');
 const started = Date.now();
 let responseObserved = false;
 let checkpointObserved = false;
+let checkpointProof = null;
 let interruptedAt = null;
 let deadlineInterrupted = false;
 let manifestPresentAtInterrupt = false;
@@ -38,6 +39,7 @@ const interval = setInterval(() => {
     const observed = cancellationObservations(text);
     responseObserved ||= observed.response;
     checkpointObserved ||= observed.checkpoint;
+    checkpointProof ??= observed.checkpointProof;
   }
   } catch (error) {
     if (error.code !== 'ENOENT' && !String(error.message).includes('evidence changed during descriptor read')) throw error;
@@ -83,6 +85,7 @@ const result = {
   model: 'minimax/MiniMax-M3',
   target: report.target,
   installed_cli_cancellation: true,
+  checkpoint_proof: checkpointProof,
   fresh_installation_credit: false,
   production_budget_overrides: false,
   elapsed_ms: Date.now() - started,
