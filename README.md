@@ -252,6 +252,10 @@ checked beside a bounded, explicitly partial source excerpt. Either path is
 followed by the complete original review before approval. Those stages share the
 same 90-second deadline and two-request ceiling, with no extra correction call.
 The precheck cannot approve a body or replace any full-source claim check.
+For an explicitly configured MiniMax-M3 primary, that local stage produces
+source-only observations without seeing the assertions. Those fallible notes
+are never a verdict; the full review still checks all original claims and source
+with the configured reasoning mode.
 Two independent read-only bodies may be
 reviewed concurrently; results are applied in portfolio order, and temporary
 aggregate-reservation refusal falls back to serial admission. Reviews submit

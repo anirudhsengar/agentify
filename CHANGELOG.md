@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Read bounded MiniMax-M3 source views before exposing proposed assertions. Exact-source observations remain untrusted, transient notes; only the subsequent unchanged full-review gates can approve or reject a specialist. Preserve the same model, full-review configuration, request limits and aggregate accounting.
+
 - Keep large-source assertions eligible for bounded local falsification using contiguous, explicitly partial source excerpts. Excerpt checks never grant approval or replace the mandatory full-source review, and retain the existing source, request, and time limits.
 
 - Check small-source assertions for direct counterexamples before large complete reviews, using the existing two-request ceiling and one shared deadline. A passed local check grants no approval; every original claim and immutable source still requires complete review.

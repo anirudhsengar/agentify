@@ -208,6 +208,22 @@ bounded semantic repair loop, and every repair completion checks the normalized
 result again. Finalization and same-HEAD reuse independently require matching
 reviews. This model review is a quality control, not a proof of arbitrary
 program semantics; release qualification still requires manual team inspection.
+For an explicitly configured international MiniMax-M3 primary, the local stage
+instead reads its source view without seeing the proposed assertions. The same
+model uses thinking-off for this bounded reading task, while the subsequent
+complete review retains the user's configured thinking mode. Its distinct
+`submit_source_observations` tool accepts at most four behaviors paired with
+exact supplied source excerpts. These are ephemeral, untrusted reading notes:
+they cannot approve or reject a specialist, authorize repair, become review
+attestation, or substitute for any original claim check. Empty observations
+confer no evidence; invalid or incomplete submissions remain failed execution.
+The complete reviewer receives the notes explicitly labeled untrusted alongside
+every original claim and immutable source byte. Source takes precedence over
+the notes. The two stages retain the same shared deadline, two-request ceiling,
+output caps and aggregate reservations. Changed HEAD, cancellation, and capacity
+refusal cannot promote an intermediate reading into approval. Other configured
+models retain their existing local-falsification behavior.
+
 Claim-only repair may replace a rejected pitfall/invariant, the text of one
 flow step at the finding's source path, or only the flow description with
 `flow_description: true`. Description and step selection are mutually exclusive;
