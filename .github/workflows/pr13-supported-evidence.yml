@@ -12,6 +12,7 @@ name: PR13 source-backed positive approval experiment
     - .github/qualification/support-transport-sdk.test.mjs
     - .github/qualification/proof-envelope.mjs
     - .github/qualification/proof-envelope-sdk.test.mjs
+    - .github/qualification/review-correction-sdk.test.mjs
 permissions:
   contents: read
   actions: read
@@ -34,10 +35,10 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: records-high-jwk
+          name: single-high-jwk
           concern: JWK and JWKSet parsing
-          candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
-          candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
+          candidate_sha: 64011416fae4314829d0adefd9057fd14f7a4174
+          candidate_tree: a8bf5a045cfcd08573d723947c57c5e28cb6d70c
           thinking_level: high
           known_bad_fragment: reports as expired
         - artifact: native-live-pyjwt-34196528837
@@ -45,10 +46,10 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: records-high-valid-cache
+          name: single-high-valid-cache
           concern: JWK and JWKSet parsing
-          candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
-          candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
+          candidate_sha: 64011416fae4314829d0adefd9057fd14f7a4174
+          candidate_tree: a8bf5a045cfcd08573d723947c57c5e28cb6d70c
           positive_control: true
           thinking_level: high
         - artifact: native-live-pyjwt-34196528837
@@ -56,10 +57,10 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: records-low-jwk
+          name: single-low-jwk
           concern: JWK and JWKSet parsing
-          candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
-          candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
+          candidate_sha: 64011416fae4314829d0adefd9057fd14f7a4174
+          candidate_tree: a8bf5a045cfcd08573d723947c57c5e28cb6d70c
           thinking_level: low
           known_bad_fragment: reports as expired
         - artifact: native-live-pyjwt-34196528837
@@ -67,10 +68,10 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: records-low-valid-cache
+          name: single-low-valid-cache
           concern: JWK and JWKSet parsing
-          candidate_sha: 6a8b85301d33201fc91775a932c75d8a18a1fb19
-          candidate_tree: f6f325568913d6968f52dbf81502476a5d9e0e9a
+          candidate_sha: 64011416fae4314829d0adefd9057fd14f7a4174
+          candidate_tree: a8bf5a045cfcd08573d723947c57c5e28cb6d70c
           positive_control: true
           thinking_level: low
     steps:
@@ -140,6 +141,8 @@ jobs:
       run: node --test probe-code/.github/qualification/support-protocol.test.mjs
     - name: Validate actual native MiniMax SDK envelope before provider credentials
       run: node --import tsx --test probe-code/.github/qualification/proof-envelope-sdk.test.mjs
+    - name: Verify original single-correction controller without provider credentials
+      run: node --import tsx --test probe-code/.github/qualification/review-correction-sdk.test.mjs
     - name: Run bounded production review with explicit verdicts
       env:
         PI_API_KEY: ${{ secrets.PI_API_KEY }}
@@ -156,4 +159,4 @@ jobs:
     - name: Remove disposable inputs and authentication
       if: always()
       run: rm -rf -- "$RUNNER_TEMP/probe-home" "$RUNNER_TEMP/probe-target" "$RUNNER_TEMP/previous"
-run-name: 'PR13 line-record review controls: high and low thinking, unchanged source gates'
+run-name: PR13 single-review line records with existing bounded argument correction

@@ -9,9 +9,9 @@ export function parseProofEnvelope(input,originalParameters,data,value){
  const header=lines.shift();assert.ok(header==='SUPPORTED'||header==='UNSUPPORTED','First line must be SUPPORTED or UNSUPPORTED.');
  const support={};const findings=[];const seen=new Set();
  for(const line of lines){
-  const empty=/^(C[0-9]{3}) +EMPTY$/.exec(line);
-  const match=/^(C[0-9]{3}) +S([0-9]+):([0-9]+)-([0-9]+) +(.+)$/.exec(line);
-  assert.ok(empty||match,'Expected C-code, S-index:inclusive-lines and justification on each line.');
+  const empty=/^(C[0-9]{3})[ \t]+EMPTY$/.exec(line);
+  const match=/^(C[0-9]{3})[ \t]+S([0-9]+):([0-9]+)-([0-9]+)[ \t]+(.+)$/.exec(line);
+  assert.ok(empty||match,'Expected C-code, S-index:inclusive-lines and justification on each line; invalid record: '+line.slice(0,160));
   const claim=(empty??match)[1];assert.ok(!seen.has(claim),'Duplicate claim record.');seen.add(claim);
   if(empty){assert.equal(header,'SUPPORTED','An unsupported assertion needs source evidence.');support[claim]=true;continue;}
   const record={source:Number(match[2]),start_line:Number(match[3]),end_line:Number(match[4]),reason:match[5]};
@@ -21,7 +21,7 @@ export function parseProofEnvelope(input,originalParameters,data,value){
  const schema=supportParameters(originalParameters,data);
  if(!value.Check(schema,report)){
   const errors=[...value.Errors(schema,report)].slice(0,3).map(e=>e.instancePath+': '+e.message).join('; ');
-  throw new Error(('Invalid decoded review: '+errors).slice(0,2048));
+  throw new Error(('Invalid decoded review: '+errors+'. Return the complete corrected review_text, not a delta; preserve every assigned C-code.').slice(0,2048));
  }
  return {report,canonical:normalizeReviewReport(report,data)};
 }
