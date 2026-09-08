@@ -1178,3 +1178,113 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+
+for (const outcome of ["approved", "incomplete", "unassigned-claim", "rejected", "cancelled", "head-changed", "capacity-refused"] as const) {
+  test(`partitioned reviews keep the complete approval boundary: ${outcome}`, async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-review-assignment-"));
+    const parent = new AbortController();
+    try {
+      fs.writeFileSync(path.join(cwd, "clock.py"), SOURCE);
+      execFileSync("git", ["init", "-q", cwd]);
+      execFileSync("git", ["-C", cwd, "add", "."]);
+      execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "review assignments"]);
+      const concern: Concern = {
+        concern: "Deadline normalization", one_line: outcome === "rejected" ? FALSE_CLAIM : "Convert numeric input with int().",
+        covers: "Numeric deadline conversion.", excludes: "Clock sampling and scheduling.",
+        flows: [{ name: "Normalize deadline", description: "Convert caller input.", steps: [
+          { path: "clock.py", what_happens: "normalize_time receives the input." },
+          { path: "clock.py", what_happens: "Return int(value), or raise for unparseable strings." },
+        ] }], touchpoints: [{ path: "clock.py", symbol: "normalize_time", role: "Owns conversion.", line_range: null, centrality: "core" }],
+        invariants: Array.from({ length: 28 }, (_, index) => ({ rule: `Case ${index}: normalize_time calls int(value).`,
+          why: "The tracked return statement performs conversion.", reference: "clock.py" })),
+        pitfalls: [{ risk: "Nonnumeric strings fail.", consequence: "ValueError is raised.", reference: "clock.py" }],
+        entry_questions: ["Is the input numeric?"], validation: [], spans_subtrees: [],
+        stability: "high", recurrence: "high", confidence: "high", last_updated: "2026-08-31T00:00:00.000Z",
+      };
+      const compilation = compileSpecialistEvidence(makeValidCodebaseMap({
+        concern_evidence: { concerns: [concern], not_concerns: [] }, expert_evidence: undefined,
+      }), { cwd });
+      assert.equal(compilation.assessment.accepted_concerns.includes(concern.concern), true);
+      const original = JSON.stringify(compilation.map);
+      const budget = new AuditResourceBudget(outcome === "capacity-refused" ? { maxOutputTokens: 10_000 } : {});
+      let started = 0;
+      let active = 0;
+      let peak = 0;
+      let ready!: () => void;
+      const barrier = new Promise<void>(resolve => { ready = resolve; });
+      const assignments: string[][] = [];
+      const runtime: AgentRuntime = { async runSession(options) {
+        const index = started++;
+        peak = Math.max(peak, ++active);
+        try {
+          const data = JSON.parse(options.userPrompt) as { claims: Record<string, unknown>;
+            evidence: Record<string, string>; scope_context?: { flows: unknown } };
+          const keys = Object.keys(data.claims);
+          assignments.push(keys);
+          assert.ok(keys.length <= 24, "large body must become smaller assigned claim sets");
+          assert.equal(data.evidence["clock.py"], SOURCE, "source bytes are not shortened or inferred");
+          assert.deepEqual(data.scope_context?.flows, concern.flows, "both assignments retain whole-body coherence context");
+          assert.equal(options.config.thinkingLevel, "high", "partitioning cannot change configured reasoning");
+          assert.equal(options.maxOutputTokens, 6_000);
+          assert.ok(options.timeoutMs! <= 90_000);
+          if (started === 2) ready();
+          options.onProviderRequest!({ inputTokens: 1000, outputTokens: 6000, costUsd: 0.1 });
+          options.onEvent?.({ type: "tool_execution_end", toolName: "submit_specialist_review", isError: true } as never);
+          assert.throws(() => options.onProviderRequest!({ inputTokens: 1000, outputTokens: 6000, costUsd: 0.1 }),
+            /provider-call limit/, "neither assignment may use a third request as an argument repair");
+          await barrier;
+          if (outcome === "cancelled") {
+            parent.abort();
+            return { turns: 0, costUsd: null, aborted: true };
+          }
+          if (outcome === "head-changed" && index === 0) {
+            fs.writeFileSync(path.join(cwd, "changed.txt"), "a different source identity");
+            execFileSync("git", ["-C", cwd, "add", "."]);
+            execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "change HEAD"]);
+          }
+          options.onEvent?.({ type: "message_end", message: { role: "assistant", stopReason: "toolUse",
+            usage: { input: 50, output: 10, cost: { total: 0.001 } } } } as never);
+          if (outcome === "incomplete" && index === 1) return { turns: 1, costUsd: 0.001, aborted: true };
+          const tool = options.customTools![0]!;
+          if (outcome === "unassigned-claim" && index === 1) {
+            const foreign = assignments[0]!.find(key => !keys.includes(key))!;
+            await assert.rejects(() => tool.execute("wrong-scope", reviewWire({
+              checked_claims: [...keys, foreign], finding: null,
+            }), undefined, undefined, { cwd } as never), /invalid or expired/);
+            return { turns: 1, costUsd: 0.001, aborted: false };
+          }
+          if (!options.signal?.aborted) await tool.execute("review-assignment", reviewWire({ checked_claims: keys,
+            finding: outcome === "rejected" && keys.includes("one_line") ? {
+              claim: "one_line", path: "clock.py", excerpt: "return int(value)", reason: CORRECTION,
+            } : null,
+          }), undefined, undefined, { cwd } as never);
+          return { turns: 1, costUsd: 0.001, aborted: true };
+        } finally { active -= 1; }
+      } };
+      const reviewed = await reviewSpecialistCompilation({ cwd, runtime, signal: parent.signal,
+        config: { schemaVersion: 1, models: {}, thinkingLevel: "high" }, ui: { status() {} } } as never,
+      compilation, budget, "assignment-test");
+      assert.equal(started, 2, "a partitioned body cannot spend more than two requests");
+      assert.equal(peak, 2);
+      const union = new Set(assignments.flat());
+      for (let i = 0; i < concern.invariants.length; i += 1) assert.ok(union.has(`invariants[${i}]`));
+      for (const key of ["concern", "one_line", "covers", "excludes", "flows[0]", "touchpoints[0]", "pitfalls[0]", "entry_questions", "validation"]) assert.ok(union.has(key), key);
+      assert.deepEqual(assignments[0]!.filter(key => assignments[1]!.includes(key)).sort(), ["concern", "covers", "excludes"],
+        "only global coherence claims overlap; every local assertion must be assigned");
+      const record = reviewed.map.specialist_reviews!.records.find(item => item.concern === concern.concern)!;
+      assert.equal(record.failure === null, outcome === "approved", "partial checklists cannot approve the exact body");
+      if (outcome === "rejected") {
+        assert.equal(record.finding?.claim, "one_line");
+        assert.equal(record.retryable, false);
+      } else if (outcome !== "approved") assert.equal(record.retryable, true);
+      assert.equal(JSON.stringify(compilation.map), original, "review cannot mutate its input evidence");
+      assert.equal(budget.snapshot().model_calls, outcome === "capacity-refused" ? 1 : 2);
+      assert.equal(budget.snapshot().unreserved_calls, 0);
+      if (outcome === "cancelled") {
+        assert.equal(budget.snapshot().unreported_calls, 2);
+        assert.equal(budget.snapshot().reserved_output_tokens, 12_000);
+      }
+    } finally { fs.rmSync(cwd, { recursive: true, force: true }); }
+  });
+}

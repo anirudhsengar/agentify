@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Partition large normalized-source reviews into two complete assigned-claim checks sharing the existing deadline, two-request ceiling, and total output allowance. Only all-complete supported assignments approve a body; source findings, cancellation, unknown usage, and missing assignments remain fail-closed.
+
 - Classify incomplete reviewer execution separately from rejected source: review-only failures cannot consume repair passes, rewrite attested bodies, or obtain hidden retries; independent source and ownership obligations still require repair.
 
 - Use verified MiniMax M3 named/any terminal-tool selection without disabling configured thinking or changing response limits. Preserve the auto-selection fallback for older models and unverified regional endpoints.

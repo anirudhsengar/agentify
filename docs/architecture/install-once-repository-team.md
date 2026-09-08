@@ -380,6 +380,23 @@ The coverage-pass limit and standalone audit behavior are unchanged. Deferred
 specialist evidence is neither approved nor discarded and must still pass the
 separate receipt, narrative, ownership and installation gates.
 
+Large normalized bodies with more than 24 review claims use two assigned-claim
+checks rather than one monolithic response and its optional argument correction.
+The original claim IDs are partitioned exactly once except the three coherence
+claims (concern, covers, excludes), which both reviewers must inspect. Each task
+receives the complete immutable evidence bytes and whole-flow scope context.
+They share the original 90-second deadline, a two-request ceiling and 12,000
+output-token allowance (6,000 per task). A partitioned task cannot spend another
+request on argument repair. The global review concurrency ceiling remains two;
+one large body occupies both slots, while small-body behavior is unchanged.
+Only complete supported results for both assignments produce the exact-body
+attestation. One exact-source finding rejects the body and cancels its sibling;
+cancellation and missing usage retain admitted reservations. Incomplete tasks,
+foreign claim IDs, changed HEAD, and failed admission cannot confer approval or
+trigger a hidden replay of an already charged assignment. This decomposition
+preserves model selection and configured thinking; it does not waive any source,
+receipt, ownership or final installation gate.
+
 Incomplete review execution is not a source contradiction. The repair controller
 separates exact-body retryable review failures from structural/source findings in
 its task input. When compilation and source receipts are complete and only those
