@@ -1,0 +1,395 @@
+name: PR13 compound assertion review qualification
+run-name: PR13 ecb1753 repeated compound checks, cancellation and fresh PyJWT
+'on':
+  push:
+    branches:
+    - validation/pr13-pyjwt-r15-20260908
+    paths:
+    - .github/workflows/pr13-pyjwt-r15.yml
+    - .github/qualification/**
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: pr13-pyjwt-r15-20260908
+  cancel-in-progress: false
+jobs:
+  review:
+    if: github.actor == github.repository_owner
+    name: Review / ${{ matrix.case.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        case:
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r15-1-high-jwk
+          concern: JWK and JWKSet parsing
+          candidate_sha: ecb17537b8aeba23d18684e99278d424cfbd02af
+          candidate_tree: c0dfde8051bf0aad855136faf4d54e4f5fe649f5
+          thinking_level: high
+          known_bad_fragment: reports as expired
+          require_source_observation: true
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r15-1-high-valid-cache
+          concern: JWK and JWKSet parsing
+          candidate_sha: ecb17537b8aeba23d18684e99278d424cfbd02af
+          candidate_tree: c0dfde8051bf0aad855136faf4d54e4f5fe649f5
+          positive_control: true
+          thinking_level: high
+          require_source_observation: true
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r15-1-numeric-exp-canary
+          concern: JWT claim validation and payload lifecycle
+          candidate_sha: ecb17537b8aeba23d18684e99278d424cfbd02af
+          candidate_tree: c0dfde8051bf0aad855136faf4d54e4f5fe649f5
+          thinking_level: high
+          false_claim_canary: true
+          require_source_observation: true
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r15-2-high-jwk
+          concern: JWK and JWKSet parsing
+          candidate_sha: ecb17537b8aeba23d18684e99278d424cfbd02af
+          candidate_tree: c0dfde8051bf0aad855136faf4d54e4f5fe649f5
+          thinking_level: high
+          known_bad_fragment: reports as expired
+          require_source_observation: true
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r15-2-high-valid-cache
+          concern: JWK and JWKSet parsing
+          candidate_sha: ecb17537b8aeba23d18684e99278d424cfbd02af
+          candidate_tree: c0dfde8051bf0aad855136faf4d54e4f5fe649f5
+          positive_control: true
+          thinking_level: high
+          require_source_observation: true
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r15-2-numeric-exp-canary
+          concern: JWT claim validation and payload lifecycle
+          candidate_sha: ecb17537b8aeba23d18684e99278d424cfbd02af
+          candidate_tree: c0dfde8051bf0aad855136faf4d54e4f5fe649f5
+          thinking_level: high
+          false_claim_canary: true
+          require_source_observation: true
+    steps:
+    - name: Require existing exact-code success before model use
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: 'set -euo pipefail
+
+        gh api repos/anirudhsengar/agentify/actions/runs/34255071445 --jq ''.status + " " + .conclusion + " " +
+        .head_sha'' > "$RUNNER_TEMP/prior-qualification-status"
+
+        test "$(cat "$RUNNER_TEMP/prior-qualification-status")" = ''completed success 1c7d5a1bc0c9c378d3492b01e0d709a1bc9f6a2c''
+
+        '
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ecb17537b8aeba23d18684e99278d424cfbd02af
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Install pinned test toolchain, no model credentials
+      run: 'npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts
+
+        test "$(git rev-parse HEAD)" = ecb17537b8aeba23d18684e99278d424cfbd02af
+
+        test "$(git rev-parse HEAD^{tree})" = c0dfde8051bf0aad855136faf4d54e4f5fe649f5
+
+        '
+    - name: Fetch exact retained input and immutable repository
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REVIEW_CASE: ${{ toJSON(matrix.case) }}
+      run: 'set -euo pipefail
+
+        printf ''PROBE_TARGET=%s/probe-target
+
+        PROBE_PREVIOUS=%s/previous
+
+        PROBE_EVIDENCE=%s/evidence
+
+        '' "$RUNNER_TEMP" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        printf ''HOME=%s/probe-home
+
+        USERPROFILE=%s/probe-home
+
+        XDG_CONFIG_HOME=%s/probe-home/.config
+
+        '' "$RUNNER_TEMP" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        name=$(printf ''%s'' "$REVIEW_CASE" | jq -r .artifact)
+
+        repository=$(printf ''%s'' "$REVIEW_CASE" | jq -r .repository)
+
+        sha=$(printf ''%s'' "$REVIEW_CASE" | jq -r .target_sha)
+
+        gh run download 34196528837 -R anirudhsengar/agentify -n "$name" -D "$RUNNER_TEMP/previous"
+
+        git init -q "$RUNNER_TEMP/probe-target"
+
+        git -C "$RUNNER_TEMP/probe-target" fetch --depth=1 "https://github.com/$repository.git" "$sha"
+
+        git -C "$RUNNER_TEMP/probe-target" checkout --detach -q FETCH_HEAD
+
+        mkdir -p "$RUNNER_TEMP/probe-home"
+
+        '
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ${{ github.sha }}
+        path: probe-code
+        persist-credentials: false
+    - name: Run bounded production review with explicit verdicts
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        REVIEW_CASE: ${{ toJSON(matrix.case) }}
+      run: node --import tsx probe-code/.github/qualification/review-probe.mjs
+    - name: Retain redacted review outcome only
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: review-r15-${{ matrix.case.name }}-${{ github.run_id }}
+        path: ${{ env.PROBE_EVIDENCE }}
+        if-no-files-found: warn
+        retention-days: 14
+    - name: Remove disposable inputs and authentication
+      if: always()
+      run: rm -rf -- "$RUNNER_TEMP/probe-home" "$RUNNER_TEMP/probe-target" "$RUNNER_TEMP/previous"
+    permissions:
+      contents: read
+      actions: read
+  cancel:
+    if: github.actor == github.repository_owner
+    name: Actual installed CLI cancellation
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        case:
+        - name: pyjwt
+          repository: anirudhsengar/pyjwt
+          sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          cohort: heldout-round-1
+    env:
+      LIVE_REPOSITORY: ${{ matrix.case.repository }}
+      LIVE_TARGET_SHA: ${{ matrix.case.sha }}
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ecb17537b8aeba23d18684e99278d424cfbd02af
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Provision pinned candidate toolchain without model credentials
+      run: 'set -euo pipefail
+
+        sudo apt-get update -qq
+
+        sudo apt-get install --no-install-recommends -y ripgrep fd-find
+
+        if ! command -v fd >/dev/null; then sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd; fi
+
+        npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts
+
+        test "$(npm --version)" = 11.19.0
+
+        '
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ${{ github.sha }}
+        path: validation-code
+        persist-credentials: false
+    - name: Require successful exact-candidate qualification and its verified package hash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        EXPECTED_CANDIDATE: ecb17537b8aeba23d18684e99278d424cfbd02af
+        EXPECTED_TREE: c0dfde8051bf0aad855136faf4d54e4f5fe649f5
+        EXPECTED_LAUNCHER: 1c7d5a1bc0c9c378d3492b01e0d709a1bc9f6a2c
+      run: "set -euo pipefail\numask 022\nmv -- validation-code \"$RUNNER_TEMP/review-r15-validation\"\ntest \"\
+        $(git rev-parse HEAD)\" = ecb17537b8aeba23d18684e99278d424cfbd02af\ntest \"$(git rev-parse HEAD^{tree})\"\
+        \ = c0dfde8051bf0aad855136faf4d54e4f5fe649f5\ntest -z \"$(git status --porcelain)\"\ngh api repos/anirudhsengar/agentify/actions/runs/34255071445\
+        \ > \"$RUNNER_TEMP/qualification.json\"\nfor version in 22.19.0 24.19.0; do\n gh run download 34255071445\
+        \ -R anirudhsengar/agentify -n \"pr13-compound-r15-code-node-$version-34255071445\" -D \"$RUNNER_TEMP/qualified-source/node-$version\"\
+        \ndone\nfor name in r15-1-high-jwk r15-1-high-valid-cache r15-1-numeric-exp-canary r15-2-high-jwk r15-2-high-valid-cache\
+        \ r15-2-numeric-exp-canary; do\n gh run download \"$GITHUB_RUN_ID\" -R anirudhsengar/agentify -n \"review-r15-$name-$GITHUB_RUN_ID\"\
+        \ -D \"$RUNNER_TEMP/source-controls/$name\"\ndone\nnode \"$RUNNER_TEMP/review-r15-validation/.github/qualification/verify-review-r15.mjs\"\
+        \nprintf 'LIVE_WORK_DIR=%s/fresh-pyjwt-r15-%s\\nLIVE_PACK_RESULT=%s/pyjwt-r15-pack.json\\n' \"$RUNNER_TEMP\"\
+        \ \"$GITHUB_RUN_ID\" \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n"
+    - name: Validate exact-source evidence gate without model credentials
+      run: node --test "$RUNNER_TEMP/review-r15-validation/.github/qualification/verify-review-r15.test.mjs"
+    - name: Pack exact qualified bytes
+      run: 'set -euo pipefail
+
+        umask 022
+
+        npm run --silent pack:release > "$LIVE_PACK_RESULT"
+
+        node --input-type=module -e ''import fs from "node:fs"; import assert from "node:assert/strict"; const p=JSON.parse(fs.readFileSync(process.env.LIVE_PACK_RESULT,"utf8"));
+        assert.equal(p.sha256,process.env.LIVE_EXPECTED_PACKAGE_HASH); console.log(JSON.stringify(p));''
+
+        '
+    - name: Prepare fresh frozen target and install actual npm artifact
+      run: npm run --silent live:prepare
+    - name: Validate source-checkpoint observer without model credentials
+      run: node --test "$RUNNER_TEMP/review-r15-validation/.github/qualification/cancellation-events.test.mjs"
+    - name: Interrupt the actual installed CLI at the validated checkpoint
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        GH_TOKEN: ${{ github.token }}
+      run: node "$RUNNER_TEMP/review-r15-validation/.github/qualification/cli-cancellation.mjs"
+    - name: Retain redacted per-target evidence
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: cli-cancellation-r15-${{ github.run_id }}
+        path: '${{ env.LIVE_WORK_DIR }}/evidence
+
+          ${{ runner.temp }}/qualification.json
+
+          ${{ runner.temp }}/review-r15-qualification-reuse.json'
+        if-no-files-found: warn
+        include-hidden-files: true
+        retention-days: 14
+    - name: Remove disposable target and credentials
+      if: always()
+      run: if test -n "${LIVE_WORK_DIR:-}"; then rm -rf -- "$LIVE_WORK_DIR"; fi
+    needs:
+    - review
+  install:
+    if: github.actor == github.repository_owner
+    name: Fresh diagnostic / ${{ matrix.case.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        case:
+        - name: pyjwt
+          repository: anirudhsengar/pyjwt
+          sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          cohort: heldout-round-1
+    env:
+      LIVE_REPOSITORY: ${{ matrix.case.repository }}
+      LIVE_TARGET_SHA: ${{ matrix.case.sha }}
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ecb17537b8aeba23d18684e99278d424cfbd02af
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Provision pinned candidate toolchain without model credentials
+      run: 'set -euo pipefail
+
+        sudo apt-get update -qq
+
+        sudo apt-get install --no-install-recommends -y ripgrep fd-find
+
+        if ! command -v fd >/dev/null; then sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd; fi
+
+        npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts
+
+        test "$(npm --version)" = 11.19.0
+
+        '
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ${{ github.sha }}
+        path: validation-code
+        persist-credentials: false
+    - name: Require successful exact-candidate qualification and its verified package hash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        EXPECTED_CANDIDATE: ecb17537b8aeba23d18684e99278d424cfbd02af
+        EXPECTED_TREE: c0dfde8051bf0aad855136faf4d54e4f5fe649f5
+        EXPECTED_LAUNCHER: 1c7d5a1bc0c9c378d3492b01e0d709a1bc9f6a2c
+      run: "set -euo pipefail\numask 022\nmv -- validation-code \"$RUNNER_TEMP/review-r15-validation\"\ntest \"\
+        $(git rev-parse HEAD)\" = ecb17537b8aeba23d18684e99278d424cfbd02af\ntest \"$(git rev-parse HEAD^{tree})\"\
+        \ = c0dfde8051bf0aad855136faf4d54e4f5fe649f5\ntest -z \"$(git status --porcelain)\"\ngh api repos/anirudhsengar/agentify/actions/runs/34255071445\
+        \ > \"$RUNNER_TEMP/qualification.json\"\nfor version in 22.19.0 24.19.0; do\n gh run download 34255071445\
+        \ -R anirudhsengar/agentify -n \"pr13-compound-r15-code-node-$version-34255071445\" -D \"$RUNNER_TEMP/qualified-source/node-$version\"\
+        \ndone\nfor name in r15-1-high-jwk r15-1-high-valid-cache r15-1-numeric-exp-canary r15-2-high-jwk r15-2-high-valid-cache\
+        \ r15-2-numeric-exp-canary; do\n gh run download \"$GITHUB_RUN_ID\" -R anirudhsengar/agentify -n \"review-r15-$name-$GITHUB_RUN_ID\"\
+        \ -D \"$RUNNER_TEMP/source-controls/$name\"\ndone\nnode \"$RUNNER_TEMP/review-r15-validation/.github/qualification/verify-review-r15.mjs\"\
+        \nprintf 'LIVE_WORK_DIR=%s/fresh-pyjwt-r15-%s\\nLIVE_PACK_RESULT=%s/pyjwt-r15-pack.json\\n' \"$RUNNER_TEMP\"\
+        \ \"$GITHUB_RUN_ID\" \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n"
+    - name: Validate exact-source evidence gate without model credentials
+      run: node --test "$RUNNER_TEMP/review-r15-validation/.github/qualification/verify-review-r15.test.mjs"
+    - name: Pack exact qualified bytes
+      run: 'set -euo pipefail
+
+        umask 022
+
+        npm run --silent pack:release > "$LIVE_PACK_RESULT"
+
+        node --input-type=module -e ''import fs from "node:fs"; import assert from "node:assert/strict"; const p=JSON.parse(fs.readFileSync(process.env.LIVE_PACK_RESULT,"utf8"));
+        assert.equal(p.sha256,process.env.LIVE_EXPECTED_PACKAGE_HASH); console.log(JSON.stringify(p));''
+
+        '
+    - name: Prepare fresh frozen target and install actual npm artifact
+      run: npm run --silent live:prepare
+    - name: Install with production M3 roles, boundaries, and budgets
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        GH_TOKEN: ${{ github.token }}
+      run: npm run --silent live:install
+    - name: Retain redacted per-target evidence
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: fresh-pyjwt-r15-${{ github.run_id }}
+        path: '${{ env.LIVE_WORK_DIR }}/evidence
+
+          ${{ runner.temp }}/qualification.json
+
+          ${{ runner.temp }}/review-r15-qualification-reuse.json'
+        if-no-files-found: warn
+        include-hidden-files: true
+        retention-days: 14
+    - name: Remove disposable target and credentials
+      if: always()
+      run: if test -n "${LIVE_WORK_DIR:-}"; then rm -rf -- "$LIVE_WORK_DIR"; fi
+    needs:
+    - cancel
