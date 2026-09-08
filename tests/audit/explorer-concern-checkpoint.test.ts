@@ -1255,3 +1255,78 @@ test("the tracer reports exact validation locations and normalizes tracked path 
   );
   assert.equal((unrelated as { isError?: boolean }).isError, true);
 });
+
+
+for (const scenario of ["missing-focus", "review-timeout", "unrelated-focus", "path-prefix", "covered-path", "source-obligation", "missing-observation", "failed-receipt", "later-failure", "stale-ledger", "stale-review", "changed-body", "source-finding", "initial-audit"] as const) {
+  test(`review-only retries need independent source repair authority: ${scenario}`, async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-review-retrace-admission-"));
+    const stateDir = ".agentify/runtime/audit";
+    try {
+      for (const [file, source] of Object.entries({
+        "src/extract/mod.rs": "pub trait FromRequest {}\n",
+        "src/extract/rejection.rs": "pub enum Rejection {}\n",
+        "src/uncovered.ts": "export const unrelatedWork = () => 42;\n",
+        "tests/uncovered.test.ts": "import { unrelatedWork } from '../src/uncovered';\nconsole.assert(unrelatedWork() === 42);\n",
+      })) {
+        fs.mkdirSync(path.dirname(path.join(cwd, file)), { recursive: true });
+        fs.writeFileSync(path.join(cwd, file), source);
+      }
+      git(cwd, "init", "-q");
+      git(cwd, "config", "user.name", "Agentify Test");
+      git(cwd, "config", "user.email", "agentify@example.invalid");
+      git(cwd, "add", ".");
+      git(cwd, "commit", "-qm", "source repair admission fixture");
+      const concern = parseStructuredConcernReport(REPORT, "2026-08-29T00:00:00.000Z")!;
+      const map = attestCodebaseMap(makeValidCodebaseMap({
+        concern_evidence: { concerns: [concern], not_concerns: [] }, expert_evidence: undefined,
+      }), currentRepositoryCommit(cwd)!);
+      const review = map.specialist_reviews!.records[0]!;
+      review.failure = "bounded review did not produce a complete typed result";
+      review.retryable = true;
+      if (scenario === "missing-observation") map.explorer_receipts!.receipts[1]!.observed_paths = [];
+      if (scenario === "failed-receipt") map.explorer_receipts!.receipts[1]!.success = false;
+      if (scenario === "later-failure") map.explorer_receipts!.receipts.push({
+        ...map.explorer_receipts!.receipts[1]!, sequence: 3, success: false, failure_kind: "timeout",
+      });
+      if (scenario === "stale-ledger") map.explorer_receipts!.repository_commit = "0".repeat(40);
+      if (scenario === "stale-review") map.specialist_reviews!.repository_commit = "0".repeat(40);
+      if (scenario === "changed-body") review.digest = "0".repeat(64);
+      if (scenario === "source-finding") {
+        review.retryable = false;
+        review.finding = { claim: "covers", path: "src/extract/mod.rs", excerpt: "pub trait FromRequest {}",
+          reason: "The observed scope needs a narrower evidence-backed boundary." };
+      }
+      writeCanonicalMap(cwd, map, { stateDir, mapFilename: "codebase_map.json" });
+      const file = path.join(cwd, stateDir, "codebase_map.json");
+      const before = fs.readFileSync(file, "utf8");
+      assert.ok(compileSpecialistEvidence(map, { cwd }).assessment.uncovered_paths.includes("src/uncovered.ts"),
+        "the admitted focus must name a real compiler obligation, not a fabricated test path");
+      const budget = new AuditResourceBudget();
+      let sessions = 0;
+      const tool = createSpawnExplorerTool({
+        agentDir: cwd, stateDir, ...(scenario === "initial-audit" ? {} : { purpose: "specialist-repair" as const }),
+        explorerModel: { id: "fixture", name: "fixture", provider: "fixture", api: "openai-completions",
+          contextWindow: 32_768, maxTokens: 12_000, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } } as Model<Api>,
+        resourceBudget: budget,
+        createSession: async () => { sessions += 1; throw new Error("test child admission reached"); },
+      });
+      const focus = scenario === "source-obligation" ? "Resolve the compiler obligation at src/uncovered.ts."
+        : scenario === "covered-path" ? "Retrace src/extract/mod.rs because the reviewer timed out."
+        : scenario === "path-prefix" ? "Repair src/uncovered.ts.backup, not an actual obligation."
+        : scenario === "unrelated-focus" ? "Inspect src/invented.ts."
+        : scenario === "missing-focus" ? undefined : "Review timed out; retrace the unchanged concern.";
+      const result = await tool.execute("retry", { mode: "concern_tracer", target_path: ".", concern: concern.concern,
+        ...(focus ? { focus } : {}) }, undefined, undefined, { cwd } as never) as {
+          isError?: boolean; details?: { review_execution_pending?: boolean } };
+      const refused = ["missing-focus", "review-timeout", "unrelated-focus", "path-prefix", "covered-path"].includes(scenario);
+      assert.equal(result.details?.review_execution_pending === true, refused, scenario);
+      assert.equal(sessions, refused ? 0 : 1, "only independent source work may enter a repair tracer");
+      if (refused) {
+        assert.equal(budget.snapshot().model_calls, 0);
+        assert.equal(budget.snapshot().explorer_spawns, 0);
+        assert.equal(budget.snapshot().unreported_calls, 0);
+      }
+      assert.equal(fs.readFileSync(file, "utf8"), before, "admission cannot change the source body, receipts or review");
+    } finally { fs.rmSync(cwd, { recursive: true, force: true }); }
+  });
+}

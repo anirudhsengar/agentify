@@ -380,6 +380,17 @@ The coverage-pass limit and standalone audit behavior are unchanged. Deferred
 specialist evidence is neither approved nor discarded and must still pass the
 separate receipt, narrative, ownership and installation gates.
 
+At the explorer admission boundary, semantic repair cannot retrace an exact
+current-HEAD body solely because its reviewer did not finish. When that body's
+successful source receipts and observations remain intact, a retrace must name
+an exact current compiler-uncovered path, cluster path or conflicting core path
+in focus. Similar path prefixes do not qualify. Missing observations, later
+failed tracer receipts, changed or stale review digests, and source-backed
+findings retain the ordinary repair path; the initial audit is unchanged.
+Refusal dispatches no model session, spends no child budget, writes no evidence,
+and grants no review or installation credit. Normal tracer scope, grounding and
+monotonicity validation still applies to any independently authorized repair.
+
 Incomplete review execution is not a source contradiction. The repair controller
 separates exact-body retryable review failures from structural/source findings in
 its task input. When compilation and source receipts are complete and only those

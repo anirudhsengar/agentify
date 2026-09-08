@@ -66,7 +66,7 @@ import { Value } from "typebox/value";
 import { capProviderOutputTokens, forceProviderToolChoice, providerFailureSummary } from "../pi-sdk-runtime.ts";
 import { ConcernAmendmentSchema, ConcernSchema, type Concern } from "./schema/concerns.ts";
 import type { CodebaseMap } from "./schema/index.ts";
-import { assessConcernGrounding, assessSpecialistEvidence, concernEvidencePaths } from "./specialist-completion.ts";
+import { assessConcernGrounding, assessSpecialistEvidence, concernEvidencePaths, removeTrustedInferredAttachments } from "./specialist-completion.ts";
 import { compileSpecialistEvidence } from "./specialist-compiler.ts";
 import { getThinkingLevel } from "./state.ts";
 import { makeDefenseHook } from "./defense-hook.ts";
@@ -977,6 +977,42 @@ function currentCompilerFeedback(
     return feedback;
 }
 
+/** Incomplete reviewer execution is not evidence that a traced body needs rewriting. */
+function reviewOnlyRetrace(map: CodebaseMap | null, name: string | undefined, cwd: string, focus: string | undefined): boolean {
+    const commit = currentRepositoryCommit(cwd);
+    const body = map?.concern_evidence?.concerns.find(concern => concern.concern === name);
+    if (!commit || !body || map?.specialist_reviews?.repository_commit !== commit
+        || map.explorer_receipts?.repository_commit !== commit) return false;
+    const digest = createHash("sha256").update(stableMapValueIdentity(body)).digest("hex");
+    const review = map.specialist_reviews.records.find(record => record.concern === name && record.digest === digest);
+    if (!review?.failure || review.retryable !== true || review.finding || review.additional_findings?.length) return false;
+    const receipts = map.explorer_receipts.receipts;
+    const named = receipts.filter(receipt => receipt.mode === "concern_tracer"
+        && (receipt.expected_concern === name || receipt.report_concern === name));
+    const latestSuccess = Math.max(-1, ...named.filter(receipt => receipt.success).map(receipt => receipt.sequence));
+    if (latestSuccess < 0 || named.some(receipt => !receipt.success && receipt.sequence > latestSuccess)) return false;
+    const authored = removeTrustedInferredAttachments(map).concern_evidence?.concerns.find(concern => concern.concern === name);
+    const observed = new Set(receipts.filter(receipt => receipt.mode === "concern_tracer" && receipt.success)
+        .flatMap(receipt => receipt.observed_paths ?? []));
+    if (!authored || concernEvidencePaths(authored).some(file => !observed.has(file))) return false;
+    const compilation = compileSpecialistEvidence(map, { cwd });
+    if (compilation.status === "non-convergent" || !compilation.assessment.accepted_concerns.includes(body.concern)) return false;
+    const obligations = new Set([...compilation.assessment.uncovered_paths,
+        ...compilation.assessment.uncovered_clusters.flatMap(cluster => [...cluster.implementation_paths, ...cluster.test_paths])]);
+    const owners = new Map<string, number>();
+    for (const concern of compilation.map.concern_evidence?.concerns ?? []) {
+        for (const file of new Set(concern.touchpoints.filter(point => point.centrality === "core").map(point => point.path))) {
+            owners.set(file, (owners.get(file) ?? 0) + 1);
+        }
+    }
+    for (const [file, count] of owners) if (count > 1) obligations.add(file);
+    // Match exact repository-relative paths, not similarly named backups.
+    return ![...obligations].some(file => {
+        const escaped = file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return new RegExp(`(?:^|[^A-Za-z0-9_./-])${escaped}(?![A-Za-z0-9_/-]|\\.[A-Za-z0-9_./-])`).test(focus ?? "");
+    });
+}
+
 function successfulCurrentHeadScouts(cwd: string, stateDir: string) {
     const map = loadCanonicalMapAt(cwd, stateDir);
     const currentCommit = currentRepositoryCommit(cwd);
@@ -1192,6 +1228,13 @@ export function createSpawnExplorerTool(toolOptions: SpawnExplorerToolOptions): 
         const existingMap = mode === "concern_tracer" && expectedConcern
             ? loadCanonicalMapAt(ctx.cwd, stateDir)
             : null;
+        if (specialistRepair && mode === "concern_tracer" && reviewOnlyRetrace(existingMap, expectedConcern, ctx.cwd, params.focus)) {
+            return {
+                content: [{ type: "text", text: "Error: this exact body already has current-HEAD source receipts; only its review execution is incomplete. A reviewer timeout is not rejected source. Preserve the body and review obligation. Retrace only for an independent current compiler gap or core-ownership conflict, naming its exact tracked path in focus; no child was dispatched." }],
+                isError: true,
+                details: { review_execution_pending: true },
+            };
+        }
         const requiredScopePaths = existingMap && expectedConcern
             ? [...new Set(
                 (existingMap.concern_evidence?.concerns.find((concern) =>

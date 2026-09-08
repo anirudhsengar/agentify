@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Refuse review-only retracing before child admission: an unchanged, currently attested body with an incomplete reviewer execution needs an explicit independent compiler path or core-ownership obligation before semantic repair can retrace it. Missing observations and failed source receipts remain repairable.
+
 - Classify incomplete reviewer execution separately from rejected source: review-only failures cannot consume repair passes, rewrite attested bodies, or obtain hidden retries; independent source and ownership obligations still require repair.
 
 - Use verified MiniMax M3 named/any terminal-tool selection without disabling configured thinking or changing response limits. Preserve the auto-selection fallback for older models and unverified regional endpoints.
