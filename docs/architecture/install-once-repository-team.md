@@ -228,6 +228,11 @@ original stable claim IDs, with repeated findings for one original claim collaps
 The final reviewer still receives every original claim and immutable source byte.
 No fragment outcome becomes a whole-body attestation, and no extra request,
 deadline, source allowance, model change or reasoning-mode override is introduced.
+If a validated precheck finding causes trusted surplus-claim pruning, the next
+review of that changed digest bypasses another local precheck and enters the
+complete review directly. Repeating the same heuristic cannot consume the fresh
+body's review window; every remaining original claim and immutable source byte
+still requires the ordinary complete review under its existing request limits.
 Only validated supported submissions become the existing canonical null finding;
 persisted exact-body review attestations and their meaning are unchanged. It submits immediately at the first decisive rejection, retaining
 additional findings only if already established rather than searching for a quota.

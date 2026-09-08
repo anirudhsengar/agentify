@@ -262,6 +262,9 @@ context retained. Predicate conjunctions are separated when the second clause
 introduces an executable behavior, so a correct return value cannot support an
 incorrect state predicate. Every fragment must be checked; findings map back to
 the original claim without changing the installed body or complete-review contract.
+After trusted pruning removes a source-rejected surplus assertion, the changed
+body proceeds directly to its mandatory complete review instead of repeating the
+same local precheck. The full review and existing request limits remain authoritative.
 Two independent read-only bodies may be
 reviewed concurrently; results are applied in portfolio order, and temporary
 aggregate-reservation refusal falls back to serial admission. Reviews submit

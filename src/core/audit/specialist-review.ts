@@ -391,14 +391,14 @@ async function reviewClaimTask(
 
 async function reviewConcern(
   context: RunContext, concern: Concern, commit: string, budget: AuditResourceBudget,
-  attachments: readonly RepositoryConcernAttachment[],
+  attachments: readonly RepositoryConcernAttachment[], skipPrecheck = false,
 ): Promise<ReviewOutcome> {
   const deadline = Date.now() + budget.remainingDurationMs(REVIEW_TIMEOUT_MS);
   const sources = immutableSources(context.cwd, commit, concern, deadline);
   const claims = reviewClaims(concern, attachments);
   if (Object.keys(claims).length > 512) throw new Error("review claim budget exceeded");
   const admitted = { requests: 0 };
-  const precheck = sourcePrecheck(claims, sources);
+  const precheck = skipPrecheck ? null : sourcePrecheck(claims, sources);
   if (!precheck) return reviewClaimTask(context, concern, commit, budget, attachments,
     { claims, sources, deadline, admitted, precheck: false, maxRequests: 2 });
   try {
@@ -464,6 +464,7 @@ async function reviewSpecialistCompilationOnce(
     record.concern === concern.concern && record.digest === specialistReviewDigest(concern)));
   type ReviewRecord = (typeof records)[number];
   const review = async (concern: Concern): Promise<ReviewRecord | null> => {
+    let skipPrecheck = false;
     while (true) {
       const digest = specialistReviewDigest(concern);
       const cached = records.find(item => item.concern === concern.concern && item.digest === digest);
@@ -474,7 +475,7 @@ async function reviewSpecialistCompilationOnce(
       let finding: NonNullable<SpecialistReviewSubmission["finding"]> | undefined;
       let additional_findings: SpecialistReviewSubmission["additional_findings"];
       try { ({ failure, retryable, finding, additional_findings } = await reviewConcern(context, concern, commit, budget,
-        attachments)); }
+        attachments, skipPrecheck)); }
       catch (error) {
         if (error instanceof AuditBudgetExceededError) throw error;
         failure = `Review unresolved: ${error instanceof Error ? error.message : String(error)}`.slice(0, 2_048);
@@ -485,6 +486,10 @@ async function reviewSpecialistCompilationOnce(
         event: { type: "specialist_review_result", concern: concern.concern,
           digest, repository_commit: commit, failure, retryable, pruned_claims: prunedClaims } });
       if (prunedClaims.length > 0) {
+        // The precheck is only a falsification hint. Once trusted pruning changes
+        // the body, do not spend another request repeating that local hint; the
+        // changed digest still requires the complete original review contract.
+        skipPrecheck = true;
         continue;
       }
       return { concern: concern.concern, digest, run_id: runId, failure, retryable,
