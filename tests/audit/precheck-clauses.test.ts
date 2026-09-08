@@ -30,6 +30,24 @@ test("compound prechecks preserve every field and bind each fragment to its orig
   assert.deepEqual(expandPrecheckClauses(structuredClone(originals)), plan);
 });
 
+test("predicate conjunctions cannot let a true outcome rescue a false state claim", () => {
+  const original = {
+    "invariants[0]": {
+      rule: "The absence guard is false for an empty cache, so an empty cache reports as expired and returns None from get().",
+      why: "The predicate and getter have distinct return values.",
+      reference: "cache.py",
+    },
+  };
+  const plan = expandPrecheckClauses(original)!;
+  assert.ok(plan);
+  const rule = Object.values(plan.claims)
+    .filter(clause => clause.original_claim === "invariants[0]" && clause.field === "rule")
+    .map(clause => clause.text);
+  assert.ok(rule.some(fragment => fragment.includes("reports as expired") && !fragment.includes("returns None")),
+    "the state assertion must be independently reviewable from the getter outcome");
+  assert.equal(rule.join(""), original["invariants[0]"].rule);
+});
+
 test("simple assertions and source identifiers retain their original review contract", () => {
   assert.equal(expandPrecheckClauses({
     "pitfalls[0]": { risk: "time.monotonic() controls age.", consequence: "Check cache.is_expired().", reference: "cache.py" },

@@ -4,7 +4,7 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
-- Give compound source-precheck assertions separate, lossless fragment IDs so a true premise cannot hide a false conclusion. Every fragment remains required, source findings bind back to the original claim, and complete original-body review remains mandatory without new requests or higher limits.
+- Give compound source-precheck assertions separate, lossless fragment IDs so a true premise or neighboring getter outcome cannot hide a false predicate conclusion. Predicate conjunctions such as “reports X and returns Y” are independently reviewable; every fragment remains required, source findings bind back to the original claim, and complete original-body review remains mandatory without new requests or higher limits.
 
 - Present complete-review source as literal, separately delimited text rather than nested JSON-escaped strings. Preserve every original claim, source character, precheck contract, and review/provenance gate.
 

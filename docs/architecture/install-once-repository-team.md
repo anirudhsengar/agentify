@@ -214,8 +214,11 @@ can repair the actual argument error. The wire contract requires an explicit
 `supported` verdict with no finding property and the complete checklist, or an
 `unsupported` verdict with an exact-source finding. Null, empty, missing-verdict,
 and contradictory proposals are rejected rather than interpreted as approval.
-For a compound precheck assertion, literal sentence, semicolon and selected
-contrast/consequence boundaries produce independently required fragment IDs.
+For a compound precheck assertion, literal sentence, semicolon, selected
+contrast/consequence boundaries and predicate conjunctions produce independently
+required fragment IDs. A conjunction is split only when its second clause begins
+with an executable predicate or behavior verb; the original prose remains present
+as context so the boundary does not invent a new assertion.
 This is a presentation heuristic, not a natural-language parser. Concatenating
 the fragments reconstructs every original prose field exactly; the full original
 assertion is retained as untrusted guard and antecedent context. Simple assertions

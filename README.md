@@ -258,8 +258,10 @@ followed by the complete original review before approval. Those stages share the
 same 90-second deadline and two-request ceiling, with no extra correction call.
 The precheck cannot approve a body or replace any full-source claim check.
 Compound precheck prose receives separate fragment IDs with its full original
-context retained. Every fragment must be checked; findings map back to the
-original claim without changing the installed body or complete-review contract.
+context retained. Predicate conjunctions are separated when the second clause
+introduces an executable behavior, so a correct return value cannot support an
+incorrect state predicate. Every fragment must be checked; findings map back to
+the original claim without changing the installed body or complete-review contract.
 Two independent read-only bodies may be
 reviewed concurrently; results are applied in portfolio order, and temporary
 aggregate-reservation refusal falls back to serial admission. Reviews submit
