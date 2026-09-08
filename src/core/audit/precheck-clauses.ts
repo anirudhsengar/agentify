@@ -14,7 +14,7 @@ export interface PrecheckClausePlan {
 function proseFragments(text: string): string[] {
   const fragments: string[] = [];
   let start = 0;
-  const boundaryPattern = /(?<=[.!?;])\s+(?=[A-Z`])|,\s+(?=(?:so|but|however|therefore|yet|whereas)\b)|\s+(?=and\s+(?:is|are|was|were|has|have|does|do|can|cannot|will|would|should|must|returns?|raises?|throws?|sets?|stores?|writes?|reads?|calls?|uses?|creates?|deletes?|updates?|reports?|produces?|rejects?|accepts?|skips?|keeps?|loads?|checks?|requires?|allows?|disables?|enables?|remains?)\b)/gi;
+  const boundaryPattern = /(?<=[.!?;])\s+(?=[A-Z`])|,\s+(?=(?:so|but|however|therefore|yet|whereas)\b)|\s+(?=and\s+(?:is|are|was|were|has|have|does|do|can|cannot|will|would|should|must|returns?|raises?|throws?|sets?|stores?|writes?|reads?|calls?|uses?|creates?|deletes?|updates?|reports?|produces?|rejects?|accepts?|skips?|keeps?|loads?|checks?|requires?|allows?|disables?|enables?|remains?)\b)/g;
   for (const boundary of text.matchAll(boundaryPattern)) {
     const end = boundary.index! + boundary[0].length;
     fragments.push(text.slice(start, end));

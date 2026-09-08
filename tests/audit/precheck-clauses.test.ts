@@ -48,6 +48,23 @@ test("predicate conjunctions cannot let a true outcome rescue a false state clai
   assert.equal(rule.join(""), original["invariants[0]"].rule);
 });
 
+test("predicate conjunction support does not broaden lowercase semicolon boundaries", () => {
+  const original = {
+    "invariants[0]": {
+      rule: "Caching disables expiration; cache staleness then requires explicit clearing.",
+      why: "The first condition holds. The second condition remains separate.",
+      reference: "cache.py",
+    },
+  };
+  const plan = expandPrecheckClauses(original)!;
+  assert.ok(plan);
+  const rule = Object.values(plan.claims)
+    .filter(clause => clause.original_claim === "invariants[0]" && clause.field === "rule")
+    .map(clause => clause.text);
+  assert.deepEqual(rule, [original["invariants[0]"].rule],
+    "lowercase text after a semicolon must retain the prior presentation boundary contract");
+});
+
 test("simple assertions and source identifiers retain their original review contract", () => {
   assert.equal(expandPrecheckClauses({
     "pitfalls[0]": { risk: "time.monotonic() controls age.", consequence: "Check cache.is_expired().", reference: "cache.py" },
