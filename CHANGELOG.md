@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Present complete-review source as literal, separately delimited text rather than nested JSON-escaped strings. Preserve every original claim, source character, precheck contract, and review/provenance gate.
+
 - Start a bounded first source-tracing batch immediately after successful initial scouting, instead of relying on parent timing. Preserve exact candidate names, source receipts, cancellations, remaining proposals, and all production limits and final gates.
 
 - Retain the original per-request review output ceiling for local prechecks; a shorter transport allowance must not consume the model's response before it can submit. Both stages still share the existing two-request and single-deadline limits.

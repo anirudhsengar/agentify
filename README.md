@@ -266,7 +266,9 @@ a ceiling, not a quota. A typed, complete review is
 required; unsupported assertions and incomplete reviews remain repair obligations.
 Before claim-by-claim falsification, review rejects a catalog or framework layer whose flows lack one shared
 failure domain or invariant set; individually sourced claims cannot make an
-incoherent specialist installable.
+incoherent specialist installable. Complete reviews receive literal immutable
+source in explicit untrusted-data blocks, with every original claim ID retained;
+formatting never supplies a review verdict or changes the acceptance checks.
 An exact current-HEAD nonretryable concern-level finding retires that reviewed
 body during normalization and records the finding as its substantive rejection;
 Agentify does not spend another tracer call merely to restate the same evidence.

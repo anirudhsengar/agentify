@@ -1,3 +1,4 @@
+import { readReviewPrompt } from "../fixtures/review-prompt.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
@@ -116,7 +117,7 @@ test("an exact current source review retires an incoherent body without another 
     let sessions = 0;
     const runtime: AgentRuntime = { async runSession(options) {
       sessions += 1;
-      const claims = (JSON.parse(options.userPrompt) as { claims: Record<string, unknown> }).claims;
+      const claims = (readReviewPrompt(options.userPrompt) as { claims: Record<string, unknown> }).claims;
       options.onProviderRequest?.({ inputTokens: 100, outputTokens: 100, costUsd: 0.01 });
       options.onEvent?.({ type: "message_end", message: { role: "assistant", stopReason: "toolUse",
         usage: { input: 50, output: 10, cost: { total: 0.001 } } } } as never);
@@ -175,7 +176,7 @@ test("review re-proves supporting attachments hidden by normalized coverage", as
     let inspected = false;
     let alteredRole = false;
     const runtime: AgentRuntime = { async runSession(options) {
-      const input = JSON.parse(options.userPrompt) as { claims: Record<string, { path?: string; role?: string }>;
+      const input = readReviewPrompt(options.userPrompt) as { claims: Record<string, { path?: string; role?: string }>;
         compiler_attachments: Array<{ paths: string[] }> };
       inspected = true;
       assert.ok(input.compiler_attachments.some(attachment => attachment.paths.includes("clock/warnings.py")),
@@ -244,7 +245,7 @@ test("review removes a rejected surplus pitfall before semantic repair", async (
     let reviews = 0;
     const runtime: AgentRuntime = { async runSession(options) {
       reviews += 1;
-      const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
+      const { claims } = readReviewPrompt(options.userPrompt) as { claims: Record<string, unknown> };
       const falseClaim = Object.keys(claims).find(key => JSON.stringify(claims[key]).includes(FALSE_CLAIM));
       await options.customTools![0]!.execute("review", reviewWire({ checked_claims: Object.keys(claims), finding: falseClaim
         ? { claim: falseClaim, path: "clock.py", excerpt: "return int(value)", reason: CORRECTION }
@@ -301,7 +302,7 @@ test("independent specialist bodies are reviewed with bounded overlap", async ()
       active += 1;
       peak = Math.max(peak, active);
       await new Promise(resolve => setTimeout(resolve, 25));
-      const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
+      const { claims } = readReviewPrompt(options.userPrompt) as { claims: Record<string, unknown> };
       await options.customTools![0]!.execute("review", reviewWire({ checked_claims: Object.keys(claims), finding: null }),
         undefined, undefined, { cwd } as never);
       assert.equal(options.signal?.aborted, true,
@@ -352,7 +353,7 @@ test("specialist review overlap falls back to serial admission when reservations
       assert.equal(options.recoveryPromptIfToolNotCalled?.requiredToolName, "submit_specialist_review");
       options.onProviderRequest!({ inputTokens: 1_000, outputTokens: 100, costUsd: 0.1 });
       await new Promise(resolve => setTimeout(resolve, 25));
-      const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
+      const { claims } = readReviewPrompt(options.userPrompt) as { claims: Record<string, unknown> };
       await options.customTools![0]!.execute("review", reviewWire({ checked_claims: Object.keys(claims), finding: null }),
         undefined, undefined, { cwd } as never);
       options.onEvent?.({ type: "message_end", message: { role: "assistant", stopReason: "toolUse",
@@ -435,7 +436,7 @@ test(`claim correction reviews within one session without overwriting concurrent
           writeCanonicalMap(cwd, latest,
             { stateDir: ".agentify/runtime/audit", mapFilename: "codebase_map.json" });
         }
-        const { claims } = JSON.parse(options.userPrompt) as { claims: Record<string, unknown> };
+        const { claims } = readReviewPrompt(options.userPrompt) as { claims: Record<string, unknown> };
         const claim = Object.keys(claims).find(key => JSON.stringify(claims[key]).includes(FALSE_CLAIM));
         await options.customTools![0]!.execute("review", reviewWire({ checked_claims: Object.keys(claims),
           finding: claim ? { claim, path: (claims["touchpoints[0]"] as { path: string }).path,
@@ -603,7 +604,7 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
         "early rejection must not weaken the complete approval checklist");
       assert.deepEqual(options.executionPolicy.allowedTools, []);
       assert.deepEqual(options.tools, ["submit_specialist_review"]);
-      const input = JSON.parse(options.userPrompt) as { claims: Record<string, unknown>; evidence: Record<string, string>;
+      const input = readReviewPrompt(options.userPrompt) as { claims: Record<string, unknown>; evidence: Record<string, string>;
         compiler_attachments: typeof initial.assessment.attachments };
       assert.ok(Array.isArray(input.compiler_attachments), "review needs application-owned path-relationship context");
       if (reviews === 1) assert.deepEqual(input.compiler_attachments, initial.assessment.attachments);
@@ -1228,7 +1229,7 @@ for (const outcome of ["complete", "local-contradiction", "local-incomplete", "f
       let firstTimeout: number | undefined;
       const runtime: AgentRuntime = { async runSession(options) {
         sessions += 1;
-        const data = JSON.parse(options.userPrompt) as { claims: Record<string, unknown>;
+        const data = readReviewPrompt(options.userPrompt) as { claims: Record<string, unknown>;
           evidence: Record<string, string>; source_precheck?: boolean; source_excerpt?: boolean };
         const precheck = data.source_precheck === true;
         stages.push(precheck);
@@ -1248,6 +1249,10 @@ for (const outcome of ["complete", "local-contradiction", "local-incomplete", "f
           if (!isLargeSource) assert.equal(visible, small);
           assert.equal(options.maxOutputTokens, 12_000);
         } else {
+          assert.ok(options.userPrompt.startsWith("UNTRUSTED NORMALIZED REVIEW DATA\n\n"),
+            "complete review source must be literal rather than nested JSON-escaped text");
+          assert.ok(options.userPrompt.includes(`\n${small}\n</SOURCE_`));
+          assert.ok(options.userPrompt.includes(`\n${large}\n</SOURCE_`));
           assert.equal(data.evidence["small.py"], small);
           assert.equal(data.evidence["large.py"], large, "the complete review retains every original immutable source byte");
           for (let index = 0; index < concern.invariants.length; index += 1) assert.ok(`invariants[${index}]` in data.claims);

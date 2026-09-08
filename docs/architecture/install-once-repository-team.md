@@ -170,7 +170,15 @@ of that evidence supplies the structural context. Only exact compiler-generated 
 symbol-free, range-free touchpoints are projected out of narrative role claims;
 their paths and structural fields remain reviewed. Authored or altered role text
 is never exempted by a marker prefix. This projection changes neither the
-installed body nor its review digest. The reviewer has
+installed body nor its review digest. Complete-review prompts separate structured
+claim/attachment metadata from literal immutable source blocks. File names stay
+JSON-encoded; content-derived delimiters are checked against the source so source
+text cannot terminate its own block. Every original source character and claim
+ID is retained. Both claims and source remain explicitly untrusted data. Bounded
+prechecks keep their existing JSON contract and partial-source markers. This
+presentation does not change the review tool schema, exact-excerpt validation,
+claim coverage, approval digest, source limits, request admission or deadline.
+The reviewer has
 no filesystem or command tools. Ordinary reviews use one provider request within
 90 seconds including source collection; a rejected typed submission permits one
 additional argument-correction request inside that same deadline and aggregate

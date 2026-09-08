@@ -1,3 +1,4 @@
+import { readReviewPrompt } from "../fixtures/review-prompt.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
@@ -28,7 +29,7 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
       };
       const content = payload.messages.find(message => message.role === "user")!.content;
       const text = typeof content === "string" ? content : content.map(part => part.text ?? "").join("\n");
-      const data = JSON.parse(text) as { source_precheck?: boolean; claims: Record<string, unknown>; evidence: Record<string, string> };
+      const data = readReviewPrompt(text) as { source_precheck?: boolean; claims: Record<string, unknown>; evidence: Record<string, string> };
       const precheck = data.source_precheck === true;
       requests.push({ precheck, cap: payload.max_tokens, thinking: payload.thinking });
       assert.deepEqual(payload.tool_choice, { type: "auto" });
