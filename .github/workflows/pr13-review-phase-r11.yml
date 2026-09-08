@@ -1,0 +1,245 @@
+name: PR13 phase-specific M3 review reasoning experiment
+run-name: 'PR13 same-model review phases: repeated positive and falsification controls'
+'on':
+  push:
+    branches:
+    - validation/pr13-review-phase-r11-20260908
+    paths:
+    - .github/workflows/pr13-review-phase-r11.yml
+    - .github/qualification/**
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: pr13-review-phase-r11-20260908
+  cancel-in-progress: false
+jobs:
+  review:
+    if: github.actor == github.repository_owner
+    name: Review / ${{ matrix.case.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        case:
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r11-1-high-jwk
+          concern: JWK and JWKSet parsing
+          candidate_sha: 82e51b35feabaa6574002937200c7f70cd93f4f0
+          candidate_tree: f832b245847ecc73846870c0cfe74154e7cf4c59
+          thinking_level: high
+          known_bad_fragment: reports as expired
+          require_source_precheck: true
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r11-1-high-valid-cache
+          concern: JWK and JWKSet parsing
+          candidate_sha: 82e51b35feabaa6574002937200c7f70cd93f4f0
+          candidate_tree: f832b245847ecc73846870c0cfe74154e7cf4c59
+          positive_control: true
+          thinking_level: high
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r11-1-numeric-exp-canary
+          concern: JWT claim validation and payload lifecycle
+          candidate_sha: 82e51b35feabaa6574002937200c7f70cd93f4f0
+          candidate_tree: f832b245847ecc73846870c0cfe74154e7cf4c59
+          thinking_level: high
+          false_claim_canary: true
+          require_source_precheck: true
+          require_source_excerpt: true
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r11-1-false-summary
+          concern: JWK and JWKSet parsing
+          candidate_sha: 82e51b35feabaa6574002937200c7f70cd93f4f0
+          candidate_tree: f832b245847ecc73846870c0cfe74154e7cf4c59
+          thinking_level: high
+          known_bad_fragment: reports as expired
+          require_source_precheck: true
+          full_review_canary: one_line
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r11-1-false-flow
+          concern: JWK and JWKSet parsing
+          candidate_sha: 82e51b35feabaa6574002937200c7f70cd93f4f0
+          candidate_tree: f832b245847ecc73846870c0cfe74154e7cf4c59
+          thinking_level: high
+          known_bad_fragment: reports as expired
+          require_source_precheck: true
+          full_review_canary: flows[0]
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r11-2-high-jwk
+          concern: JWK and JWKSet parsing
+          candidate_sha: 82e51b35feabaa6574002937200c7f70cd93f4f0
+          candidate_tree: f832b245847ecc73846870c0cfe74154e7cf4c59
+          thinking_level: high
+          known_bad_fragment: reports as expired
+          require_source_precheck: true
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r11-2-high-valid-cache
+          concern: JWK and JWKSet parsing
+          candidate_sha: 82e51b35feabaa6574002937200c7f70cd93f4f0
+          candidate_tree: f832b245847ecc73846870c0cfe74154e7cf4c59
+          positive_control: true
+          thinking_level: high
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r11-2-numeric-exp-canary
+          concern: JWT claim validation and payload lifecycle
+          candidate_sha: 82e51b35feabaa6574002937200c7f70cd93f4f0
+          candidate_tree: f832b245847ecc73846870c0cfe74154e7cf4c59
+          thinking_level: high
+          false_claim_canary: true
+          require_source_precheck: true
+          require_source_excerpt: true
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r11-2-false-summary
+          concern: JWK and JWKSet parsing
+          candidate_sha: 82e51b35feabaa6574002937200c7f70cd93f4f0
+          candidate_tree: f832b245847ecc73846870c0cfe74154e7cf4c59
+          thinking_level: high
+          known_bad_fragment: reports as expired
+          require_source_precheck: true
+          full_review_canary: one_line
+        - artifact: native-live-pyjwt-34196528837
+          source_run: 34196528837
+          map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: r11-2-false-flow
+          concern: JWK and JWKSet parsing
+          candidate_sha: 82e51b35feabaa6574002937200c7f70cd93f4f0
+          candidate_tree: f832b245847ecc73846870c0cfe74154e7cf4c59
+          thinking_level: high
+          known_bad_fragment: reports as expired
+          require_source_precheck: true
+          full_review_canary: flows[0]
+    steps:
+    - name: Require existing exact-code success before model use
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: 'set -euo pipefail
+
+        gh api repos/anirudhsengar/agentify/actions/runs/34237230441 --jq ''.status + " " + .conclusion + " " +
+        .head_sha'' > "$RUNNER_TEMP/prior-qualification-status"
+
+        test "$(cat "$RUNNER_TEMP/prior-qualification-status")" = ''completed success afb6c7ca30fa507d902bc4197f694d8efb7249b0''
+
+        '
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: 82e51b35feabaa6574002937200c7f70cd93f4f0
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Install pinned test toolchain, no model credentials
+      run: 'npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts
+
+        test "$(git rev-parse HEAD)" = 82e51b35feabaa6574002937200c7f70cd93f4f0
+
+        test "$(git rev-parse HEAD^{tree})" = f832b245847ecc73846870c0cfe74154e7cf4c59
+
+        '
+    - name: Fetch exact retained input and immutable repository
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REVIEW_CASE: ${{ toJSON(matrix.case) }}
+      run: 'set -euo pipefail
+
+        printf ''PROBE_TARGET=%s/probe-target
+
+        PROBE_PREVIOUS=%s/previous
+
+        PROBE_EVIDENCE=%s/evidence
+
+        '' "$RUNNER_TEMP" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        printf ''HOME=%s/probe-home
+
+        USERPROFILE=%s/probe-home
+
+        XDG_CONFIG_HOME=%s/probe-home/.config
+
+        '' "$RUNNER_TEMP" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        name=$(printf ''%s'' "$REVIEW_CASE" | jq -r .artifact)
+
+        repository=$(printf ''%s'' "$REVIEW_CASE" | jq -r .repository)
+
+        sha=$(printf ''%s'' "$REVIEW_CASE" | jq -r .target_sha)
+
+        gh run download 34196528837 -R anirudhsengar/agentify -n "$name" -D "$RUNNER_TEMP/previous"
+
+        git init -q "$RUNNER_TEMP/probe-target"
+
+        git -C "$RUNNER_TEMP/probe-target" fetch --depth=1 "https://github.com/$repository.git" "$sha"
+
+        git -C "$RUNNER_TEMP/probe-target" checkout --detach -q FETCH_HEAD
+
+        mkdir -p "$RUNNER_TEMP/probe-home"
+
+        '
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ${{ github.sha }}
+        path: probe-code
+        persist-credentials: false
+    - name: Verify native phase settings without provider credentials
+      run: node --import tsx --test probe-code/.github/qualification/phase-config-sdk.test.mjs
+    - name: Run bounded production review with explicit verdicts
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        REVIEW_CASE: ${{ toJSON(matrix.case) }}
+      run: node --import tsx probe-code/.github/qualification/review-probe.mjs
+    - name: Retain redacted review outcome only
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: phase-r11-${{ matrix.case.name }}-${{ github.run_id }}
+        path: ${{ env.PROBE_EVIDENCE }}
+        if-no-files-found: warn
+        retention-days: 14
+    - name: Remove disposable inputs and authentication
+      if: always()
+      run: rm -rf -- "$RUNNER_TEMP/probe-home" "$RUNNER_TEMP/probe-target" "$RUNNER_TEMP/previous"
+    permissions:
+      contents: read
+      actions: read
