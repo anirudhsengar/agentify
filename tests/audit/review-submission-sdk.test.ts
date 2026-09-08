@@ -23,7 +23,7 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
       const chunks: Buffer[] = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
-        max_tokens?: number; thinking?: unknown;
+        max_tokens?: number; thinking?: unknown; tool_choice?: unknown;
         messages: Array<{ role: string; content: string | Array<{ type: string; text?: string }> }>;
       };
       const content = payload.messages.find(message => message.role === "user")!.content;
@@ -31,6 +31,7 @@ for (const outcome of ["supported", "local-contradiction", "incomplete-full-revi
       const data = JSON.parse(text) as { source_precheck?: boolean; claims: Record<string, unknown>; evidence: Record<string, string> };
       const precheck = data.source_precheck === true;
       requests.push({ precheck, cap: payload.max_tokens, thinking: payload.thinking });
+      assert.deepEqual(payload.tool_choice, { type: "auto" });
       assert.equal(data.evidence["small.py"], small);
       if (precheck) assert.deepEqual(Object.keys(data.claims), ["pitfalls[0]"]);
       else {

@@ -368,12 +368,14 @@ numeric reasoning-token allowance; the complete response's output ceiling,
 request reservations, aggregate limits, cancellation and source gates still apply.
 See https://platform.minimax.io/docs/api-reference/text-anthropic-api.
 
-Required terminal requests to the verified international `minimax/MiniMax-M3`
-endpoint retain configured thinking while selecting one named tool or any of the
-permitted terminal alternatives. Other MiniMax models and unverified regional
-endpoints retain automatic selection with the same allowed-tool filtering.
-Schema validation, source checks, deadline and request admission remain decisive;
-a provider selecting a tool is never itself installation or review approval.
+Required terminal requests to MiniMax retain configured thinking and filter the
+offered tools to the permitted terminal set. The Messages API documents only
+`auto` and `none`; named and `any` directives are not used, even if a particular
+request happens to accept them. The request uses `auto`, while execution-time
+authority still rejects unoffered tools. Schema validation, exact source checks,
+deadlines and request admission remain decisive. Prose or merely selecting a
+tool never confers review or installation credit.
+See https://platform.minimax.io/docs/api-reference/text-chat-anthropic.
 
 The structured audit, recovery sessions, semantic repair sessions, and explorer
 sub-sessions consume one aggregate budget. Defaults limit the entire audit to 30

@@ -43,24 +43,22 @@ function record(value: unknown): value is Record<string, unknown> {
  * Unknown APIs retain their existing prompt/recovery behavior instead of
  * receiving a guessed wire shape.
  */
-export function forceProviderToolChoice(payload: unknown, api: string, toolName: string | readonly string[], provider?: string, modelId?: string): unknown {
+export function forceProviderToolChoice(payload: unknown, api: string, toolName: string | readonly string[], provider?: string, _modelId?: string): unknown {
   if (!record(payload)) return payload;
   if (api === "anthropic-messages" && (provider === "minimax" || provider === "minimax-cn")) {
-    // The verified international M3 endpoint accepts named/any selection with
-    // thinking enabled. Preserve auto for older models and unverified backends;
-    // the model identity comes from trusted registry metadata, not payload text.
-    const nativeM3 = provider === "minimax" && modelId === "MiniMax-M3";
+    // MiniMax's Messages contract supports only auto/none, not named/any.
+    // Narrow the offered tools and enforce terminal authority at execution;
+    // automatic selection alone never grants review or installation credit.
+    // https://platform.minimax.io/docs/api-reference/text-chat-anthropic
     const allowedNames = typeof toolName === "string" ? [toolName] : toolName;
     if (allowedNames.length === 0) return payload;
     return {
       ...payload,
       ...(Array.isArray(payload.tools) ? { tools: payload.tools.filter((tool) => record(tool) && typeof tool.name === "string" && allowedNames.includes(tool.name)) } : {}),
-      tool_choice: nativeM3
-        ? allowedNames.length === 1 ? { type: "tool", name: allowedNames[0] } : { type: "any" }
-        : { type: "auto" },
+      tool_choice: { type: "auto" },
     };
   }
-  // Alternative terminal sets use only the verified MiniMax branch above.
+  // Alternative terminal sets use only the MiniMax filtering branch above.
   // Never guess forcing shapes for other APIs.
   if (typeof toolName !== "string") return payload;
   if (api === "anthropic-messages") {

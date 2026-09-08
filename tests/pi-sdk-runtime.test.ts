@@ -156,7 +156,7 @@ test("SDK admission rejection prevents HTTP dispatch, while admitted requests st
   }
 });
 
-test("MiniMax M3 required terminal selection keeps configured reasoning on the wire", async () => {
+test("MiniMax M3 uses documented automatic selection with only authorized terminals", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-sdk-tool-choice-"));
   const payloads: Array<Record<string, unknown>> = [];
   const server = createServer(async (request, response) => {
@@ -187,7 +187,7 @@ test("MiniMax M3 required terminal selection keeps configured reasoning on the w
     }), /provider session failed \(minimax\): 400 .*wire fixture complete/,
     "the intentional HTTP 400 must surface without changing the dispatched wire contract");
     assert.equal(payloads.length, 1);
-    assert.deepEqual(payloads[0]!.tool_choice, { type: "tool", name: "submit_report" });
+    assert.deepEqual(payloads[0]!.tool_choice, { type: "auto" });
     assert.deepEqual((payloads[0]!.tools as Array<{ name: string }>).map((tool) => tool.name), ["submit_report"]);
     assert.notDeepEqual(payloads[0]!.thinking, { type: "disabled" }, "native forcing must not disable configured reasoning");
   } finally {
@@ -425,15 +425,14 @@ test("provider output caps narrow OpenAI responses but never touch the Codex pay
 });
 
 
-test("verified international MiniMax M3 forces terminal tools without disabling thinking", () => {
+test("MiniMax M3 narrows terminal tools with documented automatic selection", () => {
   const payload = { model: "MiniMax-M3", max_tokens: 12000,
     thinking: { type: "enabled", budget_tokens: 10976, display: "summarized" },
     tools: [{ name: "read" }, { name: "submit" }, { name: "reject" }] };
   const original = structuredClone(payload);
   for (const names of ["submit", ["submit"], ["submit", "reject"]] as const) {
     const result = forceProviderToolChoice(payload, "anthropic-messages", names, "minimax", "MiniMax-M3") as typeof payload & { tool_choice: unknown };
-    assert.deepEqual(result.tool_choice, typeof names === "string" || names.length === 1
-      ? { type: "tool", name: "submit" } : { type: "any" });
+    assert.deepEqual(result.tool_choice, { type: "auto" });
     assert.deepEqual(result.thinking, payload.thinking);
     assert.equal(result.max_tokens, payload.max_tokens);
     assert.ok(result.tools.every(tool => tool.name !== "read"));
@@ -477,7 +476,7 @@ test(`MiniMax M3 sends documented adaptive thinking without changing terminal au
     }), /provider session failed \(minimax\): 400 .*wire fixture complete/,
     "the intentional HTTP 400 must surface without changing the dispatched wire contract");
     assert.equal(payloads.length, 1);
-    if (forced) assert.deepEqual(payloads[0]!.tool_choice, { type: "tool", name: "submit_report" });
+    if (forced) assert.deepEqual(payloads[0]!.tool_choice, { type: "auto" });
     if (forced) assert.deepEqual((payloads[0]!.tools as Array<{ name: string }>).map((tool) => tool.name), ["submit_report"]);
     assert.deepEqual(payloads[0]!.thinking, { type: "adaptive" }, "M3 uses its documented on/off mode, not a Claude-style token budget");
   } finally {

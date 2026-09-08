@@ -145,7 +145,7 @@ test("actual tracer SDK blocks unoffered reads in the reserved final turns after
   assert.equal(outcome.payloads.length, 8);
   for (const payload of outcome.payloads.slice(6)) {
     assert.deepEqual(payload.tools.map(tool => tool.name).sort(), ["submit_concern_rejection", "submit_concern_report"]);
-    assert.deepEqual(payload.tool_choice, { type: "any" });
+    assert.deepEqual(payload.tool_choice, { type: "auto" });
   }
   const late = outcome.tools.find(event => event.toolCallId === "tool_7");
   assert.ok(late);
