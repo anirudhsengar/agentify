@@ -244,9 +244,13 @@ model-backed top-up audit; a normalizable fixed point can therefore finish
 without spending or resetting an exhausted model budget when its exact
 normalized bodies already have current-HEAD narrative reviews. Changed bodies
 require fresh review with the configured primary model: 90 seconds and at most
-512 KiB of immutable source per concern. One provider request is allowed, plus
-one argument-correction request only after a rejected typed submission, within
-the same deadline and aggregate budget. Two independent read-only bodies may be
+512 KiB of immutable source per concern. Ordinary reviews use one provider request plus at most one argument-correction
+request after a rejected typed submission. For larger bodies, an eligible small
+source module is checked first for direct counterexamples in its associated
+assertions, followed by the complete original review. Those stages share the
+same 90-second deadline and two-request ceiling, with no extra correction call.
+The precheck cannot approve a body or replace any full-source claim check.
+Two independent read-only bodies may be
 reviewed concurrently; results are applied in portfolio order, and temporary
 aggregate-reservation refusal falls back to serial admission. Reviews submit
 the first decisive finding promptly and inspect at most two unchecked claims

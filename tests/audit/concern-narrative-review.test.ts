@@ -6,6 +6,7 @@ import * as path from "node:path";
 import test from "node:test";
 import { Value } from "typebox/value";
 import type { Concern } from "../../src/core/audit/schema/concerns.ts";
+import type { CodebaseMap } from "../../src/core/audit/schema/codebase-map.ts";
 import { compileSpecialistEvidence } from "../../src/core/audit/specialist-compiler.ts";
 import { assessSpecialistReviews, reviewSpecialistCompilation,
   specialistReviewDigest } from "../../src/core/audit/specialist-review.ts";
@@ -1178,3 +1179,131 @@ test("normalized narrative review rejects contradictions and binds exact bodies 
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+
+for (const outcome of ["complete", "local-contradiction", "local-incomplete", "full-incomplete",
+  "full-contradiction", "cancelled", "changed-head", "capacity-refused", "deadline-refused", "small-body"] as const) {
+  test(`source-local prechecks cannot substitute for complete review: ${outcome}`, async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-source-local-review-"));
+    const parent = new AbortController();
+    const small = "def present(record):\n    return record is not None\n";
+    const large = "def relay(record):\n    return record\n" + "# Immutable broader module context.\n".repeat(400);
+    try {
+      fs.writeFileSync(path.join(cwd, "small.py"), small);
+      fs.writeFileSync(path.join(cwd, "large.py"), large);
+      execFileSync("git", ["init", "-q", cwd]);
+      execFileSync("git", ["-C", cwd, "add", "."]);
+      execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "source locality"]);
+      const concern: Concern = {
+        concern: "Record presence and relay", one_line: outcome === "full-contradiction"
+          ? "Copies a record after checking presence." : "Checks presence and relays the original record.",
+        covers: "Presence checks and unchanged record relay.", excludes: "Storage, copying and scheduling.",
+        flows: [{ name: "Check and relay", description: "Check whether a record is present, then relay it.", steps: [
+          { path: "small.py", what_happens: "present compares the record against None." },
+          { path: "large.py", what_happens: "relay returns its original record." },
+        ] }],
+        touchpoints: [{ path: "small.py", symbol: "present", role: "Evaluates presence.", line_range: null, centrality: "core" },
+          { path: "large.py", symbol: "relay", role: "Relays the original record.", line_range: null, centrality: "core" }],
+        invariants: Array.from({ length: outcome === "small-body" ? 2 : 26 }, (_, index) => ({
+          rule: `Case ${index}: relay returns its original argument.`, why: "The return expression is record.", reference: "large.py",
+        })),
+        pitfalls: [{ risk: outcome === "local-contradiction" ? "An absent record is reported present."
+          : "An absent record is not reported present.", consequence: "Presence must be checked separately from relay.", reference: "small.py" }],
+        entry_questions: ["Does the change affect presence or record identity?"], validation: [], spans_subtrees: [],
+        stability: "high", recurrence: "high", confidence: "high", last_updated: "2026-08-31T00:00:00.000Z",
+      };
+      const compiled = compileSpecialistEvidence(makeValidCodebaseMap({
+        concern_evidence: { concerns: [concern], not_concerns: [] }, expert_evidence: undefined,
+      }), { cwd });
+      assert.ok(compiled.assessment.accepted_concerns.includes(concern.concern), compiled.reasons.join("; "));
+      const before = JSON.stringify(compiled.map);
+      const budget = new AuditResourceBudget(outcome === "capacity-refused" ? { maxOutputTokens: 10_000 } : {});
+      let sessions = 0;
+      let admitted = 0;
+      const checkpoints: CodebaseMap[] = [];
+      const stages: boolean[] = [];
+      let firstTimeout: number | undefined;
+      const runtime: AgentRuntime = { async runSession(options) {
+        sessions += 1;
+        const data = JSON.parse(options.userPrompt) as { claims: Record<string, unknown>;
+          evidence: Record<string, string>; source_precheck?: boolean };
+        const precheck = data.source_precheck === true;
+        stages.push(precheck);
+        assert.equal(precheck, outcome !== "small-body" && sessions === 1);
+        assert.equal(options.config.thinkingLevel, "high", "the source strategy must not change configured thinking");
+        assert.ok(options.timeoutMs! <= 90_000);
+        if (precheck) {
+          firstTimeout = options.timeoutMs;
+          assert.deepEqual(Object.keys(data.claims), ["pitfalls[0]"]);
+          assert.deepEqual(data.evidence, { "small.py": small }, "a local check receives the exact selected source only");
+          assert.equal(options.maxOutputTokens, 4_096);
+        } else {
+          assert.equal(data.evidence["small.py"], small);
+          assert.equal(data.evidence["large.py"], large, "the complete review retains every original immutable source byte");
+          for (let index = 0; index < concern.invariants.length; index += 1) assert.ok(`invariants[${index}]` in data.claims);
+          for (const id of ["concern", "one_line", "covers", "excludes", "entry_questions", "validation", "flows[0]", "touchpoints[0]", "touchpoints[1]"]) assert.ok(id in data.claims, id);
+          assert.equal(options.maxOutputTokens, 12_000);
+          if (firstTimeout !== undefined) assert.ok(options.timeoutMs! <= firstTimeout);
+          assert.equal(checkpoints.length, 0, "the precheck cannot publish a full-body review record");
+        }
+        const reservation = { inputTokens: 1000, outputTokens: options.maxOutputTokens!, costUsd: 0.1 };
+        if (outcome === "deadline-refused" && !precheck) {
+          const now = Date.now;
+          try {
+            Date.now = () => now() + 90_001;
+            assert.throws(() => options.onProviderRequest!(reservation), /deadline expired/);
+          } finally { Date.now = now; }
+          return { turns: 0, costUsd: null, aborted: true };
+        }
+        options.onProviderRequest!(reservation);
+        admitted += 1;
+        if (outcome !== "small-body") {
+          options.onEvent?.({ type: "tool_execution_end", toolName: "submit_specialist_review", isError: true } as never);
+          assert.throws(() => options.onProviderRequest!(reservation), /provider-call limit/,
+            "the precheck and full review together cannot consume a third request");
+        }
+        if (outcome === "cancelled") {
+          parent.abort();
+          return { turns: 0, costUsd: null, aborted: true };
+        }
+        options.onEvent?.({ type: "message_end", message: { role: "assistant", stopReason: "toolUse",
+          usage: { input: 50, output: 10, cost: { total: 0.001 } } } } as never);
+        if (outcome === "local-incomplete" && precheck || outcome === "full-incomplete" && !precheck) {
+          return { turns: 1, costUsd: 0.001, aborted: true };
+        }
+        const finding = outcome === "local-contradiction" && precheck
+          ? { claim: "pitfalls[0]", path: "small.py", excerpt: "return record is not None",
+            reason: "An absent record is None, making the predicate False rather than True." }
+          : outcome === "full-contradiction" && !precheck
+          ? { claim: "one_line", path: "large.py", excerpt: "return record",
+            reason: "The relay returns the original record rather than a copy." } : null;
+        await options.customTools![0]!.execute("review", reviewWire({ checked_claims: Object.keys(data.claims), finding }),
+          undefined, undefined, { cwd } as never);
+        if (outcome === "changed-head") execFileSync("git", ["-C", cwd, "-c", "user.name=Fixture",
+          "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-qm", "new source identity"]);
+        return { turns: 1, costUsd: 0.001, aborted: true };
+      } };
+      const reviewed = await reviewSpecialistCompilation({ cwd, runtime, signal: parent.signal,
+        config: { schemaVersion: 1, thinkingLevel: "high", models: {} }, ui: { status() {} } } as never,
+      compiled, budget, "source-local-test", map => { checkpoints.push(map); });
+      const record = reviewed.map.specialist_reviews!.records.find(item => item.concern === concern.concern)!;
+      const approved = outcome === "complete" || outcome === "small-body";
+      assert.equal(record.failure === null, approved);
+      if (outcome === "local-contradiction" || outcome === "full-contradiction") {
+        assert.equal(record.retryable, false);
+        assert.equal(record.finding?.claim, outcome === "local-contradiction" ? "pitfalls[0]" : "one_line");
+      } else if (!approved) assert.equal(record.retryable, true);
+      const onlyLocal = ["local-contradiction", "local-incomplete", "cancelled", "changed-head"].includes(outcome);
+      assert.equal(sessions, onlyLocal || outcome === "small-body" ? 1 : 2);
+      assert.equal(budget.snapshot().model_calls, admitted);
+      assert.ok(admitted <= 2);
+      assert.equal(budget.snapshot().unreserved_calls, 0);
+      if (outcome === "cancelled") {
+        assert.equal(budget.snapshot().unreported_calls, 1);
+        assert.equal(budget.snapshot().reserved_output_tokens, 4_096);
+      }
+      if (outcome === "capacity-refused" || outcome === "deadline-refused") assert.equal(admitted, 1);
+      assert.equal(JSON.stringify(compiled.map), before, "source review must not mutate its input evidence");
+    } finally { fs.rmSync(cwd, { recursive: true, force: true }); }
+  });
+}

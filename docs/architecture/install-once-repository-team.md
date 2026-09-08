@@ -159,11 +159,25 @@ symbol-free, range-free touchpoints are projected out of narrative role claims;
 their paths and structural fields remain reviewed. Authored or altered role text
 is never exempted by a marker prefix. This projection changes neither the
 installed body nor its review digest. The reviewer has
-no filesystem or command tools, and one provider request within
-90 seconds including source collection. Only a rejected typed submission permits
-one additional request to correct its arguments, within the same deadline and
-shared resource budget. Prose, unrelated tool errors, and a second rejection grant
-no further calls. Rejected checklists name missing claim IDs and rejected excerpts
+no filesystem or command tools. Ordinary reviews use one provider request within
+90 seconds including source collection; a rejected typed submission permits one
+additional argument-correction request inside that same deadline and aggregate
+budget. Prose, unrelated tool errors, and a second rejection grant no further calls.
+For bodies with more than 24 review claims, the application may first check a
+small immutable module with at most eight directly referenced pitfall/invariant
+assertions. It chooses the smallest eligible source, bounded to 8 KiB, with the
+tracked path as tie-breaker. This local precheck can report a demonstrated source
+counterexample but cannot decide overall coherence or approve the specialist.
+Missing external context is left for the complete reviewer, not treated as a
+local contradiction. A successful precheck must be followed by the original
+complete claim set, every original immutable source byte and the ordinary
+coherence/approval checks. These sequential stages share one 90-second deadline
+and at most two requests, with response ceilings of 4,096 and 12,000 tokens and
+no extra argument-correction request. Existing aggregate limits and two-body
+concurrency are unchanged. Incomplete stages, changed HEAD and cancellation fail
+closed. A capacity refusal after a charged precheck cannot replay that precheck;
+its reservations and unresolved result remain accounted. No intermediate
+precheck outcome is persisted as a complete-body approval. Rejected checklists name missing claim IDs and rejected excerpts
 name their claim and source path in bounded feedback, so the one correction call
 can repair the actual argument error. The wire contract requires an explicit
 `supported` verdict with no finding property and the complete checklist, or an

@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Check small-source assertions for direct counterexamples before large complete reviews, using the existing two-request ceiling and one shared deadline. A passed local check grants no approval; every original claim and immutable source still requires complete review.
+
 - Translate the international MiniMax M3 thinking-on request to its documented adaptive wire format, preserving disabled thinking, the original total-output and accounting limits, and prior conversation content. Other providers, older models and regional backends retain their existing formats.
 
 - Refuse review-only retracing before child admission: an unchanged, currently attested body with an incomplete reviewer execution needs an explicit independent compiler path or core-ownership obligation before semantic repair can retrace it. Missing observations and failed source receipts remain repairable.
