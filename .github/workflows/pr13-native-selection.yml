@@ -1,0 +1,322 @@
+name: PR13 native M3 selection qualification
+run-name: PR13 b2c3823 exact checks, captured reviews, then fresh installs
+'on':
+  push:
+    branches:
+    - validation/pr13-native-selection-20260908
+    paths:
+    - .github/workflows/pr13-native-selection.yml
+    - .github/qualification/review-probe.mjs
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: pr13-native-selection-20260908
+  cancel-in-progress: false
+jobs:
+  qualify:
+    if: github.actor == github.repository_owner
+    name: Exact b2c3823 qualification (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+        - 22.19.0
+        - 24.19.0
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: b2c382315dd10ab99b712ebd67eccf6e84ce916a
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: ${{ matrix.node }}
+        cache: npm
+    - name: Provision SDK search tools
+      run: 'sudo apt-get update -qq
+
+        sudo apt-get install --no-install-recommends -y ripgrep fd-find
+
+        if ! command -v fd >/dev/null; then sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd; fi
+
+        '
+    - name: Install the pinned toolchain without model credentials
+      run: 'npm install --global npm@11.19.0
+
+        test "$(npm --version)" = "11.19.0"
+
+        npm ci
+
+        '
+    - name: Verify immutable source and qualify the exact candidate
+      shell: bash
+      env:
+        EXPECTED_NODE: ${{ matrix.node }}
+      run: "set -euo pipefail\numask 022\ntest \"$(git rev-parse HEAD)\" = b2c382315dd10ab99b712ebd67eccf6e84ce916a\n\
+        test \"$(git rev-parse HEAD^{tree})\" = 013254a1807366855a91d9ae070d4114ce434b2c\ntest \"$(node --version)\"\
+        \ = \"v$EXPECTED_NODE\"\ntest \"$(npm --version)\" = \"11.19.0\"\ntest -z \"$(git status --porcelain)\"\n\
+        {\n  git show -s --format='candidate=%H%ntree=%T'\n  node --version\n  npm --version\n  printf 'umask=';\
+        \ umask\n} > \"$RUNNER_TEMP/pr13-native-selection-environment.txt\"\nset +e\nnpm run verify:release > \"\
+        $RUNNER_TEMP/pr13-native-selection-qualification.log\" 2>&1\nstatus=$?\nif test \"$status\" = 0 && test\
+        \ \"$EXPECTED_NODE\" = \"22.19.0\"; then\n  npm run verify:pack-reproducibility >> \"$RUNNER_TEMP/pr13-native-selection-qualification.log\"\
+        \ 2>&1\n  status=$?\nfi\nprintf '%s\\n' \"$status\" > \"$RUNNER_TEMP/pr13-native-selection-qualification.exit\"\
+        \ncat \"$RUNNER_TEMP/pr13-native-selection-qualification.log\"\nexit \"$status\"\n"
+    - name: Retain exact-candidate evidence even on failure
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: pr13-native-selection-node-${{ matrix.node }}-${{ github.run_id }}
+        path: '${{ runner.temp }}/pr13-native-selection-environment.txt
+
+          ${{ runner.temp }}/pr13-native-selection-qualification.log
+
+          ${{ runner.temp }}/pr13-native-selection-qualification.exit
+
+          '
+        if-no-files-found: warn
+        retention-days: 14
+  install:
+    if: github.actor == github.repository_owner
+    name: ${{ matrix.case.cohort }} / ${{ matrix.case.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        case:
+        - name: pyjwt
+          repository: anirudhsengar/pyjwt
+          sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          cohort: heldout-round-1
+        - name: hono
+          repository: anirudhsengar/hono
+          sha: e2740d5a1bd0b4254e517e3af8b60789284bc7bd
+          cohort: historical
+    env:
+      LIVE_REPOSITORY: ${{ matrix.case.repository }}
+      LIVE_TARGET_SHA: ${{ matrix.case.sha }}
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: b2c382315dd10ab99b712ebd67eccf6e84ce916a
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Provision pinned candidate toolchain without model credentials
+      run: 'set -euo pipefail
+
+        sudo apt-get update -qq
+
+        sudo apt-get install --no-install-recommends -y ripgrep fd-find
+
+        if ! command -v fd >/dev/null; then sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd; fi
+
+        npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts
+
+        test "$(npm --version)" = 11.19.0
+
+        '
+    - name: Require successful exact-candidate qualification and its verified package hash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: 'set -euo pipefail
+
+        umask 022
+
+        test "$(git rev-parse HEAD)" = b2c382315dd10ab99b712ebd67eccf6e84ce916a
+
+        test "$(git rev-parse HEAD^{tree})" = 013254a1807366855a91d9ae070d4114ce434b2c
+
+        test -z "$(git status --porcelain)"
+
+        gh run download "$GITHUB_RUN_ID" -R anirudhsengar/agentify -n "pr13-native-selection-node-22.19.0-$GITHUB_RUN_ID"
+        -D "$RUNNER_TEMP/qualified-source"
+
+        test "$(cat "$RUNNER_TEMP/qualified-source/pr13-native-selection-qualification.exit")" = 0
+
+        grep -Fx ''candidate=b2c382315dd10ab99b712ebd67eccf6e84ce916a'' "$RUNNER_TEMP/qualified-source/pr13-native-selection-environment.txt"
+
+        grep -Fx ''tree=013254a1807366855a91d9ae070d4114ce434b2c'' "$RUNNER_TEMP/qualified-source/pr13-native-selection-environment.txt"
+
+        python3 - <<''PYHASH''
+
+        from pathlib import Path
+
+        import os,re
+
+        root=Path(os.environ[''RUNNER_TEMP'']);text=(root/''qualified-source/pr13-native-selection-qualification.log'').read_text()
+
+        found=re.findall(r''exact installed artifact qualification passed \([^,]+, ([a-f0-9]{64}), 52 entries\)'',text)
+
+        assert len(found)==1
+
+        with open(os.environ[''GITHUB_ENV''],''a'') as f:f.write(''LIVE_EXPECTED_PACKAGE_HASH=''+found[0]+''\n'')
+
+        PYHASH
+
+        printf ''LIVE_WORK_DIR=%s/native-selection-%s-${{ matrix.case.name }}\n'' "$RUNNER_TEMP" "$GITHUB_RUN_ID"
+        >> "$GITHUB_ENV"
+
+        printf ''LIVE_PACK_RESULT=%s/native-selection-pack.json\n'' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        '
+    - name: Pack exact qualified bytes
+      run: 'set -euo pipefail
+
+        umask 022
+
+        npm run --silent pack:release > "$LIVE_PACK_RESULT"
+
+        node --input-type=module -e ''import fs from "node:fs"; import assert from "node:assert/strict"; const p=JSON.parse(fs.readFileSync(process.env.LIVE_PACK_RESULT,"utf8"));
+        assert.equal(p.sha256,process.env.LIVE_EXPECTED_PACKAGE_HASH); console.log(JSON.stringify(p));''
+
+        '
+    - name: Prepare fresh frozen target and install actual npm artifact
+      run: npm run --silent live:prepare
+    - name: Install with production M3 roles, boundaries, and budgets
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        GH_TOKEN: ${{ github.token }}
+      run: npm run --silent live:install
+    - name: Retain redacted per-target evidence
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: native-selection-${{ matrix.case.name }}-${{ github.run_id }}
+        path: '${{ env.LIVE_WORK_DIR }}/evidence
+
+          ${{ runner.temp }}/qualified-source/pr13-native-selection-environment.txt'
+        if-no-files-found: warn
+        include-hidden-files: true
+        retention-days: 14
+    - name: Remove disposable target and credentials
+      if: always()
+      run: if test -n "${LIVE_WORK_DIR:-}"; then rm -rf -- "$LIVE_WORK_DIR"; fi
+    needs:
+    - qualify
+    - review
+  review:
+    if: github.actor == github.repository_owner
+    name: Review / ${{ matrix.case.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        case:
+        - artifact: coverage-live-pyjwt-34119229852
+          source_run: 34119229852
+          map_sha256: dcf92303013f49885dd405f194fd10fcc616bd79cd3e342799da744433bed5af
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: crypto
+          concern: Cryptographic algorithm family (HMAC/RSA/EC/EdDSA)
+        - artifact: coverage-live-pyjwt-34119229852
+          source_run: 34119229852
+          map_sha256: dcf92303013f49885dd405f194fd10fcc616bd79cd3e342799da744433bed5af
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: claims
+          concern: JWT claim semantics & validation
+        - artifact: coverage-live-pyjwt-34119229852
+          source_run: 34119229852
+          map_sha256: dcf92303013f49885dd405f194fd10fcc616bd79cd3e342799da744433bed5af
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: jws
+          concern: JWS wire-format encode/decode & signature verification
+        - artifact: coverage-live-pyjwt-34119229852
+          source_run: 34119229852
+          map_sha256: dcf92303013f49885dd405f194fd10fcc616bd79cd3e342799da744433bed5af
+          target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          repository: anirudhsengar/pyjwt
+          name: false-claim
+          concern: JWT claim semantics & validation
+          false_claim_canary: true
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: b2c382315dd10ab99b712ebd67eccf6e84ce916a
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Install pinned test toolchain, no model credentials
+      run: 'npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts
+
+        test "$(git rev-parse HEAD)" = b2c382315dd10ab99b712ebd67eccf6e84ce916a
+
+        test "$(git rev-parse HEAD^{tree})" = 013254a1807366855a91d9ae070d4114ce434b2c
+
+        '
+    - name: Fetch exact retained input and immutable repository
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REVIEW_CASE: ${{ toJSON(matrix.case) }}
+      run: 'set -euo pipefail
+
+        printf ''PROBE_TARGET=%s/probe-target
+
+        PROBE_PREVIOUS=%s/previous
+
+        PROBE_EVIDENCE=%s/evidence
+
+        '' "$RUNNER_TEMP" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        printf ''HOME=%s/probe-home
+
+        USERPROFILE=%s/probe-home
+
+        XDG_CONFIG_HOME=%s/probe-home/.config
+
+        '' "$RUNNER_TEMP" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        name=$(printf ''%s'' "$REVIEW_CASE" | jq -r .artifact)
+
+        repository=$(printf ''%s'' "$REVIEW_CASE" | jq -r .repository)
+
+        sha=$(printf ''%s'' "$REVIEW_CASE" | jq -r .target_sha)
+
+        gh run download 34119229852 -R anirudhsengar/agentify -n "$name" -D "$RUNNER_TEMP/previous"
+
+        git init -q "$RUNNER_TEMP/probe-target"
+
+        git -C "$RUNNER_TEMP/probe-target" fetch --depth=1 "https://github.com/$repository.git" "$sha"
+
+        git -C "$RUNNER_TEMP/probe-target" checkout --detach -q FETCH_HEAD
+
+        mkdir -p "$RUNNER_TEMP/probe-home"
+
+        '
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: ${{ github.sha }}
+        path: probe-code
+        persist-credentials: false
+    - name: Run bounded production review with explicit verdicts
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        REVIEW_CASE: ${{ toJSON(matrix.case) }}
+      run: node --import tsx probe-code/.github/qualification/review-probe.mjs
+    - name: Retain redacted review outcome only
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: native-review-${{ matrix.case.name }}-${{ github.run_id }}
+        path: ${{ env.PROBE_EVIDENCE }}
+        if-no-files-found: warn
+        retention-days: 14
+    - name: Remove disposable inputs and authentication
+      if: always()
+      run: rm -rf -- "$RUNNER_TEMP/probe-home" "$RUNNER_TEMP/probe-target" "$RUNNER_TEMP/previous"
