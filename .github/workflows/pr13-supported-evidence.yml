@@ -15,6 +15,9 @@ name: PR13 source-backed positive approval experiment
     - .github/qualification/review-correction-sdk.test.mjs
     - .github/qualification/source-local-review.mjs
     - .github/qualification/source-local-review.test.mjs
+    - .github/qualification/claim-record-tool.mjs
+    - .github/qualification/claim-record-tool.test.mjs
+    - .github/qualification/claim-record-sdk.test.mjs
 permissions:
   contents: read
   actions: read
@@ -37,7 +40,7 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: adjacent-high-jwk
+          name: batch-high-jwk
           concern: JWK and JWKSet parsing
           candidate_sha: 64011416fae4314829d0adefd9057fd14f7a4174
           candidate_tree: a8bf5a045cfcd08573d723947c57c5e28cb6d70c
@@ -48,7 +51,7 @@ jobs:
           map_sha256: ef196b102ee2e11935de68bbb776791bb8f0e7a895149b27955d8d10bf7489cd
           target_sha: 7144e4534c34810f4525dc4578a32addd8212cff
           repository: anirudhsengar/pyjwt
-          name: adjacent-high-valid-cache
+          name: batch-high-valid-cache
           concern: JWK and JWKSet parsing
           candidate_sha: 64011416fae4314829d0adefd9057fd14f7a4174
           candidate_tree: a8bf5a045cfcd08573d723947c57c5e28cb6d70c
@@ -125,6 +128,8 @@ jobs:
       run: node --import tsx --test probe-code/.github/qualification/review-correction-sdk.test.mjs
     - name: Verify no claims or immutable sources are omitted from presentation
       run: node --test probe-code/.github/qualification/source-local-review.test.mjs
+    - name: Verify actual provider-call accounting and complete claim batch gate
+      run: node --import tsx --test probe-code/.github/qualification/claim-record-tool.test.mjs probe-code/.github/qualification/claim-record-sdk.test.mjs
     - name: Run bounded production review with explicit verdicts
       env:
         PI_API_KEY: ${{ secrets.PI_API_KEY }}
@@ -141,4 +146,4 @@ jobs:
     - name: Remove disposable inputs and authentication
       if: always()
       run: rm -rf -- "$RUNNER_TEMP/probe-home" "$RUNNER_TEMP/probe-target" "$RUNNER_TEMP/previous"
-run-name: PR13 source-adjacent review with complete actionable correction feedback
+run-name: PR13 flat per-claim records inside the original review request allowance

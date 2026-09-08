@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {claimBindings,encodedClaims} from './support-protocol.mjs';
 const mentions=(value,file)=>typeof value==='string'?value.includes(file):Array.isArray(value)?value.some(x=>mentions(x,file)):
  value!==null&&typeof value==='object'?Object.values(value).some(x=>mentions(x,file)):false;
-export function renderSourceLocalReview(data){
+export function renderSourceLocalReview(data,emptyAcknowledgment='EMPTY'){
  const bindings=claimBindings(data),claims=encodedClaims(data),remaining=new Set(Object.keys(bindings));
- const required=Object.entries(bindings).map(([code,id])=>Array.isArray(data.claims[id])&&data.claims[id].length===0?code+' EMPTY':code+' needs its complete source justification');
+ const required=Object.entries(bindings).map(([code,id])=>Array.isArray(data.claims[id])&&data.claims[id].length===0?code+' '+emptyAcknowledgment:code+' needs its complete source justification');
  const sections=['REQUIRED REVIEW RECORDS (none may be omitted):',required.join('\n'),'UNTRUSTED EXACT CLAIM INDEX:',JSON.stringify(claims,null,2),
   'Every C-code is an obligation. Review each full assertion, not just its first clause. A reference links data, not proof of correctness.',
   'WHOLE BEHAVIOR CONTEXT:',JSON.stringify(data.scope_context??Object.fromEntries(Object.entries(data.claims).filter(([id])=>['concern','one_line','covers','excludes'].includes(id)||id.startsWith('flows[')))),
