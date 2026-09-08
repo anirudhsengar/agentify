@@ -1071,3 +1071,70 @@ test("coverage recovery preserves specialist state after transport normalization
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+
+for (const missingReceipt of [false, true]) {
+test(`review execution failures do not start evidence repair without a source obligation: ${missingReceipt}`, async () => {
+  const repository = createRepository();
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "agentify-review-only-home-"));
+  const previousHome = process.env.HOME;
+  process.env.HOME = home;
+  const stateDir = ".agentify/runtime/audit";
+  const mapPath = path.join(repository.cwd, stateDir, "codebase_map.json");
+  try {
+    const compiled = compileSpecialistEvidence(aqaShapedMap(), { cwd: repository.cwd });
+    assert.equal(compiled.complete, true, compiled.reasons.join("; "));
+    const map = attestCodebaseMap(compiled.map, repository.head);
+    delete map.specialist_reviews;
+    const missing = map.explorer_receipts!.receipts.find(receipt => receipt.mode === "concern_tracer")!;
+    if (missingReceipt) missing.success = false;
+    fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+    fs.writeFileSync(mapPath, JSON.stringify(map));
+    const budget = new AuditResourceBudget();
+    let reviews = 0;
+    let repairs = 0;
+    const runtime: AgentRuntime = { async runSession(options) {
+      if (options.tools.includes("submit_specialist_review")) {
+        reviews += 1;
+        return { turns: 1, costUsd: 0, aborted: true };
+      }
+      if (options.spawnExplorerPurpose === "specialist-repair") {
+        repairs += 1;
+        assert.match(options.userPrompt, /Pending review execution, not rejected source/);
+        assert.match(options.userPrompt, /do not rewrite or retrace them solely/i);
+        const concern = map.concern_evidence!.concerns.find(item => item.concern === missing.report_concern)!;
+        options.onEvent?.({ type: "tool_execution_end", toolName: "spawn_explorer", isError: false,
+          resultText: `Sub-agent (mode=concern_tracer) explored .\n\n## Report\nconcern: ${concern.concern}`,
+          details: { mode: "concern_tracer", target_path: ".", expected_concern: concern.concern,
+            report_concern: concern.concern, observed_paths: concernEvidencePaths(concern) },
+        } as never);
+      }
+      return { turns: 1, costUsd: 0, aborted: false };
+    } };
+    await assert.rejects(runRepositoryAudit({ cwd: repository.cwd, runtime, ui: new RepairUi(),
+      auditResourceBudget: budget, config: { schemaVersion: 1, thinkingLevel: "high", models: {} } }),
+    /specialist discovery did not reach semantic closure/);
+    assert.equal(repairs, missingReceipt ? 1 : 0, "only independent missing source receipts can start repair");
+    assert.equal(reviews, map.concern_evidence!.concerns.length,
+      "each exact body keeps the existing single review attempt; no hidden same-run retry");
+    assert.equal(budget.snapshot().semantic_repair_passes, missingReceipt ? 1 : 0);
+    const persisted = JSON.parse(fs.readFileSync(mapPath, "utf8")) as CodebaseMap;
+    assert.deepEqual(persisted.concern_evidence, map.concern_evidence);
+    assert.equal(assessExplorerReceiptAttestation(persisted, repository.cwd).complete, true);
+    assert.ok(persisted.specialist_reviews!.records.every(record => record.retryable === true && record.failure !== null));
+    const logDir = path.join(home, ".agentify/logs/agentify");
+    const terminals = fs.readdirSync(logDir).filter(name => name.endsWith(".jsonl")).flatMap(name =>
+      fs.readFileSync(path.join(logDir, name), "utf8").trim().split("\n")
+        .map(line => JSON.parse(line) as { event: string; payload: string }))
+      .filter(row => row.event === "agentify.run_end");
+    assert.equal(terminals.length, 1);
+    assert.notEqual(JSON.parse(terminals[0]!.payload).status, "success");
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(repository.cwd, { recursive: true, force: true });
+  }
+});
+
+}

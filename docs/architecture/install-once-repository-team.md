@@ -380,6 +380,14 @@ The coverage-pass limit and standalone audit behavior are unchanged. Deferred
 specialist evidence is neither approved nor discarded and must still pass the
 separate receipt, narrative, ownership and installation gates.
 
+Incomplete review execution is not a source contradiction. The repair controller
+separates exact-body retryable review failures from structural/source findings in
+its task input. When compilation and source receipts are complete and only those
+review executions remain unresolved, it dispatches no repair parent and consumes
+no repair pass. It retains the failed review and diagnostic evidence without
+approving installation or bypassing same-run review retry limits. Independent
+source, ownership, or typed finding obligations still follow ordinary repair.
+
 Semantic-repair parents receive the current unresolved obligations directly and
 may only dispatch bounded explorers or apply a concern delta; repository reads
 remain confined to those explorers, preventing broad map and tree rereads.

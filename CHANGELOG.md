@@ -4,6 +4,8 @@ All notable changes to Agentify are documented here.
 
 ## [Unreleased]
 
+- Classify incomplete reviewer execution separately from rejected source: review-only failures cannot consume repair passes, rewrite attested bodies, or obtain hidden retries; independent source and ownership obligations still require repair.
+
 - Use verified MiniMax M3 named/any terminal-tool selection without disabling configured thinking or changing response limits. Preserve the auto-selection fallback for older models and unverified regional endpoints.
 
 - Enforce coverage-recovery authority after transport and legacy-key normalization. Serialized and nested specialist updates cannot bypass the phase guard; absent receipts remain absent rather than corrupting handoff with an empty attestation.

@@ -89,6 +89,15 @@ export function actionableNarrativeCorrections(map: CodebaseMap) {
   }).slice(0, 12);
 }
 
+function pendingReviewExecutions(map: CodebaseMap) {
+  return (map.specialist_reviews?.records ?? []).flatMap(record => {
+    const body = map.concern_evidence?.concerns.find(concern => concern.concern === record.concern);
+    if (!body || record.digest !== specialistReviewDigest(body) || !record.failure
+      || record.retryable !== true || record.finding) return [];
+    return [{ concern: record.concern, digest: record.digest, failure: record.failure }];
+  });
+}
+
 function repairPrompt(
   map: CodebaseMap,
   assessment: SpecialistEvidenceAssessment,
@@ -97,7 +106,11 @@ function repairPrompt(
   explorerReceiptReasons: ReadonlyArray<string> = [],
   compilationReasons: ReadonlyArray<string> = [],
 ): string {
-  const currentFailures = [...assessment.reasons, ...compilationReasons];
+  const reviewExecutions = pendingReviewExecutions(map);
+  const executionReasons = new Set(reviewExecutions.map(record =>
+    `${record.concern}: narrative review: ${record.failure}`));
+  const currentFailures = [...assessment.reasons, ...compilationReasons]
+    .filter(reason => !executionReasons.has(reason));
   const structuralRetraces = structuralNarrativeRetraces(map);
   const narrativeCorrections = actionableNarrativeCorrections(map);
   const coreConflictReasons = currentFailures.filter((reason) =>
@@ -145,6 +158,8 @@ function repairPrompt(
     "The repository's coverage map is complete, but its specialist portfolio failed the trusted semantic-quality gate.",
     `Repair pass ${pass}/${maxRepairPasses}; ${assessment.uncovered_paths.length} tracked paths and ${assessment.uncovered_clusters.length} local implementation/test clusters remain in total.`,
     `Current failures: ${currentFailures.slice(0, 12).join("; ")}.`,
+    `Pending review execution, not rejected source: ${JSON.stringify(reviewExecutions.slice(0, 12))}.`,
+    "An incomplete review or review timeout is not a source finding and does not request a narrative retrace. Preserve those bodies and their successful source receipts; do not rewrite or retrace them solely to obtain another review attempt. Resolve independent tracked gaps, ownership or missing receipts where listed. Unchanged incomplete reviews remain unapproved and only the application may retry them within its existing rules.",
     `Structural narrative retraces: ${JSON.stringify(structuralRetraces)}.`,
     "Resolve every listed structural narrative retrace before local claim corrections. Run concern_tracer with the exact existing concern identity and a narrow focus on the cited incoherence; preserve verified flows and core scope while making the body one failure domain or invariant set. Do not reject or rename an accepted body unless the current source review finding names the concern identity itself; that case requires one precise scope-preserving corrective name. Agentify rejects every other rename. Agentify intentionally withholds claim corrections until these retraces clear because the replacement body can remove obsolete local claims.",
     "A narrative review finding is a source-backed correction obligation. For a listed correction, use write_map_delta with delta: {} and claim_correction: {concern, digest, claim, statement, rationale}; use the exact identifiers below. For a pitfall/invariant, correct only that assertion and its consequence/explanation. For a flow finding, choose flow_step (zero-based index at the finding's path) to replace only that step's what_happens, or flow_description: true to replace only the description with statement. Never use both; rationale only explains the correction. Flow names, paths, order and all unselected prose stay unchanged. All other claims, references and ownership are preserved, and full normalized review remains mandatory. Findings requiring new paths or changed flow structure require retracing the exact concern. Covered paths do not excuse false claims; never reject real behavior or suppress review to close it.",
@@ -436,11 +451,11 @@ async function repairSpecialistPortfolio(
   const maxRepairPasses = resourceBudget.limits.maxSemanticRepairPasses;
   for (let pass = 1; pass <= maxRepairPasses; pass += 1) {
     context.signal?.throwIfAborted();
-    resourceBudget.reserveSemanticRepairPass();
     const sourceMap = preserveReceiptAttestation(loadCanonicalMapAt(context.cwd, stateDir));
     if (sourceMap === null) throw new Error("canonical codebase map disappeared before specialist repair");
+    const structuralCompilation = compileSpecialistEvidence(sourceMap, { cwd: context.cwd });
     const compilation = await reviewCompiledPortfolio(context, log, resourceBudget,
-      compileSpecialistEvidence(sourceMap, { cwd: context.cwd }));
+      structuralCompilation);
     persistSpecialistCompilation(context, sourceMap, compilation);
     const map = compilation.map;
     const assessment = compilation.assessment;
@@ -452,6 +467,14 @@ async function repairSpecialistPortfolio(
     }
 
     lastFingerprint = repairObligationFingerprint(compilation, receiptAssessment.reasons);
+    // A reviewer that did not finish has supplied no source correction. Do not
+    // spend a repair pass or invalidate attested evidence merely to evade the
+    // existing exact-body review retry limit. Missing source, ownership and
+    // source-backed findings still enter their ordinary repair path below.
+    const reviewExecutions = pendingReviewExecutions(map);
+    if (structuralCompilation.complete && receiptAssessment.complete && reviewExecutions.length > 0
+      && assessSpecialistReviews(map, context.cwd).length === reviewExecutions.length) break;
+    resourceBudget.reserveSemanticRepairPass();
     if (!resourceBudget.recordUnresolvedFingerprint(lastFingerprint)) break;
 
     context.ui.status(
