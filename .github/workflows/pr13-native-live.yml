@@ -1,0 +1,149 @@
+name: PR13 native-runtime fresh installer diagnostics
+run-name: PR13 b8220ce fresh Hono and PyJWT; final installation gates unchanged
+'on':
+  push:
+    branches:
+    - validation/pr13-native-live-20260908
+    paths:
+    - .github/workflows/pr13-native-live.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: pr13-native-live-20260908
+  cancel-in-progress: false
+jobs:
+  install:
+    if: github.actor == github.repository_owner
+    name: Fresh diagnostic / ${{ matrix.case.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        case:
+        - name: pyjwt
+          repository: anirudhsengar/pyjwt
+          sha: 7144e4534c34810f4525dc4578a32addd8212cff
+          cohort: heldout-round-1
+        - name: hono
+          repository: anirudhsengar/hono
+          sha: e2740d5a1bd0b4254e517e3af8b60789284bc7bd
+          cohort: historical
+    env:
+      LIVE_REPOSITORY: ${{ matrix.case.repository }}
+      LIVE_TARGET_SHA: ${{ matrix.case.sha }}
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        ref: b8220ce897ab05a0d3cb6947906846f9e18af472
+        persist-credentials: false
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      with:
+        node-version: 22.19.0
+        cache: npm
+    - name: Provision pinned candidate toolchain without model credentials
+      run: 'set -euo pipefail
+
+        sudo apt-get update -qq
+
+        sudo apt-get install --no-install-recommends -y ripgrep fd-find
+
+        if ! command -v fd >/dev/null; then sudo ln -s "$(command -v fdfind)" /usr/local/bin/fd; fi
+
+        npm install --global npm@11.19.0
+
+        npm ci --ignore-scripts
+
+        test "$(npm --version)" = 11.19.0
+
+        '
+    - name: Require successful exact-candidate qualification and its verified package hash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: 'set -euo pipefail
+
+        umask 022
+
+        test "$(git rev-parse HEAD)" = b8220ce897ab05a0d3cb6947906846f9e18af472
+
+        test "$(git rev-parse HEAD^{tree})" = bcc1850e6f669a76f340d122cab7da58f7015bb6
+
+        test -z "$(git status --porcelain)"
+
+        gh api repos/anirudhsengar/agentify/actions/runs/34194939296 > "$RUNNER_TEMP/qualification.json"
+
+        jq -e ''.status=="completed" and .conclusion=="success" and .head_sha=="5f34afa3c5e9b61d16c96dabeef5c248164a908b"''
+        "$RUNNER_TEMP/qualification.json" >/dev/null
+
+        gh run download 34194939296 -R anirudhsengar/agentify -n pr13-native-final-node-22.19.0-34194939296 -D "$RUNNER_TEMP/qualified-source"
+
+        test "$(cat "$RUNNER_TEMP/qualified-source/pr13-native-final-qualification.exit")" = 0
+
+        grep -Fx ''candidate=b8220ce897ab05a0d3cb6947906846f9e18af472'' "$RUNNER_TEMP/qualified-source/pr13-native-final-environment.txt"
+
+        grep -Fx ''tree=bcc1850e6f669a76f340d122cab7da58f7015bb6'' "$RUNNER_TEMP/qualified-source/pr13-native-final-environment.txt"
+
+        grep -F ''91cf0d80ece1620a5545b77b007456f7f3bd9a6288b3919061b6f18dabf85a25, 52 entries'' "$RUNNER_TEMP/qualified-source/pr13-native-final-qualification.log"
+
+        # Reuse the passed false-claim control on byte-identical runtime source.
+
+        git fetch --no-tags --depth=1 origin b2c382315dd10ab99b712ebd67eccf6e84ce916a
+
+        test "$(git diff --name-only b2c382315dd10ab99b712ebd67eccf6e84ce916a HEAD)" = tests/audit/minimax-tracer-terminal.test.ts
+
+        gh run download 34194531201 -R anirudhsengar/agentify -n native-review-false-claim-34194531201 -D "$RUNNER_TEMP/source-canary"
+
+        jq -e ''.candidate_sha=="b2c382315dd10ab99b712ebd67eccf6e84ce916a" and .canary_rejected==true and .source_unchanged==true''
+        "$RUNNER_TEMP/source-canary/review-probe.json" >/dev/null
+
+        printf ''LIVE_WORK_DIR=%s/native-live-%s-${{ matrix.case.name }}
+
+        '' "$RUNNER_TEMP" "$GITHUB_RUN_ID" >> "$GITHUB_ENV"
+
+        printf ''LIVE_PACK_RESULT=%s/native-live-pack.json
+
+        '' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+        printf ''LIVE_EXPECTED_PACKAGE_HASH=91cf0d80ece1620a5545b77b007456f7f3bd9a6288b3919061b6f18dabf85a25
+
+        '' >> "$GITHUB_ENV"
+
+        '
+    - name: Pack exact qualified bytes
+      run: 'set -euo pipefail
+
+        umask 022
+
+        npm run --silent pack:release > "$LIVE_PACK_RESULT"
+
+        node --input-type=module -e ''import fs from "node:fs"; import assert from "node:assert/strict"; const p=JSON.parse(fs.readFileSync(process.env.LIVE_PACK_RESULT,"utf8"));
+        assert.equal(p.sha256,process.env.LIVE_EXPECTED_PACKAGE_HASH); console.log(JSON.stringify(p));''
+
+        '
+    - name: Prepare fresh frozen target and install actual npm artifact
+      run: npm run --silent live:prepare
+    - name: Install with production M3 roles, boundaries, and budgets
+      env:
+        PI_API_KEY: ${{ secrets.PI_API_KEY }}
+        GH_TOKEN: ${{ github.token }}
+      run: npm run --silent live:install
+    - name: Retain redacted per-target evidence
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: native-live-${{ matrix.case.name }}-${{ github.run_id }}
+        path: '${{ env.LIVE_WORK_DIR }}/evidence
+
+          ${{ runner.temp }}/qualification.json
+
+          ${{ runner.temp }}/qualified-source/pr13-native-final-environment.txt
+
+          ${{ runner.temp }}/source-canary/review-probe.json'
+        if-no-files-found: warn
+        include-hidden-files: true
+        retention-days: 14
+    - name: Remove disposable target and credentials
+      if: always()
+      run: if test -n "${LIVE_WORK_DIR:-}"; then rm -rf -- "$LIVE_WORK_DIR"; fi
